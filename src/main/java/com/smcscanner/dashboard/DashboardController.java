@@ -1,0 +1,356 @@
+package com.smcscanner.dashboard;
+
+import com.smcscanner.config.ScannerConfig;
+import com.smcscanner.model.TickerStatus;
+import com.smcscanner.model.eod.Level;
+import com.smcscanner.model.eod.TickerReport;
+import com.smcscanner.state.ReportCache;
+import com.smcscanner.state.SharedState;
+import com.smcscanner.strategy.EodReportService;
+import com.smcscanner.strategy.SessionFilter;
+import com.smcscanner.tracking.PerformanceTracker;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import com.smcscanner.alert.DiscordAlertService;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.ResponseBody;
+import org.springframework.web.servlet.view.RedirectView;
+
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
+import java.util.stream.Collectors;
+
+@Controller
+public class DashboardController {
+    private static final Logger log = LoggerFactory.getLogger(DashboardController.class);
+    private static final ZoneId ET = ZoneId.of("America/New_York");
+
+    private final SharedState        state;
+    private final ScannerConfig      config;
+    private final SessionFilter      sessionFilter;
+    private final PerformanceTracker tracker;
+    private final EodReportService   eodReport;
+    private final DiscordAlertService discord;
+    private final ReportCache        reportCache;
+
+    private static final Map<String,String> TV_MAP = Map.of(
+        "X:BTCUSD", "BINANCE:BTCUSDT",
+        "X:ETHUSD", "BINANCE:ETHUSDT",
+        "X:SOLUSD", "BINANCE:SOLUSDT",
+        "X:XRPUSD", "BINANCE:XRPUSDT"
+    );
+
+    private String tvUrl(String ticker) {
+        String sym = TV_MAP.getOrDefault(ticker, ticker);
+        return "https://www.tradingview.com/chart/?symbol=" + sym;
+    }
+
+    public DashboardController(SharedState state, ScannerConfig config, SessionFilter sessionFilter,
+                                PerformanceTracker tracker, EodReportService eodReport,
+                                DiscordAlertService discord, ReportCache reportCache) {
+        this.state=state; this.config=config; this.sessionFilter=sessionFilter;
+        this.tracker=tracker; this.eodReport=eodReport; this.discord=discord;
+        this.reportCache=reportCache;
+    }
+
+    @GetMapping("/")
+    public String dashboard(Model model) {
+        List<String> tickers = config.loadWatchlist();
+        Map<String,TickerStatus> statusMap = state.getTickerStatus();
+        List<Map<String,Object>> watchlist = new ArrayList<>();
+        for (String t : tickers) {
+            TickerStatus ts = statusMap.get(t);
+            Map<String,Object> info = new LinkedHashMap<>();
+            info.put("ticker",    t);
+            info.put("status",    ts!=null ? ts.getStatus()    : "idle");
+            info.put("direction", ts!=null ? ts.getDirection() : null);
+            info.put("phaseMsg",  ts!=null ? ts.getPhaseMsg()  : "Waiting...");
+            info.put("confidence",ts!=null ? ts.getConfidence(): 0);
+            info.put("isCrypto",  t.startsWith("X:"));
+            info.put("tvUrl",     tvUrl(t));
+            watchlist.add(info);
+        }
+        List<Map<String,Object>> setups = state.getSetups();
+        String now = ZonedDateTime.now(ET).format(DateTimeFormatter.ofPattern("h:mm:ss a"));
+        model.addAttribute("title",         "SD SCANNER");
+        model.addAttribute("subtitle",      "Smart Money Concepts — Real-time Intraday Scanner");
+        model.addAttribute("runStatus",     state.getStatus().toUpperCase());
+        model.addAttribute("watchlistSize", tickers.size());
+        model.addAttribute("activeSetups",  setups.size());
+        model.addAttribute("currentSession", sessionFilter.currentSession());
+        model.addAttribute("lastScan",      state.getLastScan()!=null ? state.getLastScan() : now);
+        model.addAttribute("watchlist",     watchlist);
+        model.addAttribute("setups",        setups);
+        return "dashboard";
+    }
+
+    @GetMapping("/api/status")
+    @ResponseBody
+    public ResponseEntity<Map<String,Object>> apiStatus() {
+        Map<String,Object> resp = new LinkedHashMap<>();
+        resp.put("status",            state.getStatus());
+        resp.put("last_scan",         state.getLastScan());
+        resp.put("active_setups",     state.getSetups().size());
+        resp.put("session",           sessionFilter.currentSession());
+        resp.put("is_active_session", sessionFilter.isActiveSession());
+        resp.put("active_sessions",   sessionFilter.getActiveSessions());
+        resp.put("timestamp", ZonedDateTime.now(ET).format(DateTimeFormatter.ofPattern("h:mm:ss a")));
+        return ResponseEntity.ok(resp);
+    }
+
+    @GetMapping("/api/setups")
+    @ResponseBody
+    public ResponseEntity<List<Map<String,Object>>> apiSetups() {
+        List<Map<String,Object>> setups = new ArrayList<>(state.getSetups());
+        setups.sort((a, b) -> {
+            int ca = ((Number) a.getOrDefault("confidence", 0)).intValue();
+            int cb = ((Number) b.getOrDefault("confidence", 0)).intValue();
+            return Integer.compare(cb, ca);
+        });
+        return ResponseEntity.ok(setups);
+    }
+
+    @GetMapping("/api/watchlist")
+    @ResponseBody
+    public ResponseEntity<List<Map<String,Object>>> apiWatchlist() {
+        List<String> tickers = config.loadWatchlist();
+        Map<String,TickerStatus> sm = state.getTickerStatus();
+        List<Map<String,Object>> result = tickers.stream().map(t -> {
+            TickerStatus ts = sm.get(t);
+            Map<String,Object> m = new LinkedHashMap<>();
+            m.put("ticker",     t);
+            m.put("status",     ts!=null ? ts.getStatus()    : "idle");
+            m.put("direction",  ts!=null ? ts.getDirection() : null);
+            m.put("confidence", ts!=null ? ts.getConfidence(): 0);
+            m.put("phase_msg",  ts!=null ? ts.getPhaseMsg()  : "Waiting...");
+            m.put("is_crypto",  t.startsWith("X:"));
+            return m;
+        }).collect(Collectors.toList());
+        return ResponseEntity.ok(result);
+    }
+
+    @GetMapping("/api/performance")
+    @ResponseBody
+    public ResponseEntity<Map<String,Object>> apiPerformance() {
+        Map<String,Object> resp = new LinkedHashMap<>();
+        resp.put("stats",  tracker.getStats());
+        resp.put("recent", tracker.getRecent(20));
+        return ResponseEntity.ok(resp);
+    }
+
+    @GetMapping("/api/eod-report")
+    @ResponseBody
+    public ResponseEntity<List<Map<String,Object>>> apiEodReport() {
+        try {
+            List<TickerReport> reports = eodReport.generateReport(config.loadWatchlist());
+            List<Map<String,Object>> result = reports.stream().map(r -> {
+                Map<String,Object> m = new LinkedHashMap<>();
+                m.put("ticker",             r.getTicker());
+                m.put("bias",               r.getBias());
+                m.put("watch_for",          r.getWatchFor());
+                m.put("trend_summary",      r.getTrendSummary());
+                m.put("action_note",        r.getActionNote());
+                m.put("current_price",      r.getCurrentPrice());
+                m.put("atr",                r.getAtr());
+                m.put("nearest_support",    r.getNearestSupport());
+                m.put("nearest_resistance", r.getNearestResistance());
+                m.put("support_levels",     r.getSupportLevels());
+                m.put("resistance_levels",  r.getResistanceLevels());
+                // Volume Profile
+                if (r.getVolumeProfile()!=null) {
+                    var vp = r.getVolumeProfile();
+                    m.put("vpoc", vp.getVpoc());
+                    m.put("vah",  vp.getVah());
+                    m.put("val",  vp.getVal());
+                }
+                // Correlation
+                if (r.getCorrelation()!=null) {
+                    var c = r.getCorrelation();
+                    m.put("beta_spy", c.getBetaSpy()); m.put("corr_spy", c.getCorrSpy());
+                    m.put("beta_qqq", c.getBetaQqq()); m.put("corr_qqq", c.getCorrQqq());
+                }
+                // Insider
+                if (r.getInsiderActivity()!=null && r.getInsiderActivity().getSignal()!=null)
+                    m.put("insider_signal", r.getInsiderActivity().getSignal());
+                if (r.getError()!=null) m.put("error", r.getError());
+                return m;
+            }).collect(Collectors.toList());
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            log.error("EOD report API error: {}", e.getMessage());
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+
+    /** POST /api/send-eod-discord  — manually trigger the EOD Discord report */
+    @PostMapping("/api/send-eod-discord")
+    @ResponseBody
+    public ResponseEntity<Map<String,Object>> sendEodDiscord() {
+        try {
+            List<TickerReport> reports = eodReport.generateReport(config.loadWatchlist());
+            reportCache.save(reports);
+            boolean ok = discord.sendEodReport(reports);
+            return ResponseEntity.ok(Map.of("sent", ok, "tickers", reports.size()));
+        } catch (Exception e) {
+            log.error("Manual EOD Discord send failed: {}", e.getMessage());
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    // ── /eod — Full HTML report page ──────────────────────────────────────────
+
+    @GetMapping("/eod")
+    public String eodPage(Model model) {
+        List<TickerReport> reports = reportCache.hasData()
+                ? reportCache.getReports()
+                : List.of();
+
+        List<Map<String,Object>> rows = buildEodRows(reports);
+
+        long bullCount   = reports.stream().filter(r->"bullish".equals(r.getBias())).count();
+        long bearCount   = reports.stream().filter(r->"bearish".equals(r.getBias())).count();
+        long neutCount   = reports.stream().filter(r->"neutral".equals(r.getBias())).count();
+        long actionCount = reports.stream().filter(r->r.getActionNote()!=null && !r.getActionNote().startsWith("⏳")).count();
+        long insiderCount= reports.stream().filter(r->r.getInsiderActivity()!=null && r.getInsiderActivity().getSignal()!=null).count();
+
+        model.addAttribute("generatedAt",  reportCache.getGeneratedAtStr());
+        model.addAttribute("totalCount",   reports.size());
+        model.addAttribute("bullCount",    bullCount);
+        model.addAttribute("bearCount",    bearCount);
+        model.addAttribute("neutCount",    neutCount);
+        model.addAttribute("actionCount",  actionCount);
+        model.addAttribute("insiderCount", insiderCount);
+        model.addAttribute("rows",         rows);
+        return "eod-report";
+    }
+
+    /** GET /eod/refresh — regenerate report then redirect to /eod */
+    @GetMapping("/eod/refresh")
+    public RedirectView eodRefresh() {
+        try {
+            List<TickerReport> reports = eodReport.generateReport(config.loadWatchlist());
+            reportCache.save(reports);
+            log.info("EOD report refreshed via UI: {} tickers", reports.size());
+        } catch (Exception e) {
+            log.error("EOD refresh failed: {}", e.getMessage());
+        }
+        return new RedirectView("/eod");
+    }
+
+    /** GET /eod/csv — download CSV of last cached report */
+    @GetMapping("/eod/csv")
+    @ResponseBody
+    public ResponseEntity<byte[]> eodCsv() {
+        List<TickerReport> reports = reportCache.hasData()
+                ? reportCache.getReports()
+                : List.of();
+
+        StringBuilder csv = new StringBuilder();
+        csv.append("Ticker,Price,Bias,ATR,VPOC,VAH,VAL,Beta_SPY,Corr_SPY,Beta_QQQ,Corr_QQQ,")
+           .append("Nearest_Support,Nearest_Resistance,Watch_For,Action_Note,Insider_Signal\n");
+
+        for (TickerReport r : reports) {
+            String vpoc="", vah="", val_="", bSpy="", cSpy="", bQqq="", cQqq="", ins="";
+            if (r.getVolumeProfile()!=null) {
+                vpoc  = String.format("%.2f", r.getVolumeProfile().getVpoc());
+                vah   = String.format("%.2f", r.getVolumeProfile().getVah());
+                val_  = String.format("%.2f", r.getVolumeProfile().getVal());
+            }
+            if (r.getCorrelation()!=null) {
+                bSpy  = String.format("%.3f", r.getCorrelation().getBetaSpy());
+                cSpy  = String.format("%.3f", r.getCorrelation().getCorrSpy());
+                bQqq  = String.format("%.3f", r.getCorrelation().getBetaQqq());
+                cQqq  = String.format("%.3f", r.getCorrelation().getCorrQqq());
+            }
+            if (r.getInsiderActivity()!=null && r.getInsiderActivity().getSignal()!=null)
+                ins = r.getInsiderActivity().getSignal().replace(",", ";");
+            String nearSup = r.getNearestSupport()!=null  ? String.format("%.2f",r.getNearestSupport())  : "";
+            String nearRes = r.getNearestResistance()!=null? String.format("%.2f",r.getNearestResistance()): "";
+            String watchFor    = r.getWatchFor()   !=null ? csvEsc(r.getWatchFor())    : "";
+            String actionNote  = r.getActionNote() !=null ? csvEsc(r.getActionNote())  : "";
+            csv.append(String.join(",",
+                    r.getTicker(),
+                    String.format("%.4f", r.getCurrentPrice()),
+                    r.getBias()!=null?r.getBias():"",
+                    String.format("%.4f", r.getAtr()),
+                    vpoc, vah, val_,
+                    bSpy, cSpy, bQqq, cQqq,
+                    nearSup, nearRes,
+                    watchFor, actionNote,
+                    ins
+            )).append("\n");
+        }
+
+        byte[] bytes = csv.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        String filename = "eod-report-" + ZonedDateTime.now(ET)
+                .format(DateTimeFormatter.ofPattern("yyyy-MM-dd")) + ".csv";
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .contentType(MediaType.parseMediaType("text/csv"))
+                .body(bytes);
+    }
+
+    private String csvEsc(String v) {
+        if (v == null) return "";
+        if (v.contains(",") || v.contains("\"") || v.contains("\n"))
+            return "\"" + v.replace("\"","\"\"") + "\"";
+        return v;
+    }
+
+    /** Converts TickerReport list into the row maps the eod-report.html template expects. */
+    private List<Map<String,Object>> buildEodRows(List<TickerReport> reports) {
+        return reports.stream().map(r -> {
+            Map<String,Object> row = new LinkedHashMap<>();
+            row.put("ticker",      r.getTicker());
+            row.put("price",       r.getCurrentPrice());
+            row.put("bias",        r.getBias()!=null ? r.getBias() : "neutral");
+            row.put("trendSummary",r.getTrendSummary());
+            row.put("watchFor",    r.getWatchFor());
+            row.put("actionNote",  r.getActionNote());
+            row.put("tvUrl",       tvUrl(r.getTicker()));
+
+            // Volume Profile — always set keys so Thymeleaf doesn't get SpEL "property not found"
+            if (r.getVolumeProfile()!=null) {
+                row.put("vpoc", r.getVolumeProfile().getVpoc());
+                row.put("vah",  r.getVolumeProfile().getVah());
+                row.put("val",  r.getVolumeProfile().getVal());
+            } else {
+                row.put("vpoc", null); row.put("vah", null); row.put("val", null);
+            }
+
+            // Correlation — always set keys
+            if (r.getCorrelation()!=null) {
+                row.put("betaSpy",  Math.round(r.getCorrelation().getBetaSpy()*100.0)/100.0);
+                row.put("corrSpy",  Math.round(r.getCorrelation().getCorrSpy()*100.0)/100.0);
+                row.put("betaQqq",  Math.round(r.getCorrelation().getBetaQqq()*100.0)/100.0);
+                row.put("corrQqq",  Math.round(r.getCorrelation().getCorrQqq()*100.0)/100.0);
+            } else {
+                row.put("betaSpy", null); row.put("corrSpy", null);
+                row.put("betaQqq", null); row.put("corrQqq", null);
+            }
+
+            // Support / Resistance levels (pass Level objects directly — Thymeleaf reads getters)
+            row.put("supportLevels",    r.getSupportLevels()!=null    ? r.getSupportLevels()    : List.of());
+            row.put("resistanceLevels", r.getResistanceLevels()!=null ? r.getResistanceLevels() : List.of());
+
+            // Insider
+            boolean hasIns = r.getInsiderActivity()!=null && r.getInsiderActivity().getSignal()!=null;
+            row.put("hasInsider",   hasIns);
+            row.put("insiderSignal",hasIns ? r.getInsiderActivity().getSignal() : null);
+
+            return row;
+        }).collect(Collectors.toList());
+    }
+
+    @GetMapping("/health")
+    @ResponseBody
+    public ResponseEntity<Map<String,String>> health() { return ResponseEntity.ok(Map.of("status","UP")); }
+}

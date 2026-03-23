@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>SD Scanner — EOD Report</title>
+    <style>
+        :root {
+            --bg:      #0d1117; --surface: #161b22; --border: #30363d;
+            --text:    #e6edf3; --muted:   #8b949e;
+            --green:   #3fb950; --red:     #f85149; --blue:   #58a6ff;
+            --yellow:  #d29922; --purple:  #bc8cff; --orange: #f0883e;
+        }
+        * { box-sizing: border-box; margin:0; padding:0; }
+        body { background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,sans-serif; font-size:13px; }
+
+        /* Header */
+        .header { background:var(--surface); border-bottom:1px solid var(--border); padding:14px 24px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; }
+        .logo { display:flex; align-items:center; gap:10px; }
+        .logo-dot { width:10px; height:10px; border-radius:50%; background:var(--green); box-shadow:0 0 6px var(--green); }
+        .logo h1 { font-size:18px; font-weight:700; color:var(--blue); letter-spacing:1px; }
+        .logo p { font-size:11px; color:var(--muted); }
+        .header-actions { display:flex; gap:10px; align-items:center; }
+        .btn { padding:6px 16px; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; border:none; text-decoration:none; display:inline-block; }
+        .btn-green  { background:rgba(63,185,80,.15); color:var(--green);  border:1px solid var(--green); }
+        .btn-blue   { background:rgba(88,166,255,.15); color:var(--blue);  border:1px solid var(--blue);  }
+        .btn-orange { background:rgba(240,136,62,.15); color:var(--orange);border:1px solid var(--orange);}
+        .btn:hover { opacity:.8; }
+
+        /* Stats bar */
+        .stats-bar { display:flex; gap:24px; padding:14px 24px; border-bottom:1px solid var(--border); background:var(--surface); flex-wrap:wrap; }
+        .stat { text-align:center; min-width:80px; }
+        .stat-num { font-size:26px; font-weight:700; }
+        .stat-lbl { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.8px; margin-top:2px; }
+        .c-green  { color:var(--green);  }
+        .c-red    { color:var(--red);    }
+        .c-blue   { color:var(--blue);   }
+        .c-yellow { color:var(--yellow); }
+        .c-muted  { color:var(--muted);  }
+
+        /* Filters */
+        .filters { padding:12px 24px; display:flex; gap:10px; align-items:center; flex-wrap:wrap; border-bottom:1px solid var(--border); }
+        .filters label { font-size:11px; color:var(--muted); }
+        .filters select, .filters input { background:var(--surface); border:1px solid var(--border); color:var(--text); padding:4px 8px; border-radius:5px; font-size:12px; }
+        .filter-btn { padding:4px 12px; border-radius:5px; font-size:11px; font-weight:600; cursor:pointer; border:1px solid var(--border); background:var(--surface); color:var(--muted); }
+        .filter-btn.active { border-color:var(--blue); color:var(--blue); background:rgba(88,166,255,.1); }
+
+        /* Table */
+        .table-wrap { overflow-x:auto; padding:0 24px 24px; }
+        table { width:100%; border-collapse:collapse; font-size:12px; min-width:1100px; margin-top:16px; }
+        thead th { background:var(--surface); color:var(--muted); font-weight:600; font-size:10px; text-transform:uppercase; letter-spacing:.8px; padding:10px 12px; text-align:left; border-bottom:2px solid var(--border); white-space:nowrap; cursor:pointer; user-select:none; position:sticky; top:0; z-index:1; }
+        thead th:hover { color:var(--blue); }
+        thead th.sorted-asc::after  { content:" ↑"; color:var(--blue); }
+        thead th.sorted-desc::after { content:" ↓"; color:var(--blue); }
+        tbody tr { border-bottom:1px solid var(--border); transition:background .1s; }
+        tbody tr:hover { background:rgba(255,255,255,.03); }
+        td { padding:10px 12px; white-space:nowrap; vertical-align:top; }
+        td.wrap { white-space:normal; max-width:220px; }
+
+        /* Row bias colors */
+        tr.bull { border-left:3px solid var(--green);  }
+        tr.bear { border-left:3px solid var(--red);    }
+        tr.neut { border-left:3px solid var(--border); }
+
+        /* Chips */
+        .chip { display:inline-block; padding:2px 8px; border-radius:10px; font-size:10px; font-weight:700; letter-spacing:.5px; }
+        .chip-bull { background:rgba(63,185,80,.15);  color:var(--green);  }
+        .chip-bear { background:rgba(248,81,73,.15);  color:var(--red);    }
+        .chip-neut { background:rgba(139,148,158,.1); color:var(--muted);  }
+
+        /* Strength badges */
+        .imm  { color:#ffd700; font-size:10px; }
+        .near { color:var(--orange); font-size:10px; }
+        .wtch { color:var(--muted); font-size:10px; }
+
+        /* Ticker link */
+        .ticker-link { color:var(--blue); font-weight:700; text-decoration:none; font-size:13px; }
+        .ticker-link:hover { text-decoration:underline; }
+
+        /* Insider signal */
+        .bull-ins { color:var(--green); }
+        .bear-ins { color:var(--yellow); }
+
+        /* Level cells */
+        .lvl-block { display:flex; flex-direction:column; gap:3px; }
+        .lvl-row   { display:flex; gap:4px; align-items:baseline; font-size:11px; }
+        .lvl-price { font-weight:600; }
+        .lvl-pct   { color:var(--muted); font-size:10px; }
+        .lvl-lbl   { color:var(--muted); font-size:10px; }
+
+        /* VP mini-bar */
+        .vp-bar { display:flex; flex-direction:column; gap:3px; font-size:11px; }
+        .vp-row { display:flex; gap:6px; }
+        .vp-key  { color:var(--muted); font-size:10px; width:36px; }
+        .vp-val  { font-weight:600; }
+
+        /* Beta display */
+        .beta-block { font-size:11px; display:flex; flex-direction:column; gap:2px; }
+        .beta-row   { display:flex; gap:5px; align-items:center; }
+        .beta-key   { color:var(--muted); font-size:10px; width:32px; }
+        .beta-hi    { color:var(--red);    font-weight:700; }
+        .beta-mid   { color:var(--yellow); font-weight:600; }
+        .beta-lo    { color:var(--green);  font-weight:600; }
+
+        /* Empty state */
+        .empty { text-align:center; padding:60px; color:var(--muted); }
+        .empty .icon { font-size:40px; margin-bottom:12px; }
+
+        /* Footer */
+        .footer { text-align:center; padding:12px; color:var(--muted); font-size:11px; border-top:1px solid var(--border); }
+    </style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+    <div class="logo">
+        <div class="logo-dot"></div>
+        <div>
+            <h1>SD SCANNER — EOD REPORT</h1>
+            <p th:text="${generatedAt}">—</p>
+        </div>
+    </div>
+    <div class="header-actions">
+        <a href="/eod/csv" class="btn btn-green">⬇ Download CSV</a>
+        <a href="/eod/refresh" class="btn btn-orange" onclick="return confirm('Regenerate report? Takes ~60s.')">🔄 Refresh</a>
+        <a href="/" class="btn btn-blue">📡 Dashboard</a>
+    </div>
+</div>
+
+<!-- Stats bar -->
+<div class="stats-bar">
+    <div class="stat"><div class="stat-num c-blue"   th:text="${totalCount}">0</div><div class="stat-lbl">Total</div></div>
+    <div class="stat"><div class="stat-num c-green"  th:text="${bullCount}">0</div><div class="stat-lbl">Bullish</div></div>
+    <div class="stat"><div class="stat-num c-red"    th:text="${bearCount}">0</div><div class="stat-lbl">Bearish</div></div>
+    <div class="stat"><div class="stat-num c-muted"  th:text="${neutCount}">0</div><div class="stat-lbl">Neutral</div></div>
+    <div class="stat"><div class="stat-num c-yellow" th:text="${actionCount}">0</div><div class="stat-lbl">Actionable</div></div>
+    <div class="stat"><div class="stat-num c-purple" th:text="${insiderCount}">0</div><div class="stat-lbl">Insider Signal</div></div>
+</div>
+
+<!-- Filters -->
+<div class="filters">
+    <label>Bias:</label>
+    <button class="filter-btn active" onclick="filterBias('all', this)">All</button>
+    <button class="filter-btn" onclick="filterBias('bullish', this)">🟢 Bullish</button>
+    <button class="filter-btn" onclick="filterBias('bearish', this)">🔴 Bearish</button>
+    <button class="filter-btn" onclick="filterBias('neutral', this)">⚪ Neutral</button>
+    <button class="filter-btn" onclick="filterBias('insider', this)">🐋 Insider</button>
+    <label style="margin-left:16px;">Search:</label>
+    <input type="text" id="searchBox" placeholder="TSLA, AMD..." oninput="filterSearch(this.value)" style="width:120px;"/>
+</div>
+
+<!-- Table -->
+<div class="table-wrap">
+    <div class="empty" th:if="${#lists.isEmpty(rows)}">
+        <div class="icon">📭</div>
+        <div>No report generated yet — auto-fires at 4:05 PM ET, or click <strong>Refresh</strong>.</div>
+    </div>
+
+    <table id="eodTable" th:if="${not #lists.isEmpty(rows)}">
+        <thead>
+        <tr>
+            <th onclick="sortTable(0)">Ticker</th>
+            <th onclick="sortTable(1)">Price</th>
+            <th onclick="sortTable(2)">Bias</th>
+            <th onclick="sortTable(3)">Trend</th>
+            <th onclick="sortTable(4)">VPOC</th>
+            <th onclick="sortTable(5)">VAH / VAL</th>
+            <th onclick="sortTable(6)">β SPY</th>
+            <th onclick="sortTable(7)">β QQQ</th>
+            <th>Support Levels</th>
+            <th>Resistance Levels</th>
+            <th onclick="sortTable(10)">Watch For</th>
+            <th>Action for Tomorrow</th>
+            <th onclick="sortTable(12)">Insider (30d)</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr th:each="r : ${rows}"
+            th:classappend="${r.bias == 'bullish'} ? 'bull' : (${r.bias == 'bearish'} ? 'bear' : 'neut')"
+            th:attr="data-bias=${r.bias}, data-insider=${r.hasInsider}">
+
+            <!-- Ticker -->
+            <td>
+                <a class="ticker-link" th:href="${r.tvUrl}" target="_blank" th:text="${r.ticker}">—</a>
+            </td>
+
+            <!-- Price -->
+            <td style="font-weight:600;" th:text="${'$' + #numbers.formatDecimal(r.price, 1, 2)}">—</td>
+
+            <!-- Bias -->
+            <td>
+                <span th:if="${r.bias == 'bullish'}" class="chip chip-bull">🟢 BULL</span>
+                <span th:if="${r.bias == 'bearish'}" class="chip chip-bear">🔴 BEAR</span>
+                <span th:if="${r.bias == 'neutral'}" class="chip chip-neut">⚪ NEUT</span>
+            </td>
+
+            <!-- Trend -->
+            <td class="wrap" style="color:var(--muted); font-size:11px;" th:text="${r.trendSummary}">—</td>
+
+            <!-- VPOC -->
+            <td th:text="${r.vpoc != null ? ('$' + #numbers.formatDecimal(r.vpoc, 1, 2)) : '—'}">—</td>
+
+            <!-- VAH / VAL -->
+            <td>
+                <div class="vp-bar" th:if="${r.vpoc != null}">
+                    <div class="vp-row"><span class="vp-key">VAH</span><span class="vp-val c-red"  th:text="${'$' + #numbers.formatDecimal(r.vah, 1, 2)}">—</span></div>
+                    <div class="vp-row"><span class="vp-key">VAL</span><span class="vp-val c-green" th:text="${'$' + #numbers.formatDecimal(r.val, 1, 2)}">—</span></div>
+                </div>
+                <span th:if="${r.vpoc == null}" style="color:var(--muted)">—</span>
+            </td>
+
+            <!-- Beta SPY -->
+            <td>
+                <div class="beta-block" th:if="${r.betaSpy != null}">
+                    <div class="beta-row">
+                        <span class="beta-key">β</span>
+                        <span th:text="${r.betaSpy}"
+                              th:classappend="${r.betaSpy >= 2.0} ? 'beta-hi' : (${r.betaSpy >= 1.2} ? 'beta-mid' : 'beta-lo')">—</span>
+                    </div>
+                    <div class="beta-row">
+                        <span class="beta-key">ρ</span>
+                        <span style="color:var(--muted)" th:text="${r.corrSpy}">—</span>
+                    </div>
+                </div>
+                <span th:if="${r.betaSpy == null}" style="color:var(--muted)">—</span>
+            </td>
+
+            <!-- Beta QQQ -->
+            <td>
+                <div class="beta-block" th:if="${r.betaQqq != null}">
+                    <div class="beta-row">
+                        <span class="beta-key">β</span>
+                        <span th:text="${r.betaQqq}"
+                              th:classappend="${r.betaQqq >= 2.0} ? 'beta-hi' : (${r.betaQqq >= 1.2} ? 'beta-mid' : 'beta-lo')">—</span>
+                    </div>
+                    <div class="beta-row">
+                        <span class="beta-key">ρ</span>
+                        <span style="color:var(--muted)" th:text="${r.corrQqq}">—</span>
+                    </div>
+                </div>
+                <span th:if="${r.betaQqq == null}" style="color:var(--muted)">—</span>
+            </td>
+
+            <!-- Support Levels -->
+            <td>
+                <div class="lvl-block">
+                    <div class="lvl-row" th:each="l : ${r.supportLevels}">
+                        <span class="lvl-price c-green" th:text="${'$' + #numbers.formatDecimal(l.price, 1, 2)}">—</span>
+                        <span class="lvl-pct" th:text="${'-' + l.distancePct + '%'}">—</span>
+                        <span th:text="${l.strength}" th:classappend="${l.strength.contains('IMMEDIATE')} ? 'imm' : (${l.strength.contains('NEAR')} ? 'near' : 'wtch')">—</span>
+                    </div>
+                </div>
+            </td>
+
+            <!-- Resistance Levels -->
+            <td>
+                <div class="lvl-block">
+                    <div class="lvl-row" th:each="l : ${r.resistanceLevels}">
+                        <span class="lvl-price c-red" th:text="${'$' + #numbers.formatDecimal(l.price, 1, 2)}">—</span>
+                        <span class="lvl-pct" th:text="${'+' + l.distancePct + '%'}">—</span>
+                        <span th:text="${l.strength}" th:classappend="${l.strength.contains('IMMEDIATE')} ? 'imm' : (${l.strength.contains('NEAR')} ? 'near' : 'wtch')">—</span>
+                    </div>
+                </div>
+            </td>
+
+            <!-- Watch For -->
+            <td class="wrap" th:text="${r.watchFor}">—</td>
+
+            <!-- Action -->
+            <td class="wrap" style="font-size:11px; max-width:260px;" th:text="${r.actionNote}">—</td>
+
+            <!-- Insider Signal -->
+            <td th:if="${r.insiderSignal != null}"
+                th:text="${r.insiderSignal}"
+                th:classappend="${r.insiderSignal.contains('🐋')} ? 'bull-ins' : 'bear-ins'">—</td>
+            <td th:if="${r.insiderSignal == null}" style="color:var(--muted)">—</td>
+        </tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- Footer -->
+<div class="footer">
+    SD Scanner EOD Report — <span th:text="${generatedAt}">—</span> — auto-fires 4:05 PM ET daily
+</div>
+
+<script>
+// ── Filter by bias ────────────────────────────────────────────────────────────
+function filterBias(bias, btn) {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('#eodTable tbody tr').forEach(row => {
+        if (bias === 'all') { row.style.display = ''; return; }
+        if (bias === 'insider') { row.style.display = row.dataset.insider === 'true' ? '' : 'none'; return; }
+        row.style.display = row.dataset.bias === bias ? '' : 'none';
+    });
+}
+
+// ── Search filter ─────────────────────────────────────────────────────────────
+function filterSearch(val) {
+    const q = val.toUpperCase();
+    document.querySelectorAll('#eodTable tbody tr').forEach(row => {
+        const ticker = row.cells[0] ? row.cells[0].textContent.toUpperCase() : '';
+        row.style.display = ticker.includes(q) ? '' : 'none';
+    });
+}
+
+// ── Sort table ────────────────────────────────────────────────────────────────
+let sortDir = {};
+function sortTable(col) {
+    const table = document.getElementById('eodTable');
+    const tbody = table.tBodies[0];
+    const rows  = Array.from(tbody.rows);
+    const asc   = !sortDir[col];
+    sortDir = {}; sortDir[col] = asc;
+
+    rows.sort((a, b) => {
+        let av = a.cells[col] ? a.cells[col].textContent.trim() : '';
+        let bv = b.cells[col] ? b.cells[col].textContent.trim() : '';
+        const an = parseFloat(av.replace(/[$,%βρ↗↘↔+\s]/g,''));
+        const bn = parseFloat(bv.replace(/[$,%βρ↗↘↔+\s]/g,''));
+        if (!isNaN(an) && !isNaN(bn)) return asc ? an-bn : bn-an;
+        return asc ? av.localeCompare(bv) : bv.localeCompare(av);
+    });
+
+    table.querySelectorAll('th').forEach((th,i) => {
+        th.classList.remove('sorted-asc','sorted-desc');
+        if (i === col) th.classList.add(asc ? 'sorted-asc' : 'sorted-desc');
+    });
+    rows.forEach(r => tbody.appendChild(r));
+}
+</script>
+</body>
+</html>

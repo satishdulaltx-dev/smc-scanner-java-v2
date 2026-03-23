@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <meta http-equiv="refresh" content="8"/>
+    <title>SD Scanner</title>
+    <style>
+        :root {
+            --bg:       #0d1117;
+            --surface:  #161b22;
+            --border:   #30363d;
+            --text:     #e6edf3;
+            --muted:    #8b949e;
+            --green:    #3fb950;
+            --red:      #f85149;
+            --blue:     #58a6ff;
+            --yellow:   #d29922;
+            --purple:   #bc8cff;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 13px; }
+
+        /* ── Header ── */
+        .header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; align-items: center; justify-content: space-between; }
+        .logo { display: flex; align-items: center; gap: 10px; }
+        .logo-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--green); box-shadow: 0 0 6px var(--green); }
+        .logo h1 { font-size: 18px; font-weight: 700; letter-spacing: 1px; color: var(--blue); }
+        .logo p  { font-size: 11px; color: var(--muted); }
+        .badge { padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 600; letter-spacing: 1px; }
+        .badge-green { background: rgba(63,185,80,.15); color: var(--green); border: 1px solid var(--green); }
+
+        /* ── Stats bar ── */
+        .stats-bar { display: flex; gap: 24px; padding: 16px 24px; border-bottom: 1px solid var(--border); background: var(--surface); }
+        .stat-block h2 { font-size: 28px; font-weight: 700; color: var(--text); }
+        .stat-block p  { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; }
+        .stat-block .val-green { color: var(--green); }
+        .stat-block .val-yellow { color: var(--yellow); }
+        .stat-block .val-blue   { color: var(--blue); }
+
+        /* ── Body ── */
+        .body { padding: 20px 24px; }
+
+        /* ── Watchlist grid ── */
+        .section-title { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+        .count-chip { background: rgba(88,166,255,.12); color: var(--blue); padding: 2px 8px; border-radius: 12px; font-size: 11px; }
+        .ticker-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 8px; margin-bottom: 28px; }
+        .ticker-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; cursor: pointer; transition: border-color .15s, background .15s; text-decoration: none; color: inherit; display: block; }
+        .ticker-card:hover { border-color: var(--blue); background: rgba(88,166,255,.06); }
+        .ticker-card .name { font-weight: 700; font-size: 13px; }
+        .ticker-card .status { font-size: 10px; color: var(--muted); margin-top: 2px; text-transform: uppercase; letter-spacing: .6px; }
+        .ticker-card .msg   { font-size: 10px; color: var(--muted); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .status-long  { border-left: 3px solid var(--green) !important; }
+        .status-short { border-left: 3px solid var(--red) !important; }
+        .status-scanning { border-left: 3px solid var(--yellow) !important; }
+
+        /* ── Active setups table ── */
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        thead th { background: var(--surface); color: var(--muted); font-weight: 600; font-size: 10px; text-transform: uppercase; letter-spacing: .8px; padding: 8px 12px; text-align: left; border-bottom: 1px solid var(--border); white-space: nowrap; }
+        tbody tr { border-bottom: 1px solid var(--border); transition: background .1s; }
+        tbody tr:hover { background: rgba(255,255,255,.03); }
+        td { padding: 9px 12px; white-space: nowrap; }
+        .dir-long  { color: var(--green); font-weight: 700; }
+        .dir-short { color: var(--red);   font-weight: 700; }
+        .conf-high   { color: var(--green); }
+        .conf-medium { color: var(--yellow); }
+        .conf-low    { color: var(--muted); }
+        .empty-state { text-align: center; padding: 48px; color: var(--muted); }
+        .empty-state .icon { font-size: 32px; margin-bottom: 12px; }
+
+        /* ── Footer ── */
+        .footer { text-align: center; padding: 12px; color: var(--muted); font-size: 11px; border-top: 1px solid var(--border); }
+
+        /* ── Action buttons ── */
+        .header-actions { display: flex; align-items: center; gap: 10px; }
+        .btn { padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; border: 1px solid; letter-spacing: .5px; transition: opacity .15s, transform .1s; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; }
+        .btn:active { transform: scale(.97); }
+        .btn-discord { background: rgba(88,101,242,.2); color: #8892f5; border-color: #5865f2; }
+        .btn-discord:hover { background: rgba(88,101,242,.35); }
+        .btn-eod { background: rgba(188,140,255,.15); color: var(--purple); border-color: var(--purple); }
+        .btn-eod:hover { background: rgba(188,140,255,.28); }
+        .btn-disabled { opacity: .45; cursor: not-allowed; pointer-events: none; }
+        #eod-status { font-size: 11px; color: var(--muted); min-width: 120px; }
+    </style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+    <div class="logo">
+        <div class="logo-dot"></div>
+        <div>
+            <h1 th:text="${title}">SD SCANNER</h1>
+            <p th:text="${subtitle}">Smart Money Concepts</p>
+        </div>
+    </div>
+    <div class="header-actions">
+        <span id="eod-status"></span>
+        <a href="/eod" class="btn btn-eod" target="_blank">📊 EOD Report</a>
+        <button class="btn btn-discord" id="send-eod-btn" onclick="sendEodDiscord()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.492c-1.53-.69-3.17-1.2-4.885-1.49a.075.075 0 0 0-.079.036c-.21.369-.444.85-.608 1.23a18.566 18.566 0 0 0-5.487 0 12.36 12.36 0 0 0-.617-1.23A.077.077 0 0 0 8.562 3c-1.714.29-3.354.8-4.885 1.491a.07.07 0 0 0-.032.027C.533 9.093-.32 13.555.099 17.961a.08.08 0 0 0 .031.055 20.03 20.03 0 0 0 5.993 2.98.078.078 0 0 0 .084-.026c.462-.62.874-1.275 1.226-1.963a.074.074 0 0 0-.041-.104 13.201 13.201 0 0 1-1.872-.878.075.075 0 0 1-.008-.125c.126-.093.252-.19.372-.287a.075.075 0 0 1 .078-.01c3.927 1.764 8.18 1.764 12.061 0a.075.075 0 0 1 .079.009c.12.098.245.195.372.288a.075.075 0 0 1-.006.125c-.598.344-1.22.635-1.873.877a.075.075 0 0 0-.041.105c.36.687.772 1.341 1.225 1.962a.077.077 0 0 0 .084.028 19.963 19.963 0 0 0 6.002-2.981.076.076 0 0 0 .032-.054c.5-5.094-.838-9.52-3.549-13.442a.06.06 0 0 0-.031-.028z"/></svg>
+            Send EOD
+        </button>
+        <span class="badge badge-green" th:text="${runStatus}">RUNNING</span>
+    </div>
+</div>
+
+<script>
+function sendEodDiscord() {
+    const btn = document.getElementById('send-eod-btn');
+    const status = document.getElementById('eod-status');
+    btn.classList.add('btn-disabled');
+    btn.textContent = '⏳ Generating...';
+    status.textContent = '';
+    fetch('/api/send-eod-discord', { method: 'POST' })
+        .then(r => r.json())
+        .then(d => {
+            if (d.sent) {
+                status.style.color = '#3fb950';
+                status.textContent = '✓ Sent ' + d.tickers + ' tickers';
+            } else {
+                status.style.color = '#f85149';
+                status.textContent = '✗ ' + (d.error || 'Failed');
+            }
+        })
+        .catch(() => {
+            status.style.color = '#f85149';
+            status.textContent = '✗ Network error';
+        })
+        .finally(() => {
+            btn.classList.remove('btn-disabled');
+            btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M20.317 4.492c-1.53-.69-3.17-1.2-4.885-1.49a.075.075 0 0 0-.079.036c-.21.369-.444.85-.608 1.23a18.566 18.566 0 0 0-5.487 0 12.36 12.36 0 0 0-.617-1.23A.077.077 0 0 0 8.562 3c-1.714.29-3.354.8-4.885 1.491a.07.07 0 0 0-.032.027C.533 9.093-.32 13.555.099 17.961a.08.08 0 0 0 .031.055 20.03 20.03 0 0 0 5.993 2.98.078.078 0 0 0 .084-.026c.462-.62.874-1.275 1.226-1.963a.074.074 0 0 0-.041-.104 13.201 13.201 0 0 1-1.872-.878.075.075 0 0 1-.008-.125c.126-.093.252-.19.372-.287a.075.075 0 0 1 .078-.01c3.927 1.764 8.18 1.764 12.061 0a.075.075 0 0 1 .079.009c.12.098.245.195.372.288a.075.075 0 0 1-.006.125c-.598.344-1.22.635-1.873.877a.075.075 0 0 0-.041.105c.36.687.772 1.341 1.225 1.962a.077.077 0 0 0 .084.028 19.963 19.963 0 0 0 6.002-2.981.076.076 0 0 0 .032-.054c.5-5.094-.838-9.52-3.549-13.442a.06.06 0 0 0-.031-.028z"/></svg> Send EOD';
+            setTimeout(() => { status.textContent = ''; }, 8000);
+        });
+}
+</script>
+
+<!-- Stats bar -->
+<div class="stats-bar">
+    <div class="stat-block">
+        <p>WATCHLIST</p>
+        <h2 class="val-blue" th:text="${watchlistSize}">0</h2>
+    </div>
+    <div class="stat-block">
+        <p>ACTIVE SETUPS</p>
+        <h2 class="val-green" th:text="${activeSetups}">0</h2>
+    </div>
+    <div class="stat-block">
+        <p>SESSION</p>
+        <h2 class="val-yellow" style="font-size:20px;" th:text="${currentSession}">—</h2>
+    </div>
+    <div class="stat-block">
+        <p>LAST SCAN</p>
+        <h2 style="font-size:18px; color: var(--muted);" th:text="${lastScan}">—</h2>
+    </div>
+</div>
+
+<!-- Body -->
+<div class="body">
+
+    <!-- Watchlist grid -->
+    <div class="section-title">
+        WATCHLIST <span class="count-chip" th:text="${watchlistSize} + ' tickers'">0 tickers</span>
+    </div>
+    <div class="ticker-grid">
+        <a th:each="t : ${watchlist}"
+           th:href="${t.tvUrl}"
+           target="_blank"
+           rel="noopener noreferrer"
+           th:classappend="${t.status == 'setup-long'} ? 'status-long' : (${t.status == 'setup-short'} ? 'status-short' : (${t.status == 'scanning'} ? 'status-scanning' : ''))"
+           class="ticker-card">
+            <div class="name" th:text="${t.ticker}">TICKER</div>
+            <div class="status" th:text="${t.status.toUpperCase()}">IDLE</div>
+            <div class="msg" th:text="${t.phaseMsg}">Waiting...</div>
+        </a>
+    </div>
+
+    <!-- Active setups -->
+    <div class="section-title">
+        ACTIVE SETUPS
+        <span class="count-chip" th:text="${activeSetups}"
+              th:style="${activeSetups > 0} ? 'background:rgba(63,185,80,.12);color:#3fb950' : ''">0</span>
+    </div>
+
+    <div class="table-wrap">
+        <table th:if="${not #lists.isEmpty(setups)}">
+            <thead>
+            <tr>
+                <th>TICKER</th><th>DIR</th><th>TF</th><th>CONF</th>
+                <th>ENTRY</th><th>STOP LOSS</th><th>TAKE PROFIT</th><th>R:R</th>
+                <th>CONDITIONS</th><th>FVG ZONE</th><th>SESSION</th>
+                <th>VOLATILITY</th><th>TIME</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:each="s : ${setups}">
+                <td th:text="${s.ticker}">—</td>
+                <td>
+                    <span th:if="${s.direction == 'long'}"  class="dir-long">▲ LONG</span>
+                    <span th:if="${s.direction == 'short'}" class="dir-short">▼ SHORT</span>
+                </td>
+                <td th:text="${s.session}">—</td>
+                <td>
+                    <span th:text="${s.confidence} + '%'"
+                          th:classappend="${(s.confidence >= 85)} ? 'conf-high' : (${(s.confidence >= 70)} ? 'conf-medium' : 'conf-low')">0%</span>
+                </td>
+                <td th:text="${'$' + s.entry}">—</td>
+                <td th:text="${'$' + s.stop_loss}">—</td>
+                <td th:text="${'$' + s.take_profit}">—</td>
+                <td th:text="${s.rr + ':1'}">—</td>
+                <td th:text="${s.reasons}">—</td>
+                <td th:text="${'$' + s.fvg_bottom + ' – $' + s.fvg_top}">—</td>
+                <td th:text="${s.session}">—</td>
+                <td th:text="${s.volatility}">—</td>
+                <td th:text="${s.timestamp}">—</td>
+            </tr>
+            </tbody>
+        </table>
+
+        <div class="empty-state" th:if="${#lists.isEmpty(setups)}">
+            <div class="icon">📡</div>
+            <div>No setups yet — waiting for Sweep → Displacement → FVG → Retest</div>
+        </div>
+    </div>
+</div>
+
+<!-- Footer -->
+<div class="footer">
+    Last refresh: <span th:text="${lastScan}">—</span> — auto-refresh every 8s
+</div>
+
+</body>
+</html>
