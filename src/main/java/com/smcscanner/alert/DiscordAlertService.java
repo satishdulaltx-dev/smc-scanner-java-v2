@@ -60,6 +60,37 @@ public class DiscordAlertService {
         return e;
     }
 
+    public boolean sendSwingAlert(TradeSetup s) {
+        String url = config.getDiscordSwingWebhookUrl();
+        if (url == null || url.isBlank()) { log.warn("No swing Discord webhook URL"); return false; }
+        return postEmbeds(url, List.of(buildSwingEmbed(s)));
+    }
+
+    private Map<String,Object> buildSwingEmbed(TradeSetup s) {
+        boolean isLong = "long".equals(s.getDirection());
+        String arrow   = isLong ? "⬆️" : "⬇️";
+        String grade   = s.getConfidence()>=85?"⭐":(s.getConfidence()>=75?"✅":(s.getConfidence()>=65?"🟡":"⚪"));
+        double slPts   = Math.abs(s.getEntry()-s.getStopLoss()), tpPts = Math.abs(s.getTakeProfit()-s.getEntry());
+        double slPct   = s.getEntry()>0?slPts/s.getEntry()*100:0, tpPct = s.getEntry()>0?tpPts/s.getEntry()*100:0;
+        String ts      = ZonedDateTime.now(ZoneOffset.UTC).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))+" UTC";
+        List<Map<String,Object>> fields = List.of(
+            f("Direction",  arrow+" "+s.getDirection().toUpperCase(), true),
+            f("Confidence", grade+" "+s.getConfidence()+"/100",       true),
+            f("Timeframe",  "📅 Daily",                               true),
+            f("Entry Zone", String.format("$%.4f", s.getEntry()),     true),
+            f("Stop Loss",  String.format("$%.4f (-%.2f%%)", s.getStopLoss(),  slPct), true),
+            f("Take Profit",String.format("$%.4f (+%.2f%%)", s.getTakeProfit(), tpPct), true),
+            f("R:R",        String.format("%.1f:1", s.rrRatio()),     true),
+            f("ATR (Daily)",String.format("$%.4f",  s.getAtr()),      true),
+            f("Hold",       "1–5 days (swing)",                       true));
+        Map<String,Object> e = new HashMap<>();
+        e.put("title",  "📊 "+s.getTicker()+" — SWING "+s.getDirection().toUpperCase());
+        e.put("color",  isLong ? 0xFF8C00 : 0x6A5ACD); // orange long / purple short
+        e.put("fields", fields);
+        e.put("footer", Map.of("text", "SD Scanner · Swing · Daily Bars | "+ts));
+        return e;
+    }
+
     public boolean sendEodReport(List<TickerReport> reports) {
         String url=config.resolveEodWebhookUrl();
         if (url==null||url.isBlank()) return false;

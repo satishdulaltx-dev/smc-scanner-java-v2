@@ -9,6 +9,7 @@ import com.smcscanner.state.ReportCache;
 import com.smcscanner.state.SharedState;
 import com.smcscanner.strategy.EodReportService;
 import com.smcscanner.strategy.ScannerService;
+import com.smcscanner.strategy.SwingScannerService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.EnableScheduling;
@@ -25,23 +26,27 @@ public class ScannerScheduler {
     private static final Logger log = LoggerFactory.getLogger(ScannerScheduler.class);
     private static final ZoneId ET = ZoneId.of("America/New_York");
     private static final LocalTime NY_OPEN=LocalTime.of(9,30), NY_CLOSE=LocalTime.of(16,0);
-    private static final LocalTime EOD_TRIGGER=LocalTime.of(16,5), EOD_CUTOFF=LocalTime.of(16,20);
+    private static final LocalTime EOD_TRIGGER=LocalTime.of(16,5),  EOD_CUTOFF=LocalTime.of(16,20);
+    private static final LocalTime SWING_TRIGGER=LocalTime.of(16,30), SWING_CUTOFF=LocalTime.of(17,0);
 
     private volatile boolean eodSentToday=false;
     private volatile int lastEodDay=-1;
+    private volatile boolean swingSentToday=false;
+    private volatile int lastSwingDay=-1;
 
-    private final ScannerConfig      config;
-    private final ScannerService     scanner;
-    private final EodReportService   eodReport;
+    private final ScannerConfig       config;
+    private final ScannerService      scanner;
+    private final SwingScannerService swingScanner;
+    private final EodReportService    eodReport;
     private final DiscordAlertService discord;
-    private final AlertDedup         dedup;
-    private final SharedState        state;
-    private final ReportCache        reportCache;
+    private final AlertDedup          dedup;
+    private final SharedState         state;
+    private final ReportCache         reportCache;
 
-    public ScannerScheduler(ScannerConfig config, ScannerService scanner, EodReportService eodReport,
-                             DiscordAlertService discord, AlertDedup dedup, SharedState state,
-                             ReportCache reportCache) {
-        this.config=config; this.scanner=scanner; this.eodReport=eodReport;
+    public ScannerScheduler(ScannerConfig config, ScannerService scanner, SwingScannerService swingScanner,
+                             EodReportService eodReport, DiscordAlertService discord, AlertDedup dedup,
+                             SharedState state, ReportCache reportCache) {
+        this.config=config; this.scanner=scanner; this.swingScanner=swingScanner; this.eodReport=eodReport;
         this.discord=discord; this.dedup=dedup; this.state=state; this.reportCache=reportCache;
     }
 
@@ -63,6 +68,19 @@ public class ScannerScheduler {
             try{Thread.sleep(200);}catch(InterruptedException e){Thread.currentThread().interrupt();return;}
         }
         dedup.cleanup();
+    }
+
+    @Scheduled(fixedRate=60_000)
+    public void checkSwingScan() {
+        ZonedDateTime nowET=ZonedDateTime.now(ET);
+        LocalTime time=nowET.toLocalTime(); int day=nowET.getDayOfYear();
+        if (day!=lastSwingDay) { swingSentToday=false; lastSwingDay=day; }
+        if (nowET.getDayOfWeek().getValue()>=6||swingSentToday) return;
+        if (time.isBefore(SWING_TRIGGER)||time.isAfter(SWING_CUTOFF)) return;
+        swingSentToday=true;
+        log.info("Running swing scan ({})", time);
+        try { swingScanner.scanAll(config.loadWatchlist()); }
+        catch (Exception e) { log.error("Swing scan failed: {}", e.getMessage()); }
     }
 
     @Scheduled(fixedRate=60_000)

@@ -17,9 +17,10 @@ import java.util.List;
 public class ScannerConfig {
     private static final Logger log = LoggerFactory.getLogger(ScannerConfig.class);
 
-    private String polygonApiKey         = "";
-    private String discordWebhookUrl     = "";
-    private String discordEodWebhookUrl  = "";  // dedicated EOD report channel
+    private String polygonApiKey          = "";
+    private String discordWebhookUrl      = "";
+    private String discordEodWebhookUrl   = "";  // dedicated EOD report channel
+    private String discordSwingWebhookUrl = "";  // swing trade alerts channel
     private int    scanInterval       = 15;
     private int    minConfidence      = 70;
     private int    dashboardPort      = 8080;
@@ -33,9 +34,10 @@ public class ScannerConfig {
     private double maxSpreadPct       = 0.15;
 
     // getters
-    public String getPolygonApiKey()       { return polygonApiKey; }
-    public String getDiscordWebhookUrl()    { return discordWebhookUrl; }
-    public String getDiscordEodWebhookUrl() { return discordEodWebhookUrl; }
+    public String getPolygonApiKey()         { return polygonApiKey; }
+    public String getDiscordWebhookUrl()     { return discordWebhookUrl; }
+    public String getDiscordEodWebhookUrl()  { return discordEodWebhookUrl; }
+    public String getDiscordSwingWebhookUrl(){ return discordSwingWebhookUrl; }
     /** Returns the EOD webhook if set, otherwise falls back to the main webhook. */
     public String resolveEodWebhookUrl()    {
         return (discordEodWebhookUrl != null && !discordEodWebhookUrl.isBlank())
@@ -54,9 +56,10 @@ public class ScannerConfig {
     public double getMaxSpreadPct()        { return maxSpreadPct; }
 
     // setters (required by @ConfigurationProperties)
-    public void setPolygonApiKey(String v)       { this.polygonApiKey = v; }
+    public void setPolygonApiKey(String v)          { this.polygonApiKey = v; }
     public void setDiscordWebhookUrl(String v)      { this.discordWebhookUrl = v; }
     public void setDiscordEodWebhookUrl(String v)   { this.discordEodWebhookUrl = v; }
+    public void setDiscordSwingWebhookUrl(String v) { this.discordSwingWebhookUrl = v; }
     public void setScanInterval(int v)           { this.scanInterval = v; }
     public void setMinConfidence(int v)          { this.minConfidence = v; }
     public void setDashboardPort(int v)          { this.dashboardPort = v; }

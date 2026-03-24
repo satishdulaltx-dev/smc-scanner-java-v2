@@ -14,8 +14,11 @@ public class AlertDedup {
         return ticker + ":" + dir + ":" + String.format("%.2f", entry);
     }
     public boolean isDuplicate(String ticker, String dir, double entry) {
+        return isDuplicate(ticker, dir, entry, COOLDOWN_MIN);
+    }
+    public boolean isDuplicate(String ticker, String dir, double entry, int cooldownMin) {
         Instant l = last.get(key(ticker, dir, entry));
-        return l != null && Instant.now().isBefore(l.plusSeconds(COOLDOWN_MIN * 60L));
+        return l != null && Instant.now().isBefore(l.plusSeconds(cooldownMin * 60L));
     }
     public void markSent(String ticker, String dir, double entry) { last.put(key(ticker, dir, entry), Instant.now()); }
     public void cleanup() { Instant cut=Instant.now().minusSeconds(COOLDOWN_MIN*60L); last.entrySet().removeIf(e->e.getValue().isBefore(cut)); }
