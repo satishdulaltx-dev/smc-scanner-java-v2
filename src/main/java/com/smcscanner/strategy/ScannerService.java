@@ -44,21 +44,30 @@ public class ScannerService {
             List<OHLCV> bars=client.getBars(ticker,"5m",100);
             if (bars==null||bars.size()<20) { setTs(ticker,"idle",null,0,"No data"); return; }
             String htfBias="neutral";
+            double dailyAtr=0.0; // 0 = use fallback (curAtr*8) in SetupDetector
             try { List<OHLCV> hb=client.getBars(ticker,"60m",50); if (hb!=null&&hb.size()>=10) htfBias=mtf.getHtfBias(hb); }
             catch (Exception e) { log.debug("{} HTF error: {}",ticker,e.getMessage()); }
             List<TradeSetup> setups; String phaseMsg;
             if (isC) { setups=crypto.detectCryptoSetup(bars,ticker); phaseMsg=setups.isEmpty()?"Waiting for breakout + volume spike...":""; }
             else {
-                SetupDetector.DetectResult r=setupDetector.detectSetups(bars,htfBias,ticker,false);
+                SetupDetector.DetectResult r=setupDetector.detectSetups(bars,htfBias,ticker,false,dailyAtr);
                 setups=r.setups(); phaseMsg=r.state().phaseMsg();
             }
             if (!setups.isEmpty()) {
                 TradeSetup s=setups.get(0);
                 setTs(ticker,"long".equals(s.getDirection())?"setup-long":"setup-short",s.getDirection(),s.getConfidence(),
                     String.format("ENTRY %s | Score %d | $%.2f",s.getDirection().toUpperCase(),s.getConfidence(),s.getEntry()));
-                if (!dedup.isDuplicate(ticker,s.getDirection())) { discord.sendSetupAlert(s); dedup.markSent(ticker,s.getDirection()); }
+                if (s.getConfidence() >= config.getMinConfidence() && !dedup.isDuplicate(ticker,s.getDirection())) {
+                    log.info("SETUP ALERT {} {} conf={} entry={}", ticker, s.getDirection().toUpperCase(), s.getConfidence(), s.getEntry());
+                    discord.sendSetupAlert(s); dedup.markSent(ticker,s.getDirection());
+                } else if (s.getConfidence() < config.getMinConfidence()) {
+                    log.debug("{} setup found but LOW_CONF conf={} min={}", ticker, s.getConfidence(), config.getMinConfidence());
+                }
                 tracker.recordSetup(s); updateSetup(s);
-            } else { removeSetup(ticker); setTs(ticker,"idle",null,0,phaseMsg); }
+            } else {
+                log.debug("{} phase={}", ticker, phaseMsg);
+                removeSetup(ticker); setTs(ticker,"idle",null,0,phaseMsg);
+            }
         } catch (Exception e) { log.error("Error scanning {}: {}",ticker,e.getMessage()); setTs(ticker,"idle",null,0,"Error: "+e.getMessage()); }
     }
 

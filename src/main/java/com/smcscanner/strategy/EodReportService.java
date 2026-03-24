@@ -441,10 +441,10 @@ public class EodReportService {
                           "description", sumDesc.toString(),
                           "color", 0x3498DB, "footer", footer));
 
-        // ── Per-ticker embeds (bullish + bearish, max 8) ───────────────────────
+        // ── Per-ticker embeds (bullish + bearish, max 20) ───────────────────────
         List<TickerReport> toShow = new ArrayList<>(bullish);
         toShow.addAll(bearish);
-        toShow = toShow.stream().filter(r->r.getActionNote()!=null).limit(6).toList();
+        toShow = toShow.stream().limit(20).toList();
 
         for (TickerReport r : toShow) {
             int    color = "bullish".equals(r.getBias()) ? 0x00C853 : 0xFF1744;

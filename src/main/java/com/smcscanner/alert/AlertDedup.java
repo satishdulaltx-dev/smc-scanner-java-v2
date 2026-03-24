@@ -6,7 +6,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Component
 public class AlertDedup {
-    private static final int COOLDOWN_MIN = 30;
+    private static final int COOLDOWN_MIN = 240; // 4 hours — one full trading session
     private final ConcurrentHashMap<String,Instant> last = new ConcurrentHashMap<>();
 
     private String key(String ticker,String dir) { return ticker+":"+dir; }

@@ -83,8 +83,8 @@ public class PolygonClient {
         String apiKey = config.getPolygonApiKey();
         if (apiKey == null || apiKey.isBlank()) { log.warn("POLYGON_API_KEY not set for {}", ticker); return new ArrayList<>(); }
         String[] tf   = TF_MAP.getOrDefault(timeframe.toLowerCase(), new String[]{"5", "minute"});
-        // Lookback window: daily bars need ~90 calendar days; intraday needs ~7 days
-        int lookbackDays = tf[1].equals("day") ? 90 : (tf[1].equals("hour") ? 30 : 7);
+        // Lookback window: daily uses 2x limit to ensure enough trading days; hourly=7d; minute=1d
+        int lookbackDays = tf[1].equals("day") ? Math.max(90, limit * 2) : (tf[1].equals("hour") ? 7 : 1);
         String to     = LocalDate.now(ZoneOffset.UTC).format(DateTimeFormatter.ISO_LOCAL_DATE);
         String from   = LocalDate.now(ZoneOffset.UTC).minusDays(lookbackDays).format(DateTimeFormatter.ISO_LOCAL_DATE);
         String url    = String.format("https://api.polygon.io/v2/aggs/ticker/%s/range/%s/%s/%s/%s?adjusted=true&sort=asc&limit=%d&apiKey=%s",

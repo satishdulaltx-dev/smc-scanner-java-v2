@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>SD Scanner — Backtest</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --bg:#0d1117; --surface:#161b22; --border:#30363d;
+            --text:#e6edf3; --muted:#8b949e;
+            --green:#3fb950; --red:#f85149; --blue:#58a6ff;
+            --yellow:#d29922; --purple:#bc8cff; --orange:#f0883e;
+        }
+        * { box-sizing:border-box; margin:0; padding:0; }
+        body { background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,sans-serif; font-size:13px; min-height:100vh; }
+
+        /* Header */
+        .header { background:var(--surface); border-bottom:1px solid var(--border); padding:14px 24px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; }
+        .logo { display:flex; align-items:center; gap:10px; }
+        .logo-dot { width:10px; height:10px; border-radius:50%; background:var(--purple); box-shadow:0 0 6px var(--purple); }
+        .logo h1 { font-size:18px; font-weight:700; color:var(--blue); letter-spacing:1px; }
+        .logo p { font-size:11px; color:var(--muted); }
+        .btn { padding:6px 14px; border-radius:6px; font-size:12px; font-weight:600; cursor:pointer; text-decoration:none; display:inline-flex; align-items:center; gap:6px; border:1px solid; transition:opacity .15s; }
+        .btn:hover { opacity:.8; }
+        .btn-blue   { background:rgba(88,166,255,.15); color:var(--blue);   border-color:var(--blue); }
+        .btn-purple { background:rgba(188,140,255,.15); color:var(--purple); border-color:var(--purple); }
+
+        /* Controls */
+        .controls { background:var(--surface); border-bottom:1px solid var(--border); padding:16px 24px; display:flex; align-items:flex-end; gap:16px; flex-wrap:wrap; }
+        .ctrl-group { display:flex; flex-direction:column; gap:6px; }
+        .ctrl-group label { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.8px; font-weight:600; }
+        .ctrl-group select, .ctrl-group input {
+            background:var(--bg); border:1px solid var(--border); color:var(--text);
+            padding:8px 12px; border-radius:6px; font-size:13px; min-width:140px;
+        }
+        .ctrl-group select:focus, .ctrl-group input:focus { outline:none; border-color:var(--blue); }
+        .run-btn { padding:9px 24px; border-radius:6px; font-size:13px; font-weight:700; cursor:pointer; border:none; background:var(--blue); color:#0d1117; letter-spacing:.5px; transition:opacity .15s; }
+        .run-btn:hover { opacity:.85; }
+        .run-btn:disabled { opacity:.4; cursor:not-allowed; }
+
+        /* Stats cards */
+        .stats-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:12px; padding:20px 24px 0; }
+        .stat-card { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:14px 16px; }
+        .stat-card .val { font-size:28px; font-weight:700; margin-bottom:4px; }
+        .stat-card .lbl { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.8px; }
+        .c-green { color:var(--green); } .c-red { color:var(--red); } .c-blue { color:var(--blue); }
+        .c-yellow { color:var(--yellow); } .c-purple { color:var(--purple); } .c-muted { color:var(--muted); }
+
+        /* Charts row */
+        .charts-row { display:grid; grid-template-columns:1fr 1fr; gap:16px; padding:16px 24px; }
+        .chart-card { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:16px; }
+        .chart-title { font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.8px; margin-bottom:12px; }
+        .chart-wrap { position:relative; height:200px; }
+
+        /* Trades table */
+        .table-section { padding:0 24px 24px; }
+        .section-title { font-size:11px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:.8px; margin:16px 0 10px; display:flex; align-items:center; gap:8px; }
+        .count-chip { background:rgba(88,166,255,.12); color:var(--blue); padding:2px 8px; border-radius:12px; font-size:11px; }
+        table { width:100%; border-collapse:collapse; font-size:12px; }
+        thead th { background:var(--surface); color:var(--muted); font-weight:600; font-size:10px; text-transform:uppercase; letter-spacing:.8px; padding:8px 12px; text-align:left; border-bottom:1px solid var(--border); white-space:nowrap; }
+        tbody tr { border-bottom:1px solid var(--border); transition:background .1s; }
+        tbody tr:hover { background:rgba(255,255,255,.03); }
+        tbody tr.win-row { border-left:3px solid var(--green); }
+        tbody tr.loss-row { border-left:3px solid var(--red); }
+        td { padding:9px 12px; white-space:nowrap; }
+        .dir-long  { color:var(--green); font-weight:700; }
+        .dir-short { color:var(--red);   font-weight:700; }
+        .win-badge  { background:rgba(63,185,80,.15); color:var(--green); padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; }
+        .loss-badge { background:rgba(248,81,73,.15);  color:var(--red);   padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; }
+
+        /* Empty / loading states */
+        .empty-state { text-align:center; padding:60px 24px; color:var(--muted); }
+        .empty-icon { font-size:40px; margin-bottom:12px; }
+        .loading { display:none; text-align:center; padding:48px; color:var(--muted); }
+        .spinner { display:inline-block; width:24px; height:24px; border:2px solid var(--border); border-top-color:var(--blue); border-radius:50%; animation:spin .8s linear infinite; margin-right:8px; vertical-align:middle; }
+        @keyframes spin { to { transform:rotate(360deg); } }
+
+        /* Ticker multi-select grid */
+        .ticker-grid-select { display:flex; flex-wrap:wrap; gap:6px; max-width:600px; }
+        .ticker-pill { padding:4px 10px; border-radius:20px; border:1px solid var(--border); background:var(--bg); color:var(--muted); cursor:pointer; font-size:11px; font-weight:600; transition:all .15s; user-select:none; }
+        .ticker-pill.active { border-color:var(--blue); color:var(--blue); background:rgba(88,166,255,.1); }
+        .ticker-pill:hover { border-color:var(--blue); }
+
+        /* Batch results */
+        .batch-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:10px; padding:0 24px 24px; }
+        .batch-card { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:12px 14px; cursor:pointer; transition:border-color .15s; }
+        .batch-card:hover { border-color:var(--blue); }
+        .batch-card.positive { border-left:3px solid var(--green); }
+        .batch-card.negative { border-left:3px solid var(--red); }
+        .batch-card .bt-ticker { font-size:14px; font-weight:700; margin-bottom:6px; }
+        .batch-card .bt-row { display:flex; justify-content:space-between; font-size:11px; color:var(--muted); margin-top:3px; }
+        .batch-card .bt-val { font-weight:600; }
+
+        /* Footer */
+        .footer { text-align:center; padding:16px; color:var(--muted); font-size:11px; border-top:1px solid var(--border); margin-top:16px; }
+    </style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+    <div class="logo">
+        <div class="logo-dot"></div>
+        <div>
+            <h1>SD SCANNER — BACKTEST</h1>
+            <p>SMC strategy historical performance</p>
+        </div>
+    </div>
+    <div style="display:flex;gap:10px">
+        <a href="/" class="btn btn-blue">← Dashboard</a>
+        <a href="/eod" class="btn btn-purple">📊 EOD Report</a>
+    </div>
+</div>
+
+<!-- Controls -->
+<div class="controls">
+    <div class="ctrl-group">
+        <label>Mode</label>
+        <select id="mode" onchange="toggleMode()">
+            <option value="single">Single Ticker</option>
+            <option value="batch">All Watchlist</option>
+        </select>
+    </div>
+    <div class="ctrl-group" id="ticker-ctrl">
+        <label>Ticker</label>
+        <select id="ticker">
+            <option>AAPL</option><option>MSFT</option><option>GOOGL</option><option>AMZN</option>
+            <option>NVDA</option><option>META</option><option>TSLA</option><option>AMD</option>
+            <option>NFLX</option><option>SPY</option><option>QQQ</option><option>COIN</option>
+            <option>SHOP</option><option>PLTR</option><option>SOFI</option><option>RIVN</option>
+            <option>NIO</option><option>BABA</option><option selected>PYPL</option><option>DIS</option>
+            <option>BA</option><option>JPM</option><option>GS</option><option>V</option>
+            <option>UBER</option><option>ABNB</option><option>SNAP</option><option>ROKU</option>
+            <option>MARA</option><option>HOOD</option><option>MSTR</option>
+            <option>X:BTCUSD</option><option>X:ETHUSD</option><option>X:SOLUSD</option><option>X:XRPUSD</option>
+        </select>
+    </div>
+    <div class="ctrl-group">
+        <label>Lookback</label>
+        <select id="days">
+            <option value="30">30 days</option>
+            <option value="60">60 days</option>
+            <option value="90" selected>90 days</option>
+            <option value="180">180 days</option>
+        </select>
+    </div>
+    <button class="run-btn" id="run-btn" onclick="runBacktest()">▶ Run Backtest</button>
+</div>
+
+<!-- Loading -->
+<div class="loading" id="loading">
+    <span class="spinner"></span> Running backtest...
+</div>
+
+<!-- Single ticker results -->
+<div id="single-results" style="display:none">
+    <!-- Stats -->
+    <div class="stats-grid" id="stats-grid"></div>
+
+    <!-- Charts -->
+    <div class="charts-row">
+        <div class="chart-card">
+            <div class="chart-title">Equity Curve (cumulative P&L %)</div>
+            <div class="chart-wrap"><canvas id="equity-chart"></canvas></div>
+        </div>
+        <div class="chart-card">
+            <div class="chart-title">Win / Loss Distribution</div>
+            <div class="chart-wrap"><canvas id="dist-chart"></canvas></div>
+        </div>
+    </div>
+
+    <!-- Trades table -->
+    <div class="table-section">
+        <div class="section-title">
+            TRADE LOG <span class="count-chip" id="trade-count">0</span>
+            <span style="font-size:10px;color:#f59e0b;font-weight:400;text-transform:none;letter-spacing:0;margin-left:8px">
+                ⚠ Daily bar backtest (swing) — TP/SL are fixed 1:3 ratio · Live alerts use 5m bars (intraday)
+            </span>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th><th>ENTRY DATE</th><th>EXIT DATE</th><th>DAYS HELD</th><th>DIR</th>
+                    <th>ENTRY</th><th>STOP LOSS</th><th>TAKE PROFIT</th><th>OUTCOME</th><th>P&L %</th>
+                </tr>
+            </thead>
+            <tbody id="trades-tbody"></tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Batch results -->
+<div id="batch-results" style="display:none">
+    <div style="padding:16px 24px 8px; color:var(--muted); font-size:11px; text-transform:uppercase; font-weight:600; letter-spacing:.8px;">
+        WATCHLIST BACKTEST RESULTS
+        <span style="color:var(--muted); font-size:10px; margin-left:8px;">Click a card to drill in</span>
+    </div>
+    <div class="batch-grid" id="batch-grid"></div>
+</div>
+
+<!-- Empty state -->
+<div class="empty-state" id="empty-state">
+    <div class="empty-icon">📈</div>
+    <div>Select a ticker and click Run Backtest</div>
+    <div style="font-size:11px; color:var(--muted); margin-top:6px;">Replays 90 days of price data to find SMC setups and test outcomes</div>
+</div>
+
+<div class="footer">SD Scanner — Backtest Engine · Daily bar replay · SMC: Sweep→Displacement→FVG→Retest</div>
+
+<script>
+let equityChart = null, distChart = null;
+
+function toggleMode() {
+    const single = document.getElementById('mode').value === 'single';
+    document.getElementById('ticker-ctrl').style.display = single ? '' : 'none';
+}
+
+function runBacktest() {
+    const mode = document.getElementById('mode').value;
+    if (mode === 'batch') { runBatch(); return; }
+    const ticker = document.getElementById('ticker').value;
+    const days   = document.getElementById('days').value;
+    setLoading(true);
+    fetch(`/api/backtest?ticker=${ticker}&days=${days}`)
+        .then(r => r.json())
+        .then(d => { setLoading(false); renderSingle(d); })
+        .catch(() => { setLoading(false); alert('Backtest failed'); });
+}
+
+function runBatch() {
+    const tickers = ['AAPL','MSFT','GOOGL','AMZN','NVDA','META','TSLA','AMD','NFLX','SPY','QQQ',
+        'COIN','SHOP','PLTR','SOFI','RIVN','NIO','BABA','PYPL','DIS','BA','JPM','GS','V',
+        'UBER','ABNB','SNAP','ROKU','MARA','HOOD','MSTR'];
+    const days = document.getElementById('days').value;
+    setLoading(true);
+    hide('single-results'); hide('empty-state');
+
+    const promises = tickers.map(t =>
+        fetch(`/api/backtest?ticker=${t}&days=${days}`).then(r => r.json()).catch(() => null)
+    );
+    Promise.all(promises).then(results => {
+        setLoading(false);
+        renderBatch(results.filter(Boolean), days);
+    });
+}
+
+function renderSingle(d) {
+    hide('batch-results'); hide('empty-state');
+    show('single-results');
+
+    if (d.error && d.total_trades === 0) {
+        document.getElementById('stats-grid').innerHTML =
+            `<div style="grid-column:1/-1;color:var(--red);padding:20px">${d.ticker}: ${d.error}</div>`;
+        document.getElementById('trades-tbody').innerHTML = '';
+        document.getElementById('trade-count').textContent = '0';
+        return;
+    }
+
+    const wr = d.win_rate;
+    const wrColor = wr >= 60 ? 'var(--green)' : wr >= 45 ? 'var(--yellow)' : 'var(--red)';
+    const exColor = d.expectancy >= 0 ? 'var(--green)' : 'var(--red)';
+
+    document.getElementById('stats-grid').innerHTML = `
+        <div class="stat-card"><div class="val" style="color:var(--blue)">${d.total_trades}</div><div class="lbl">Total Trades</div></div>
+        <div class="stat-card"><div class="val" style="color:${wrColor}">${wr}%</div><div class="lbl">Win Rate</div></div>
+        <div class="stat-card"><div class="val" style="color:var(--green)">${d.wins}</div><div class="lbl">Wins</div></div>
+        <div class="stat-card"><div class="val" style="color:var(--red)">${d.losses}</div><div class="lbl">Losses</div></div>
+        <div class="stat-card"><div class="val" style="color:${exColor}">${d.expectancy >= 0 ? '+' : ''}${d.expectancy}%</div><div class="lbl">Expectancy / Trade</div></div>
+        <div class="stat-card"><div class="val c-green">+${d.avg_win_pct.toFixed(2)}%</div><div class="lbl">Avg Win</div></div>
+        <div class="stat-card"><div class="val c-red">-${d.avg_loss_pct.toFixed(2)}%</div><div class="lbl">Avg Loss</div></div>
+        <div class="stat-card"><div class="val c-purple">${d.lookback_days}d</div><div class="lbl">Lookback</div></div>
+    `;
+
+    // Equity curve
+    let cum = 0;
+    const labels = [], cumData = [];
+    labels.push('Start'); cumData.push(0);
+    d.trades.forEach((t, i) => {
+        cum += t.pnl_pct;
+        labels.push(`#${i+1}`);
+        cumData.push(Math.round(cum * 100) / 100);
+    });
+    drawEquity(labels, cumData);
+
+    // Distribution chart
+    const wins = d.trades.filter(t => t.outcome === 'WIN').map(t => t.pnl_pct);
+    const losses = d.trades.filter(t => t.outcome === 'LOSS').map(t => t.pnl_pct);
+    drawDist(wins, losses);
+
+    // Trades table
+    document.getElementById('trade-count').textContent = d.total_trades;
+    const ticker = document.getElementById('ticker').value;
+    const tvTicker = ticker.startsWith('X:') ? ticker.replace('X:','').replace('USD','USDT') : ticker;
+    document.getElementById('trades-tbody').innerHTML = d.trades.map((t, i) => {
+        const tvUrl = `https://www.tradingview.com/chart/?symbol=${tvTicker}&interval=D`;
+        const daysLabel = t.days_held === 0 ? 'same day' : t.days_held === 1 ? '1 day' : `${t.days_held} days`;
+        const tradeType = t.days_held === 0 ? '<span style="color:#f59e0b;font-size:10px">INTRADAY</span>'
+                        : t.days_held <= 3  ? '<span style="color:#60a5fa;font-size:10px">SHORT SWING</span>'
+                        :                     '<span style="color:#a78bfa;font-size:10px">SWING</span>';
+        return `
+        <tr class="${t.outcome === 'WIN' ? 'win-row' : 'loss-row'}">
+            <td style="color:var(--muted)">${i+1}</td>
+            <td><a href="${tvUrl}" target="_blank" style="color:var(--accent);text-decoration:none;font-size:11px;font-family:monospace" title="View on TradingView">${t.entry_date || '—'}</a></td>
+            <td style="font-size:11px;font-family:monospace;color:var(--muted)">${t.exit_date || '—'}</td>
+            <td style="font-size:11px">${daysLabel}<br>${tradeType}</td>
+            <td class="${t.dir === 'long' ? 'dir-long' : 'dir-short'}">${t.dir === 'long' ? '▲ LONG' : '▼ SHORT'}</td>
+            <td>$${t.entry.toFixed(2)}</td>
+            <td style="color:var(--red)">$${t.sl.toFixed(2)}</td>
+            <td style="color:var(--green)">$${t.tp.toFixed(2)}</td>
+            <td><span class="${t.outcome === 'WIN' ? 'win-badge' : 'loss-badge'}">${t.outcome}</span></td>
+            <td style="color:${t.pnl_pct >= 0 ? 'var(--green)' : 'var(--red)'}; font-weight:600">
+                ${t.pnl_pct >= 0 ? '+' : ''}${t.pnl_pct.toFixed(2)}%
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+function renderBatch(results, days) {
+    show('batch-results');
+    results.sort((a, b) => b.expectancy - a.expectancy);
+    document.getElementById('batch-grid').innerHTML = results.map(d => {
+        const positive = d.expectancy >= 0;
+        const wrColor = d.win_rate >= 60 ? '#3fb950' : d.win_rate >= 45 ? '#d29922' : '#f85149';
+        return `<div class="batch-card ${positive ? 'positive' : 'negative'}" onclick="drillIn('${d.ticker}', ${days})">
+            <div class="bt-ticker">${d.ticker} ${positive ? '📈' : '📉'}</div>
+            <div class="bt-row"><span>Win Rate</span><span class="bt-val" style="color:${wrColor}">${d.win_rate}%</span></div>
+            <div class="bt-row"><span>Trades</span><span class="bt-val">${d.total_trades}</span></div>
+            <div class="bt-row"><span>Expectancy</span>
+                <span class="bt-val" style="color:${positive ? '#3fb950' : '#f85149'}">${d.expectancy >= 0 ? '+' : ''}${d.expectancy}%</span>
+            </div>
+            <div class="bt-row"><span>Avg Win</span><span class="bt-val c-green">+${(d.avg_win_pct||0).toFixed(2)}%</span></div>
+        </div>`;
+    }).join('');
+}
+
+function drillIn(ticker, days) {
+    document.getElementById('mode').value = 'single';
+    document.getElementById('ticker').value = ticker;
+    document.getElementById('days').value = days;
+    toggleMode();
+    setLoading(true);
+    fetch(`/api/backtest?ticker=${ticker}&days=${days}`)
+        .then(r => r.json())
+        .then(d => { setLoading(false); renderSingle(d); })
+        .catch(() => { setLoading(false); });
+}
+
+function drawEquity(labels, data) {
+    if (equityChart) equityChart.destroy();
+    const ctx = document.getElementById('equity-chart').getContext('2d');
+    const lastVal = data[data.length - 1] || 0;
+    const lineColor = lastVal >= 0 ? '#3fb950' : '#f85149';
+    equityChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [{
+                data, borderColor: lineColor, backgroundColor: lineColor + '18',
+                borderWidth: 2, pointRadius: 3, pointBackgroundColor: lineColor, fill: true, tension: 0.3
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { grid: { color: '#30363d' }, ticks: { color: '#8b949e', font: { size: 10 } } },
+                y: { grid: { color: '#30363d' }, ticks: { color: '#8b949e', font: { size: 10 },
+                    callback: v => v + '%' } }
+            }
+        }
+    });
+}
+
+function drawDist(wins, losses) {
+    if (distChart) distChart.destroy();
+    const ctx = document.getElementById('dist-chart').getContext('2d');
+    const allPnl = [...wins.map(v => ({v, c:'#3fb950'})), ...losses.map(v => ({v, c:'#f85149'}))];
+    allPnl.sort((a, b) => a.v - b.v);
+    distChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: allPnl.map((_, i) => `T${i+1}`),
+            datasets: [{
+                data: allPnl.map(x => x.v),
+                backgroundColor: allPnl.map(x => x.c + 'cc'),
+                borderColor: allPnl.map(x => x.c),
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { grid: { color: '#30363d' }, ticks: { color: '#8b949e', font: { size: 10 } } },
+                y: { grid: { color: '#30363d' }, ticks: { color: '#8b949e', font: { size: 10 },
+                    callback: v => v + '%' } }
+            }
+        }
+    });
+}
+
+function setLoading(on) {
+    document.getElementById('loading').style.display = on ? 'block' : 'none';
+    document.getElementById('run-btn').disabled = on;
+    if (on) { hide('single-results'); hide('batch-results'); hide('empty-state'); }
+}
+function show(id) { document.getElementById(id).style.display = ''; }
+function hide(id) { document.getElementById(id).style.display = 'none'; }
+</script>
+</body>
+</html>

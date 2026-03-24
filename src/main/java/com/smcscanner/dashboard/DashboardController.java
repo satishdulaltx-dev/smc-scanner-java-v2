@@ -1,5 +1,6 @@
 package com.smcscanner.dashboard;
 
+import com.smcscanner.backtest.BacktestService;
 import com.smcscanner.config.ScannerConfig;
 import com.smcscanner.model.TickerStatus;
 import com.smcscanner.model.eod.Level;
@@ -40,6 +41,7 @@ public class DashboardController {
     private final EodReportService   eodReport;
     private final DiscordAlertService discord;
     private final ReportCache        reportCache;
+    private final BacktestService    backtestService;
 
     private static final Map<String,String> TV_MAP = Map.of(
         "X:BTCUSD", "BINANCE:BTCUSDT",
@@ -55,10 +57,11 @@ public class DashboardController {
 
     public DashboardController(SharedState state, ScannerConfig config, SessionFilter sessionFilter,
                                 PerformanceTracker tracker, EodReportService eodReport,
-                                DiscordAlertService discord, ReportCache reportCache) {
+                                DiscordAlertService discord, ReportCache reportCache,
+                                BacktestService backtestService) {
         this.state=state; this.config=config; this.sessionFilter=sessionFilter;
         this.tracker=tracker; this.eodReport=eodReport; this.discord=discord;
-        this.reportCache=reportCache;
+        this.reportCache=reportCache; this.backtestService=backtestService;
     }
 
     @GetMapping("/")
@@ -348,6 +351,48 @@ public class DashboardController {
 
             return row;
         }).collect(Collectors.toList());
+    }
+
+    /** GET /backtest - serve backtest UI page */
+    @GetMapping("/backtest")
+    public String backtestPage(Model model) {
+        model.addAttribute("tickers", config.loadWatchlist());
+        return "backtest";
+    }
+
+    /** GET /api/backtest?ticker=AAPL&days=90 */
+    @GetMapping("/api/backtest")
+    @ResponseBody
+    public ResponseEntity<Map<String,Object>> apiBacktest(
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue="AAPL") String ticker,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue="90")  int days) {
+        try {
+            var result = backtestService.run(ticker.toUpperCase(), days);
+            Map<String,Object> resp = new LinkedHashMap<>();
+            resp.put("ticker",      result.ticker);
+            resp.put("lookback_days", result.lookbackDays);
+            resp.put("total_trades", result.total);
+            resp.put("wins",         result.wins);
+            resp.put("losses",       result.losses);
+            resp.put("win_rate",     result.winRate);
+            resp.put("avg_win_pct",  Math.round(result.avgWinPct*100)/100.0);
+            resp.put("avg_loss_pct", Math.round(result.avgLossPct*100)/100.0);
+            resp.put("expectancy",   Math.round(result.expectancy*100)/100.0);
+            if (result.error != null) resp.put("error", result.error);
+            List<Map<String,Object>> tradeList = result.trades.stream().map(t -> {
+                Map<String,Object> m = new LinkedHashMap<>();
+                m.put("entry_date", t.barIndex()); m.put("exit_date", t.exitDate());
+                m.put("days_held", t.daysHeld()); m.put("dir", t.direction()); m.put("entry", t.entry());
+                m.put("sl", t.sl()); m.put("tp", t.tp());
+                m.put("outcome", t.outcome()); m.put("pnl_pct", t.pnlPct());
+                return m;
+            }).collect(java.util.stream.Collectors.toList());
+            resp.put("trades", tradeList);
+            return ResponseEntity.ok(resp);
+        } catch (Exception e) {
+            log.error("Backtest error: {}", e.getMessage());
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
     }
 
     @GetMapping("/health")
