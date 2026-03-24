@@ -91,13 +91,15 @@
     },
     {
       "ticker": "META",
-      "strategyType": "vwap",
-      "note": "Large-cap — VWAP reversion strategy"
+      "strategyType": "keylevel",
+      "note": "Large-cap — Key Level Rejection: 40% WR +0.35% expectancy over 180d (was VWAP 25% WR)"
     },
     {
       "ticker": "V",
-      "strategyType": "vwap",
-      "note": "Payment mega-cap — VWAP reversion"
+      "skip": true,
+      "skipReason": "Neither VWAP (0% WR) nor Key Level (18% WR, -0.01% expectancy) produced reliable intraday edge — too slow-moving for 5m strategy",
+      "strategyType": "keylevel",
+      "note": "skip=true; V is a stable mega-cap with tiny intraday ranges. Revisit with daily-bar swing strategy."
     },
     {
       "ticker": "DIS",
