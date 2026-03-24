@@ -59,13 +59,19 @@ public class BacktestService {
             List<OHLCV> dayBars = byDate.get(date);
             if (dayBars.size() < 20) continue;
 
-            // HTF bias: price vs 20-day SMA using daily bars up to this date
+            // HTF bias + daily ATR using daily bars up to this date
             String htfBias = "neutral";
+            double dailyAtr = 0.0;
             if (dailyBars != null && !dailyBars.isEmpty()) {
                 long cutoff = date.atStartOfDay(ET).toInstant().toEpochMilli();
                 List<OHLCV> htfSlice = dailyBars.stream()
                         .filter(b -> Long.parseLong(b.getTimestamp()) < cutoff)
                         .collect(Collectors.toList());
+                if (htfSlice.size() >= 5) {
+                    // Daily ATR — used for proper TP/SL sizing in SetupDetector
+                    double[] da = atrCalc.computeAtr(htfSlice, Math.min(14, htfSlice.size()-1));
+                    for (int i = da.length-1; i >= 0; i--) { if (da[i] > 0) { dailyAtr = da[i]; break; } }
+                }
                 if (htfSlice.size() >= 20) {
                     double sma = htfSlice.subList(htfSlice.size()-20, htfSlice.size())
                             .stream().mapToDouble(OHLCV::getClose).average().orElse(0);
@@ -79,7 +85,7 @@ public class BacktestService {
             for (int end = 20; end <= dayBars.size() && !tradePlacedToday; end++) {
                 List<OHLCV> window = dayBars.subList(0, end);
                 SetupDetector.DetectResult dr = setupDetector.detectSetups(
-                        window, htfBias, ticker, false, 0.0, true); // backtestMode=true bypasses session filter
+                        window, htfBias, ticker, false, dailyAtr, true); // backtestMode=true, real dailyAtr for TP/SL
                 if (dr.setups().isEmpty()) continue;
 
                 TradeSetup setup = dr.setups().get(0);

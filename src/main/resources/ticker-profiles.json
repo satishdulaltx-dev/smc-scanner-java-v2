@@ -1,0 +1,79 @@
+{
+  "profiles": [
+    {
+      "ticker": "GOOGL",
+      "skip": true,
+      "skipReason": "Mega-cap stable stock — SMC 5m FVG patterns unreliable (5.6% win rate over 500 days)"
+    },
+    {
+      "ticker": "RIVN",
+      "minConfidence": 82,
+      "minFvgPct": 0.0014,
+      "dispAtrMult": 1.8,
+      "minVolMult": 2.0,
+      "note": "Speculative EV stock — high noise, requires very strong displacement + large FVG"
+    },
+    {
+      "ticker": "HOOD",
+      "minConfidence": 80,
+      "minFvgPct": 0.0012,
+      "dispAtrMult": 1.7,
+      "minVolMult": 2.0,
+      "note": "Speculative fintech — only fire on very high-quality setups"
+    },
+    {
+      "ticker": "AMZN",
+      "minConfidence": 75,
+      "minFvgPct": 0.0008,
+      "note": "Large-cap — needs cleaner FVG and higher confidence"
+    },
+    {
+      "ticker": "MSTR",
+      "minConfidence": 75,
+      "minFvgPct": 0.0010,
+      "note": "Bitcoin proxy — extreme volatility, only strongest setups"
+    },
+    {
+      "ticker": "NIO",
+      "minConfidence": 72,
+      "minFvgPct": 0.0008,
+      "note": "Chinese EV — moderate tightening"
+    },
+    {
+      "ticker": "COIN",
+      "minConfidence": 72,
+      "minFvgPct": 0.0008,
+      "note": "Crypto proxy — tighten slightly, high avg win already"
+    },
+    {
+      "ticker": "SOFI",
+      "minConfidence": 62,
+      "note": "Strong performer (65.9% WR) — relaxed to catch more signals"
+    },
+    {
+      "ticker": "PYPL",
+      "minConfidence": 62,
+      "note": "Strong performer (60% WR) — relaxed"
+    },
+    {
+      "ticker": "SQ",
+      "minConfidence": 62,
+      "note": "Strong performer (60% WR) — relaxed"
+    },
+    {
+      "ticker": "ABNB",
+      "minConfidence": 62,
+      "note": "Strong performer (60% WR) — relaxed"
+    },
+    {
+      "ticker": "SNAP",
+      "minConfidence": 62,
+      "note": "Strong performer (58.3% WR) — relaxed"
+    },
+    {
+      "ticker": "MARA",
+      "minConfidence": 62,
+      "note": "Strong expectancy (4.36%) — relaxed to catch more signals"
+    }
+  ]
+}

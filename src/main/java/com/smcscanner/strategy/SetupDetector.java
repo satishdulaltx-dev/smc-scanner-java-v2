@@ -4,6 +4,7 @@ import com.smcscanner.config.ScannerConfig;
 import com.smcscanner.indicator.AtrCalculator;
 import com.smcscanner.model.*;
 import com.smcscanner.smc.StructureAnalyzer;
+import com.smcscanner.model.TickerProfile;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -15,7 +16,7 @@ import java.util.List;
 public class SetupDetector {
     private static final Logger log = LoggerFactory.getLogger(SetupDetector.class);
     private static final int    SWEEP_LOOKBACK = 80, FVG_WINDOW = 12, RETEST_WINDOW = 25;
-    private static final double DISP_ATR_MULT  = 1.3, MIN_FVG_PCT = 0.0004, MIN_VOL_MULT = 1.5;
+    private static final double DISP_ATR_MULT  = 1.3, MIN_FVG_PCT = 0.0004, MIN_VOL_MULT = 1.5; // global defaults — per-ticker overrides in ticker-profiles.json
 
     private final ScannerConfig config;
     private final AtrCalculator atrCalc;
@@ -56,7 +57,13 @@ public class SetupDetector {
         String vol=lastClose>0&&curAtr/lastClose*100<0.5?"low":(curAtr/lastClose*100<1.5?"medium":"high");
         String session=isCrypto?sessionFilter.cryptoSessionName():sessionFilter.sessionName();
 
-        state=runStateMachine(bars,atrArr,state);
+        // Load per-ticker overrides early — dispAtrMult needed inside runStateMachine
+        TickerProfile profile    = config.getTickerProfile(ticker);
+        double effDispAtrMult    = profile.resolveDispAtrMult(DISP_ATR_MULT);
+        double effMinFvgPct      = profile.resolveMinFvgPct(MIN_FVG_PCT);
+        double effMinVolMult     = profile.resolveMinVolMult(MIN_VOL_MULT);
+
+        state=runStateMachine(bars,atrArr,state,effDispAtrMult);
         if (!state.isComplete()) {
             log.debug("{} filtered: state={}", ticker, state.getPhase());
             return new DetectResult(List.of(),state);
@@ -81,14 +88,14 @@ public class SetupDetector {
         }
 
         double fvgSize=Math.abs(state.getFvgTop()-state.getFvgBottom());
-        if (fvgSize/lastClose<MIN_FVG_PCT) {
-            log.debug("{} filtered: FVG_TOO_SMALL fvgSize={} minPct={}", ticker, fvgSize, MIN_FVG_PCT);
+        if (fvgSize/lastClose<effMinFvgPct) {
+            log.debug("{} filtered: FVG_TOO_SMALL fvgSize={} minPct={} (profile)", ticker, fvgSize, effMinFvgPct);
             return new DetectResult(List.of(),state);
         }
 
         double avgVol=bars.stream().mapToDouble(OHLCV::getVolume).average().orElse(1.0);
         double peakVol=bars.subList(Math.max(0,bars.size()-10),bars.size()).stream().mapToDouble(OHLCV::getVolume).max().orElse(0);
-        if (peakVol<avgVol*MIN_VOL_MULT) {
+        if (peakVol<avgVol*effMinVolMult) {
             log.debug("{} filtered: LOW_VOLUME peak={} avg={} ratio={}", ticker,
                 (long)peakVol, (long)avgVol, String.format("%.2f", peakVol/Math.max(avgVol,1)));
             return new DetectResult(List.of(),state);
@@ -139,7 +146,7 @@ public class SetupDetector {
         return new DetectResult(List.of(setup),state);
     }
 
-    private SMCState runStateMachine(List<OHLCV> bars, double[] atrArr, SMCState state) {
+    private SMCState runStateMachine(List<OHLCV> bars, double[] atrArr, SMCState state, double dispAtrMult) {
         int n = bars.size();
         int scanFrom = Math.max(0, n - SWEEP_LOOKBACK);
         // Slide a 20-bar window to find local swing H/L; look for sweep in bars after each window
@@ -167,7 +174,7 @@ public class SetupDetector {
                 state.setPhase(SetupPhase.SWEEP_DETECTED);
                 state.setDirection(bull ? "long" : "short");
                 state.setSweepBar(i);
-                int dBar = findDisp(bars, atrArr, i + 1, state.getDirection(), n);
+                int dBar = findDisp(bars, atrArr, i + 1, state.getDirection(), n, dispAtrMult);
                 if (dBar < 0) { state.setPhase(SetupPhase.INVALID_NO_DISP); break; }
                 state.setPhase(SetupPhase.DISPLACEMENT_DETECTED);
                 state.setDisplacementBar(dBar);
@@ -188,10 +195,10 @@ public class SetupDetector {
         return state;
     }
 
-    private int findDisp(List<OHLCV> bars,double[] atr,int from,String dir,int n) {
+    private int findDisp(List<OHLCV> bars,double[] atr,int from,String dir,int n,double dispAtrMult) {
         for (int i=from;i<Math.min(from+15,n);i++) {
             OHLCV b=bars.get(i); double av=atr[i]>0?atr[i]:(b.getHigh()-b.getLow());
-            if ((b.getHigh()-b.getLow())<av*DISP_ATR_MULT) continue;
+            if ((b.getHigh()-b.getLow())<av*dispAtrMult) continue;
             if ("long".equals(dir)&&b.getClose()>b.getOpen()) return i;
             if ("short".equals(dir)&&b.getClose()<b.getOpen()) return i;
         }

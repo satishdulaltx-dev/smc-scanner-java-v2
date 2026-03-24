@@ -42,6 +42,14 @@ public class ScannerService {
 
     public void scanTicker(String ticker) {
         try {
+            // Check per-ticker profile: skip if marked
+            com.smcscanner.model.TickerProfile profile = config.getTickerProfile(ticker);
+            if (profile.isSkip()) {
+                setTs(ticker,"idle",null,0,"⊘ "+profile.getSkipReason());
+                return;
+            }
+            int effectiveMinConf = profile.resolveMinConfidence(config.getMinConfidence());
+
             setTs(ticker,"scanning",null,0,"Fetching data...");
             boolean isC=isCrypto(ticker);
             List<OHLCV> bars=client.getBars(ticker,"5m",100);
@@ -72,11 +80,11 @@ public class ScannerService {
                 TradeSetup s=setups.get(0);
                 setTs(ticker,"long".equals(s.getDirection())?"setup-long":"setup-short",s.getDirection(),s.getConfidence(),
                     String.format("ENTRY %s | Score %d | $%.2f",s.getDirection().toUpperCase(),s.getConfidence(),s.getEntry()));
-                if (s.getConfidence() >= config.getMinConfidence() && !dedup.isDuplicate(ticker,s.getDirection(),s.getEntry())) {
+                if (s.getConfidence() >= effectiveMinConf && !dedup.isDuplicate(ticker,s.getDirection(),s.getEntry())) {
                     log.info("INTRADAY ALERT {} {} conf={} entry={}", ticker, s.getDirection().toUpperCase(), s.getConfidence(), s.getEntry());
                     discord.sendSetupAlert(s); dedup.markSent(ticker,s.getDirection(),s.getEntry());
-                } else if (s.getConfidence() < config.getMinConfidence()) {
-                    log.debug("{} intraday LOW_CONF conf={} min={}", ticker, s.getConfidence(), config.getMinConfidence());
+                } else if (s.getConfidence() < effectiveMinConf) {
+                    log.debug("{} intraday LOW_CONF conf={} min={}", ticker, s.getConfidence(), effectiveMinConf);
                 }
                 tracker.recordSetup(s); updateSetup(s);
             } else {
@@ -91,7 +99,7 @@ public class ScannerService {
                     if (!sr.setups().isEmpty()) {
                         TradeSetup sw=sr.setups().get(0);
                         String swKey="swing_"+ticker;
-                        if (sw.getConfidence()>=config.getMinConfidence()
+                        if (sw.getConfidence()>=effectiveMinConf
                                 && !dedup.isDuplicate(swKey,sw.getDirection(),sw.getEntry(),72*60)) {
                             log.info("SWING ALERT {} {} conf={} entry={}", ticker, sw.getDirection().toUpperCase(), sw.getConfidence(), sw.getEntry());
                             discord.sendSwingAlert(sw);

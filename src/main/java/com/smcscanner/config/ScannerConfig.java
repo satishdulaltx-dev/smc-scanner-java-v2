@@ -2,6 +2,7 @@ package com.smcscanner.config;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.smcscanner.model.TickerProfile;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -9,8 +10,8 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.ClassPathResource;
 
 import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Configuration
 @ConfigurationProperties(prefix = "scanner")
@@ -71,6 +72,35 @@ public class ScannerConfig {
     public void setMinRvol(double v)             { this.minRvol = v; }
     public void setMinAtrPercentile(double v)    { this.minAtrPercentile = v; }
     public void setMaxSpreadPct(double v)        { this.maxSpreadPct = v; }
+
+    // ── Per-ticker profiles ───────────────────────────────────────────────────
+    private final Map<String, TickerProfile> profileCache = new ConcurrentHashMap<>();
+    private volatile boolean profilesLoaded = false;
+
+    public TickerProfile getTickerProfile(String ticker) {
+        if (!profilesLoaded) loadTickerProfiles();
+        return profileCache.getOrDefault(ticker, TickerProfile.DEFAULT);
+    }
+
+    private synchronized void loadTickerProfiles() {
+        if (profilesLoaded) return;
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            InputStream in = new ClassPathResource("ticker-profiles.json").getInputStream();
+            JsonNode root = mapper.readTree(in);
+            JsonNode profiles = root.get("profiles");
+            if (profiles != null && profiles.isArray()) {
+                for (JsonNode node : profiles) {
+                    TickerProfile p = mapper.treeToValue(node, TickerProfile.class);
+                    if (p.getTicker() != null) profileCache.put(p.getTicker(), p);
+                }
+            }
+            log.info("Loaded {} ticker profiles", profileCache.size());
+        } catch (Exception e) {
+            log.warn("Could not load ticker-profiles.json: {}", e.getMessage());
+        }
+        profilesLoaded = true;
+    }
 
     public List<String> loadWatchlist() {
         try {
