@@ -4,6 +4,7 @@ import com.smcscanner.alert.AlertDedup;
 import com.smcscanner.alert.DiscordAlertService;
 import com.smcscanner.config.ScannerConfig;
 import com.smcscanner.data.PolygonClient;
+import com.smcscanner.indicator.AtrCalculator;
 import com.smcscanner.model.*;
 import com.smcscanner.state.SharedState;
 import com.smcscanner.tracking.PerformanceTracker;
@@ -26,13 +27,15 @@ public class ScannerService {
     private final AlertDedup            dedup;
     private final PerformanceTracker    tracker;
     private final SharedState           state;
+    private final AtrCalculator         atrCalc;
 
     public ScannerService(ScannerConfig config, PolygonClient client, SetupDetector setupDetector,
                           CryptoStrategyService crypto, MultiTimeframeAnalyzer mtf,
                           DiscordAlertService discord, AlertDedup dedup,
-                          PerformanceTracker tracker, SharedState state) {
+                          PerformanceTracker tracker, SharedState state, AtrCalculator atrCalc) {
         this.config=config; this.client=client; this.setupDetector=setupDetector; this.crypto=crypto;
         this.mtf=mtf; this.discord=discord; this.dedup=dedup; this.tracker=tracker; this.state=state;
+        this.atrCalc=atrCalc;
     }
 
     public boolean isCrypto(String t) { return t.startsWith("X:"); }
@@ -44,9 +47,16 @@ public class ScannerService {
             List<OHLCV> bars=client.getBars(ticker,"5m",100);
             if (bars==null||bars.size()<20) { setTs(ticker,"idle",null,0,"No data"); return; }
             String htfBias="neutral";
-            double dailyAtr=0.0; // 0 = use fallback (curAtr*8) in SetupDetector
+            double dailyAtr=0.0;
             try { List<OHLCV> hb=client.getBars(ticker,"60m",50); if (hb!=null&&hb.size()>=10) htfBias=mtf.getHtfBias(hb); }
             catch (Exception e) { log.debug("{} HTF error: {}",ticker,e.getMessage()); }
+            try {
+                List<OHLCV> db=client.getBars(ticker,"1d",20);
+                if (db!=null&&db.size()>=5) {
+                    double[] da=atrCalc.computeAtr(db,Math.min(14,db.size()-1));
+                    for (int i=da.length-1;i>=0;i--) { if (da[i]>0) { dailyAtr=da[i]; break; } }
+                }
+            } catch (Exception e) { log.debug("{} daily ATR error: {}",ticker,e.getMessage()); }
             List<TradeSetup> setups; String phaseMsg;
             if (isC) { setups=crypto.detectCryptoSetup(bars,ticker); phaseMsg=setups.isEmpty()?"Waiting for breakout + volume spike...":""; }
             else {
@@ -57,9 +67,9 @@ public class ScannerService {
                 TradeSetup s=setups.get(0);
                 setTs(ticker,"long".equals(s.getDirection())?"setup-long":"setup-short",s.getDirection(),s.getConfidence(),
                     String.format("ENTRY %s | Score %d | $%.2f",s.getDirection().toUpperCase(),s.getConfidence(),s.getEntry()));
-                if (s.getConfidence() >= config.getMinConfidence() && !dedup.isDuplicate(ticker,s.getDirection())) {
+                if (s.getConfidence() >= config.getMinConfidence() && !dedup.isDuplicate(ticker,s.getDirection(),s.getEntry())) {
                     log.info("SETUP ALERT {} {} conf={} entry={}", ticker, s.getDirection().toUpperCase(), s.getConfidence(), s.getEntry());
-                    discord.sendSetupAlert(s); dedup.markSent(ticker,s.getDirection());
+                    discord.sendSetupAlert(s); dedup.markSent(ticker,s.getDirection(),s.getEntry());
                 } else if (s.getConfidence() < config.getMinConfidence()) {
                     log.debug("{} setup found but LOW_CONF conf={} min={}", ticker, s.getConfidence(), config.getMinConfidence());
                 }

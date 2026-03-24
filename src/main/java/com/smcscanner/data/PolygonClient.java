@@ -79,15 +79,26 @@ public class PolygonClient {
         } catch (Exception e) { log.error("Kraken error {}: {}", ticker, e.getMessage()); return new ArrayList<>(); }
     }
 
+    /** Fetch bars with a custom lookback (bypasses cache — used by BacktestService). */
+    public List<OHLCV> getBarsWithLookback(String ticker, String timeframe, int limit, int lookbackDays) {
+        if (ticker.startsWith("X:")) return getKrakenBars(ticker, timeframe, limit);
+        String[] tf = TF_MAP.getOrDefault(timeframe.toLowerCase(), new String[]{"5", "minute"});
+        return fetchPolygon(ticker, tf, limit, lookbackDays);
+    }
+
     private List<OHLCV> getPolygonBars(String ticker, String timeframe, int limit) {
-        String apiKey = config.getPolygonApiKey();
-        if (apiKey == null || apiKey.isBlank()) { log.warn("POLYGON_API_KEY not set for {}", ticker); return new ArrayList<>(); }
         String[] tf   = TF_MAP.getOrDefault(timeframe.toLowerCase(), new String[]{"5", "minute"});
         // Lookback window: daily uses 2x limit to ensure enough trading days; hourly=7d; minute=1d
         int lookbackDays = tf[1].equals("day") ? Math.max(90, limit * 2) : (tf[1].equals("hour") ? 7 : 1);
-        String to     = LocalDate.now(ZoneOffset.UTC).format(DateTimeFormatter.ISO_LOCAL_DATE);
-        String from   = LocalDate.now(ZoneOffset.UTC).minusDays(lookbackDays).format(DateTimeFormatter.ISO_LOCAL_DATE);
-        String url    = String.format("https://api.polygon.io/v2/aggs/ticker/%s/range/%s/%s/%s/%s?adjusted=true&sort=asc&limit=%d&apiKey=%s",
+        return fetchPolygon(ticker, tf, limit, lookbackDays);
+    }
+
+    private List<OHLCV> fetchPolygon(String ticker, String[] tf, int limit, int lookbackDays) {
+        String apiKey = config.getPolygonApiKey();
+        if (apiKey == null || apiKey.isBlank()) { log.warn("POLYGON_API_KEY not set for {}", ticker); return new ArrayList<>(); }
+        String to   = LocalDate.now(ZoneOffset.UTC).format(DateTimeFormatter.ISO_LOCAL_DATE);
+        String from = LocalDate.now(ZoneOffset.UTC).minusDays(lookbackDays).format(DateTimeFormatter.ISO_LOCAL_DATE);
+        String url  = String.format("https://api.polygon.io/v2/aggs/ticker/%s/range/%s/%s/%s/%s?adjusted=true&sort=asc&limit=%d&apiKey=%s",
                 ticker, tf[0], tf[1], from, to, limit, apiKey);
         try (Response resp = http.newCall(new Request.Builder().url(url).build()).execute()) {
             if (!resp.isSuccessful() || resp.body() == null) return new ArrayList<>();

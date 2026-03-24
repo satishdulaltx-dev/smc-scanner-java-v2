@@ -30,11 +30,18 @@ public class SetupDetector {
 
     public record DetectResult(List<TradeSetup> setups, SMCState state) {}
 
+    /** Overload without backtestMode — used by live scanner (session filter active). */
     public DetectResult detectSetups(List<OHLCV> bars, String htfBias, String ticker, boolean isCrypto, double dailyAtr) {
+        return detectSetups(bars, htfBias, ticker, isCrypto, dailyAtr, false);
+    }
+
+    public DetectResult detectSetups(List<OHLCV> bars, String htfBias, String ticker, boolean isCrypto, double dailyAtr, boolean backtestMode) {
         SMCState state = new SMCState();
         if (bars==null||bars.size()<20) return new DetectResult(List.of(),state);
-        if (isCrypto&&!sessionFilter.isInCryptoSession()) { state.setPhase(SetupPhase.OUTSIDE_SESSION); return new DetectResult(List.of(),state); }
-        if (!isCrypto&&!sessionFilter.isInNySession())    { state.setPhase(SetupPhase.OUTSIDE_SESSION); return new DetectResult(List.of(),state); }
+        if (!backtestMode) {
+            if (isCrypto&&!sessionFilter.isInCryptoSession()) { state.setPhase(SetupPhase.OUTSIDE_SESSION); return new DetectResult(List.of(),state); }
+            if (!isCrypto&&!sessionFilter.isInNySession())    { state.setPhase(SetupPhase.OUTSIDE_SESSION); return new DetectResult(List.of(),state); }
+        }
 
         double[] atrArr=atrCalc.computeAtr(bars,14);
         double curAtr=lastNz(atrArr), lastClose=bars.get(bars.size()-1).getClose();

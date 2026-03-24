@@ -381,10 +381,11 @@ public class DashboardController {
             if (result.error != null) resp.put("error", result.error);
             List<Map<String,Object>> tradeList = result.trades.stream().map(t -> {
                 Map<String,Object> m = new LinkedHashMap<>();
-                m.put("entry_date", t.barIndex()); m.put("exit_date", t.exitDate());
-                m.put("days_held", t.daysHeld()); m.put("dir", t.direction()); m.put("entry", t.entry());
+                m.put("entry_time", t.entryTime()); m.put("exit_time", t.exitTime());
+                m.put("dir", t.direction()); m.put("entry", t.entry());
                 m.put("sl", t.sl()); m.put("tp", t.tp());
                 m.put("outcome", t.outcome()); m.put("pnl_pct", t.pnlPct());
+                m.put("confidence", t.confidence()); m.put("atr", t.atr());
                 return m;
             }).collect(java.util.stream.Collectors.toList());
             resp.put("trades", tradeList);
