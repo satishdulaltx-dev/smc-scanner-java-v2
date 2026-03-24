@@ -81,13 +81,13 @@
     },
     {
       "ticker": "AAPL",
-      "strategyType": "breakout",
-      "note": "Large-cap — switched to ORB; VWAP showed 0% WR (pre-market data was polluting session)"
+      "strategyType": "keylevel",
+      "note": "Large-cap — Key Level Rejection; price respects multi-touch horizontal S/R zones reliably"
     },
     {
       "ticker": "MSFT",
-      "strategyType": "vwap",
-      "note": "Large-cap — VWAP reversion strategy"
+      "strategyType": "keylevel",
+      "note": "Large-cap — Key Level Rejection; institutional accumulation/distribution at well-known price levels"
     },
     {
       "ticker": "META",

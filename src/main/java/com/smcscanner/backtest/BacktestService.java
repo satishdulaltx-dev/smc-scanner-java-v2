@@ -7,6 +7,7 @@ import com.smcscanner.model.OHLCV;
 import com.smcscanner.model.TickerProfile;
 import com.smcscanner.model.TradeSetup;
 import com.smcscanner.strategy.BreakoutStrategyDetector;
+import com.smcscanner.strategy.KeyLevelStrategyDetector;
 import com.smcscanner.strategy.SetupDetector;
 import com.smcscanner.strategy.VwapStrategyDetector;
 import org.slf4j.Logger;
@@ -34,14 +35,15 @@ public class BacktestService {
     private final SetupDetector            setupDetector;
     private final VwapStrategyDetector     vwapDetector;
     private final BreakoutStrategyDetector breakoutDetector;
+    private final KeyLevelStrategyDetector keyLevelDetector;
     private final ScannerConfig            config;
 
     public BacktestService(PolygonClient client, AtrCalculator atrCalc, SetupDetector setupDetector,
                            VwapStrategyDetector vwapDetector, BreakoutStrategyDetector breakoutDetector,
-                           ScannerConfig config) {
+                           KeyLevelStrategyDetector keyLevelDetector, ScannerConfig config) {
         this.client = client; this.atrCalc = atrCalc; this.setupDetector = setupDetector;
         this.vwapDetector = vwapDetector; this.breakoutDetector = breakoutDetector;
-        this.config = config;
+        this.keyLevelDetector = keyLevelDetector; this.config = config;
     }
 
     public BacktestResult run(String ticker, int lookbackDays) {
@@ -74,9 +76,10 @@ public class BacktestService {
             // HTF bias + daily ATR using daily bars up to this date
             String htfBias = "neutral";
             double dailyAtr = 0.0;
+            List<OHLCV> htfSlice = List.of(); // exposed for keylevel detector in inner loop
             if (dailyBars != null && !dailyBars.isEmpty()) {
                 long cutoff = date.atStartOfDay(ET).toInstant().toEpochMilli();
-                List<OHLCV> htfSlice = dailyBars.stream()
+                htfSlice = dailyBars.stream()
                         .filter(b -> Long.parseLong(b.getTimestamp()) < cutoff)
                         .collect(Collectors.toList());
                 if (htfSlice.size() >= 5) {
@@ -95,9 +98,15 @@ public class BacktestService {
             // Slide through day's bars — detect first valid setup
             TickerProfile bp = config.getTickerProfile(ticker);
             String stratType = bp.getStrategyType();
-            boolean isSessionStrat = "breakout".equals(stratType) || "vwap".equals(stratType);
-            // Session strategies start from market open; SMC can use pre-market context
-            int minBars = isSessionStrat ? 8 : 20;
+            // Session strategies skip pre-market windows in the loop below
+            boolean isSessionStrat = "breakout".equals(stratType)
+                                  || "vwap".equals(stratType)
+                                  || "keylevel".equals(stratType);
+            // Minimum bars before we start checking each strategy
+            int minBars = "breakout".equals(stratType) ? 8
+                        : "vwap".equals(stratType)     ? 12
+                        : "keylevel".equals(stratType) ? 20
+                        : 20; // smc
             boolean tradePlacedToday = false;
             for (int end = minBars; end <= dayBars.size() && !tradePlacedToday; end++) {
                 // For VWAP/ORB: skip windows where the most recent bar is still pre-market
@@ -112,6 +121,9 @@ public class BacktestService {
                     bSetups = vwapDetector.detect(window, ticker, dailyAtr);
                 } else if ("breakout".equals(stratType)) {
                     bSetups = breakoutDetector.detect(window, ticker, dailyAtr);
+                } else if ("keylevel".equals(stratType)) {
+                    // Pass daily bars up to this date (htfSlice) as the level-detection source
+                    bSetups = keyLevelDetector.detect(window, htfSlice, ticker, dailyAtr);
                 } else {
                     SetupDetector.DetectResult dr = setupDetector.detectSetups(
                             window, htfBias, ticker, false, dailyAtr, true); // backtestMode=true, real dailyAtr for TP/SL

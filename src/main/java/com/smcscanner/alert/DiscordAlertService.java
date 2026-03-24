@@ -44,9 +44,10 @@ public class DiscordAlertService {
         double slPts=Math.abs(s.getEntry()-s.getStopLoss()), tpPts=Math.abs(s.getTakeProfit()-s.getEntry());
         double slPct=s.getEntry()>0?slPts/s.getEntry()*100:0, tpPct=s.getEntry()>0?tpPts/s.getEntry()*100:0;
         String ts=ZonedDateTime.now(ZoneOffset.UTC).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))+" UTC";
-        // Detect strategy from volatility/session fields set by each detector
-        String strategy = "normal".equals(s.getVolatility()) ? "📊 VWAP Reversion"
-                        : "high".equals(s.getVolatility())   ? "🚀 ORB Breakout"
+        // Detect strategy from volatility field set by each detector
+        String strategy = "normal".equals(s.getVolatility())   ? "📊 VWAP Reversion"
+                        : "high".equals(s.getVolatility())     ? "🚀 ORB Breakout"
+                        : "keylevel".equals(s.getVolatility()) ? "🎯 Key Level Rejection"
                         : "🔷 SMC Sweep+FVG";
         List<Map<String,Object>> fields=List.of(
             f("Direction",arrow+" "+s.getDirection().toUpperCase(),true),

@@ -28,17 +28,19 @@ public class ScannerService {
     private final PerformanceTracker     tracker;
     private final SharedState            state;
     private final AtrCalculator          atrCalc;
-    private final VwapStrategyDetector   vwap;
+    private final VwapStrategyDetector     vwap;
     private final BreakoutStrategyDetector breakout;
+    private final KeyLevelStrategyDetector keyLevel;
 
     public ScannerService(ScannerConfig config, PolygonClient client, SetupDetector setupDetector,
                           CryptoStrategyService crypto, MultiTimeframeAnalyzer mtf,
                           DiscordAlertService discord, AlertDedup dedup,
                           PerformanceTracker tracker, SharedState state, AtrCalculator atrCalc,
-                          VwapStrategyDetector vwap, BreakoutStrategyDetector breakout) {
+                          VwapStrategyDetector vwap, BreakoutStrategyDetector breakout,
+                          KeyLevelStrategyDetector keyLevel) {
         this.config=config; this.client=client; this.setupDetector=setupDetector; this.crypto=crypto;
         this.mtf=mtf; this.discord=discord; this.dedup=dedup; this.tracker=tracker; this.state=state;
-        this.atrCalc=atrCalc; this.vwap=vwap; this.breakout=breakout;
+        this.atrCalc=atrCalc; this.vwap=vwap; this.breakout=breakout; this.keyLevel=keyLevel;
     }
 
     public boolean isCrypto(String t) { return t.startsWith("X:"); }
@@ -83,6 +85,9 @@ public class ScannerService {
                 } else if ("breakout".equals(strategyType)) {
                     setups = breakout.detect(bars, ticker, dailyAtr);
                     phaseMsg = setups.isEmpty() ? "Waiting for ORB breakout..." : "";
+                } else if ("keylevel".equals(strategyType)) {
+                    setups = keyLevel.detect(bars, dailyBars, ticker, dailyAtr);
+                    phaseMsg = setups.isEmpty() ? "Waiting for key level rejection..." : "";
                 } else {
                     SetupDetector.DetectResult r=setupDetector.detectSetups(bars,htfBias,ticker,false,dailyAtr);
                     setups=r.setups(); phaseMsg=r.state().phaseMsg();
@@ -135,9 +140,10 @@ public class ScannerService {
         List<Map<String,Object>> cur=new ArrayList<>(state.getSetups());
         cur.removeIf(x->s.getTicker().equals(x.get("ticker")));
         double rr=Math.abs(s.getStopLoss()-s.getEntry())>0?Math.round(Math.abs(s.getTakeProfit()-s.getEntry())/Math.abs(s.getStopLoss()-s.getEntry())*10)/10.0:0;
-        String reasons = isCrypto(s.getTicker()) ? "Momentum+Volume"
-                       : "normal".equals(s.getVolatility()) ? "VWAP Reversion"
-                       : "high".equals(s.getVolatility())   ? "ORB Breakout"
+        String reasons = isCrypto(s.getTicker())             ? "Momentum+Volume"
+                       : "normal".equals(s.getVolatility())   ? "VWAP Reversion"
+                       : "high".equals(s.getVolatility())     ? "ORB Breakout"
+                       : "keylevel".equals(s.getVolatility()) ? "Key Level Rejection"
                        : "Sweep+Disp+FVG+Retest";
         Map<String,Object> m=new LinkedHashMap<>(s.toMap()); m.put("rr",rr); m.put("reasons",reasons);
         cur.add(m); if (cur.size()>20) cur=cur.subList(cur.size()-20,cur.size()); state.setSetups(cur);
