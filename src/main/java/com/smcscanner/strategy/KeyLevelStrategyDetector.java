@@ -4,7 +4,12 @@ import com.smcscanner.model.OHLCV;
 import com.smcscanner.model.TradeSetup;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -32,17 +37,16 @@ public class KeyLevelStrategyDetector {
     /** Max distance (%) from current price to a level for it to be "in range". */
     private static final double TOUCH_TOLERANCE = 0.004;  // 0.4%
 
-    /** Minimum number of touches for a level to be considered valid. */
+    /** Minimum number of daily bars touching the same zone for it to be a valid level. */
     private static final int MIN_TOUCHES = 2;
 
-    /** Number of bars on each side required to confirm a pivot high/low. */
-    private static final int PIVOT_LOOKBACK = 2;
+    private static final ZoneId ET = ZoneId.of("America/New_York");
 
     /**
      * Detect key-level rejection setups.
      *
      * @param fiveMinBars  recent 5-minute bars (used for entry signal + ATR)
-     * @param htfBars      daily (or hourly) bars used to identify key S/R levels
+     * @param htfBars      daily bars used to identify key S/R levels and trend
      * @param ticker       symbol
      * @param dailyAtr     daily ATR for TP sizing
      * @return             0 or 1 detected setup
@@ -53,21 +57,55 @@ public class KeyLevelStrategyDetector {
         if (fiveMinBars == null || fiveMinBars.isEmpty()) return result;
         if (htfBars == null || htfBars.size() < 10)       return result;
 
-        OHLCV last     = fiveMinBars.get(fiveMinBars.size() - 1);
+        // ── Filter 5m bars to regular NYSE session (9:30–16:00 ET) ────────────
+        // This avoids: (a) pre-market volume distorting avgVol, (b) firing on the
+        // noisy first opening bar, (c) after-hours false signals.
+        LocalDate today     = Instant.ofEpochMilli(Long.parseLong(
+                fiveMinBars.get(fiveMinBars.size() - 1).getTimestamp())).atZone(ET).toLocalDate();
+        LocalTime mktOpen   = LocalTime.of(9, 30);
+        LocalTime mktClose  = LocalTime.of(16, 0);
+
+        List<OHLCV> sessionBars = new ArrayList<>();
+        for (OHLCV bar : fiveMinBars) {
+            ZonedDateTime zdt = Instant.ofEpochMilli(Long.parseLong(bar.getTimestamp())).atZone(ET);
+            if (zdt.toLocalDate().equals(today)
+                    && !zdt.toLocalTime().isBefore(mktOpen)
+                    && zdt.toLocalTime().isBefore(mktClose)) {
+                sessionBars.add(bar);
+            }
+        }
+
+        // Require at least 5 session bars — skip the volatile opening bar(s)
+        if (sessionBars.size() < 5) return result;
+
+        OHLCV last     = sessionBars.get(sessionBars.size() - 1);
         double curClose = last.getClose();
         double curOpen  = last.getOpen();
         double curHigh  = last.getHigh();
         double curLow   = last.getLow();
 
-        // 5m ATR for SL sizing; ensure a sensible floor
-        double atr5m = computeAtr(fiveMinBars);
+        // 5m ATR computed from session bars only
+        double atr5m = computeAtr(sessionBars.size() >= 15 ? sessionBars : fiveMinBars);
         double atr   = Math.max(atr5m, curClose * 0.001);
 
         // TP sizing: prefer dailyAtr if meaningful, else scale from 5m ATR
         double effectiveAtr = (dailyAtr > atr * 3) ? dailyAtr : atr * 8;
 
-        // Average 5m volume
-        double avgVol = fiveMinBars.stream().mapToDouble(OHLCV::getVolume).average().orElse(1.0);
+        // Average session volume (excludes pre-market noise)
+        double avgVol = sessionBars.stream().mapToDouble(OHLCV::getVolume).average().orElse(1.0);
+
+        // ── HTF trend filter (20-day SMA from daily bars) ────────────────────
+        // Only take LONG setups when price is in an uptrend (above SMA20).
+        // Only take SHORT setups when price is in a downtrend (below SMA20).
+        // This prevents counter-trend trades on broken levels.
+        String htfTrend = "neutral";
+        if (htfBars.size() >= 20) {
+            double sma20 = htfBars.subList(htfBars.size() - 20, htfBars.size())
+                    .stream().mapToDouble(OHLCV::getClose).average().orElse(curClose);
+            htfTrend = curClose > sma20 * 1.005 ? "up"
+                     : curClose < sma20 * 0.995 ? "down"
+                     : "neutral";
+        }
 
         // ── Step 1: Identify key levels from HTF bars ─────────────────────────
         // lev[0] = price, lev[1] = touch count, lev[2] = +1 (resistance) or -1 (support)
@@ -86,10 +124,13 @@ public class KeyLevelStrategyDetector {
 
             if (isResistance) {
                 // ── SHORT: price touched resistance and is rejecting downward ──
+                // • Trend must NOT be strongly up (don't short a rising market)
                 // • Current bar's high reached or poked above the level (it was tested)
                 // • Bar closed below the level (rejection, not breakout)
                 // • Bearish bar (close < open)
                 // • Volume elevated
+                if ("up".equals(htfTrend)) continue; // don't short into uptrend
+
                 boolean touched      = curHigh >= levelPrice * (1 - TOUCH_TOLERANCE);
                 boolean rejectedDown = curClose <= levelPrice * (1 + TOUCH_TOLERANCE * 0.3);
                 boolean bearishBar   = curClose < curOpen;
@@ -140,6 +181,9 @@ public class KeyLevelStrategyDetector {
 
             } else {
                 // ── LONG: price touched support and is bouncing upward ──────────
+                // • Trend must NOT be strongly down (don't buy into a downtrend)
+                if ("down".equals(htfTrend)) continue; // don't long into downtrend
+
                 boolean touched      = curLow <= levelPrice * (1 + TOUCH_TOLERANCE);
                 boolean bouncedUp    = curClose >= levelPrice * (1 - TOUCH_TOLERANCE * 0.3);
                 boolean bullishBar   = curClose > curOpen;
@@ -194,42 +238,54 @@ public class KeyLevelStrategyDetector {
     }
 
     /**
-     * Find key horizontal levels from HTF bars.
+     * Find key horizontal levels from HTF (daily) bars.
      *
-     * Algorithm:
-     * 1. Scan bars for pivot highs and lows (using PIVOT_LOOKBACK bars each side).
-     * 2. Cluster pivots within LEVEL_TOLERANCE of each other.
-     * 3. A cluster with MIN_TOUCHES or more members is a valid key level.
-     * 4. Returns list of [price, touches, type] sorted by distance from current price.
+     * Algorithm — rejection-wick density (not strict pivots):
+     *  A price acts as RESISTANCE if a bar's high was near that price AND price
+     *  closed well below it (upper wick / rejection). Multiple bars showing this
+     *  pattern at the same price cluster = a real supply zone.
      *
-     * Note: the last PIVOT_LOOKBACK bars are excluded from pivot detection because
-     * they don't have confirmed forward bars yet.
+     *  A price acts as SUPPORT if a bar's low was near that price AND price closed
+     *  well above it (lower wick / bounce).
+     *
+     *  This approach captures flat-top/flat-bottom patterns like AAPL $255-256
+     *  where consecutive days touch the same level but none is a strict pivot high
+     *  (because the adjacent bars have similar highs).
+     *
+     * @param htf      daily bars (or 60m bars) — exclude the very last bar (current)
+     * @param curClose current 5m price for proximity filtering
      */
     private List<double[]> findKeyLevels(List<OHLCV> htf, double curClose) {
-        List<Double> swingHighs = new ArrayList<>();
-        List<Double> swingLows  = new ArrayList<>();
+        List<Double> touchHighs = new ArrayList<>();
+        List<Double> touchLows  = new ArrayList<>();
 
-        // Use last 120 bars (≈6 months on daily; ≈3 months on 60m)
-        int start = Math.max(0, htf.size() - 120);
-        int end   = htf.size() - PIVOT_LOOKBACK; // exclude unconfirmed recent pivots
+        // Use last 60 daily bars (≈3 months) — recent enough to be actionable
+        int start = Math.max(0, htf.size() - 60);
+        // Exclude the very last HTF bar; it may be incomplete (current day)
+        int end = htf.size() - 1;
 
-        for (int i = start + PIVOT_LOOKBACK; i < end; i++) {
-            double h = htf.get(i).getHigh();
-            double l = htf.get(i).getLow();
+        for (int i = start; i < end; i++) {
+            OHLCV bar = htf.get(i);
+            double h = bar.getHigh();
+            double l = bar.getLow();
+            double c = bar.getClose();
 
-            boolean isSwingHigh = true;
-            boolean isSwingLow  = true;
-            for (int j = 1; j <= PIVOT_LOOKBACK; j++) {
-                if (htf.get(i - j).getHigh() >= h || htf.get(i + j).getHigh() >= h) isSwingHigh = false;
-                if (htf.get(i - j).getLow()  <= l || htf.get(i + j).getLow()  <= l) isSwingLow  = false;
+            // HIGH qualifies as a resistance touch if close < high - 0.3% of high
+            // (upper wick = price was rejected from the high)
+            if (c < h * (1 - 0.003)) {
+                touchHighs.add(h);
             }
-            if (isSwingHigh) swingHighs.add(h);
-            if (isSwingLow)  swingLows.add(l);
+
+            // LOW qualifies as a support touch if close > low + 0.3% of low
+            // (lower wick = price bounced from the low)
+            if (c > l * (1 + 0.003)) {
+                touchLows.add(l);
+            }
         }
 
         List<double[]> result = new ArrayList<>();
-        result.addAll(clusterLevels(swingHighs, curClose, +1.0)); // resistance
-        result.addAll(clusterLevels(swingLows,  curClose, -1.0)); // support
+        result.addAll(clusterLevels(touchHighs, curClose, +1.0)); // resistance
+        result.addAll(clusterLevels(touchLows,  curClose, -1.0)); // support
 
         // Sort ascending by distance from current price (nearest first)
         result.sort((a, b) -> Double.compare(

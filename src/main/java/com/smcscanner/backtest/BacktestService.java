@@ -62,8 +62,9 @@ public class BacktestService {
             byDate.computeIfAbsent(d, k -> new ArrayList<>()).add(bar);
         }
 
-        // Fetch daily bars for simple HTF bias (SMA20)
-        List<OHLCV> dailyBars = client.getBars(ticker, "1d", 60);
+        // Fetch daily bars: 200 bars (~10 months) so keylevel detector has enough
+        // history even when backtesting 90+ days into the past
+        List<OHLCV> dailyBars = client.getBars(ticker, "1d", 200);
 
         List<TradeResult> trades = new ArrayList<>();
         List<LocalDate> dates = new ArrayList<>(byDate.keySet());
