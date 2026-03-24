@@ -138,12 +138,15 @@
     </div>
     <div class="ctrl-group">
         <label>Lookback</label>
-        <select id="days">
+        <select id="days" onchange="checkDaysWarning()">
             <option value="30">30 days</option>
             <option value="60">60 days</option>
             <option value="90" selected>90 days</option>
-            <option value="180">180 days</option>
+            <option value="180">180 days ⚠ may be partial</option>
         </select>
+    </div>
+    <div id="days-warn" style="display:none;align-self:center;background:rgba(210,153,34,.1);border:1px solid rgba(210,153,34,.3);border-radius:6px;padding:6px 12px;font-size:11px;color:#d29922;max-width:320px">
+        ⚠ Polygon 5m data is capped at ~5000 bars per call (~90 trading days). Results beyond 90 days may be incomplete.
     </div>
     <button class="run-btn" id="run-btn" onclick="runBacktest()">▶ Run Backtest</button>
 </div>
@@ -214,6 +217,10 @@ let equityChart = null, distChart = null;
 function toggleMode() {
     const single = document.getElementById('mode').value === 'single';
     document.getElementById('ticker-ctrl').style.display = single ? '' : 'none';
+}
+function checkDaysWarning() {
+    const days = parseInt(document.getElementById('days').value);
+    document.getElementById('days-warn').style.display = days > 90 ? 'block' : 'none';
 }
 
 function runBacktest() {

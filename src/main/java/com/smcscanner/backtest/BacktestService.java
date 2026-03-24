@@ -110,8 +110,8 @@ public class BacktestService {
                         if (fb.getLow()  <= sl) { outcome="LOSS"; exitTime=toDateTime(fb.getTimestamp()); pnlPct=round2((sl-entry)/entry*100); break; }
                         if (fb.getHigh() >= tp) { outcome="WIN";  exitTime=toDateTime(fb.getTimestamp()); pnlPct=round2((tp-entry)/entry*100); break; }
                     } else {
-                        if (fb.getHigh() >= sl) { outcome="LOSS"; exitTime=toDateTime(fb.getTimestamp()); pnlPct=round2((entry-sl)/entry*100*-1); break; }
-                        if (fb.getLow()  <= tp) { outcome="WIN";  exitTime=toDateTime(fb.getTimestamp()); pnlPct=round2((entry-tp)/entry*100);  break; }
+                        if (fb.getHigh() >= sl) { outcome="LOSS"; exitTime=toDateTime(fb.getTimestamp()); pnlPct=round2((entry-sl)/entry*100); break; }
+                        if (fb.getLow()  <= tp) { outcome="WIN";  exitTime=toDateTime(fb.getTimestamp()); pnlPct=round2((entry-tp)/entry*100); break; }
                     }
                 }
                 if ("EXPIRED".equals(outcome)) continue; // skip if neither TP nor SL hit
