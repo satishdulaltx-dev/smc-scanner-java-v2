@@ -46,17 +46,22 @@ public class ScannerService {
             boolean isC=isCrypto(ticker);
             List<OHLCV> bars=client.getBars(ticker,"5m",100);
             if (bars==null||bars.size()<20) { setTs(ticker,"idle",null,0,"No data"); return; }
+
             String htfBias="neutral";
             double dailyAtr=0.0;
+            List<OHLCV> dailyBars=null;
+
             try { List<OHLCV> hb=client.getBars(ticker,"60m",50); if (hb!=null&&hb.size()>=10) htfBias=mtf.getHtfBias(hb); }
             catch (Exception e) { log.debug("{} HTF error: {}",ticker,e.getMessage()); }
             try {
-                List<OHLCV> db=client.getBars(ticker,"1d",20);
-                if (db!=null&&db.size()>=5) {
-                    double[] da=atrCalc.computeAtr(db,Math.min(14,db.size()-1));
+                dailyBars=client.getBars(ticker,"1d",100); // 100 bars: enough for swing detection + ATR
+                if (dailyBars!=null&&dailyBars.size()>=5) {
+                    double[] da=atrCalc.computeAtr(dailyBars,Math.min(14,dailyBars.size()-1));
                     for (int i=da.length-1;i>=0;i--) { if (da[i]>0) { dailyAtr=da[i]; break; } }
                 }
-            } catch (Exception e) { log.debug("{} daily ATR error: {}",ticker,e.getMessage()); }
+            } catch (Exception e) { log.debug("{} daily bars error: {}",ticker,e.getMessage()); }
+
+            // ── Intraday alert (5m bars → original Discord channel) ─────────
             List<TradeSetup> setups; String phaseMsg;
             if (isC) { setups=crypto.detectCryptoSetup(bars,ticker); phaseMsg=setups.isEmpty()?"Waiting for breakout + volume spike...":""; }
             else {
@@ -68,16 +73,34 @@ public class ScannerService {
                 setTs(ticker,"long".equals(s.getDirection())?"setup-long":"setup-short",s.getDirection(),s.getConfidence(),
                     String.format("ENTRY %s | Score %d | $%.2f",s.getDirection().toUpperCase(),s.getConfidence(),s.getEntry()));
                 if (s.getConfidence() >= config.getMinConfidence() && !dedup.isDuplicate(ticker,s.getDirection(),s.getEntry())) {
-                    log.info("SETUP ALERT {} {} conf={} entry={}", ticker, s.getDirection().toUpperCase(), s.getConfidence(), s.getEntry());
+                    log.info("INTRADAY ALERT {} {} conf={} entry={}", ticker, s.getDirection().toUpperCase(), s.getConfidence(), s.getEntry());
                     discord.sendSetupAlert(s); dedup.markSent(ticker,s.getDirection(),s.getEntry());
                 } else if (s.getConfidence() < config.getMinConfidence()) {
-                    log.debug("{} setup found but LOW_CONF conf={} min={}", ticker, s.getConfidence(), config.getMinConfidence());
+                    log.debug("{} intraday LOW_CONF conf={} min={}", ticker, s.getConfidence(), config.getMinConfidence());
                 }
                 tracker.recordSetup(s); updateSetup(s);
             } else {
-                log.debug("{} phase={}", ticker, phaseMsg);
+                log.debug("{} intraday phase={}", ticker, phaseMsg);
                 removeSetup(ticker); setTs(ticker,"idle",null,0,phaseMsg);
             }
+
+            // ── Swing alert (daily bars → swing Discord channel) ────────────
+            if (!isC && dailyBars!=null && dailyBars.size()>=30) {
+                try {
+                    SetupDetector.DetectResult sr=setupDetector.detectSetups(dailyBars,htfBias,ticker,false,dailyAtr,true);
+                    if (!sr.setups().isEmpty()) {
+                        TradeSetup sw=sr.setups().get(0);
+                        String swKey="swing_"+ticker;
+                        if (sw.getConfidence()>=config.getMinConfidence()
+                                && !dedup.isDuplicate(swKey,sw.getDirection(),sw.getEntry(),72*60)) {
+                            log.info("SWING ALERT {} {} conf={} entry={}", ticker, sw.getDirection().toUpperCase(), sw.getConfidence(), sw.getEntry());
+                            discord.sendSwingAlert(sw);
+                            dedup.markSent(swKey,sw.getDirection(),sw.getEntry());
+                        }
+                    }
+                } catch (Exception e) { log.debug("{} swing scan error: {}",ticker,e.getMessage()); }
+            }
+
         } catch (Exception e) { log.error("Error scanning {}: {}",ticker,e.getMessage()); setTs(ticker,"idle",null,0,"Error: "+e.getMessage()); }
     }
 
