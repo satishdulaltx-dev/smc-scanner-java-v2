@@ -10,6 +10,8 @@ public class TickerProfile {
     private String  skipReason = null;
     private String  note       = null;
 
+    private String  strategyType  = "smc"; // "smc" | "vwap" | "breakout"
+
     // Detection overrides (null = use global default from SetupDetector constants)
     private Integer minConfidence = null; // overrides scanner.min-confidence
     private Double  minFvgPct     = null; // overrides MIN_FVG_PCT
@@ -20,6 +22,7 @@ public class TickerProfile {
 
     // ── Getters ───────────────────────────────────────────────────────────────
     public String  getTicker()        { return ticker; }
+    public String  getStrategyType()  { return strategyType != null ? strategyType : "smc"; }
     public boolean isSkip()           { return skip; }
     public String  getSkipReason()    { return skipReason != null ? skipReason : "Profile marked skip=true"; }
     public String  getNote()          { return note; }
@@ -38,6 +41,7 @@ public class TickerProfile {
 
     // ── Setters (for Jackson) ─────────────────────────────────────────────────
     public void setTicker(String v)        { this.ticker = v; }
+    public void setStrategyType(String v)  { this.strategyType = v; }
     public void setSkip(boolean v)         { this.skip = v; }
     public void setSkipReason(String v)    { this.skipReason = v; }
     public void setNote(String v)          { this.note = v; }

@@ -3,7 +3,9 @@
     {
       "ticker": "GOOGL",
       "skip": true,
-      "skipReason": "Mega-cap stable stock — SMC 5m FVG patterns unreliable (5.6% win rate over 500 days)"
+      "skipReason": "Mega-cap stable stock — SMC 5m FVG patterns unreliable (5.6% win rate over 500 days)",
+      "strategyType": "vwap",
+      "note": "skip=true intentional; strategyType set for future reference if skip is lifted"
     },
     {
       "ticker": "RIVN",
@@ -37,13 +39,15 @@
       "ticker": "NIO",
       "minConfidence": 72,
       "minFvgPct": 0.0008,
-      "note": "Chinese EV — moderate tightening"
+      "strategyType": "breakout",
+      "note": "Chinese EV — moderate tightening; ORB breakout strategy"
     },
     {
       "ticker": "COIN",
-      "minConfidence": 72,
+      "minConfidence": 68,
       "minFvgPct": 0.0008,
-      "note": "Crypto proxy — tighten slightly, high avg win already"
+      "strategyType": "breakout",
+      "note": "Crypto exchange — ORB breakout strategy"
     },
     {
       "ticker": "SOFI",
@@ -74,6 +78,61 @@
       "ticker": "MARA",
       "minConfidence": 62,
       "note": "Strong expectancy (4.36%) — relaxed to catch more signals"
+    },
+    {
+      "ticker": "AAPL",
+      "strategyType": "vwap",
+      "note": "Large-cap — VWAP reversion strategy"
+    },
+    {
+      "ticker": "MSFT",
+      "strategyType": "vwap",
+      "note": "Large-cap — VWAP reversion strategy"
+    },
+    {
+      "ticker": "META",
+      "strategyType": "vwap",
+      "note": "Large-cap — VWAP reversion strategy"
+    },
+    {
+      "ticker": "V",
+      "strategyType": "vwap",
+      "note": "Payment mega-cap — VWAP reversion"
+    },
+    {
+      "ticker": "DIS",
+      "strategyType": "vwap",
+      "note": "Large-cap entertainment — VWAP reversion"
+    },
+    {
+      "ticker": "SPY",
+      "strategyType": "vwap",
+      "note": "ETF — VWAP reversion strategy"
+    },
+    {
+      "ticker": "QQQ",
+      "strategyType": "vwap",
+      "note": "ETF — VWAP reversion strategy"
+    },
+    {
+      "ticker": "NVDA",
+      "strategyType": "breakout",
+      "note": "Volatile AI chip — ORB breakout strategy"
+    },
+    {
+      "ticker": "BA",
+      "strategyType": "breakout",
+      "note": "Aerospace — ORB breakout strategy"
+    },
+    {
+      "ticker": "ROKU",
+      "strategyType": "breakout",
+      "note": "Volatile streaming tech — ORB breakout"
+    },
+    {
+      "ticker": "PLTR",
+      "strategyType": "breakout",
+      "note": "Volatile defense/AI — ORB breakout"
     }
   ]
 }

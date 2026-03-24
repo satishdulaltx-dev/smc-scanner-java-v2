@@ -43,20 +43,24 @@ public class DiscordAlertService {
         String grade=s.getConfidence()>=85?"⭐":(s.getConfidence()>=75?"✅":(s.getConfidence()>=65?"🟡":"⚪"));
         double slPts=Math.abs(s.getEntry()-s.getStopLoss()), tpPts=Math.abs(s.getTakeProfit()-s.getEntry());
         double slPct=s.getEntry()>0?slPts/s.getEntry()*100:0, tpPct=s.getEntry()>0?tpPts/s.getEntry()*100:0;
-        String ts=ZonedDateTime.now(ZoneOffset.UTC).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))+" UTC"; // literal " UTC" is safe — appended as string
+        String ts=ZonedDateTime.now(ZoneOffset.UTC).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))+" UTC";
+        // Detect strategy from volatility/session fields set by each detector
+        String strategy = "normal".equals(s.getVolatility()) ? "📊 VWAP Reversion"
+                        : "high".equals(s.getVolatility())   ? "🚀 ORB Breakout"
+                        : "🔷 SMC Sweep+FVG";
         List<Map<String,Object>> fields=List.of(
             f("Direction",arrow+" "+s.getDirection().toUpperCase(),true),
             f("Confidence",grade+" "+s.getConfidence()+"/100",true),
-            f("Session",s.getSession()!=null?s.getSession():"—",true),
+            f("Strategy",strategy,true),
             f("Entry",String.format("$%.4f",s.getEntry()),true),
             f("Stop Loss",String.format("$%.4f (-%.2f%%)",s.getStopLoss(),slPct),true),
             f("Take Profit",String.format("$%.4f (+%.2f%%)",s.getTakeProfit(),tpPct),true),
             f("R:R",String.format("%.1f:1",s.rrRatio()),true),
-            f("Volatility",s.getVolatility()!=null?s.getVolatility():"—",true),
+            f("Session",s.getSession()!=null?s.getSession():"—",true),
             f("ATR",String.format("$%.4f",s.getAtr()),true));
         Map<String,Object> e=new HashMap<>();
         e.put("title",arrow+" "+s.getTicker()+" — "+s.getDirection().toUpperCase()+" Setup");
-        e.put("color",isLong?0x00FF00:0xFF0000); e.put("fields",fields); e.put("footer",Map.of("text","SD Scanner | "+ts));
+        e.put("color",isLong?0x2ECC71:0xE74C3C); e.put("fields",fields); e.put("footer",Map.of("text","SD Scanner | "+ts));
         return e;
     }
 

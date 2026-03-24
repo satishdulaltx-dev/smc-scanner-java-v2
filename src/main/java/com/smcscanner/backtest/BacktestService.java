@@ -1,10 +1,14 @@
 package com.smcscanner.backtest;
 
+import com.smcscanner.config.ScannerConfig;
 import com.smcscanner.data.PolygonClient;
 import com.smcscanner.indicator.AtrCalculator;
 import com.smcscanner.model.OHLCV;
+import com.smcscanner.model.TickerProfile;
 import com.smcscanner.model.TradeSetup;
+import com.smcscanner.strategy.BreakoutStrategyDetector;
 import com.smcscanner.strategy.SetupDetector;
+import com.smcscanner.strategy.VwapStrategyDetector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -25,12 +29,19 @@ public class BacktestService {
     private static final ZoneId ET = ZoneId.of("America/New_York");
     private static final DateTimeFormatter DT_FMT = DateTimeFormatter.ofPattern("MM/dd HH:mm");
 
-    private final PolygonClient  client;
-    private final AtrCalculator  atrCalc;
-    private final SetupDetector  setupDetector;
+    private final PolygonClient            client;
+    private final AtrCalculator            atrCalc;
+    private final SetupDetector            setupDetector;
+    private final VwapStrategyDetector     vwapDetector;
+    private final BreakoutStrategyDetector breakoutDetector;
+    private final ScannerConfig            config;
 
-    public BacktestService(PolygonClient client, AtrCalculator atrCalc, SetupDetector setupDetector) {
+    public BacktestService(PolygonClient client, AtrCalculator atrCalc, SetupDetector setupDetector,
+                           VwapStrategyDetector vwapDetector, BreakoutStrategyDetector breakoutDetector,
+                           ScannerConfig config) {
         this.client = client; this.atrCalc = atrCalc; this.setupDetector = setupDetector;
+        this.vwapDetector = vwapDetector; this.breakoutDetector = breakoutDetector;
+        this.config = config;
     }
 
     public BacktestResult run(String ticker, int lookbackDays) {
@@ -81,14 +92,24 @@ public class BacktestService {
             }
 
             // Slide through day's bars — detect first valid setup
+            TickerProfile bp = config.getTickerProfile(ticker);
+            String stratType = bp.getStrategyType();
             boolean tradePlacedToday = false;
             for (int end = 20; end <= dayBars.size() && !tradePlacedToday; end++) {
                 List<OHLCV> window = dayBars.subList(0, end);
-                SetupDetector.DetectResult dr = setupDetector.detectSetups(
-                        window, htfBias, ticker, false, dailyAtr, true); // backtestMode=true, real dailyAtr for TP/SL
-                if (dr.setups().isEmpty()) continue;
+                List<TradeSetup> bSetups;
+                if ("vwap".equals(stratType)) {
+                    bSetups = vwapDetector.detect(window, ticker, dailyAtr);
+                } else if ("breakout".equals(stratType)) {
+                    bSetups = breakoutDetector.detect(window, ticker, dailyAtr);
+                } else {
+                    SetupDetector.DetectResult dr = setupDetector.detectSetups(
+                            window, htfBias, ticker, false, dailyAtr, true); // backtestMode=true, real dailyAtr for TP/SL
+                    bSetups = dr.setups();
+                }
+                if (bSetups.isEmpty()) continue;
 
-                TradeSetup setup = dr.setups().get(0);
+                TradeSetup setup = bSetups.get(0);
                 tradePlacedToday = true;
 
                 double entry = setup.getEntry();

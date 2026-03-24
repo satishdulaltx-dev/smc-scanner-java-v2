@@ -18,24 +18,27 @@ import java.util.*;
 public class ScannerService {
     private static final Logger log = LoggerFactory.getLogger(ScannerService.class);
 
-    private final ScannerConfig         config;
-    private final PolygonClient         client;
-    private final SetupDetector         setupDetector;
-    private final CryptoStrategyService crypto;
+    private final ScannerConfig          config;
+    private final PolygonClient          client;
+    private final SetupDetector          setupDetector;
+    private final CryptoStrategyService  crypto;
     private final MultiTimeframeAnalyzer mtf;
-    private final DiscordAlertService   discord;
-    private final AlertDedup            dedup;
-    private final PerformanceTracker    tracker;
-    private final SharedState           state;
-    private final AtrCalculator         atrCalc;
+    private final DiscordAlertService    discord;
+    private final AlertDedup             dedup;
+    private final PerformanceTracker     tracker;
+    private final SharedState            state;
+    private final AtrCalculator          atrCalc;
+    private final VwapStrategyDetector   vwap;
+    private final BreakoutStrategyDetector breakout;
 
     public ScannerService(ScannerConfig config, PolygonClient client, SetupDetector setupDetector,
                           CryptoStrategyService crypto, MultiTimeframeAnalyzer mtf,
                           DiscordAlertService discord, AlertDedup dedup,
-                          PerformanceTracker tracker, SharedState state, AtrCalculator atrCalc) {
+                          PerformanceTracker tracker, SharedState state, AtrCalculator atrCalc,
+                          VwapStrategyDetector vwap, BreakoutStrategyDetector breakout) {
         this.config=config; this.client=client; this.setupDetector=setupDetector; this.crypto=crypto;
         this.mtf=mtf; this.discord=discord; this.dedup=dedup; this.tracker=tracker; this.state=state;
-        this.atrCalc=atrCalc;
+        this.atrCalc=atrCalc; this.vwap=vwap; this.breakout=breakout;
     }
 
     public boolean isCrypto(String t) { return t.startsWith("X:"); }
@@ -73,8 +76,17 @@ public class ScannerService {
             List<TradeSetup> setups; String phaseMsg;
             if (isC) { setups=crypto.detectCryptoSetup(bars,ticker); phaseMsg=setups.isEmpty()?"Waiting for breakout + volume spike...":""; }
             else {
-                SetupDetector.DetectResult r=setupDetector.detectSetups(bars,htfBias,ticker,false,dailyAtr);
-                setups=r.setups(); phaseMsg=r.state().phaseMsg();
+                String strategyType = profile.getStrategyType();
+                if ("vwap".equals(strategyType)) {
+                    setups = vwap.detect(bars, ticker, dailyAtr);
+                    phaseMsg = setups.isEmpty() ? "Waiting for VWAP reversion..." : "";
+                } else if ("breakout".equals(strategyType)) {
+                    setups = breakout.detect(bars, ticker, dailyAtr);
+                    phaseMsg = setups.isEmpty() ? "Waiting for ORB breakout..." : "";
+                } else {
+                    SetupDetector.DetectResult r=setupDetector.detectSetups(bars,htfBias,ticker,false,dailyAtr);
+                    setups=r.setups(); phaseMsg=r.state().phaseMsg();
+                }
             }
             if (!setups.isEmpty()) {
                 TradeSetup s=setups.get(0);
@@ -123,7 +135,11 @@ public class ScannerService {
         List<Map<String,Object>> cur=new ArrayList<>(state.getSetups());
         cur.removeIf(x->s.getTicker().equals(x.get("ticker")));
         double rr=Math.abs(s.getStopLoss()-s.getEntry())>0?Math.round(Math.abs(s.getTakeProfit()-s.getEntry())/Math.abs(s.getStopLoss()-s.getEntry())*10)/10.0:0;
-        Map<String,Object> m=new LinkedHashMap<>(s.toMap()); m.put("rr",rr); m.put("reasons",isCrypto(s.getTicker())?"Momentum+Volume":"Sweep+Disp+FVG+Retest");
+        String reasons = isCrypto(s.getTicker()) ? "Momentum+Volume"
+                       : "normal".equals(s.getVolatility()) ? "VWAP Reversion"
+                       : "high".equals(s.getVolatility())   ? "ORB Breakout"
+                       : "Sweep+Disp+FVG+Retest";
+        Map<String,Object> m=new LinkedHashMap<>(s.toMap()); m.put("rr",rr); m.put("reasons",reasons);
         cur.add(m); if (cur.size()>20) cur=cur.subList(cur.size()-20,cur.size()); state.setSetups(cur);
     }
     private void removeSetup(String t) { List<Map<String,Object>> c=new ArrayList<>(state.getSetups()); c.removeIf(x->t.equals(x.get("ticker"))); state.setSetups(c); }
