@@ -7,7 +7,9 @@ import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -33,16 +35,20 @@ public class VwapStrategyDetector {
         List<TradeSetup> result = new ArrayList<>();
         if (bars == null || bars.isEmpty()) return result;
 
-        // Filter to today's ET session (same LocalDate as last bar)
+        // Filter to regular NYSE session only: same date AND 9:30 AM–4:00 PM ET
+        // This excludes pre-market and after-hours bars which skew VWAP calculations
         OHLCV lastRaw = bars.get(bars.size() - 1);
         LocalDate today = Instant.ofEpochMilli(Long.parseLong(lastRaw.getTimestamp()))
                 .atZone(ET).toLocalDate();
+        LocalTime mktOpen  = LocalTime.of(9, 30);
+        LocalTime mktClose = LocalTime.of(16, 0);
 
         List<OHLCV> sessionBars = new ArrayList<>();
         for (OHLCV bar : bars) {
-            LocalDate barDate = Instant.ofEpochMilli(Long.parseLong(bar.getTimestamp()))
-                    .atZone(ET).toLocalDate();
-            if (barDate.equals(today)) {
+            ZonedDateTime zdt = Instant.ofEpochMilli(Long.parseLong(bar.getTimestamp())).atZone(ET);
+            if (zdt.toLocalDate().equals(today)
+                    && !zdt.toLocalTime().isBefore(mktOpen)
+                    && zdt.toLocalTime().isBefore(mktClose)) {
                 sessionBars.add(bar);
             }
         }
@@ -73,8 +79,8 @@ public class VwapStrategyDetector {
         OHLCV last = sessionBars.get(sessionBars.size() - 1);
 
         // ── LONG setup ────────────────────────────────────────────────────────
-        // Look back 15 bars for lowest close
-        int lookback = Math.min(15, sessionBars.size());
+        // Look back 20 bars for lowest close (wider window catches more setups)
+        int lookback = Math.min(20, sessionBars.size());
         int startIdx = sessionBars.size() - lookback;
         double lowestClose  = Double.MAX_VALUE;
         double highestClose = Double.MIN_VALUE;
@@ -85,13 +91,13 @@ public class VwapStrategyDetector {
         }
 
         // LONG: price must have dipped meaningfully below VWAP
-        if (lowestClose < vwap - 0.8 * curAtr) {
+        if (lowestClose < vwap - 0.5 * curAtr) {
             double curClose = last.getClose();
             boolean belowVwap      = curClose < vwap;
-            boolean bouncingUp     = curClose > lowestClose + curAtr * 0.3;
+            boolean bouncingUp     = curClose > lowestClose + curAtr * 0.2;
             boolean bullishBar     = last.getClose() > last.getOpen();
-            boolean volSpike       = last.getVolume() > avgVol * 1.3;
-            boolean notFreeFall    = curClose >= vwap - curAtr * 2.5;
+            boolean volSpike       = last.getVolume() > avgVol * 1.1;
+            boolean notFreeFall    = curClose >= vwap - curAtr * 3.0;
 
             if (belowVwap && bouncingUp && bullishBar && volSpike && notFreeFall) {
                 double entry = r4(curClose);
@@ -103,9 +109,10 @@ public class VwapStrategyDetector {
                 double tpRaw = r4(vwap + curAtr * 0.3);
                 double tp    = tpRaw > entry * 1.005 ? tpRaw : r4(entry + targetAtr * 0.9);
 
-                int confidence = 68;
-                if (last.getVolume() > avgVol * 2)               confidence += 5;
-                if ((vwap - curClose) > 1.2 * curAtr)            confidence += 5;
+                int confidence = 65;
+                if (last.getVolume() > avgVol * 1.8)             confidence += 5;
+                if ((vwap - curClose) > 0.8 * curAtr)            confidence += 5;
+                if (last.getVolume() > avgVol * 2.5)             confidence += 5;
 
                 if (sl < entry && tp > entry) {
                     result.add(TradeSetup.builder()
@@ -131,13 +138,13 @@ public class VwapStrategyDetector {
 
         // ── SHORT setup ───────────────────────────────────────────────────────
         // Price must have spiked meaningfully above VWAP
-        if (highestClose > vwap + 0.8 * curAtr) {
+        if (highestClose > vwap + 0.5 * curAtr) {
             double curClose = last.getClose();
             boolean aboveVwap     = curClose > vwap;
-            boolean revertingDown  = curClose < highestClose - curAtr * 0.3;
+            boolean revertingDown  = curClose < highestClose - curAtr * 0.2;
             boolean bearishBar    = last.getClose() < last.getOpen();
-            boolean volSpike      = last.getVolume() > avgVol * 1.3;
-            boolean notFreeRocket = curClose <= vwap + curAtr * 2.5;
+            boolean volSpike      = last.getVolume() > avgVol * 1.1;
+            boolean notFreeRocket = curClose <= vwap + curAtr * 3.0;
 
             if (aboveVwap && revertingDown && bearishBar && volSpike && notFreeRocket) {
                 double entry = r4(curClose);
@@ -149,9 +156,10 @@ public class VwapStrategyDetector {
                 double tpRaw = r4(vwap - curAtr * 0.3);
                 double tp    = tpRaw < entry * 0.995 ? tpRaw : r4(entry - targetAtr * 0.9);
 
-                int confidence = 68;
-                if (last.getVolume() > avgVol * 2)               confidence += 5;
-                if ((curClose - vwap) > 1.2 * curAtr)            confidence += 5;
+                int confidence = 65;
+                if (last.getVolume() > avgVol * 1.8)             confidence += 5;
+                if ((curClose - vwap) > 0.8 * curAtr)            confidence += 5;
+                if (last.getVolume() > avgVol * 2.5)             confidence += 5;
 
                 if (sl > entry && tp < entry) {
                     result.add(TradeSetup.builder()

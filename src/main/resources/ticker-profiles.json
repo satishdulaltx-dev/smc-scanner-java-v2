@@ -81,8 +81,8 @@
     },
     {
       "ticker": "AAPL",
-      "strategyType": "vwap",
-      "note": "Large-cap — VWAP reversion strategy"
+      "strategyType": "breakout",
+      "note": "Large-cap — switched to ORB; VWAP showed 0% WR (pre-market data was polluting session)"
     },
     {
       "ticker": "MSFT",
@@ -101,8 +101,8 @@
     },
     {
       "ticker": "DIS",
-      "strategyType": "vwap",
-      "note": "Large-cap entertainment — VWAP reversion"
+      "strategyType": "breakout",
+      "note": "Entertainment — VWAP showed 0/11 losses; switched to ORB breakout"
     },
     {
       "ticker": "SPY",

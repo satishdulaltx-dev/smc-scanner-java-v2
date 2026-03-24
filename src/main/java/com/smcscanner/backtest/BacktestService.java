@@ -51,11 +51,12 @@ public class BacktestService {
             return BacktestResult.empty(ticker, "Insufficient data (" + (allBars==null?0:allBars.size()) + " bars)");
         }
 
-        // Group bars by calendar date in ET
+        // Group ALL bars by calendar date in ET (including pre-market)
+        // SMC strategy benefits from pre-market context for swing/sweep detection
+        // VWAP and ORB strategies filter to regular session internally
         TreeMap<LocalDate, List<OHLCV>> byDate = new TreeMap<>();
         for (OHLCV bar : allBars) {
-            LocalDate d = Instant.ofEpochMilli(Long.parseLong(bar.getTimestamp()))
-                    .atZone(ET).toLocalDate();
+            LocalDate d = Instant.ofEpochMilli(Long.parseLong(bar.getTimestamp())).atZone(ET).toLocalDate();
             byDate.computeIfAbsent(d, k -> new ArrayList<>()).add(bar);
         }
 
@@ -94,8 +95,17 @@ public class BacktestService {
             // Slide through day's bars — detect first valid setup
             TickerProfile bp = config.getTickerProfile(ticker);
             String stratType = bp.getStrategyType();
+            boolean isSessionStrat = "breakout".equals(stratType) || "vwap".equals(stratType);
+            // Session strategies start from market open; SMC can use pre-market context
+            int minBars = isSessionStrat ? 8 : 20;
             boolean tradePlacedToday = false;
-            for (int end = 20; end <= dayBars.size() && !tradePlacedToday; end++) {
+            for (int end = minBars; end <= dayBars.size() && !tradePlacedToday; end++) {
+                // For VWAP/ORB: skip windows where the most recent bar is still pre-market
+                if (isSessionStrat) {
+                    ZonedDateTime lastZdt = Instant.ofEpochMilli(
+                        Long.parseLong(dayBars.get(end-1).getTimestamp())).atZone(ET);
+                    if (lastZdt.toLocalTime().isBefore(LocalTime.of(9, 30))) continue;
+                }
                 List<OHLCV> window = dayBars.subList(0, end);
                 List<TradeSetup> bSetups;
                 if ("vwap".equals(stratType)) {

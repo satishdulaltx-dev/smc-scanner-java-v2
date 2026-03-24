@@ -7,7 +7,9 @@ import org.springframework.stereotype.Service;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -33,22 +35,26 @@ public class BreakoutStrategyDetector {
         List<TradeSetup> result = new ArrayList<>();
         if (bars == null || bars.isEmpty()) return result;
 
-        // Filter to today's ET session (same LocalDate as last bar)
+        // Filter to regular NYSE session only: same date AND 9:30 AM–4:00 PM ET
+        // ORB must use true market-open bars; pre-market bars produce wrong opening ranges
         OHLCV lastRaw = bars.get(bars.size() - 1);
         LocalDate today = Instant.ofEpochMilli(Long.parseLong(lastRaw.getTimestamp()))
                 .atZone(ET).toLocalDate();
+        LocalTime mktOpen  = LocalTime.of(9, 30);
+        LocalTime mktClose = LocalTime.of(16, 0);
 
         List<OHLCV> sessionBars = new ArrayList<>();
         for (OHLCV bar : bars) {
-            LocalDate barDate = Instant.ofEpochMilli(Long.parseLong(bar.getTimestamp()))
-                    .atZone(ET).toLocalDate();
-            if (barDate.equals(today)) {
+            ZonedDateTime zdt = Instant.ofEpochMilli(Long.parseLong(bar.getTimestamp())).atZone(ET);
+            if (zdt.toLocalDate().equals(today)
+                    && !zdt.toLocalTime().isBefore(mktOpen)
+                    && zdt.toLocalTime().isBefore(mktClose)) {
                 sessionBars.add(bar);
             }
         }
 
-        // Need ORB period (6 bars) + at least some room for a breakout bar
-        if (sessionBars.size() <= 8) return result;
+        // Need ORB period (6 bars) + at least 1 post-ORB bar to check for breakout
+        if (sessionBars.size() < 7) return result;
 
         // Opening range = first 6 session bars
         List<OHLCV> orbBars = sessionBars.subList(0, 6);
@@ -57,27 +63,35 @@ public class BreakoutStrategyDetector {
         double orbWidth = orbHigh - orbLow;
         if (orbWidth <= 0) return result;
 
-        // Still in ORB formation — no breakout possible yet
-        if (sessionBars.size() <= 6) return result;
+        // Still in ORB formation — need at least 1 post-ORB bar
+        if (sessionBars.size() <= 6) return result; // redundant safety check
 
-        // Average volume of ORB bars
-        double avgVol = orbBars.stream().mapToDouble(OHLCV::getVolume).average().orElse(1.0);
+        // Average volume of ALL session bars (not just ORB bars — opening candle inflates ORB avg)
+        double avgVol = sessionBars.stream().mapToDouble(OHLCV::getVolume).average().orElse(1.0);
 
         OHLCV last = sessionBars.get(sessionBars.size() - 1);
-        OHLCV prev = sessionBars.get(sessionBars.size() - 2);
 
         // Breakout bar validation (common to both directions)
-        boolean volConfirmed = last.getVolume() > avgVol * 1.5;
+        boolean volConfirmed  = last.getVolume() > avgVol * 1.5;
         boolean sizeConfirmed = (last.getHigh() - last.getLow()) > orbWidth * 0.3;
 
         if (!volConfirmed || !sizeConfirmed) return result;
 
         double atr = computeAtr(sessionBars);
 
+        // Freshness check: scan ALL post-ORB bars before the current one to ensure
+        // this is truly the first breakout (works correctly in backtest and live mode)
+        boolean prevBrokeHigh = false, prevBrokeLow = false;
+        for (int i = 6; i < sessionBars.size() - 1; i++) {
+            double c = sessionBars.get(i).getClose();
+            if (c > orbHigh) prevBrokeHigh = true;
+            if (c < orbLow)  prevBrokeLow  = true;
+        }
+
         // ── LONG breakout ─────────────────────────────────────────────────────
-        if (last.getClose() > orbHigh
-                && last.getClose() > last.getOpen()
-                && prev.getClose() <= orbHigh) {
+        if (!prevBrokeHigh
+                && last.getClose() > orbHigh
+                && last.getClose() > last.getOpen()) {
 
             double entry = r4(last.getClose());
             double sl    = r4(orbLow + orbWidth * 0.15);
@@ -119,9 +133,9 @@ public class BreakoutStrategyDetector {
         }
 
         // ── SHORT breakdown ───────────────────────────────────────────────────
-        if (last.getClose() < orbLow
-                && last.getClose() < last.getOpen()
-                && prev.getClose() >= orbLow) {
+        if (!prevBrokeLow
+                && last.getClose() < orbLow
+                && last.getClose() < last.getOpen()) {
 
             double entry = r4(last.getClose());
             double sl    = r4(orbHigh - orbWidth * 0.15);
