@@ -61,13 +61,15 @@
         thead th { background:var(--surface); color:var(--muted); font-weight:600; font-size:10px; text-transform:uppercase; letter-spacing:.8px; padding:8px 12px; text-align:left; border-bottom:1px solid var(--border); white-space:nowrap; }
         tbody tr { border-bottom:1px solid var(--border); transition:background .1s; }
         tbody tr:hover { background:rgba(255,255,255,.03); }
-        tbody tr.win-row { border-left:3px solid var(--green); }
-        tbody tr.loss-row { border-left:3px solid var(--red); }
+        tbody tr.win-row     { border-left:3px solid var(--green); }
+        tbody tr.loss-row    { border-left:3px solid var(--red); }
+        tbody tr.timeout-row { border-left:3px solid var(--yellow); }
         td { padding:9px 12px; white-space:nowrap; }
         .dir-long  { color:var(--green); font-weight:700; }
         .dir-short { color:var(--red);   font-weight:700; }
-        .win-badge  { background:rgba(63,185,80,.15); color:var(--green); padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; }
-        .loss-badge { background:rgba(248,81,73,.15);  color:var(--red);   padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; }
+        .win-badge     { background:rgba(63,185,80,.15);  color:var(--green);  padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; }
+        .loss-badge    { background:rgba(248,81,73,.15);  color:var(--red);    padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; }
+        .timeout-badge { background:rgba(210,153,34,.15); color:var(--yellow); padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; }
 
         /* Empty / loading states */
         .empty-state { text-align:center; padding:60px 24px; color:var(--muted); }
@@ -276,6 +278,7 @@ function renderSingle(d) {
         <div class="stat-card"><div class="val" style="color:${exColor}">${d.expectancy >= 0 ? '+' : ''}${d.expectancy}%</div><div class="lbl">Expectancy / Trade</div></div>
         <div class="stat-card"><div class="val c-green">+${d.avg_win_pct.toFixed(2)}%</div><div class="lbl">Avg Win</div></div>
         <div class="stat-card"><div class="val c-red">-${d.avg_loss_pct.toFixed(2)}%</div><div class="lbl">Avg Loss</div></div>
+        ${d.timeouts > 0 ? `<div class="stat-card"><div class="val" style="color:var(--yellow)">${d.timeouts}</div><div class="lbl">Time Stops</div></div>` : ''}
         <div class="stat-card"><div class="val c-purple">${d.lookback_days}d</div><div class="lbl">Lookback</div></div>
     `;
 
@@ -290,9 +293,9 @@ function renderSingle(d) {
     });
     drawEquity(labels, cumData);
 
-    // Distribution chart
-    const wins = d.trades.filter(t => t.outcome === 'WIN').map(t => t.pnl_pct);
-    const losses = d.trades.filter(t => t.outcome === 'LOSS').map(t => t.pnl_pct);
+    // Distribution chart (include TIMEOUT pnl in the correct bucket)
+    const wins   = d.trades.filter(t => t.outcome === 'WIN'     || (t.outcome === 'TIMEOUT' && t.pnl_pct > 0)).map(t => t.pnl_pct);
+    const losses = d.trades.filter(t => t.outcome === 'LOSS'    || (t.outcome === 'TIMEOUT' && t.pnl_pct <= 0)).map(t => t.pnl_pct);
     drawDist(wins, losses);
 
     // Trades table
@@ -303,7 +306,7 @@ function renderSingle(d) {
         const tvUrl = `https://www.tradingview.com/chart/?symbol=${tvTicker}&interval=5`;
         const confColor = t.confidence >= 80 ? 'var(--green)' : t.confidence >= 65 ? 'var(--yellow)' : 'var(--muted)';
         return `
-        <tr class="${t.outcome === 'WIN' ? 'win-row' : 'loss-row'}">
+        <tr class="${t.outcome === 'WIN' ? 'win-row' : t.outcome === 'TIMEOUT' ? 'timeout-row' : 'loss-row'}">
             <td style="color:var(--muted)">${i+1}</td>
             <td><a href="${tvUrl}" target="_blank" style="color:var(--blue);text-decoration:none;font-size:11px;font-family:monospace" title="View 5m chart on TradingView">${t.entry_time || '—'}</a></td>
             <td style="font-size:11px;font-family:monospace;color:var(--muted)">${t.exit_time || '—'}</td>
@@ -311,7 +314,7 @@ function renderSingle(d) {
             <td>$${t.entry.toFixed(2)}</td>
             <td style="color:var(--red)">$${t.sl.toFixed(2)}</td>
             <td style="color:var(--green)">$${t.tp.toFixed(2)}</td>
-            <td><span class="${t.outcome === 'WIN' ? 'win-badge' : 'loss-badge'}">${t.outcome}</span></td>
+            <td><span class="${t.outcome === 'WIN' ? 'win-badge' : t.outcome === 'TIMEOUT' ? 'timeout-badge' : 'loss-badge'}">${t.outcome}</span></td>
             <td style="color:${t.pnl_pct >= 0 ? 'var(--green)' : 'var(--red)'}; font-weight:600">
                 ${t.pnl_pct >= 0 ? '+' : ''}${t.pnl_pct.toFixed(2)}%
             </td>

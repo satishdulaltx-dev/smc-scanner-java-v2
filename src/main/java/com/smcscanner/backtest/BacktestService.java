@@ -151,14 +151,28 @@ public class BacktestService {
 
                 for (OHLCV fb : fwdBars) {
                     if ("long".equals(dir)) {
-                        if (fb.getLow()  <= sl) { outcome="LOSS"; exitTime=toDateTime(fb.getTimestamp()); pnlPct=round2((sl-entry)/entry*100); break; }
-                        if (fb.getHigh() >= tp) { outcome="WIN";  exitTime=toDateTime(fb.getTimestamp()); pnlPct=round2((tp-entry)/entry*100); break; }
+                        if (fb.getLow()  <= sl) { outcome="LOSS";    exitTime=toDateTime(fb.getTimestamp()); pnlPct=round2((sl-entry)/entry*100); break; }
+                        if (fb.getHigh() >= tp) { outcome="WIN";     exitTime=toDateTime(fb.getTimestamp()); pnlPct=round2((tp-entry)/entry*100); break; }
                     } else {
-                        if (fb.getHigh() >= sl) { outcome="LOSS"; exitTime=toDateTime(fb.getTimestamp()); pnlPct=round2((entry-sl)/entry*100); break; }
-                        if (fb.getLow()  <= tp) { outcome="WIN";  exitTime=toDateTime(fb.getTimestamp()); pnlPct=round2((entry-tp)/entry*100); break; }
+                        if (fb.getHigh() >= sl) { outcome="LOSS";    exitTime=toDateTime(fb.getTimestamp()); pnlPct=round2((entry-sl)/entry*100); break; }
+                        if (fb.getLow()  <= tp) { outcome="WIN";     exitTime=toDateTime(fb.getTimestamp()); pnlPct=round2((entry-tp)/entry*100); break; }
                     }
                 }
-                if ("EXPIRED".equals(outcome)) continue; // skip if neither TP nor SL hit
+
+                // Time-based stop: if neither TP nor SL was hit within 2 trading days,
+                // exit at the close of the last available forward bar (market-close exit).
+                // Previously these were silently skipped as "EXPIRED", which overstated
+                // win rates by hiding neutral-to-losing open positions.
+                if ("EXPIRED".equals(outcome)) {
+                    if (fwdBars.isEmpty()) continue; // truly no forward data — skip
+                    OHLCV lastFwd = fwdBars.get(fwdBars.size() - 1);
+                    double exitPrice = lastFwd.getClose();
+                    exitTime = toDateTime(lastFwd.getTimestamp());
+                    pnlPct   = "long".equals(dir)
+                            ? round2((exitPrice - entry) / entry * 100)
+                            : round2((entry - exitPrice) / entry * 100);
+                    outcome  = "TIMEOUT"; // distinguishable from TP/SL exits in the trade list
+                }
 
                 trades.add(new TradeResult(ticker, dir, entry, sl, tp, outcome, pnlPct,
                         entryTime, exitTime != null ? exitTime : entryTime,
@@ -189,19 +203,27 @@ public class BacktestService {
         public final List<TradeResult> trades;
         public final int lookbackDays;
         public final String error;
-        public final int wins, losses, total;
+        public final int wins, losses, timeouts, total;
         public final double winRate, avgWinPct, avgLossPct, expectancy;
 
         private BacktestResult(String ticker, List<TradeResult> trades, int lookbackDays, String error) {
             this.ticker = ticker; this.trades = trades;
             this.lookbackDays = lookbackDays; this.error = error;
-            this.wins    = (int) trades.stream().filter(t -> "WIN".equals(t.outcome())).count();
-            this.losses  = (int) trades.stream().filter(t -> "LOSS".equals(t.outcome())).count();
-            this.total   = wins + losses;
-            this.winRate = total > 0 ? Math.round(wins * 100.0 / total * 10) / 10.0 : 0;
-            this.avgWinPct  = trades.stream().filter(t -> "WIN".equals(t.outcome()))
+
+            // TIMEOUT trades are counted as wins or losses based on their PnL sign,
+            // so win rate and expectancy reflect the honest all-in result.
+            this.wins     = (int) trades.stream().filter(t ->
+                    "WIN".equals(t.outcome()) || ("TIMEOUT".equals(t.outcome()) && t.pnlPct() > 0)).count();
+            this.losses   = (int) trades.stream().filter(t ->
+                    "LOSS".equals(t.outcome()) || ("TIMEOUT".equals(t.outcome()) && t.pnlPct() <= 0)).count();
+            this.timeouts = (int) trades.stream().filter(t -> "TIMEOUT".equals(t.outcome())).count();
+            this.total    = wins + losses;
+            this.winRate  = total > 0 ? Math.round(wins * 100.0 / total * 10) / 10.0 : 0;
+            this.avgWinPct  = trades.stream().filter(t ->
+                    "WIN".equals(t.outcome()) || ("TIMEOUT".equals(t.outcome()) && t.pnlPct() > 0))
                     .mapToDouble(TradeResult::pnlPct).average().orElse(0);
-            this.avgLossPct = trades.stream().filter(t -> "LOSS".equals(t.outcome()))
+            this.avgLossPct = trades.stream().filter(t ->
+                    "LOSS".equals(t.outcome()) || ("TIMEOUT".equals(t.outcome()) && t.pnlPct() <= 0))
                     .mapToDouble(t -> Math.abs(t.pnlPct())).average().orElse(0);
             this.expectancy = total > 0
                     ? (winRate / 100 * avgWinPct) - ((1 - winRate / 100) * avgLossPct) : 0;

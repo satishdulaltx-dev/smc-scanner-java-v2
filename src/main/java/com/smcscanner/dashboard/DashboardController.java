@@ -369,15 +369,16 @@ public class DashboardController {
         try {
             var result = backtestService.run(ticker.toUpperCase(), days);
             Map<String,Object> resp = new LinkedHashMap<>();
-            resp.put("ticker",      result.ticker);
+            resp.put("ticker",        result.ticker);
             resp.put("lookback_days", result.lookbackDays);
-            resp.put("total_trades", result.total);
-            resp.put("wins",         result.wins);
-            resp.put("losses",       result.losses);
-            resp.put("win_rate",     result.winRate);
-            resp.put("avg_win_pct",  Math.round(result.avgWinPct*100)/100.0);
-            resp.put("avg_loss_pct", Math.round(result.avgLossPct*100)/100.0);
-            resp.put("expectancy",   Math.round(result.expectancy*100)/100.0);
+            resp.put("total_trades",  result.total);
+            resp.put("wins",          result.wins);
+            resp.put("losses",        result.losses);
+            resp.put("timeouts",      result.timeouts);
+            resp.put("win_rate",      result.winRate);
+            resp.put("avg_win_pct",   Math.round(result.avgWinPct*100)/100.0);
+            resp.put("avg_loss_pct",  Math.round(result.avgLossPct*100)/100.0);
+            resp.put("expectancy",    Math.round(result.expectancy*100)/100.0);
             if (result.error != null) resp.put("error", result.error);
             List<Map<String,Object>> tradeList = result.trades.stream().map(t -> {
                 Map<String,Object> m = new LinkedHashMap<>();
