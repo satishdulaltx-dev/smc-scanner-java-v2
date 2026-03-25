@@ -4,7 +4,6 @@
     "X:ETHUSD",
     "AAPL",
     "MSFT",
-    "GOOGL",
     "AMZN",
     "NVDA",
     "META",
@@ -18,22 +17,16 @@
     "SHOP",
     "PLTR",
     "SOFI",
-    "RIVN",
     "NIO",
-    "BABA",
     "PYPL",
     "DIS",
     "BA",
     "JPM",
-    "GS",
-    "V",
-    "UBER",
     "ABNB",
     "SNAP",
     "ROKU",
     "MARA",
-    "SPX",
     "HOOD",
-    "MSTR"
+    "SPX"
   ]
 }
