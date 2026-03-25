@@ -67,8 +67,9 @@ public class EodReportService {
         List<TickerReport> reports = new ArrayList<>();
         for (String ticker : tickers) {
             try {
-                // Intraday bars for SMC structure; fall back to daily if thin
-                List<OHLCV> bars = client.getBars(ticker, "15m", 300);
+                // 15m bars with 10-day lookback for SMC structure (FVG/OB/swing detection).
+                // getBarsWithLookback bypasses cache so we always get fresh data at EOD.
+                List<OHLCV> bars = client.getBarsWithLookback(ticker, "15m", 500, 10);
                 if (bars == null || bars.size() < 30) bars = client.getBars(ticker, "1d", 90);
 
                 TickerReport r = analyseTicker(ticker, bars, spyBars, qqqBars);
@@ -96,14 +97,16 @@ public class EodReportService {
                     .watchFor("WAIT").currentPrice(0.0).error("Insufficient data").build();
         }
 
-        double price    = bars.get(bars.size()-1).getClose();
-        double[] atrArr = atrCalc.computeAtr(bars, 14);
-        double   atrVal = lastNz(atrArr);
-        if (atrVal == 0) atrVal = price * 0.01;
-
-        // Always fetch daily bars for VP and correlation (DataCache avoids duplicate API calls)
+        // Always fetch daily bars first — use their last close as the authoritative
+        // EOD price. The 15m bars passed in are used only for structure analysis.
+        // Using 15m last bar for price is unreliable (1-bar latency, delayed feed).
         List<OHLCV> dailyBars = client.getBars(ticker, "1d", 90);
         if (dailyBars == null || dailyBars.size() < 10) dailyBars = bars;
+
+        double price    = dailyBars.get(dailyBars.size()-1).getClose();
+        double[] atrArr = atrCalc.computeAtr(dailyBars, 14);
+        double   atrVal = lastNz(atrArr);
+        if (atrVal == 0) atrVal = price * 0.01;
 
         // ── Collect raw levels ─────────────────────────────────────────────────
         List<double[]> rawSup = new ArrayList<>();   // [price, weight]
