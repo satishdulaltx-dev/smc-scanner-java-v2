@@ -71,8 +71,10 @@
     },
     {
       "ticker": "SNAP",
+      "skip": true,
+      "skipReason": "Regime change — 6 consecutive SHORT losses Jan 2026 despite conf=100. SMC patterns valid but news-driven reversals override technical setups. Re-enable when trend stabilises.",
       "minConfidence": 62,
-      "note": "Strong performer (58.3% WR) — relaxed"
+      "note": "Was 58.3% WR historically. Now 14.3% WR 90d (-0.77% expectancy). skip=true until performance recovers."
     },
     {
       "ticker": "MARA",

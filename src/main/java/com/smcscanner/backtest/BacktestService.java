@@ -89,10 +89,26 @@ public class BacktestService {
                     for (int i = da.length-1; i >= 0; i--) { if (da[i] > 0) { dailyAtr = da[i]; break; } }
                 }
                 if (htfSlice.size() >= 20) {
-                    double sma = htfSlice.subList(htfSlice.size()-20, htfSlice.size())
+                    double sma  = htfSlice.subList(htfSlice.size()-20, htfSlice.size())
                             .stream().mapToDouble(OHLCV::getClose).average().orElse(0);
                     double last = htfSlice.get(htfSlice.size()-1).getClose();
-                    htfBias = last > sma * 1.005 ? "bullish" : last < sma * 0.995 ? "bearish" : "neutral";
+
+                    // Primary signal: price vs SMA20 — tightened neutral band to ±0.2%
+                    // (was ±0.5%, which left most SNAP-like trending periods as "neutral"
+                    //  and allowed counter-trend SMC setups to pass through)
+                    htfBias = last > sma * 1.002 ? "bullish"
+                            : last < sma * 0.998 ? "bearish"
+                            : "neutral";
+
+                    // Secondary signal: 5-day momentum breaks ties on neutral SMA
+                    // If price moved > 3% in 5 days the trend is already clear regardless
+                    // of SMA lag. This catches early-stage trends before SMA catches up.
+                    if ("neutral".equals(htfBias) && htfSlice.size() >= 5) {
+                        double prev5 = htfSlice.get(htfSlice.size() - 5).getClose();
+                        double mom   = (last - prev5) / prev5;
+                        if      (mom >  0.03) htfBias = "bullish";
+                        else if (mom < -0.03) htfBias = "bearish";
+                    }
                 }
             }
 
