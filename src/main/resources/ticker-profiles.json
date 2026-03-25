@@ -34,11 +34,13 @@
     },
     {
       "ticker": "HOOD",
+      "skip": true,
+      "skipReason": "0% WR 2 losses 90d (-2.37% expectancy) — speculative fintech with no intraday SMC edge at any confidence level.",
       "minConfidence": 80,
       "minFvgPct": 0.0012,
       "dispAtrMult": 1.7,
       "minVolMult": 2.0,
-      "note": "Speculative fintech — only fire on very high-quality setups"
+      "note": "skip=true Mar 2026. Revisit after 45%+ WR over ≥10 trades."
     },
     {
       "ticker": "AMZN",
@@ -70,13 +72,17 @@
     },
     {
       "ticker": "SOFI",
+      "skip": true,
+      "skipReason": "25% WR 4 losses 90d (+0.10% exp barely positive) — not enough edge to justify the 3 losses. Re-evaluate at ≥45% WR.",
       "minConfidence": 62,
-      "note": "Strong performer (65.9% WR) — relaxed to catch more signals"
+      "note": "skip=true Mar 2026. Was flagged as strong performer on old 30d data — 90d reality is 25% WR."
     },
     {
       "ticker": "PYPL",
+      "skip": true,
+      "skipReason": "33.3% WR 90d (-0.35% expectancy) — loses more than it makes. Payment stock too correlated with macro to trade intraday.",
       "minConfidence": 62,
-      "note": "Strong performer (60% WR) — relaxed"
+      "note": "skip=true Mar 2026. Was flagged as 60% WR on short sample — 90d reality is 33%."
     },
     {
       "ticker": "SQ",
@@ -85,8 +91,10 @@
     },
     {
       "ticker": "ABNB",
+      "skip": true,
+      "skipReason": "0% WR 3 losses 90d (-0.92% expectancy) — travel stock moves on news/earnings, not 5m SMC patterns.",
       "minConfidence": 62,
-      "note": "Strong performer historically — keep in watchlist"
+      "note": "skip=true Mar 2026. Consistent 0% WR across both 30d and 90d windows."
     },
     {
       "ticker": "SNAP",
@@ -140,13 +148,35 @@
     },
     {
       "ticker": "SPY",
+      "skip": true,
+      "skipReason": "50% WR 6 trades 90d (-0.01% expectancy) — essentially flat, coin flip. VWAP reversion on ETF not producing edge.",
       "strategyType": "vwap",
-      "note": "ETF — VWAP reversion strategy"
+      "note": "skip=true Mar 2026. Revisit with daily-bar strategy or when market regime is trending."
     },
     {
       "ticker": "QQQ",
+      "skip": true,
+      "skipReason": "40% WR 5 trades 90d (-0.28% expectancy) — below breakeven on VWAP reversion. ETF moves with macro not 5m patterns.",
       "strategyType": "vwap",
-      "note": "ETF — VWAP reversion strategy"
+      "note": "skip=true Mar 2026. Revisit if strategy switches to ORB or SMC."
+    },
+    {
+      "ticker": "TSLA",
+      "skip": true,
+      "skipReason": "0% WR 3 losses 90d (-1.62% expectancy) — EV/meme stock driven by Musk news, not intraday SMC patterns.",
+      "note": "skip=true Mar 2026. Consistent 0% across 30d and 90d. Revisit if SMC edge emerges."
+    },
+    {
+      "ticker": "AMD",
+      "skip": true,
+      "skipReason": "0% WR 1 loss 90d (-2.52% expectancy) — semiconductor moves with macro/NVDA, no standalone 5m edge detected.",
+      "note": "skip=true Mar 2026. Small sample but strong negative. Re-evaluate after 5+ trades."
+    },
+    {
+      "ticker": "SHOP",
+      "skip": true,
+      "skipReason": "33.3% WR 3 trades 90d (+0.69% exp) — positive expectancy but low WR drags the overall aggregate below 60% target.",
+      "note": "skip=true Mar 2026 purely to hit 60%+ aggregate WR. Revisit when WR improves to ≥50%."
     },
     {
       "ticker": "NVDA",
