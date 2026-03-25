@@ -2,6 +2,8 @@ package com.smcscanner.strategy;
 
 import com.smcscanner.alert.AlertDedup;
 import com.smcscanner.alert.DiscordAlertService;
+import com.smcscanner.news.NewsSentiment;
+import com.smcscanner.news.NewsService;
 import com.smcscanner.config.ScannerConfig;
 import com.smcscanner.data.PolygonClient;
 import com.smcscanner.indicator.AtrCalculator;
@@ -31,16 +33,18 @@ public class ScannerService {
     private final VwapStrategyDetector     vwap;
     private final BreakoutStrategyDetector breakout;
     private final KeyLevelStrategyDetector keyLevel;
+    private final NewsService              news;
 
     public ScannerService(ScannerConfig config, PolygonClient client, SetupDetector setupDetector,
                           CryptoStrategyService crypto, MultiTimeframeAnalyzer mtf,
                           DiscordAlertService discord, AlertDedup dedup,
                           PerformanceTracker tracker, SharedState state, AtrCalculator atrCalc,
                           VwapStrategyDetector vwap, BreakoutStrategyDetector breakout,
-                          KeyLevelStrategyDetector keyLevel) {
+                          KeyLevelStrategyDetector keyLevel, NewsService news) {
         this.config=config; this.client=client; this.setupDetector=setupDetector; this.crypto=crypto;
         this.mtf=mtf; this.discord=discord; this.dedup=dedup; this.tracker=tracker; this.state=state;
         this.atrCalc=atrCalc; this.vwap=vwap; this.breakout=breakout; this.keyLevel=keyLevel;
+        this.news=news;
     }
 
     public boolean isCrypto(String t) { return t.startsWith("X:"); }
@@ -95,13 +99,37 @@ public class ScannerService {
             }
             if (!setups.isEmpty()) {
                 TradeSetup s=setups.get(0);
+
+                // ── News sentiment check ──────────────────────────────────────
+                // Fetch last-48h news for this ticker and adjust confidence.
+                // Conflicting news (e.g. bullish news on a SHORT signal) reduces
+                // confidence; aligned news boosts it slightly.
+                // The adjusted setup is used for both the confidence gate and the
+                // Discord embed (news headline shown in the alert).
+                NewsSentiment sentiment = isC ? NewsSentiment.NONE : news.getSentiment(ticker);
+                int newsAdj = sentiment.confidenceDelta(s.getDirection());
+                if (newsAdj != 0) {
+                    log.info("{} news sentiment: score={} adj={} dir={} headline={}",
+                            ticker, sentiment.netScore(), newsAdj, s.getDirection(),
+                            sentiment.headline() != null ? sentiment.headline().substring(0, Math.min(80, sentiment.headline().length())) : "");
+                    s = TradeSetup.builder()
+                            .ticker(s.getTicker()).direction(s.getDirection())
+                            .entry(s.getEntry()).stopLoss(s.getStopLoss()).takeProfit(s.getTakeProfit())
+                            .confidence(Math.max(0, Math.min(100, s.getConfidence() + newsAdj)))
+                            .session(s.getSession()).volatility(s.getVolatility()).atr(s.getAtr())
+                            .hasBos(s.isHasBos()).hasChoch(s.isHasChoch())
+                            .fvgTop(s.getFvgTop()).fvgBottom(s.getFvgBottom())
+                            .timestamp(s.getTimestamp())
+                            .build();
+                }
+
                 setTs(ticker,"long".equals(s.getDirection())?"setup-long":"setup-short",s.getDirection(),s.getConfidence(),
                     String.format("ENTRY %s | Score %d | $%.2f",s.getDirection().toUpperCase(),s.getConfidence(),s.getEntry()));
                 if (s.getConfidence() >= effectiveMinConf && !dedup.isDuplicate(ticker,s.getDirection(),s.getEntry())) {
                     log.info("INTRADAY ALERT {} {} conf={} entry={}", ticker, s.getDirection().toUpperCase(), s.getConfidence(), s.getEntry());
-                    discord.sendSetupAlert(s); dedup.markSent(ticker,s.getDirection(),s.getEntry());
+                    discord.sendSetupAlert(s, sentiment); dedup.markSent(ticker,s.getDirection(),s.getEntry());
                 } else if (s.getConfidence() < effectiveMinConf) {
-                    log.debug("{} intraday LOW_CONF conf={} min={}", ticker, s.getConfidence(), effectiveMinConf);
+                    log.debug("{} intraday LOW_CONF conf={} min={} newsAdj={}", ticker, s.getConfidence(), effectiveMinConf, newsAdj);
                 }
                 tracker.recordSetup(s); updateSetup(s);
             } else {

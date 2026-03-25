@@ -3,6 +3,7 @@ package com.smcscanner.alert;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smcscanner.config.ScannerConfig;
 import com.smcscanner.model.TradeSetup;
+import com.smcscanner.news.NewsSentiment;
 import com.smcscanner.model.eod.TickerReport;
 import com.smcscanner.strategy.EodReportService;
 import okhttp3.*;
@@ -31,13 +32,22 @@ public class DiscordAlertService {
         this.config=config; this.eodReportService=eodReportService;
     }
 
+    /** Overload without news (swing alerts, crypto, etc.). */
     public boolean sendSetupAlert(TradeSetup s) {
+        return sendSetupAlert(s, NewsSentiment.NONE);
+    }
+
+    public boolean sendSetupAlert(TradeSetup s, NewsSentiment sentiment) {
         String url=config.getDiscordWebhookUrl();
         if (url==null||url.isBlank()) { log.warn("No Discord webhook URL"); return false; }
-        return postEmbeds(url, List.of(buildEmbed(s)));
+        return postEmbeds(url, List.of(buildEmbed(s, sentiment)));
     }
 
     private Map<String,Object> buildEmbed(TradeSetup s) {
+        return buildEmbed(s, NewsSentiment.NONE);
+    }
+
+    private Map<String,Object> buildEmbed(TradeSetup s, NewsSentiment sentiment) {
         boolean isLong="long".equals(s.getDirection());
         String arrow=isLong?"⬆️":"⬇️";
         String grade=s.getConfidence()>=85?"⭐":(s.getConfidence()>=75?"✅":(s.getConfidence()>=65?"🟡":"⚪"));
@@ -49,16 +59,28 @@ public class DiscordAlertService {
                         : "high".equals(s.getVolatility())     ? "🚀 ORB Breakout"
                         : "keylevel".equals(s.getVolatility()) ? "🎯 Key Level Rejection"
                         : "🔷 SMC Sweep+FVG";
-        List<Map<String,Object>> fields=List.of(
-            f("Direction",arrow+" "+s.getDirection().toUpperCase(),true),
-            f("Confidence",grade+" "+s.getConfidence()+"/100",true),
-            f("Strategy",strategy,true),
-            f("Entry",String.format("$%.4f",s.getEntry()),true),
-            f("Stop Loss",String.format("$%.4f (-%.2f%%)",s.getStopLoss(),slPct),true),
+        // Build field list — append news row only when there's recent sentiment
+        List<Map<String,Object>> fields = new java.util.ArrayList<>(List.of(
+            f("Direction",  arrow+" "+s.getDirection().toUpperCase(), true),
+            f("Confidence", grade+" "+s.getConfidence()+"/100",       true),
+            f("Strategy",   strategy,                                  true),
+            f("Entry",      String.format("$%.4f",s.getEntry()),       true),
+            f("Stop Loss",  String.format("$%.4f (-%.2f%%)",s.getStopLoss(),slPct),  true),
             f("Take Profit",String.format("$%.4f (+%.2f%%)",s.getTakeProfit(),tpPct),true),
-            f("R:R",String.format("%.1f:1",s.rrRatio()),true),
-            f("Session",s.getSession()!=null?s.getSession():"—",true),
-            f("ATR",String.format("$%.4f",s.getAtr()),true));
+            f("R:R",        String.format("%.1f:1",s.rrRatio()),       true),
+            f("Session",    s.getSession()!=null?s.getSession():"—",   true),
+            f("ATR",        String.format("$%.4f",s.getAtr()),         true)));
+
+        // Add news sentiment field when Polygon returned recent articles
+        if (sentiment != null && sentiment.hasNews() && sentiment.label() != null) {
+            String newsConflict = sentiment.isConflicting(s.getDirection()) ? " ⚠️ CONFLICTS WITH TRADE" : "";
+            String headline = sentiment.headline() != null
+                    ? (sentiment.headline().length() > 100
+                       ? sentiment.headline().substring(0, 97) + "…"
+                       : sentiment.headline())
+                    : "";
+            fields.add(f("News (48h)", sentiment.label() + newsConflict + "\n" + headline, false));
+        }
         Map<String,Object> e=new HashMap<>();
         e.put("title",arrow+" "+s.getTicker()+" — "+s.getDirection().toUpperCase()+" Setup");
         e.put("color",isLong?0x2ECC71:0xE74C3C); e.put("fields",fields); e.put("footer",Map.of("text","SD Scanner | "+ts));
