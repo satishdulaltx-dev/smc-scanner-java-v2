@@ -2,10 +2,15 @@ package com.smcscanner.backtest;
 
 import com.smcscanner.config.ScannerConfig;
 import com.smcscanner.data.PolygonClient;
+import com.smcscanner.filter.SignalQualityFilter;
 import com.smcscanner.indicator.AtrCalculator;
+import com.smcscanner.market.MarketContext;
+import com.smcscanner.market.MarketContextService;
 import com.smcscanner.model.OHLCV;
 import com.smcscanner.model.TickerProfile;
 import com.smcscanner.model.TradeSetup;
+import com.smcscanner.news.NewsSentiment;
+import com.smcscanner.news.NewsService;
 import com.smcscanner.strategy.BreakoutStrategyDetector;
 import com.smcscanner.strategy.KeyLevelStrategyDetector;
 import com.smcscanner.strategy.SetupDetector;
@@ -36,14 +41,21 @@ public class BacktestService {
     private final VwapStrategyDetector     vwapDetector;
     private final BreakoutStrategyDetector breakoutDetector;
     private final KeyLevelStrategyDetector keyLevelDetector;
+    private final NewsService              newsService;
+    private final MarketContextService     marketCtxService;
+    private final SignalQualityFilter      qualityFilter;
     private final ScannerConfig            config;
 
     public BacktestService(PolygonClient client, AtrCalculator atrCalc, SetupDetector setupDetector,
                            VwapStrategyDetector vwapDetector, BreakoutStrategyDetector breakoutDetector,
-                           KeyLevelStrategyDetector keyLevelDetector, ScannerConfig config) {
+                           KeyLevelStrategyDetector keyLevelDetector, NewsService newsService,
+                           MarketContextService marketCtxService, SignalQualityFilter qualityFilter,
+                           ScannerConfig config) {
         this.client = client; this.atrCalc = atrCalc; this.setupDetector = setupDetector;
         this.vwapDetector = vwapDetector; this.breakoutDetector = breakoutDetector;
-        this.keyLevelDetector = keyLevelDetector; this.config = config;
+        this.keyLevelDetector = keyLevelDetector; this.newsService = newsService;
+        this.marketCtxService = marketCtxService; this.qualityFilter = qualityFilter;
+        this.config = config;
     }
 
     public BacktestResult run(String ticker, int lookbackDays) {
@@ -65,6 +77,16 @@ public class BacktestService {
         // Fetch daily bars: 200 bars (~10 months) so keylevel detector has enough
         // history even when backtesting 90+ days into the past
         List<OHLCV> dailyBars = client.getBars(ticker, "1d", 200);
+
+        // Pre-fetch SPY and VIX bars once for market context computation.
+        // getContextAt() slices these in-memory per trade — no extra API calls.
+        List<OHLCV> spyBars = marketCtxService.fetchSpyBarsForBacktest(220);
+        List<OHLCV> vixBars = marketCtxService.fetchVixBarsForBacktest(220);
+
+        // Per-ticker consecutive-loss counter for adaptive suppression.
+        // This is LOCAL to this backtest run — does NOT touch the live
+        // adaptive-outcomes.json file used by the live scanner.
+        Map<String, Integer> btStreaks = new HashMap<>();
 
         List<TradeResult> trades = new ArrayList<>();
         List<LocalDate> dates = new ArrayList<>(byDate.keySet());
@@ -149,6 +171,48 @@ public class BacktestService {
                 if (bSetups.isEmpty()) continue;
 
                 TradeSetup setup = bSetups.get(0);
+
+                // ── Historical context checks (news + market) ────────────────
+                long entryEpochMs = Long.parseLong(dayBars.get(end - 1).getTimestamp());
+                TickerProfile bp2 = config.getTickerProfile(ticker);
+                int effectiveMinConf = bp2.resolveMinConfidence(config.getMinConfidence());
+
+                // News: 48h window ending at entry timestamp
+                NewsSentiment sentiment = ticker.startsWith("X:") ? NewsSentiment.NONE
+                        : newsService.getSentimentAt(ticker, entryEpochMs);
+                int newsAdj = sentiment.confidenceDelta(setup.getDirection());
+
+                // Market context: SPY RS + VIX regime as-of entry date
+                MarketContext context = ticker.startsWith("X:") ? MarketContext.NONE
+                        : marketCtxService.getContextAt(ticker, dailyBars, spyBars, vixBars, entryEpochMs);
+                int ctxAdj = context.confidenceDelta(setup.getDirection(), stratType);
+
+                // Signal quality: R:R + time-of-day + consecutive loss streak
+                int streak     = btStreaks.getOrDefault(ticker, 0);
+                int qualityAdj = ticker.startsWith("X:") ? 0
+                        : qualityFilter.computeDelta(setup, entryEpochMs, streak);
+                String qualityLabel = qualityFilter.buildLabel(setup, entryEpochMs, streak);
+
+                int totalAdj = newsAdj + ctxAdj + qualityAdj;
+                int adjConf  = Math.max(0, Math.min(100, setup.getConfidence() + totalAdj));
+
+                // Skip trade if combined filters knocked confidence below threshold
+                if (adjConf < effectiveMinConf && totalAdj < 0) {
+                    String filteredOutcome = (newsAdj < 0 && (ctxAdj < 0 || qualityAdj < 0)) ? "MULTI_FILTERED"
+                                           : newsAdj < 0    ? "NEWS_FILTERED"
+                                           : qualityAdj < 0 ? "QUALITY_FILTERED"
+                                           :                   "CTX_FILTERED";
+                    String filteredLabel = buildFilterLabel(sentiment.label(), context.rsLabel(), qualityLabel);
+                    trades.add(new TradeResult(ticker, setup.getDirection(),
+                            setup.getEntry(), setup.getStopLoss(), setup.getTakeProfit(),
+                            filteredOutcome, 0.0,
+                            toDateTime(dayBars.get(end - 1).getTimestamp()), toDateTime(dayBars.get(end - 1).getTimestamp()),
+                            adjConf, setup.getAtr(), newsAdj, sentiment.label(), ctxAdj, context.rsLabel(),
+                            qualityAdj, filteredLabel));
+                    tradePlacedToday = true;
+                    continue;
+                }
+
                 tradePlacedToday = true;
 
                 double entry = setup.getEntry();
@@ -190,9 +254,16 @@ public class BacktestService {
                     outcome  = "TIMEOUT"; // distinguishable from TP/SL exits in the trade list
                 }
 
+                // Update backtest streak counter for adaptive suppression on next trade
+                boolean tradeWon = "WIN".equals(outcome) || ("TIMEOUT".equals(outcome) && pnlPct > 0);
+                if (tradeWon) btStreaks.put(ticker, 0);
+                else          btStreaks.merge(ticker, 1, Integer::sum);
+
                 trades.add(new TradeResult(ticker, dir, entry, sl, tp, outcome, pnlPct,
                         entryTime, exitTime != null ? exitTime : entryTime,
-                        setup.getConfidence(), setup.getAtr()));
+                        adjConf, setup.getAtr(), newsAdj, sentiment.label(),
+                        ctxAdj, buildContextLabel(context),
+                        qualityAdj, qualityLabel));
             }
         }
 
@@ -207,24 +278,59 @@ public class BacktestService {
     }
     private double round2(double v) { return Math.round(v * 100.0) / 100.0; }
 
+    /** Compact context label for the trade log (e.g. "RS+2.4% | VIX 28.1 volatile"). */
+    private String buildContextLabel(MarketContext ctx) {
+        if (ctx == null || ctx == MarketContext.NONE) return null;
+        StringBuilder sb = new StringBuilder();
+        if (ctx.rsScore() != 0) sb.append(String.format("RS%+.1f%%", ctx.rsScore() * 100));
+        if (ctx.vixLevel() > 0) {
+            if (sb.length() > 0) sb.append(" | ");
+            sb.append(String.format("VIX %.1f (%s)", ctx.vixLevel(), ctx.vixRegime()));
+        }
+        return sb.length() > 0 ? sb.toString() : null;
+    }
+
+    /** Label shown on filtered rows — combines news and context reasons. */
+    private String buildFilterLabel(String newsLabel, String rsLabel, String vixLabel) {
+        StringBuilder sb = new StringBuilder();
+        if (newsLabel != null) sb.append(newsLabel);
+        if (rsLabel   != null) { if (sb.length() > 0) sb.append(" | "); sb.append(rsLabel); }
+        if (vixLabel  != null) { if (sb.length() > 0) sb.append(" | "); sb.append(vixLabel); }
+        return sb.length() > 0 ? sb.toString() : "filtered";
+    }
+
     // ── Result types ──────────────────────────────────────────────────────────
 
     public record TradeResult(String ticker, String direction, double entry, double sl, double tp,
                                String outcome, double pnlPct,
                                String entryTime, String exitTime,
-                               int confidence, double atr) {}
+                               int confidence, double atr,
+                               int newsAdjustment,    // signed delta from news        (e.g. -8)
+                               String newsLabel,      // e.g. "🔴 Strong bearish news"
+                               int ctxAdjustment,     // signed delta from RS+VIX      (e.g. -6)
+                               String ctxLabel,       // e.g. "RS+4.2% | VIX 18.5"
+                               int qualityAdjustment, // signed delta from R:R+time+streak (e.g. -15)
+                               String qualityLabel    // e.g. "R:R 1.2 (-10) | 3-loss streak (-15)"
+    ) {}
 
     public static class BacktestResult {
         public final String ticker;
         public final List<TradeResult> trades;
         public final int lookbackDays;
         public final String error;
-        public final int wins, losses, timeouts, total;
+        public final int wins, losses, timeouts, newsFiltered, ctxFiltered, qualityFiltered, total;
         public final double winRate, avgWinPct, avgLossPct, expectancy;
 
         private BacktestResult(String ticker, List<TradeResult> trades, int lookbackDays, String error) {
             this.ticker = ticker; this.trades = trades;
             this.lookbackDays = lookbackDays; this.error = error;
+
+            // Filtered trades are excluded from win/loss stats — never actually entered.
+            this.newsFiltered = (int) trades.stream().filter(t -> "NEWS_FILTERED".equals(t.outcome())).count();
+            this.ctxFiltered  = (int) trades.stream().filter(t ->
+                    "CTX_FILTERED".equals(t.outcome())).count();
+            this.qualityFiltered = (int) trades.stream().filter(t ->
+                    "QUALITY_FILTERED".equals(t.outcome()) || "MULTI_FILTERED".equals(t.outcome())).count();
 
             // TIMEOUT trades are counted as wins or losses based on their PnL sign,
             // so win rate and expectancy reflect the honest all-in result.

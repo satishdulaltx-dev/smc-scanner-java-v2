@@ -2,6 +2,10 @@ package com.smcscanner.strategy;
 
 import com.smcscanner.alert.AlertDedup;
 import com.smcscanner.alert.DiscordAlertService;
+import com.smcscanner.filter.AdaptiveSuppressor;
+import com.smcscanner.filter.SignalQualityFilter;
+import com.smcscanner.market.MarketContext;
+import com.smcscanner.market.MarketContextService;
 import com.smcscanner.news.NewsSentiment;
 import com.smcscanner.news.NewsService;
 import com.smcscanner.config.ScannerConfig;
@@ -34,17 +38,22 @@ public class ScannerService {
     private final BreakoutStrategyDetector breakout;
     private final KeyLevelStrategyDetector keyLevel;
     private final NewsService              news;
+    private final MarketContextService     marketCtx;
+    private final SignalQualityFilter      qualityFilter;
+    private final AdaptiveSuppressor       adaptive;
 
     public ScannerService(ScannerConfig config, PolygonClient client, SetupDetector setupDetector,
                           CryptoStrategyService crypto, MultiTimeframeAnalyzer mtf,
                           DiscordAlertService discord, AlertDedup dedup,
                           PerformanceTracker tracker, SharedState state, AtrCalculator atrCalc,
                           VwapStrategyDetector vwap, BreakoutStrategyDetector breakout,
-                          KeyLevelStrategyDetector keyLevel, NewsService news) {
+                          KeyLevelStrategyDetector keyLevel, NewsService news,
+                          MarketContextService marketCtx, SignalQualityFilter qualityFilter,
+                          AdaptiveSuppressor adaptive) {
         this.config=config; this.client=client; this.setupDetector=setupDetector; this.crypto=crypto;
         this.mtf=mtf; this.discord=discord; this.dedup=dedup; this.tracker=tracker; this.state=state;
         this.atrCalc=atrCalc; this.vwap=vwap; this.breakout=breakout; this.keyLevel=keyLevel;
-        this.news=news;
+        this.news=news; this.marketCtx=marketCtx; this.qualityFilter=qualityFilter; this.adaptive=adaptive;
     }
 
     public boolean isCrypto(String t) { return t.startsWith("X:"); }
@@ -101,21 +110,48 @@ public class ScannerService {
                 TradeSetup s=setups.get(0);
 
                 // ── News sentiment check ──────────────────────────────────────
-                // Fetch last-48h news for this ticker and adjust confidence.
-                // Conflicting news (e.g. bullish news on a SHORT signal) reduces
-                // confidence; aligned news boosts it slightly.
-                // The adjusted setup is used for both the confidence gate and the
-                // Discord embed (news headline shown in the alert).
                 NewsSentiment sentiment = isC ? NewsSentiment.NONE : news.getSentiment(ticker);
                 int newsAdj = sentiment.confidenceDelta(s.getDirection());
                 if (newsAdj != 0) {
-                    log.info("{} news sentiment: score={} adj={} dir={} headline={}",
-                            ticker, sentiment.netScore(), newsAdj, s.getDirection(),
-                            sentiment.headline() != null ? sentiment.headline().substring(0, Math.min(80, sentiment.headline().length())) : "");
+                    log.info("{} news adj={} score={} dir={}", ticker, newsAdj, sentiment.netScore(), s.getDirection());
+                }
+
+                // ── Market context (SPY RS + VIX regime) ─────────────────────
+                // SPY relative strength: if the stock is strongly outperforming
+                // SPY while we try to SHORT (or underperforming while going LONG),
+                // reduce confidence. VIX regime check flags when strategy type
+                // (VWAP/ORB) is a poor fit for current market volatility.
+                String stratType = profile.getStrategyType();
+                MarketContext context = isC ? MarketContext.NONE : marketCtx.getContext(ticker);
+                int ctxAdj = context.confidenceDelta(s.getDirection(), stratType);
+                if (ctxAdj != 0) {
+                    log.info("{} market ctx adj={} rs={} vix={} regime={}", ticker, ctxAdj,
+                            String.format("%.2f%%", context.rsScore()*100), context.vixLevel(), context.vixRegime());
+                }
+
+                // ── Signal quality (R:R + time-of-day + loss streak) ─────────
+                // The entry bar's timestamp drives both R:R and time-of-day checks.
+                // Streak comes from the live adaptive suppressor's file-backed state.
+                long barEpochMs   = s.getTimestamp() != null
+                        ? java.time.ZoneOffset.UTC.normalized()
+                                .equals(s.getTimestamp().atZone(java.time.ZoneOffset.UTC).getZone())
+                                ? s.getTimestamp().toInstant(java.time.ZoneOffset.UTC).toEpochMilli()
+                                : s.getTimestamp().atZone(java.time.ZoneId.of("America/New_York")).toInstant().toEpochMilli()
+                        : System.currentTimeMillis();
+                int streak     = isC ? 0 : adaptive.getConsecutiveLosses(ticker);
+                int qualityAdj = isC ? 0 : qualityFilter.computeDelta(s, barEpochMs, streak);
+                if (qualityAdj != 0) {
+                    log.info("{} quality adj={} rr={} streak={}", ticker, qualityAdj,
+                            String.format("%.1f", s.rrRatio()), streak);
+                }
+
+                // Apply combined confidence adjustment (news + market context + quality)
+                int totalAdj = newsAdj + ctxAdj + qualityAdj;
+                if (totalAdj != 0) {
                     s = TradeSetup.builder()
                             .ticker(s.getTicker()).direction(s.getDirection())
                             .entry(s.getEntry()).stopLoss(s.getStopLoss()).takeProfit(s.getTakeProfit())
-                            .confidence(Math.max(0, Math.min(100, s.getConfidence() + newsAdj)))
+                            .confidence(Math.max(0, Math.min(100, s.getConfidence() + totalAdj)))
                             .session(s.getSession()).volatility(s.getVolatility()).atr(s.getAtr())
                             .hasBos(s.isHasBos()).hasChoch(s.isHasChoch())
                             .fvgTop(s.getFvgTop()).fvgBottom(s.getFvgBottom())
@@ -126,10 +162,11 @@ public class ScannerService {
                 setTs(ticker,"long".equals(s.getDirection())?"setup-long":"setup-short",s.getDirection(),s.getConfidence(),
                     String.format("ENTRY %s | Score %d | $%.2f",s.getDirection().toUpperCase(),s.getConfidence(),s.getEntry()));
                 if (s.getConfidence() >= effectiveMinConf && !dedup.isDuplicate(ticker,s.getDirection(),s.getEntry())) {
-                    log.info("INTRADAY ALERT {} {} conf={} entry={}", ticker, s.getDirection().toUpperCase(), s.getConfidence(), s.getEntry());
-                    discord.sendSetupAlert(s, sentiment); dedup.markSent(ticker,s.getDirection(),s.getEntry());
+                    log.info("INTRADAY ALERT {} {} conf={} entry={} adj=news{}/ctx{}/qual{}",
+                            ticker, s.getDirection().toUpperCase(), s.getConfidence(), s.getEntry(), newsAdj, ctxAdj, qualityAdj);
+                    discord.sendSetupAlert(s, sentiment, context); dedup.markSent(ticker,s.getDirection(),s.getEntry());
                 } else if (s.getConfidence() < effectiveMinConf) {
-                    log.debug("{} intraday LOW_CONF conf={} min={} newsAdj={}", ticker, s.getConfidence(), effectiveMinConf, newsAdj);
+                    log.debug("{} LOW_CONF conf={} min={} adj=news{}/ctx{}/qual{}", ticker, s.getConfidence(), effectiveMinConf, newsAdj, ctxAdj, qualityAdj);
                 }
                 tracker.recordSetup(s); updateSetup(s);
             } else {

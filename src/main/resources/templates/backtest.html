@@ -63,13 +63,22 @@
         tbody tr:hover { background:rgba(255,255,255,.03); }
         tbody tr.win-row     { border-left:3px solid var(--green); }
         tbody tr.loss-row    { border-left:3px solid var(--red); }
-        tbody tr.timeout-row { border-left:3px solid var(--yellow); }
+        tbody tr.timeout-row      { border-left:3px solid var(--yellow); }
+        tbody tr.news-filtered-row { border-left:3px solid #8b949e; opacity:0.65; }
+        tbody tr.ctx-filtered-row     { border-left:3px solid #6e40c9; opacity:0.65; }
+        tbody tr.quality-filtered-row { border-left:3px solid #e36209; opacity:0.65; }
+        tbody tr.multi-filtered-row   { border-left:3px solid #8b949e; opacity:0.55; }
         td { padding:9px 12px; white-space:nowrap; }
         .dir-long  { color:var(--green); font-weight:700; }
         .dir-short { color:var(--red);   font-weight:700; }
-        .win-badge     { background:rgba(63,185,80,.15);  color:var(--green);  padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; }
-        .loss-badge    { background:rgba(248,81,73,.15);  color:var(--red);    padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; }
-        .timeout-badge { background:rgba(210,153,34,.15); color:var(--yellow); padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; }
+        .win-badge               { background:rgba(63,185,80,.15);   color:var(--green);  padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; }
+        .loss-badge              { background:rgba(248,81,73,.15);   color:var(--red);    padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; }
+        .timeout-badge           { background:rgba(210,153,34,.15);  color:var(--yellow); padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; }
+        .news-filtered-badge     { background:rgba(139,148,158,.12); color:#8b949e;       padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; }
+        .ctx-filtered-badge      { background:rgba(110,64,201,.12);  color:#9b6dff;       padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; }
+        .quality-filtered-badge  { background:rgba(227,98,9,.12);    color:#e36209;       padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; }
+        .multi-filtered-badge    { background:rgba(139,148,158,.10); color:#8b949e;       padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; }
+        .adj-tag { font-size:10px; color:#8b949e; margin-left:4px; }
 
         /* Empty / loading states */
         .empty-state { text-align:center; padding:60px 24px; color:var(--muted); }
@@ -111,6 +120,7 @@
     </div>
     <div style="display:flex;gap:10px">
         <a href="/" class="btn btn-blue">← Dashboard</a>
+        <a href="/#adaptive-panel" class="btn" style="background:rgba(227,98,9,.15);color:#e36209;border-color:#e36209" onclick="sessionStorage.setItem('scrollAdaptive','1')">⚡ Adaptive</a>
         <a href="/eod" class="btn btn-purple">📊 EOD Report</a>
     </div>
 </div>
@@ -279,23 +289,30 @@ function renderSingle(d) {
         <div class="stat-card"><div class="val c-green">+${d.avg_win_pct.toFixed(2)}%</div><div class="lbl">Avg Win</div></div>
         <div class="stat-card"><div class="val c-red">-${d.avg_loss_pct.toFixed(2)}%</div><div class="lbl">Avg Loss</div></div>
         ${d.timeouts > 0 ? `<div class="stat-card"><div class="val" style="color:var(--yellow)">${d.timeouts}</div><div class="lbl">Time Stops</div></div>` : ''}
+        ${d.news_filtered > 0 ? `<div class="stat-card"><div class="val" style="color:#8b949e">${d.news_filtered}</div><div class="lbl">News Filtered</div></div>` : ''}
+        ${d.ctx_filtered     > 0 ? `<div class="stat-card"><div class="val" style="color:#9b6dff">${d.ctx_filtered}</div><div class="lbl">RS/VIX Filtered</div></div>` : ''}
+        ${d.quality_filtered > 0 ? `<div class="stat-card"><div class="val" style="color:#e36209">${d.quality_filtered}</div><div class="lbl">Quality Filtered</div></div>` : ''}
         <div class="stat-card"><div class="val c-purple">${d.lookback_days}d</div><div class="lbl">Lookback</div></div>
     `;
 
-    // Equity curve
+    // Equity curve — exclude all filtered outcomes (trades were never entered)
+    const FILTERED_OUTCOMES = new Set(['NEWS_FILTERED','CTX_FILTERED','QUALITY_FILTERED','MULTI_FILTERED']);
     let cum = 0;
     const labels = [], cumData = [];
     labels.push('Start'); cumData.push(0);
-    d.trades.forEach((t, i) => {
+    let tradeNum = 0;
+    d.trades.forEach(t => {
+        if (FILTERED_OUTCOMES.has(t.outcome)) return;
+        tradeNum++;
         cum += t.pnl_pct;
-        labels.push(`#${i+1}`);
+        labels.push(`#${tradeNum}`);
         cumData.push(Math.round(cum * 100) / 100);
     });
     drawEquity(labels, cumData);
 
-    // Distribution chart (include TIMEOUT pnl in the correct bucket)
-    const wins   = d.trades.filter(t => t.outcome === 'WIN'     || (t.outcome === 'TIMEOUT' && t.pnl_pct > 0)).map(t => t.pnl_pct);
-    const losses = d.trades.filter(t => t.outcome === 'LOSS'    || (t.outcome === 'TIMEOUT' && t.pnl_pct <= 0)).map(t => t.pnl_pct);
+    // Distribution chart (include TIMEOUT pnl; exclude all filtered outcomes)
+    const wins   = d.trades.filter(t => t.outcome === 'WIN'  || (t.outcome === 'TIMEOUT' && t.pnl_pct > 0)).map(t => t.pnl_pct);
+    const losses = d.trades.filter(t => t.outcome === 'LOSS' || (t.outcome === 'TIMEOUT' && t.pnl_pct <= 0)).map(t => t.pnl_pct);
     drawDist(wins, losses);
 
     // Trades table
@@ -303,22 +320,48 @@ function renderSingle(d) {
     const ticker = document.getElementById('ticker').value;
     const tvTicker = ticker.startsWith('X:') ? ticker.replace('X:','').replace('USD','USDT') : ticker;
     document.getElementById('trades-tbody').innerHTML = d.trades.map((t, i) => {
+        const isNewsFiltered    = t.outcome === 'NEWS_FILTERED';
+        const isCtxFiltered     = t.outcome === 'CTX_FILTERED';
+        const isQualityFiltered = t.outcome === 'QUALITY_FILTERED';
+        const isMultiFiltered   = t.outcome === 'MULTI_FILTERED';
+        const isFiltered        = isNewsFiltered || isCtxFiltered || isQualityFiltered || isMultiFiltered;
         const tvUrl = `https://www.tradingview.com/chart/?symbol=${tvTicker}&interval=5`;
         const confColor = t.confidence >= 80 ? 'var(--green)' : t.confidence >= 65 ? 'var(--yellow)' : 'var(--muted)';
+        const rowClass  = isMultiFiltered   ? 'multi-filtered-row'
+                        : isQualityFiltered ? 'quality-filtered-row'
+                        : isCtxFiltered     ? 'ctx-filtered-row'
+                        : isNewsFiltered    ? 'news-filtered-row'
+                        : t.outcome === 'WIN'     ? 'win-row'
+                        : t.outcome === 'TIMEOUT' ? 'timeout-row'
+                        : 'loss-row';
+        const badgeClass = isMultiFiltered   ? 'multi-filtered-badge'
+                         : isQualityFiltered ? 'quality-filtered-badge'
+                         : isCtxFiltered     ? 'ctx-filtered-badge'
+                         : isNewsFiltered    ? 'news-filtered-badge'
+                         : t.outcome === 'WIN'     ? 'win-badge'
+                         : t.outcome === 'TIMEOUT' ? 'timeout-badge'
+                         : 'loss-badge';
+        // Adjustment tags on confidence cell
+        const newsTag  = t.news_adj  ? `<span class="adj-tag" title="${t.news_label||''}">${t.news_adj>0?'+':''}${t.news_adj}📰</span>` : '';
+        const ctxTag   = t.ctx_adj   ? `<span class="adj-tag" title="${t.ctx_label||''}">${t.ctx_adj>0?'+':''}${t.ctx_adj}📊</span>` : '';
+        const qualTag  = t.qual_adj  ? `<span class="adj-tag" title="${t.qual_label||''}">${t.qual_adj>0?'+':''}${t.qual_adj}⚡</span>` : '';
+        // PnL cell or filter reason
+        const filterReason = [t.news_label, t.ctx_label, t.qual_label].filter(Boolean).join(' | ') || 'filtered';
+        const pnlCell = isFiltered
+            ? `<td style="color:#8b949e;font-size:10px;max-width:220px;white-space:normal">${filterReason}</td>`
+            : `<td style="color:${t.pnl_pct >= 0 ? 'var(--green)' : 'var(--red)'}; font-weight:600">${t.pnl_pct >= 0 ? '+' : ''}${t.pnl_pct.toFixed(2)}%</td>`;
         return `
-        <tr class="${t.outcome === 'WIN' ? 'win-row' : t.outcome === 'TIMEOUT' ? 'timeout-row' : 'loss-row'}">
+        <tr class="${rowClass}">
             <td style="color:var(--muted)">${i+1}</td>
             <td><a href="${tvUrl}" target="_blank" style="color:var(--blue);text-decoration:none;font-size:11px;font-family:monospace" title="View 5m chart on TradingView">${t.entry_time || '—'}</a></td>
-            <td style="font-size:11px;font-family:monospace;color:var(--muted)">${t.exit_time || '—'}</td>
+            <td style="font-size:11px;font-family:monospace;color:var(--muted)">${isFiltered ? '—' : (t.exit_time || '—')}</td>
             <td class="${t.dir === 'long' ? 'dir-long' : 'dir-short'}">${t.dir === 'long' ? '▲ LONG' : '▼ SHORT'}</td>
             <td>$${t.entry.toFixed(2)}</td>
             <td style="color:var(--red)">$${t.sl.toFixed(2)}</td>
             <td style="color:var(--green)">$${t.tp.toFixed(2)}</td>
-            <td><span class="${t.outcome === 'WIN' ? 'win-badge' : t.outcome === 'TIMEOUT' ? 'timeout-badge' : 'loss-badge'}">${t.outcome}</span></td>
-            <td style="color:${t.pnl_pct >= 0 ? 'var(--green)' : 'var(--red)'}; font-weight:600">
-                ${t.pnl_pct >= 0 ? '+' : ''}${t.pnl_pct.toFixed(2)}%
-            </td>
-            <td style="color:${confColor};font-size:11px">${t.confidence}/100</td>
+            <td><span class="${badgeClass}">${t.outcome}</span></td>
+            ${pnlCell}
+            <td style="color:${confColor};font-size:11px">${t.confidence}/100${newsTag}${ctxTag}${qualTag}</td>
         </tr>`;
     }).join('');
 }

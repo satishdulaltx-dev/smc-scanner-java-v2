@@ -2,6 +2,7 @@ package com.smcscanner.alert;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smcscanner.config.ScannerConfig;
+import com.smcscanner.market.MarketContext;
 import com.smcscanner.model.TradeSetup;
 import com.smcscanner.news.NewsSentiment;
 import com.smcscanner.model.eod.TickerReport;
@@ -32,22 +33,26 @@ public class DiscordAlertService {
         this.config=config; this.eodReportService=eodReportService;
     }
 
-    /** Overload without news (swing alerts, crypto, etc.). */
+    /** Overload without news or context (swing alerts, crypto, etc.). */
     public boolean sendSetupAlert(TradeSetup s) {
-        return sendSetupAlert(s, NewsSentiment.NONE);
+        return sendSetupAlert(s, NewsSentiment.NONE, MarketContext.NONE);
     }
 
     public boolean sendSetupAlert(TradeSetup s, NewsSentiment sentiment) {
+        return sendSetupAlert(s, sentiment, MarketContext.NONE);
+    }
+
+    public boolean sendSetupAlert(TradeSetup s, NewsSentiment sentiment, MarketContext context) {
         String url=config.getDiscordWebhookUrl();
         if (url==null||url.isBlank()) { log.warn("No Discord webhook URL"); return false; }
-        return postEmbeds(url, List.of(buildEmbed(s, sentiment)));
+        return postEmbeds(url, List.of(buildEmbed(s, sentiment, context)));
     }
 
     private Map<String,Object> buildEmbed(TradeSetup s) {
-        return buildEmbed(s, NewsSentiment.NONE);
+        return buildEmbed(s, NewsSentiment.NONE, MarketContext.NONE);
     }
 
-    private Map<String,Object> buildEmbed(TradeSetup s, NewsSentiment sentiment) {
+    private Map<String,Object> buildEmbed(TradeSetup s, NewsSentiment sentiment, MarketContext context) {
         boolean isLong="long".equals(s.getDirection());
         String arrow=isLong?"⬆️":"⬇️";
         String grade=s.getConfidence()>=85?"⭐":(s.getConfidence()>=75?"✅":(s.getConfidence()>=65?"🟡":"⚪"));
@@ -71,15 +76,26 @@ public class DiscordAlertService {
             f("Session",    s.getSession()!=null?s.getSession():"—",   true),
             f("ATR",        String.format("$%.4f",s.getAtr()),         true)));
 
-        // Add news sentiment field when Polygon returned recent articles
+        // ── News sentiment field ──────────────────────────────────────────────
         if (sentiment != null && sentiment.hasNews() && sentiment.label() != null) {
-            String newsConflict = sentiment.isConflicting(s.getDirection()) ? " ⚠️ CONFLICTS WITH TRADE" : "";
+            String newsConflict = sentiment.isConflicting(s.getDirection()) ? " ⚠️ CONFLICTS" : "";
             String headline = sentiment.headline() != null
                     ? (sentiment.headline().length() > 100
                        ? sentiment.headline().substring(0, 97) + "…"
                        : sentiment.headline())
                     : "";
             fields.add(f("News (48h)", sentiment.label() + newsConflict + "\n" + headline, false));
+        }
+
+        // ── Market context fields (RS + VIX) ─────────────────────────────────
+        if (context != null && context.rsLabel() != null) {
+            String rsConflict = context.isRsConflicting(s.getDirection()) ? " ⚠️ CONFLICTS" : "";
+            fields.add(f("RS vs SPY (5d)", context.rsLabel() + rsConflict, true));
+        }
+        if (context != null && context.vixLabel() != null && context.isVixConflicting(s.getVolatility())) {
+            fields.add(f("VIX Regime", context.vixLabel() + " ⚠️ WEAK ENV", true));
+        } else if (context != null && context.vixLabel() != null && !"normal".equals(context.vixRegime())) {
+            fields.add(f("VIX Regime", context.vixLabel(), true));
         }
         Map<String,Object> e=new HashMap<>();
         e.put("title",arrow+" "+s.getTicker()+" — "+s.getDirection().toUpperCase()+" Setup");

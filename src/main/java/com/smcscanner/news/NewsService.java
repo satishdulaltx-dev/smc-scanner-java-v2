@@ -56,13 +56,9 @@ public class NewsService {
 
     /**
      * Returns the news sentiment for a ticker published in the last 48 hours.
-     * Returns {@link NewsSentiment#NONE} (no signal) if the API is unreachable or
-     * there are no recent articles.
-     *
-     * Result is cached for 20 minutes per ticker.
+     * Used by the live scanner. Result is cached for 20 minutes per ticker.
      */
     public NewsSentiment getSentiment(String ticker) {
-        // Skip crypto tickers — Polygon news uses equity symbols only
         if (ticker.startsWith("X:")) return NewsSentiment.NONE;
 
         long now = System.currentTimeMillis();
@@ -71,34 +67,39 @@ public class NewsService {
             return cacheVal.getOrDefault(ticker, NewsSentiment.NONE);
         }
 
-        try {
-            // Polygon news: most-recent articles for this ticker, sorted newest-first
-            String published_gte = Instant.ofEpochMilli(now - 48 * 3600_000L)
-                    .atZone(ZoneOffset.UTC)
-                    .format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss'Z'"));
+        Instant to   = Instant.ofEpochMilli(now);
+        Instant from = Instant.ofEpochMilli(now - 48 * 3600_000L);
+        NewsSentiment result = fetchFromPolygon(ticker, from, to);
+        return cache(ticker, result);
+    }
 
-            String url = "https://api.polygon.io/v2/reference/news"
-                    + "?ticker=" + ticker
-                    + "&limit=" + MAX_ARTICLES
-                    + "&order=desc"
-                    + "&sort=published_utc"
-                    + "&published_utc.gte=" + published_gte
-                    + "&apiKey=" + config.getPolygonApiKey();
+    /**
+     * Returns the news sentiment for a ticker as it existed at a specific point in
+     * the past — used by the backtest to simulate what the live scanner would have
+     * seen at the moment a trade was triggered.
+     *
+     * @param ticker     stock symbol
+     * @param atEpochMs  epoch-ms of the trade entry bar (end of the backtest window)
+     */
+    public NewsSentiment getSentimentAt(String ticker, long atEpochMs) {
+        if (ticker.startsWith("X:")) return NewsSentiment.NONE;
 
-            Request req = new Request.Builder().url(url).get().build();
-            try (Response resp = http.newCall(req).execute()) {
-                if (!resp.isSuccessful()) {
-                    log.debug("News API {} for {}: HTTP {}", url, ticker, resp.code());
-                    return cache(ticker, NewsSentiment.NONE);
-                }
-                JsonNode root = mapper.readTree(resp.body().string());
-                NewsSentiment result = parse(ticker, root);
-                return cache(ticker, result);
-            }
-        } catch (Exception e) {
-            log.debug("News fetch error for {}: {}", ticker, e.getMessage());
-            return NewsSentiment.NONE;
+        // Cache key encodes ticker + day bucket (per-day granularity is fine for backtest)
+        String cacheKey = ticker + "_" + (atEpochMs / 86_400_000L);
+        long[] ts = cacheTs.get(cacheKey);
+        long now = System.currentTimeMillis();
+        if (ts != null && (now - ts[0]) < CACHE_TTL_MS) {
+            return cacheVal.getOrDefault(cacheKey, NewsSentiment.NONE);
         }
+
+        Instant to   = Instant.ofEpochMilli(atEpochMs);
+        Instant from = Instant.ofEpochMilli(atEpochMs - 48 * 3600_000L);
+        NewsSentiment result = fetchFromPolygon(ticker, from, to);
+
+        // Cache under the day-bucket key
+        cacheTs.put(cacheKey, new long[]{ now });
+        cacheVal.put(cacheKey, result);
+        return result;
     }
 
     // ── Parsing ───────────────────────────────────────────────────────────────
@@ -150,6 +151,52 @@ public class NewsService {
                         : latestHeadline;
 
         return new NewsSentiment(ticker, positive, negative, neutral, netScore, headline);
+    }
+
+    // ── HTTP fetch ────────────────────────────────────────────────────────────
+
+    /**
+     * Calls Polygon's /v2/reference/news endpoint and parses sentiment.
+     * Shared by getSentiment() (live) and getSentimentAt() (backtest).
+     *
+     * @param ticker  stock symbol
+     * @param from    window start (inclusive)
+     * @param to      window end   (inclusive)
+     */
+    private NewsSentiment fetchFromPolygon(String ticker, Instant from, Instant to) {
+        String apiKey = config.getPolygonApiKey();
+        if (apiKey == null || apiKey.isBlank()) {
+            log.warn("No Polygon API key — skipping news for {}", ticker);
+            return NewsSentiment.NONE;
+        }
+
+        // ISO-8601 date strings required by Polygon (e.g. 2024-03-21T14:30:00Z)
+        DateTimeFormatter iso = DateTimeFormatter.ISO_INSTANT.withZone(ZoneOffset.UTC);
+        String gte = iso.format(from);
+        String lte = iso.format(to);
+
+        String url = "https://api.polygon.io/v2/reference/news"
+                   + "?ticker="              + ticker
+                   + "&published_utc.gte="   + gte
+                   + "&published_utc.lte="   + lte
+                   + "&limit="               + MAX_ARTICLES
+                   + "&apiKey="              + apiKey;
+
+        try {
+            Request req = new Request.Builder().url(url).get().build();
+            try (Response resp = http.newCall(req).execute()) {
+                if (!resp.isSuccessful()) {
+                    log.warn("Polygon news {} → HTTP {}", ticker, resp.code());
+                    return NewsSentiment.NONE;
+                }
+                String body = resp.body() != null ? resp.body().string() : "";
+                JsonNode root = mapper.readTree(body);
+                return parse(ticker, root);
+            }
+        } catch (Exception e) {
+            log.warn("Polygon news fetch error for {}: {}", ticker, e.getMessage());
+            return NewsSentiment.NONE;
+        }
     }
 
     private NewsSentiment cache(String ticker, NewsSentiment s) {

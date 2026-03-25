@@ -2,6 +2,7 @@ package com.smcscanner.dashboard;
 
 import com.smcscanner.backtest.BacktestService;
 import com.smcscanner.config.ScannerConfig;
+import com.smcscanner.filter.AdaptiveSuppressor;
 import com.smcscanner.model.TickerStatus;
 import com.smcscanner.model.eod.Level;
 import com.smcscanner.model.eod.TickerReport;
@@ -42,6 +43,7 @@ public class DashboardController {
     private final DiscordAlertService discord;
     private final ReportCache        reportCache;
     private final BacktestService    backtestService;
+    private final AdaptiveSuppressor adaptive;
 
     private static final Map<String,String> TV_MAP = Map.of(
         "X:BTCUSD", "BINANCE:BTCUSDT",
@@ -58,10 +60,10 @@ public class DashboardController {
     public DashboardController(SharedState state, ScannerConfig config, SessionFilter sessionFilter,
                                 PerformanceTracker tracker, EodReportService eodReport,
                                 DiscordAlertService discord, ReportCache reportCache,
-                                BacktestService backtestService) {
+                                BacktestService backtestService, AdaptiveSuppressor adaptive) {
         this.state=state; this.config=config; this.sessionFilter=sessionFilter;
         this.tracker=tracker; this.eodReport=eodReport; this.discord=discord;
-        this.reportCache=reportCache; this.backtestService=backtestService;
+        this.reportCache=reportCache; this.backtestService=backtestService; this.adaptive=adaptive;
     }
 
     @GetMapping("/")
@@ -375,6 +377,9 @@ public class DashboardController {
             resp.put("wins",          result.wins);
             resp.put("losses",        result.losses);
             resp.put("timeouts",      result.timeouts);
+            resp.put("news_filtered", result.newsFiltered);
+            resp.put("ctx_filtered",     result.ctxFiltered);
+            resp.put("quality_filtered", result.qualityFiltered);
             resp.put("win_rate",      result.winRate);
             resp.put("avg_win_pct",   Math.round(result.avgWinPct*100)/100.0);
             resp.put("avg_loss_pct",  Math.round(result.avgLossPct*100)/100.0);
@@ -387,6 +392,12 @@ public class DashboardController {
                 m.put("sl", t.sl()); m.put("tp", t.tp());
                 m.put("outcome", t.outcome()); m.put("pnl_pct", t.pnlPct());
                 m.put("confidence", t.confidence()); m.put("atr", t.atr());
+                if (t.newsAdjustment() != 0) m.put("news_adj",   t.newsAdjustment());
+                if (t.newsLabel() != null)   m.put("news_label", t.newsLabel());
+                if (t.ctxAdjustment() != 0)      m.put("ctx_adj",     t.ctxAdjustment());
+                if (t.ctxLabel() != null)        m.put("ctx_label",   t.ctxLabel());
+                if (t.qualityAdjustment() != 0)  m.put("qual_adj",    t.qualityAdjustment());
+                if (t.qualityLabel() != null)     m.put("qual_label",  t.qualityLabel());
                 return m;
             }).collect(java.util.stream.Collectors.toList());
             resp.put("trades", tradeList);
@@ -395,6 +406,48 @@ public class DashboardController {
             log.error("Backtest error: {}", e.getMessage());
             return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
         }
+    }
+
+    // ── Adaptive suppressor endpoints ──────────────────────────────────────────
+
+    /** GET /api/adaptive — current streak state for all tickers. */
+    @GetMapping("/api/adaptive")
+    @ResponseBody
+    public ResponseEntity<Map<String,Object>> adaptiveState() {
+        Map<String,Object> resp = new LinkedHashMap<>();
+        resp.put("active_streaks", adaptive.getActiveStreaks());
+        resp.put("snapshot",       adaptive.getSnapshot());
+        return ResponseEntity.ok(resp);
+    }
+
+    /**
+     * POST /api/adaptive/outcome?ticker=SNAP&outcome=loss
+     * Records a live trade outcome. outcome param: "win" or "loss".
+     * Called manually after reviewing a trade, or by EOD webhook.
+     */
+    @PostMapping("/api/adaptive/outcome")
+    @ResponseBody
+    public ResponseEntity<Map<String,Object>> recordOutcome(
+            @org.springframework.web.bind.annotation.RequestParam String ticker,
+            @org.springframework.web.bind.annotation.RequestParam String outcome) {
+        ticker = ticker.toUpperCase();
+        if ("win".equalsIgnoreCase(outcome))       adaptive.recordWin(ticker);
+        else if ("loss".equalsIgnoreCase(outcome)) adaptive.recordLoss(ticker);
+        else return ResponseEntity.badRequest().body(Map.of("error","outcome must be 'win' or 'loss'"));
+        return ResponseEntity.ok(Map.of(
+                "ticker",   ticker,
+                "outcome",  outcome,
+                "streak",   adaptive.getConsecutiveLosses(ticker),
+                "streaks",  adaptive.getActiveStreaks()));
+    }
+
+    /** POST /api/adaptive/reset?ticker=SNAP — clears history for a ticker. */
+    @PostMapping("/api/adaptive/reset")
+    @ResponseBody
+    public ResponseEntity<Map<String,Object>> resetAdaptive(
+            @org.springframework.web.bind.annotation.RequestParam String ticker) {
+        adaptive.reset(ticker.toUpperCase());
+        return ResponseEntity.ok(Map.of("reset", ticker.toUpperCase()));
     }
 
     @GetMapping("/health")
