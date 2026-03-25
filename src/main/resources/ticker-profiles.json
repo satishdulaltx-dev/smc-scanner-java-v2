@@ -34,11 +34,13 @@
     },
     {
       "ticker": "HOOD",
+      "skip": true,
+      "skipReason": "0% WR 90d (-2.37% expectancy) despite minConf=80. No consistent intraday edge.",
       "minConfidence": 80,
       "minFvgPct": 0.0012,
       "dispAtrMult": 1.7,
       "minVolMult": 2.0,
-      "note": "Speculative fintech — only fire on very high-quality setups"
+      "note": "skip=true Mar 2026."
     },
     {
       "ticker": "AMZN",
@@ -85,13 +87,17 @@
     },
     {
       "ticker": "ABNB",
+      "skip": true,
+      "skipReason": "0% WR 90d (-0.92% expectancy). Was 60% WR historically but no edge in current regime.",
       "minConfidence": 62,
-      "note": "Strong performer (60% WR) — relaxed"
+      "note": "skip=true Mar 2026."
     },
     {
       "ticker": "SNAP",
+      "skip": true,
+      "skipReason": "0% WR 90d (-1.54% expectancy). 30d showed 50% but was only 4 trades — too small a sample. Full 90d picture shows no edge.",
       "minConfidence": 68,
-      "note": "Re-enabled Mar 2026. Jan regime change cleared — 50% WR +0.15% expectancy in last 30d. Raised minConf from 62→68 as guard."
+      "note": "skip=true again Mar 2026. Re-evaluate after consistent 90d WR >45%."
     },
     {
       "ticker": "MARA",
