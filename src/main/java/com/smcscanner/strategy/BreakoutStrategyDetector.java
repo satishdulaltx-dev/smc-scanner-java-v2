@@ -95,11 +95,10 @@ public class BreakoutStrategyDetector {
 
             double entry = r4(last.getClose());
             double sl    = r4(orbLow + orbWidth * 0.15);
-            double tp    = r4(entry + orbWidth * 1.8);
-
-            // Safety guards
+            // Safety guard: sl must be below entry for a long
             if (sl >= entry) sl = r4(entry - orbWidth * 0.15);
-            if (tp <= entry * 1.001) tp = r4(entry + orbWidth * 1.8);
+            // TP = exactly 1.5:1 R:R (news-aligned extension to 3:1 applied later)
+            double tp    = r4(entry + (entry - sl) * 1.5);
 
             if (sl < entry && tp > entry) {
                 double risk   = entry - sl;
@@ -139,11 +138,10 @@ public class BreakoutStrategyDetector {
 
             double entry = r4(last.getClose());
             double sl    = r4(orbHigh - orbWidth * 0.15);
-            double tp    = r4(entry - orbWidth * 1.8);
-
-            // Safety guards
+            // Safety guard: sl must be above entry for a short
             if (sl <= entry) sl = r4(entry + orbWidth * 0.15);
-            if (tp >= entry * 0.999) tp = r4(entry - orbWidth * 1.8);
+            // TP = exactly 1.5:1 R:R (news-aligned extension to 3:1 applied later)
+            double tp    = r4(entry - (sl - entry) * 1.5);
 
             if (sl > entry && tp < entry) {
                 double risk   = sl - entry;

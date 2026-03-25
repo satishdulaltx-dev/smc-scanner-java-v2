@@ -182,6 +182,22 @@ public class BacktestService {
                         : newsService.getSentimentAt(ticker, entryEpochMs);
                 int newsAdj = sentiment.confidenceDelta(setup.getDirection());
 
+                // News-aligned TP extension: 1.5:1 → 3:1 R:R
+                // Mirrors live scanner logic: when news aligns with direction, widen TP
+                if (sentiment.isAligned(setup.getDirection()) && !ticker.startsWith("X:")) {
+                    double risk  = Math.abs(setup.getEntry() - setup.getStopLoss());
+                    double tp3x  = "long".equals(setup.getDirection())
+                            ? Math.round((setup.getEntry() + risk * 3.0) * 10000.0) / 10000.0
+                            : Math.round((setup.getEntry() - risk * 3.0) * 10000.0) / 10000.0;
+                    setup = TradeSetup.builder()
+                            .ticker(setup.getTicker()).direction(setup.getDirection())
+                            .entry(setup.getEntry()).stopLoss(setup.getStopLoss()).takeProfit(tp3x)
+                            .confidence(setup.getConfidence()).session(setup.getSession()).volatility(setup.getVolatility())
+                            .atr(setup.getAtr()).hasBos(setup.isHasBos()).hasChoch(setup.isHasChoch())
+                            .fvgTop(setup.getFvgTop()).fvgBottom(setup.getFvgBottom()).timestamp(setup.getTimestamp())
+                            .build();
+                }
+
                 // Market context: SPY RS + VIX regime as-of entry date
                 MarketContext context = ticker.startsWith("X:") ? MarketContext.NONE
                         : marketCtxService.getContextAt(ticker, dailyBars, spyBars, vixBars, entryEpochMs);

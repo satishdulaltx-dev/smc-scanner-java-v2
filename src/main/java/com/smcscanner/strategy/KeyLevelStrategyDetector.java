@@ -140,11 +140,10 @@ public class KeyLevelStrategyDetector {
                 if (touched && rejectedDown && bearishBar && volConfirmed) {
                     double entry = r4(curClose);
                     double sl    = r4(levelPrice + atr * 0.5);
-                    double tp    = r4(entry - effectiveAtr * 0.6);
-
-                    // Safety guards
+                    // Safety guard: sl must be above entry for a short
                     if (sl <= entry) sl = r4(entry + atr * 0.5);
-                    if (tp >= entry * 0.999) tp = r4(entry - effectiveAtr * 0.6);
+                    // TP = exactly 1.5:1 R:R (news-aligned extension to 3:1 applied later)
+                    double tp    = r4(entry - (sl - entry) * 1.5);
 
                     if (sl > entry && tp < entry) {
                         double risk   = sl - entry;
@@ -193,11 +192,10 @@ public class KeyLevelStrategyDetector {
                 if (touched && bouncedUp && bullishBar && volConfirmed) {
                     double entry = r4(curClose);
                     double sl    = r4(levelPrice - atr * 0.5);
-                    double tp    = r4(entry + effectiveAtr * 0.6);
-
-                    // Safety guards
+                    // Safety guard: sl must be below entry for a long
                     if (sl >= entry) sl = r4(entry - atr * 0.5);
-                    if (tp <= entry * 1.001) tp = r4(entry + effectiveAtr * 0.6);
+                    // TP = exactly 1.5:1 R:R (news-aligned extension to 3:1 applied later)
+                    double tp    = r4(entry + (entry - sl) * 1.5);
 
                     if (sl < entry && tp > entry) {
                         double risk   = entry - sl;

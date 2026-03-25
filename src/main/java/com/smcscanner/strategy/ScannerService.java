@@ -116,6 +116,25 @@ public class ScannerService {
                     log.info("{} news adj={} score={} dir={}", ticker, newsAdj, sentiment.netScore(), s.getDirection());
                 }
 
+                // ── News-aligned TP extension: 1.5:1 → 3:1 ──────────────────
+                // When news aligns with the trade direction, widen TP to 3:1 R:R.
+                // The default from detectors is 1.5:1 (better win rate on neutral days).
+                // Strong aligned news signals a momentum-driven move with more follow-through.
+                if (!isC && sentiment.isAligned(s.getDirection())) {
+                    double risk = Math.abs(s.getEntry() - s.getStopLoss());
+                    double tp3x = "long".equals(s.getDirection())
+                            ? Math.round((s.getEntry() + risk * 3.0) * 10000.0) / 10000.0
+                            : Math.round((s.getEntry() - risk * 3.0) * 10000.0) / 10000.0;
+                    s = TradeSetup.builder()
+                            .ticker(s.getTicker()).direction(s.getDirection())
+                            .entry(s.getEntry()).stopLoss(s.getStopLoss()).takeProfit(tp3x)
+                            .confidence(s.getConfidence()).session(s.getSession()).volatility(s.getVolatility())
+                            .atr(s.getAtr()).hasBos(s.isHasBos()).hasChoch(s.isHasChoch())
+                            .fvgTop(s.getFvgTop()).fvgBottom(s.getFvgBottom()).timestamp(s.getTimestamp())
+                            .build();
+                    log.info("{} news-aligned: TP extended to 3:1 tp={}", ticker, tp3x);
+                }
+
                 // ── Market context (SPY RS + VIX regime) ─────────────────────
                 // SPY relative strength: if the stock is strongly outperforming
                 // SPY while we try to SHORT (or underperforming while going LONG),

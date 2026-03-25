@@ -136,8 +136,9 @@ public class SetupDetector {
         // Use daily ATR for meaningful TP/SL; fall back to 4x 5m ATR if daily not available
         double targetAtr = dailyAtr > curAtr * 2 ? dailyAtr : curAtr * 4;
         double sl,tp;
-        if ("long".equals(state.getDirection())) { sl=r4(entry-targetAtr*0.4); tp=r4(entry+targetAtr*1.2); }
-        else                                     { sl=r4(entry+targetAtr*0.4); tp=r4(entry-targetAtr*1.2); }
+        // SL = 0.4 ATR, TP = 0.6 ATR → exactly 1.5:1 R:R (news-aligned extension to 3:1 applied in ScannerService/BacktestService)
+        if ("long".equals(state.getDirection())) { sl=r4(entry-targetAtr*0.4); tp=r4(entry+targetAtr*0.6); }
+        else                                     { sl=r4(entry+targetAtr*0.4); tp=r4(entry-targetAtr*0.6); }
 
         TradeSetup setup=TradeSetup.builder().ticker(ticker).direction(state.getDirection())
             .entry(entry).stopLoss(sl).takeProfit(tp).confidence(conf).session(session).volatility(vol)
