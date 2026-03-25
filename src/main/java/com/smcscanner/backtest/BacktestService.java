@@ -83,10 +83,12 @@ public class BacktestService {
         List<OHLCV> spyBars = marketCtxService.fetchSpyBarsForBacktest(220);
         List<OHLCV> vixBars = marketCtxService.fetchVixBarsForBacktest(220);
 
-        // Per-ticker consecutive-loss counter for adaptive suppression.
-        // This is LOCAL to this backtest run — does NOT touch the live
-        // adaptive-outcomes.json file used by the live scanner.
-        Map<String, Integer> btStreaks = new HashMap<>();
+        // Per-ticker outcome history for adaptive suppression — mirrors the live
+        // AdaptiveSuppressor: bounded to last 6 outcomes so that a win in month 2
+        // resets the streak before month 3 (prevents 90-day run from showing fewer
+        // trades than a standalone 30-day run due to accumulated early-period losses).
+        // LOCAL to this backtest run — does NOT touch adaptive-outcomes.json.
+        Map<String, java.util.ArrayDeque<Boolean>> btOutcomes = new HashMap<>();
 
         List<TradeResult> trades = new ArrayList<>();
         List<LocalDate> dates = new ArrayList<>(byDate.keySet());
@@ -204,7 +206,14 @@ public class BacktestService {
                 int ctxAdj = context.confidenceDelta(setup.getDirection(), stratType);
 
                 // Signal quality: R:R + time-of-day + consecutive loss streak
-                int streak     = btStreaks.getOrDefault(ticker, 0);
+                // Streak = consecutive losses at the tail of the last-6-outcomes window
+                java.util.ArrayDeque<Boolean> hist = btOutcomes.getOrDefault(ticker, new java.util.ArrayDeque<>());
+                Boolean[] histArr = hist.toArray(new Boolean[0]);
+                int streak = 0;
+                for (int k = histArr.length - 1; k >= 0; k--) {
+                    if (!histArr[k]) streak++;
+                    else break;
+                }
                 int qualityAdj = ticker.startsWith("X:") ? 0
                         : qualityFilter.computeDelta(setup, entryEpochMs, streak);
                 String qualityLabel = qualityFilter.buildLabel(setup, entryEpochMs, streak);
@@ -270,10 +279,11 @@ public class BacktestService {
                     outcome  = "TIMEOUT"; // distinguishable from TP/SL exits in the trade list
                 }
 
-                // Update backtest streak counter for adaptive suppression on next trade
+                // Update bounded outcome history (max 6 entries — same as live AdaptiveSuppressor)
                 boolean tradeWon = "WIN".equals(outcome) || ("TIMEOUT".equals(outcome) && pnlPct > 0);
-                if (tradeWon) btStreaks.put(ticker, 0);
-                else          btStreaks.merge(ticker, 1, Integer::sum);
+                java.util.ArrayDeque<Boolean> h = btOutcomes.computeIfAbsent(ticker, k -> new java.util.ArrayDeque<>());
+                h.addLast(tradeWon);
+                if (h.size() > 6) h.pollFirst();
 
                 trades.add(new TradeResult(ticker, dir, entry, sl, tp, outcome, pnlPct,
                         entryTime, exitTime != null ? exitTime : entryTime,

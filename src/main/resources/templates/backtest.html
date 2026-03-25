@@ -94,6 +94,12 @@
         .ticker-pill:hover { border-color:var(--blue); }
 
         /* Batch results */
+        /* Batch aggregate summary bar */
+        .batch-summary { display:flex; flex-wrap:wrap; gap:12px; padding:16px 24px 12px; border-bottom:1px solid var(--border); background:var(--surface); margin-bottom:4px; align-items:center; }
+        .batch-summary .bs-stat { display:flex; flex-direction:column; align-items:center; min-width:80px; }
+        .batch-summary .bs-val  { font-size:22px; font-weight:700; line-height:1.1; }
+        .batch-summary .bs-lbl  { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.7px; margin-top:2px; }
+        .batch-summary .bs-sep  { width:1px; height:36px; background:var(--border); align-self:center; }
         .batch-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:10px; padding:0 24px 24px; }
         .batch-card { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:12px 14px; cursor:pointer; transition:border-color .15s; }
         .batch-card:hover { border-color:var(--blue); }
@@ -209,8 +215,9 @@
 <div id="batch-results" style="display:none">
     <div style="padding:16px 24px 8px; color:var(--muted); font-size:11px; text-transform:uppercase; font-weight:600; letter-spacing:.8px;">
         WATCHLIST BACKTEST RESULTS
-        <span style="color:var(--muted); font-size:10px; margin-left:8px;">Click a card to drill in</span>
+        <span style="color:var(--muted); font-size:10px; margin-left:8px;">CLICK A CARD TO DRILL IN</span>
     </div>
+    <div class="batch-summary" id="batch-summary"></div>
     <div class="batch-grid" id="batch-grid"></div>
 </div>
 
@@ -369,13 +376,83 @@ function renderSingle(d) {
 function renderBatch(results, days) {
     show('batch-results');
     results.sort((a, b) => b.expectancy - a.expectancy);
+
+    // ── Aggregate stats ───────────────────────────────────────────────────────
+    const FILTERED = new Set(['NEWS_FILTERED','CTX_FILTERED','QUALITY_FILTERED','MULTI_FILTERED']);
+    let totalTrades = 0, totalWins = 0, totalLosses = 0, totalFiltered = 0;
+    let sumWinPnl = 0, sumLossPnl = 0, sumExpectancy = 0, tickersWithTrades = 0;
+    let bestTicker = null, worstTicker = null;
+    results.forEach(d => {
+        totalTrades  += d.total_trades;
+        totalWins    += d.wins;
+        totalLosses  += d.losses;
+        totalFiltered += (d.news_filtered||0) + (d.ctx_filtered||0) + (d.quality_filtered||0);
+        if (d.wins > 0)   sumWinPnl  += d.avg_win_pct  * d.wins;
+        if (d.losses > 0) sumLossPnl += d.avg_loss_pct * d.losses;
+        if (d.total_trades > 0) {
+            sumExpectancy += d.expectancy * d.total_trades;
+            tickersWithTrades++;
+            if (!bestTicker  || d.expectancy > bestTicker.expectancy)  bestTicker  = d;
+            if (!worstTicker || d.expectancy < worstTicker.expectancy) worstTicker = d;
+        }
+    });
+    const overallWR   = totalTrades > 0 ? Math.round(totalWins / totalTrades * 100) : 0;
+    const overallExp  = totalTrades > 0 ? (sumExpectancy / totalTrades).toFixed(2) : '0.00';
+    const avgWinPnl   = totalWins   > 0 ? (sumWinPnl  / totalWins).toFixed(2)   : '0.00';
+    const avgLossPnl  = totalLosses > 0 ? (sumLossPnl / totalLosses).toFixed(2) : '0.00';
+    const wrColor     = overallWR >= 55 ? 'var(--green)' : overallWR >= 40 ? 'var(--yellow)' : 'var(--red)';
+    const expColor    = overallExp >= 0 ? 'var(--green)' : 'var(--red)';
+
+    document.getElementById('batch-summary').innerHTML = `
+        <div class="bs-stat">
+            <div class="bs-val" style="color:${wrColor}">${overallWR}%</div>
+            <div class="bs-lbl">Overall Win Rate</div>
+        </div>
+        <div class="bs-sep"></div>
+        <div class="bs-stat">
+            <div class="bs-val" style="color:var(--blue)">${totalTrades}</div>
+            <div class="bs-lbl">Total Trades</div>
+        </div>
+        <div class="bs-stat">
+            <div class="bs-val" style="color:var(--green)">${totalWins}</div>
+            <div class="bs-lbl">Wins</div>
+        </div>
+        <div class="bs-stat">
+            <div class="bs-val" style="color:var(--red)">${totalLosses}</div>
+            <div class="bs-lbl">Losses</div>
+        </div>
+        <div class="bs-sep"></div>
+        <div class="bs-stat">
+            <div class="bs-val" style="color:${expColor}">${overallExp >= 0 ? '+' : ''}${overallExp}%</div>
+            <div class="bs-lbl">Avg Expectancy</div>
+        </div>
+        <div class="bs-stat">
+            <div class="bs-val" style="color:var(--green)">+${avgWinPnl}%</div>
+            <div class="bs-lbl">Avg Win</div>
+        </div>
+        <div class="bs-stat">
+            <div class="bs-val" style="color:var(--red)">-${avgLossPnl}%</div>
+            <div class="bs-lbl">Avg Loss</div>
+        </div>
+        <div class="bs-sep"></div>
+        ${totalFiltered > 0 ? `<div class="bs-stat"><div class="bs-val" style="color:var(--muted)">${totalFiltered}</div><div class="bs-lbl">Filtered</div></div>` : ''}
+        ${bestTicker  ? `<div class="bs-stat"><div class="bs-val" style="color:var(--green);font-size:15px">${bestTicker.ticker}</div><div class="bs-lbl">Best (+${bestTicker.expectancy}%)</div></div>` : ''}
+        ${worstTicker ? `<div class="bs-stat"><div class="bs-val" style="color:var(--red);font-size:15px">${worstTicker.ticker}</div><div class="bs-lbl">Worst (${worstTicker.expectancy}%)</div></div>` : ''}
+        <div class="bs-stat">
+            <div class="bs-val" style="color:var(--purple);font-size:15px">${days}d</div>
+            <div class="bs-lbl">Lookback</div>
+        </div>
+    `;
+
+    // ── Per-ticker cards ──────────────────────────────────────────────────────
     document.getElementById('batch-grid').innerHTML = results.map(d => {
         const positive = d.expectancy >= 0;
         const wrColor = d.win_rate >= 60 ? '#3fb950' : d.win_rate >= 45 ? '#d29922' : '#f85149';
+        const filtered = (d.news_filtered||0) + (d.ctx_filtered||0) + (d.quality_filtered||0);
         return `<div class="batch-card ${positive ? 'positive' : 'negative'}" onclick="drillIn('${d.ticker}', ${days})">
             <div class="bt-ticker">${d.ticker} ${positive ? '📈' : '📉'}</div>
             <div class="bt-row"><span>Win Rate</span><span class="bt-val" style="color:${wrColor}">${d.win_rate}%</span></div>
-            <div class="bt-row"><span>Trades</span><span class="bt-val">${d.total_trades}</span></div>
+            <div class="bt-row"><span>Trades</span><span class="bt-val">${d.total_trades}${filtered > 0 ? ` <span style="color:#8b949e;font-size:9px">(${filtered} filtered)</span>` : ''}</span></div>
             <div class="bt-row"><span>Expectancy</span>
                 <span class="bt-val" style="color:${positive ? '#3fb950' : '#f85149'}">${d.expectancy >= 0 ? '+' : ''}${d.expectancy}%</span>
             </div>
