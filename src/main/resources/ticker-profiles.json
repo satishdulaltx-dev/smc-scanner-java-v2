@@ -42,9 +42,9 @@
     },
     {
       "ticker": "AMZN",
-      "minConfidence": 75,
-      "minFvgPct": 0.0008,
-      "note": "Large-cap — needs cleaner FVG and higher confidence"
+      "minConfidence": 65,
+      "minFvgPct": 0.0005,
+      "note": "Relaxed Mar 2026: was minConf=75/fvg=0.0008 → 1 trade in 30d. AMZN moves enough to warrant lower threshold."
     },
     {
       "ticker": "MSTR",
@@ -96,6 +96,13 @@
       "note": "skip=true again Mar 2026. Re-evaluate after consistent 90d WR >45%."
     },
     {
+      "ticker": "NFLX",
+      "minConfidence": 63,
+      "minFvgPct": 0.0005,
+      "dispAtrMult": 1.4,
+      "note": "Fast-moving large-cap — 1 trade 30d on defaults. Relaxed to catch more sweep+FVG setups."
+    },
+    {
       "ticker": "MARA",
       "minConfidence": 62,
       "note": "Strong expectancy (4.36%) — relaxed to catch more signals"
@@ -107,13 +114,17 @@
     },
     {
       "ticker": "MSFT",
-      "strategyType": "keylevel",
-      "note": "Large-cap — Key Level Rejection; institutional accumulation/distribution at well-known price levels"
+      "strategyType": "smc",
+      "minConfidence": 65,
+      "minFvgPct": 0.0006,
+      "note": "Switched keylevel→SMC Mar 2026: keylevel 0 trades 30d. SMC fires on sweep+FVG displacement."
     },
     {
       "ticker": "META",
-      "strategyType": "keylevel",
-      "note": "Large-cap — Key Level Rejection: 40% WR +0.35% expectancy over 180d (was VWAP 25% WR)"
+      "strategyType": "smc",
+      "minConfidence": 65,
+      "minFvgPct": 0.0006,
+      "note": "Switched keylevel→SMC Mar 2026: keylevel 0 trades 30d (not at key levels). SMC fires on any sweep+FVG."
     },
     {
       "ticker": "V",
@@ -139,8 +150,11 @@
     },
     {
       "ticker": "NVDA",
-      "strategyType": "breakout",
-      "note": "Volatile AI chip — ORB breakout strategy"
+      "strategyType": "smc",
+      "minConfidence": 65,
+      "minFvgPct": 0.0007,
+      "dispAtrMult": 1.5,
+      "note": "Switched breakout→SMC Mar 2026: ORB 0 trades 30d. NVDA has large intraday sweeps — SMC suits it better."
     },
     {
       "ticker": "BA",
