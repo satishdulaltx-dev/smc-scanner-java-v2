@@ -254,21 +254,30 @@ function runBacktest() {
         .catch(() => { setLoading(false); alert('Backtest failed'); });
 }
 
-function runBatch() {
+async function runBatch() {
     const tickers = ['AAPL','MSFT','GOOGL','AMZN','NVDA','META','TSLA','AMD','NFLX','SPY','QQQ',
         'COIN','SHOP','PLTR','SOFI','RIVN','NIO','BABA','PYPL','DIS','BA','JPM','GS','V',
         'UBER','ABNB','SNAP','ROKU','MARA','HOOD','MSTR'];
-    const days = document.getElementById('days').value;
+    const days  = document.getElementById('days').value;
+    const BATCH = 4; // max concurrent Polygon API requests — prevents rate-limit errors on 90d runs
     setLoading(true);
     hide('single-results'); hide('empty-state');
 
-    const promises = tickers.map(t =>
-        fetch(`/api/backtest?ticker=${t}&days=${days}`).then(r => r.json()).catch(() => null)
-    );
-    Promise.all(promises).then(results => {
-        setLoading(false);
-        renderBatch(results.filter(Boolean), days);
-    });
+    const all = [];
+    const loadBtn = document.getElementById('run-btn');
+    for (let i = 0; i < tickers.length; i += BATCH) {
+        const group = tickers.slice(i, i + BATCH);
+        const done = Math.min(i + BATCH, tickers.length);
+        if (loadBtn) loadBtn.textContent = `⏳ ${done} / ${tickers.length}`;
+        const chunk = await Promise.all(
+            group.map(t => fetch(`/api/backtest?ticker=${t}&days=${days}`).then(r => r.json()).catch(() => null))
+        );
+        all.push(...chunk);
+    }
+    setLoading(false);
+    if (loadBtn) loadBtn.innerHTML = '&#9654; Run Backtest';
+    // Filter out null (network error) and invalid responses (error responses have no ticker field)
+    renderBatch(all.filter(d => d && d.ticker && d.total_trades !== undefined), days);
 }
 
 function renderSingle(d) {
@@ -383,12 +392,12 @@ function renderBatch(results, days) {
     let sumWinPnl = 0, sumLossPnl = 0, sumExpectancy = 0, tickersWithTrades = 0;
     let bestTicker = null, worstTicker = null;
     results.forEach(d => {
-        totalTrades  += d.total_trades;
-        totalWins    += d.wins;
-        totalLosses  += d.losses;
+        totalTrades  += (d.total_trades || 0);
+        totalWins    += (d.wins   || 0);
+        totalLosses  += (d.losses || 0);
         totalFiltered += (d.news_filtered||0) + (d.ctx_filtered||0) + (d.quality_filtered||0);
-        if (d.wins > 0)   sumWinPnl  += d.avg_win_pct  * d.wins;
-        if (d.losses > 0) sumLossPnl += d.avg_loss_pct * d.losses;
+        if ((d.wins   || 0) > 0) sumWinPnl  += (d.avg_win_pct  || 0) * d.wins;
+        if ((d.losses || 0) > 0) sumLossPnl += (d.avg_loss_pct || 0) * d.losses;
         if (d.total_trades > 0) {
             sumExpectancy += d.expectancy * d.total_trades;
             tickersWithTrades++;
