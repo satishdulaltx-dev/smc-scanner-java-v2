@@ -255,9 +255,12 @@ function runBacktest() {
 }
 
 async function runBatch() {
-    const tickers = ['AAPL','MSFT','GOOGL','AMZN','NVDA','META','TSLA','AMD','NFLX','SPY','QQQ',
-        'COIN','SHOP','PLTR','SOFI','RIVN','NIO','BABA','PYPL','DIS','BA','JPM','GS','V',
-        'UBER','ABNB','SNAP','ROKU','MARA','HOOD','MSTR'];
+    // Always fetch live watchlist from server — stays in sync with watchlist.json automatically
+    // /api/watchlist returns [{ticker, status, ...}, ...] — extract ticker strings, exclude crypto
+    const wlResp = await fetch('/api/watchlist').then(r => r.json()).catch(() => []);
+    const tickers = (Array.isArray(wlResp) ? wlResp : [])
+        .map(t => t.ticker).filter(t => t && !t.startsWith('X:'));
+    if (tickers.length === 0) { alert('Could not load watchlist'); return; }
     const days  = document.getElementById('days').value;
     const BATCH = 4; // max concurrent Polygon API requests — prevents rate-limit errors on 90d runs
     setLoading(true);
