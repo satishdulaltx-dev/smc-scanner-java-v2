@@ -11,6 +11,24 @@ public class TradeSetup {
     private final boolean hasBos, hasChoch;
     private final LocalDateTime timestamp;
 
+    // ── Options fields (populated by OptionsFlowAnalyzer) ───────────────────
+    private final String optionsContract;     // e.g. "O:AAPL260404C00255000"
+    private final String optionsType;         // "call" | "put"
+    private final double optionsStrike;
+    private final String optionsExpiry;
+    private final double optionsPremium;      // estimated entry premium
+    private final double optionsDelta;
+    private final double optionsIV;
+    private final int    optionsIVPct;        // IV percentile 0-100
+    private final double optionsBreakEven;
+    private final double optionsProfitPer;    // profit per contract at TP
+    private final double optionsLossPer;      // loss per contract at SL
+    private final double optionsRR;           // options risk/reward
+    private final int    optionsSuggested;    // suggested # of contracts
+    private final String optionsFlowLabel;    // e.g. "🟢 UNUSUAL CALL SWEEP 3.2:1"
+    private final String optionsFlowDir;      // "BULLISH" | "BEARISH" | "NEUTRAL"
+    private final double optionsMaxPain;
+
     private TradeSetup(Builder b) {
         this.ticker = b.ticker; this.direction = b.direction; this.session = b.session;
         this.volatility = b.volatility; this.entry = b.entry; this.stopLoss = b.stopLoss;
@@ -18,6 +36,16 @@ public class TradeSetup {
         this.fvgBottom = b.fvgBottom; this.confidence = b.confidence;
         this.hasBos = b.hasBos; this.hasChoch = b.hasChoch;
         this.timestamp = b.timestamp != null ? b.timestamp : LocalDateTime.now();
+        // Options
+        this.optionsContract = b.optionsContract; this.optionsType = b.optionsType;
+        this.optionsStrike = b.optionsStrike; this.optionsExpiry = b.optionsExpiry;
+        this.optionsPremium = b.optionsPremium; this.optionsDelta = b.optionsDelta;
+        this.optionsIV = b.optionsIV; this.optionsIVPct = b.optionsIVPct;
+        this.optionsBreakEven = b.optionsBreakEven;
+        this.optionsProfitPer = b.optionsProfitPer; this.optionsLossPer = b.optionsLossPer;
+        this.optionsRR = b.optionsRR; this.optionsSuggested = b.optionsSuggested;
+        this.optionsFlowLabel = b.optionsFlowLabel; this.optionsFlowDir = b.optionsFlowDir;
+        this.optionsMaxPain = b.optionsMaxPain;
     }
 
     public String        getTicker()     { return ticker; }
@@ -34,6 +62,25 @@ public class TradeSetup {
     public boolean       isHasBos()      { return hasBos; }
     public boolean       isHasChoch()    { return hasChoch; }
     public LocalDateTime getTimestamp()  { return timestamp; }
+
+    // Options getters
+    public String getOptionsContract()   { return optionsContract; }
+    public String getOptionsType()       { return optionsType; }
+    public double getOptionsStrike()     { return optionsStrike; }
+    public String getOptionsExpiry()     { return optionsExpiry; }
+    public double getOptionsPremium()    { return optionsPremium; }
+    public double getOptionsDelta()      { return optionsDelta; }
+    public double getOptionsIV()         { return optionsIV; }
+    public int    getOptionsIVPct()      { return optionsIVPct; }
+    public double getOptionsBreakEven()  { return optionsBreakEven; }
+    public double getOptionsProfitPer()  { return optionsProfitPer; }
+    public double getOptionsLossPer()    { return optionsLossPer; }
+    public double getOptionsRR()         { return optionsRR; }
+    public int    getOptionsSuggested()  { return optionsSuggested; }
+    public String getOptionsFlowLabel()  { return optionsFlowLabel; }
+    public String getOptionsFlowDir()    { return optionsFlowDir; }
+    public double getOptionsMaxPain()    { return optionsMaxPain; }
+    public boolean hasOptionsData()      { return optionsContract != null && optionsPremium > 0; }
 
     public double rrRatio() {
         double risk   = Math.abs(entry - stopLoss);
@@ -57,6 +104,25 @@ public class TradeSetup {
         m.put("fvg_bottom",  fvgBottom);
         m.put("rr",          Math.round(rrRatio() * 10.0) / 10.0);
         m.put("timestamp",   timestamp != null ? timestamp.toString() : "");
+        // Options fields
+        if (optionsContract != null) {
+            m.put("options_contract",   optionsContract);
+            m.put("options_type",       optionsType);
+            m.put("options_strike",     optionsStrike);
+            m.put("options_expiry",     optionsExpiry);
+            m.put("options_premium",    optionsPremium);
+            m.put("options_delta",      optionsDelta);
+            m.put("options_iv",         optionsIV);
+            m.put("options_iv_pct",     optionsIVPct);
+            m.put("options_break_even", optionsBreakEven);
+            m.put("options_profit_per", optionsProfitPer);
+            m.put("options_loss_per",   optionsLossPer);
+            m.put("options_rr",         optionsRR);
+            m.put("options_suggested",  optionsSuggested);
+            m.put("options_flow_label", optionsFlowLabel);
+            m.put("options_flow_dir",   optionsFlowDir);
+            m.put("options_max_pain",   optionsMaxPain);
+        }
         return m;
     }
 
@@ -68,6 +134,12 @@ public class TradeSetup {
         private int confidence;
         private boolean hasBos, hasChoch;
         private LocalDateTime timestamp;
+        // Options
+        private String optionsContract, optionsType, optionsExpiry, optionsFlowLabel, optionsFlowDir;
+        private double optionsStrike, optionsPremium, optionsDelta, optionsIV, optionsBreakEven;
+        private double optionsProfitPer, optionsLossPer, optionsRR, optionsMaxPain;
+        private int optionsIVPct, optionsSuggested;
+
         public Builder ticker(String v)        { this.ticker = v;      return this; }
         public Builder direction(String v)     { this.direction = v;   return this; }
         public Builder session(String v)       { this.session = v;     return this; }
@@ -82,6 +154,23 @@ public class TradeSetup {
         public Builder hasBos(boolean v)       { this.hasBos = v;      return this; }
         public Builder hasChoch(boolean v)     { this.hasChoch = v;    return this; }
         public Builder timestamp(LocalDateTime v){ this.timestamp = v; return this; }
+        // Options builder methods
+        public Builder optionsContract(String v)   { this.optionsContract = v;   return this; }
+        public Builder optionsType(String v)       { this.optionsType = v;       return this; }
+        public Builder optionsStrike(double v)     { this.optionsStrike = v;     return this; }
+        public Builder optionsExpiry(String v)     { this.optionsExpiry = v;     return this; }
+        public Builder optionsPremium(double v)    { this.optionsPremium = v;    return this; }
+        public Builder optionsDelta(double v)      { this.optionsDelta = v;      return this; }
+        public Builder optionsIV(double v)         { this.optionsIV = v;         return this; }
+        public Builder optionsIVPct(int v)         { this.optionsIVPct = v;      return this; }
+        public Builder optionsBreakEven(double v)  { this.optionsBreakEven = v;  return this; }
+        public Builder optionsProfitPer(double v)  { this.optionsProfitPer = v;  return this; }
+        public Builder optionsLossPer(double v)    { this.optionsLossPer = v;    return this; }
+        public Builder optionsRR(double v)         { this.optionsRR = v;        return this; }
+        public Builder optionsSuggested(int v)     { this.optionsSuggested = v;  return this; }
+        public Builder optionsFlowLabel(String v)  { this.optionsFlowLabel = v;  return this; }
+        public Builder optionsFlowDir(String v)    { this.optionsFlowDir = v;    return this; }
+        public Builder optionsMaxPain(double v)    { this.optionsMaxPain = v;    return this; }
         public TradeSetup build()              { return new TradeSetup(this); }
     }
 }

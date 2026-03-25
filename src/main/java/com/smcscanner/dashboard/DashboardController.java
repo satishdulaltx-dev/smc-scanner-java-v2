@@ -385,6 +385,12 @@ public class DashboardController {
             resp.put("avg_win_pct",   Math.round(result.avgWinPct*100)/100.0);
             resp.put("avg_loss_pct",  Math.round(result.avgLossPct*100)/100.0);
             resp.put("expectancy",    Math.round(result.expectancy*100)/100.0);
+            // Options aggregate P&L
+            resp.put("opt_total_pnl",      Math.round(result.totalOptPnl*100)/100.0);
+            resp.put("opt_avg_win_pnl",    Math.round(result.avgOptWinPnl*100)/100.0);
+            resp.put("opt_avg_loss_pnl",   Math.round(result.avgOptLossPnl*100)/100.0);
+            resp.put("opt_expectancy",     Math.round(result.optExpectancy*100)/100.0);
+            resp.put("opt_total_return",   result.optTotalReturn);
             if (result.error != null) resp.put("error", result.error);
             List<Map<String,Object>> tradeList = result.trades.stream().map(t -> {
                 Map<String,Object> m = new LinkedHashMap<>();
@@ -399,6 +405,13 @@ public class DashboardController {
                 if (t.ctxLabel() != null)        m.put("ctx_label",   t.ctxLabel());
                 if (t.qualityAdjustment() != 0)  m.put("qual_adj",    t.qualityAdjustment());
                 if (t.qualityLabel() != null)     m.put("qual_label",  t.qualityLabel());
+                // Options P&L per trade
+                if (t.optEntryPremium() > 0) {
+                    m.put("opt_entry_premium",   t.optEntryPremium());
+                    m.put("opt_exit_premium",    t.optExitPremium());
+                    m.put("opt_pnl_per_contract", t.optPnlPerContract());
+                    m.put("opt_pnl_pct",         t.optPnlPct());
+                }
                 return m;
             }).collect(java.util.stream.Collectors.toList());
             resp.put("trades", tradeList);

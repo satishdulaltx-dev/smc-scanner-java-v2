@@ -11,6 +11,7 @@ import com.smcscanner.model.TickerProfile;
 import com.smcscanner.model.TradeSetup;
 import com.smcscanner.news.NewsSentiment;
 import com.smcscanner.news.NewsService;
+import com.smcscanner.options.OptionsFlowAnalyzer;
 import com.smcscanner.strategy.BreakoutStrategyDetector;
 import com.smcscanner.strategy.KeyLevelStrategyDetector;
 import com.smcscanner.strategy.SetupDetector;
@@ -45,17 +46,18 @@ public class BacktestService {
     private final MarketContextService     marketCtxService;
     private final SignalQualityFilter      qualityFilter;
     private final ScannerConfig            config;
+    private final OptionsFlowAnalyzer      optionsAnalyzer;
 
     public BacktestService(PolygonClient client, AtrCalculator atrCalc, SetupDetector setupDetector,
                            VwapStrategyDetector vwapDetector, BreakoutStrategyDetector breakoutDetector,
                            KeyLevelStrategyDetector keyLevelDetector, NewsService newsService,
                            MarketContextService marketCtxService, SignalQualityFilter qualityFilter,
-                           ScannerConfig config) {
+                           ScannerConfig config, OptionsFlowAnalyzer optionsAnalyzer) {
         this.client = client; this.atrCalc = atrCalc; this.setupDetector = setupDetector;
         this.vwapDetector = vwapDetector; this.breakoutDetector = breakoutDetector;
         this.keyLevelDetector = keyLevelDetector; this.newsService = newsService;
         this.marketCtxService = marketCtxService; this.qualityFilter = qualityFilter;
-        this.config = config;
+        this.config = config; this.optionsAnalyzer = optionsAnalyzer;
     }
 
     public BacktestResult run(String ticker, int lookbackDays) {
@@ -233,7 +235,8 @@ public class BacktestService {
                             filteredOutcome, 0.0,
                             toDateTime(dayBars.get(end - 1).getTimestamp()), toDateTime(dayBars.get(end - 1).getTimestamp()),
                             adjConf, setup.getAtr(), newsAdj, sentiment.label(), ctxAdj, context.rsLabel(),
-                            qualityAdj, filteredLabel));
+                            qualityAdj, filteredLabel,
+                            0, 0, 0, 0)); // no options P&L for filtered trades
                     tradePlacedToday = true;
                     continue;
                 }
@@ -302,11 +305,21 @@ public class BacktestService {
                 h.addLast(tradeWon);
                 if (h.size() > 6) h.pollFirst();
 
+                // Estimate options P&L using delta model (no historical options data available)
+                double exitPrice = "long".equals(dir)
+                        ? entry * (1 + pnlPct / 100.0)
+                        : entry * (1 - pnlPct / 100.0);
+                double holdDays = 1.0; // most intraday setups resolve within 1 trading day
+                OptionsFlowAnalyzer.BacktestOptionsEstimate optEst =
+                        optionsAnalyzer.estimateBacktestOptionsPnl(entry, exitPrice, dir, holdDays, setup.getAtr());
+
                 trades.add(new TradeResult(ticker, dir, entry, sl, tp, outcome, pnlPct,
                         entryTime, exitTime != null ? exitTime : entryTime,
                         adjConf, setup.getAtr(), newsAdj, sentiment.label(),
                         ctxAdj, buildContextLabel(context),
-                        qualityAdj, qualityLabel));
+                        qualityAdj, qualityLabel,
+                        optEst.entryPremium(), optEst.exitPremium(),
+                        optEst.pnlPerContract(), optEst.optionsPnlPct()));
             }
         }
 
@@ -353,7 +366,12 @@ public class BacktestService {
                                int ctxAdjustment,     // signed delta from RS+VIX      (e.g. -6)
                                String ctxLabel,       // e.g. "RS+4.2% | VIX 18.5"
                                int qualityAdjustment, // signed delta from R:R+time+streak (e.g. -15)
-                               String qualityLabel    // e.g. "R:R 1.2 (-10) | 3-loss streak (-15)"
+                               String qualityLabel,   // e.g. "R:R 1.2 (-10) | 3-loss streak (-15)"
+                               // Options P&L estimate (delta model)
+                               double optEntryPremium,  // estimated entry premium per share
+                               double optExitPremium,   // estimated exit premium per share
+                               double optPnlPerContract,// profit/loss per 1 contract (×100)
+                               double optPnlPct         // percentage return on premium invested
     ) {}
 
     public static class BacktestResult {
@@ -363,6 +381,12 @@ public class BacktestService {
         public final String error;
         public final int wins, losses, beStops, timeouts, newsFiltered, ctxFiltered, qualityFiltered, total;
         public final double winRate, avgWinPct, avgLossPct, expectancy;
+        // Options aggregate stats
+        public final double totalOptPnl;        // sum of P&L across all contracts (1 contract each)
+        public final double avgOptWinPnl;       // avg $ profit per winning contract
+        public final double avgOptLossPnl;      // avg $ loss per losing contract
+        public final double optExpectancy;      // avg $ per trade (options)
+        public final double optTotalReturn;     // % return on total premium invested
 
         private BacktestResult(String ticker, List<TradeResult> trades, int lookbackDays, String error) {
             this.ticker = ticker; this.trades = trades;
@@ -394,6 +418,28 @@ public class BacktestService {
                     .mapToDouble(t -> Math.abs(t.pnlPct())).average().orElse(0);
             this.expectancy = total > 0
                     ? (winRate / 100 * avgWinPct) - ((1 - winRate / 100) * avgLossPct) : 0;
+
+            // ── Options aggregate P&L ────────────────────────────────────────
+            // Only count executed trades (not filtered)
+            List<TradeResult> executed = trades.stream()
+                    .filter(t -> !"NEWS_FILTERED".equals(t.outcome())
+                              && !"CTX_FILTERED".equals(t.outcome())
+                              && !"QUALITY_FILTERED".equals(t.outcome())
+                              && !"MULTI_FILTERED".equals(t.outcome()))
+                    .toList();
+
+            this.totalOptPnl = executed.stream().mapToDouble(TradeResult::optPnlPerContract).sum();
+            this.avgOptWinPnl = executed.stream()
+                    .filter(t -> t.optPnlPerContract() > 0)
+                    .mapToDouble(TradeResult::optPnlPerContract).average().orElse(0);
+            this.avgOptLossPnl = executed.stream()
+                    .filter(t -> t.optPnlPerContract() <= 0)
+                    .mapToDouble(t -> Math.abs(t.optPnlPerContract())).average().orElse(0);
+            this.optExpectancy = executed.isEmpty() ? 0 : totalOptPnl / executed.size();
+            double totalPremiumInvested = executed.stream()
+                    .mapToDouble(t -> t.optEntryPremium() * 100).sum(); // ×100 shares per contract
+            this.optTotalReturn = totalPremiumInvested > 0
+                    ? Math.round(totalOptPnl / totalPremiumInvested * 100 * 10) / 10.0 : 0;
         }
 
         public static BacktestResult of(String t, List<TradeResult> trades, int days) {

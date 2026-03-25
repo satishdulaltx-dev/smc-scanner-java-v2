@@ -12,6 +12,9 @@ import com.smcscanner.config.ScannerConfig;
 import com.smcscanner.data.PolygonClient;
 import com.smcscanner.indicator.AtrCalculator;
 import com.smcscanner.model.*;
+import com.smcscanner.options.OptionsFlowAnalyzer;
+import com.smcscanner.options.OptionsFlowResult;
+import com.smcscanner.options.OptionsRecommendation;
 import com.smcscanner.state.SharedState;
 import com.smcscanner.tracking.PerformanceTracker;
 import org.slf4j.Logger;
@@ -41,6 +44,7 @@ public class ScannerService {
     private final MarketContextService     marketCtx;
     private final SignalQualityFilter      qualityFilter;
     private final AdaptiveSuppressor       adaptive;
+    private final OptionsFlowAnalyzer      optionsFlow;
 
     public ScannerService(ScannerConfig config, PolygonClient client, SetupDetector setupDetector,
                           CryptoStrategyService crypto, MultiTimeframeAnalyzer mtf,
@@ -49,11 +53,12 @@ public class ScannerService {
                           VwapStrategyDetector vwap, BreakoutStrategyDetector breakout,
                           KeyLevelStrategyDetector keyLevel, NewsService news,
                           MarketContextService marketCtx, SignalQualityFilter qualityFilter,
-                          AdaptiveSuppressor adaptive) {
+                          AdaptiveSuppressor adaptive, OptionsFlowAnalyzer optionsFlow) {
         this.config=config; this.client=client; this.setupDetector=setupDetector; this.crypto=crypto;
         this.mtf=mtf; this.discord=discord; this.dedup=dedup; this.tracker=tracker; this.state=state;
         this.atrCalc=atrCalc; this.vwap=vwap; this.breakout=breakout; this.keyLevel=keyLevel;
         this.news=news; this.marketCtx=marketCtx; this.qualityFilter=qualityFilter; this.adaptive=adaptive;
+        this.optionsFlow=optionsFlow;
     }
 
     public boolean isCrypto(String t) { return t.startsWith("X:"); }
@@ -164,18 +169,55 @@ public class ScannerService {
                             String.format("%.1f", s.rrRatio()), streak);
                 }
 
-                // Apply combined confidence adjustment (news + market context + quality)
-                int totalAdj = newsAdj + ctxAdj + qualityAdj;
-                if (totalAdj != 0) {
-                    s = TradeSetup.builder()
+                // ── Options flow check (call/put volume + contract recommendation) ──
+                OptionsFlowResult flow = OptionsFlowResult.NONE;
+                OptionsRecommendation rec = OptionsRecommendation.NONE;
+                int flowAdj = 0;
+                if (!isC) {
+                    try {
+                        double currentPrice = bars.get(bars.size() - 1).getClose();
+                        flow = optionsFlow.analyzeFlow(ticker, currentPrice);
+                        flowAdj = flow.confidenceDelta(s.getDirection());
+                        if (flowAdj != 0) {
+                            log.info("{} options flow adj={} dir={} pcRatio={} unusual={}",
+                                    ticker, flowAdj, flow.flowDirection(),
+                                    String.format("%.2f", flow.pcRatioVol()), flow.unusualActivity());
+                        }
+                        // Get contract recommendation
+                        rec = optionsFlow.recommendContract(ticker, s.getDirection(),
+                                s.getEntry(), s.getStopLoss(), s.getTakeProfit());
+                    } catch (Exception e) {
+                        log.debug("{} options flow error: {}", ticker, e.getMessage());
+                    }
+                }
+
+                // Apply combined confidence adjustment (news + market context + quality + options flow)
+                int totalAdj = newsAdj + ctxAdj + qualityAdj + flowAdj;
+                if (totalAdj != 0 || flow.hasData() || rec.hasData()) {
+                    TradeSetup.Builder sb = TradeSetup.builder()
                             .ticker(s.getTicker()).direction(s.getDirection())
                             .entry(s.getEntry()).stopLoss(s.getStopLoss()).takeProfit(s.getTakeProfit())
                             .confidence(Math.max(0, Math.min(100, s.getConfidence() + totalAdj)))
                             .session(s.getSession()).volatility(s.getVolatility()).atr(s.getAtr())
                             .hasBos(s.isHasBos()).hasChoch(s.isHasChoch())
                             .fvgTop(s.getFvgTop()).fvgBottom(s.getFvgBottom())
-                            .timestamp(s.getTimestamp())
-                            .build();
+                            .timestamp(s.getTimestamp());
+                    // Attach options flow data
+                    if (flow.hasData()) {
+                        sb.optionsFlowLabel(flow.label()).optionsFlowDir(flow.flowDirection())
+                          .optionsMaxPain(flow.maxPainStrike());
+                    }
+                    // Attach contract recommendation
+                    if (rec.hasData()) {
+                        sb.optionsContract(rec.contractTicker()).optionsType(rec.contractType())
+                          .optionsStrike(rec.strike()).optionsExpiry(rec.expirationDate())
+                          .optionsPremium(rec.estimatedPremium()).optionsDelta(rec.delta())
+                          .optionsIV(rec.iv()).optionsIVPct(rec.ivPercentile())
+                          .optionsBreakEven(rec.breakEvenPrice())
+                          .optionsProfitPer(rec.profitPerContract()).optionsLossPer(rec.lossPerContract())
+                          .optionsRR(rec.optionsRR()).optionsSuggested(rec.suggestedContracts());
+                    }
+                    s = sb.build();
                 }
 
                 setTs(ticker,"long".equals(s.getDirection())?"setup-long":"setup-short",s.getDirection(),s.getConfidence(),

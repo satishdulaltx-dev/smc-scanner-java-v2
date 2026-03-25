@@ -64,8 +64,47 @@ public class DiscordAlertService {
                         : "high".equals(s.getVolatility())     ? "🚀 ORB Breakout"
                         : "keylevel".equals(s.getVolatility()) ? "🎯 Key Level Rejection"
                         : "🔷 SMC Sweep+FVG";
-        // Build field list — append news row only when there's recent sentiment
-        List<Map<String,Object>> fields = new java.util.ArrayList<>(List.of(
+
+        List<Map<String,Object>> fields = new java.util.ArrayList<>();
+
+        // ── OPTIONS CONTRACT (top priority — this is what they trade) ─────────
+        if (s.hasOptionsData()) {
+            String contractLabel = String.format("**%s** $%.0f%s  exp %s (%dd)",
+                    s.getOptionsType().toUpperCase(), s.getOptionsStrike(),
+                    "call".equals(s.getOptionsType()) ? "C" : "P",
+                    s.getOptionsExpiry(), (int)((java.time.LocalDate.parse(s.getOptionsExpiry()).toEpochDay()
+                        - java.time.LocalDate.now().toEpochDay())));
+            fields.add(f("🎯 OPTIONS CONTRACT", contractLabel, false));
+
+            String premiumLine = String.format("Premium: **$%.2f** /contract ($%.0f total for %d)",
+                    s.getOptionsPremium(), s.getOptionsPremium() * 100 * s.getOptionsSuggested(),
+                    s.getOptionsSuggested());
+            fields.add(f("💵 Entry Cost", premiumLine, false));
+
+            String greeksLine = String.format("Δ %.3f  |  IV %.1f%%  %s",
+                    s.getOptionsDelta(), s.getOptionsIV() * 100,
+                    s.getOptionsIVPct() <= 30 ? "✅ Cheap"
+                    : s.getOptionsIVPct() >= 70 ? "⚠️ Expensive (IV crush risk)"
+                    : "");
+            fields.add(f("📐 Greeks", greeksLine, false));
+
+            // P&L per contract
+            double totalProfit = s.getOptionsProfitPer() * s.getOptionsSuggested();
+            double totalLoss   = s.getOptionsLossPer() * s.getOptionsSuggested();
+            String pnlLine = String.format(
+                    "**If TP hit:** +$%.0f per contract → **+$%.0f** (%d contracts)\n" +
+                    "**If SL hit:** -$%.0f per contract → **-$%.0f**\n" +
+                    "**Options R:R:** %.1f:1",
+                    s.getOptionsProfitPer(), totalProfit, s.getOptionsSuggested(),
+                    s.getOptionsLossPer(), totalLoss,
+                    s.getOptionsRR());
+            fields.add(f("💰 P&L Estimate", pnlLine, false));
+
+            fields.add(f("🔓 Break-Even", String.format("$%.2f (stock must reach this)", s.getOptionsBreakEven()), true));
+        }
+
+        // ── Core setup fields ─────────────────────────────────────────────────
+        fields.addAll(List.of(
             f("Direction",  arrow+" "+s.getDirection().toUpperCase(), true),
             f("Confidence", grade+" "+s.getConfidence()+"/100",       true),
             f("Strategy",   strategy,                                  true),
@@ -73,12 +112,25 @@ public class DiscordAlertService {
             f("Stop Loss",  String.format("$%.4f (-%.2f%%)",s.getStopLoss(),slPct),  true),
             f("Take Profit",String.format("$%.4f (+%.2f%%)",s.getTakeProfit(),tpPct),true),
             f("R:R",        String.format("%.1f:1",s.rrRatio()),       true),
-            f("Session",    s.getSession()!=null?s.getSession():"—",   true),
-            f("ATR",        String.format("$%.4f",s.getAtr()),         true),
-            f("🔒 Breakeven", String.format("Move SL → $%.4f once price hits $%.4f (1:1)",
+            f("ATR",        String.format("$%.4f",s.getAtr()),         true)));
+
+        // ── Breakeven stop instruction ────────────────────────────────────────
+        fields.add(f("🔒 Breakeven", String.format("Move SL → $%.4f once price hits $%.4f (1:1)",
                     s.getEntry(),
                     isLong ? s.getEntry() + Math.abs(s.getEntry()-s.getStopLoss())
-                           : s.getEntry() - Math.abs(s.getEntry()-s.getStopLoss())), false)));
+                           : s.getEntry() - Math.abs(s.getEntry()-s.getStopLoss())), false));
+
+        // ── Options flow sentiment ────────────────────────────────────────────
+        if (s.getOptionsFlowLabel() != null) {
+            String flowConflict = s.getOptionsFlowDir() != null
+                    && (("long".equals(s.getDirection()) && "BEARISH".equals(s.getOptionsFlowDir()))
+                     || ("short".equals(s.getDirection()) && "BULLISH".equals(s.getOptionsFlowDir())))
+                    ? " ⚠️ FLOW CONFLICTS" : "";
+            fields.add(f("📊 Options Flow", s.getOptionsFlowLabel() + flowConflict, false));
+        }
+        if (s.getOptionsMaxPain() > 0) {
+            fields.add(f("🧲 Max Pain", String.format("$%.1f (price magnet by expiry)", s.getOptionsMaxPain()), true));
+        }
 
         // ── News sentiment field ──────────────────────────────────────────────
         if (sentiment != null && sentiment.hasNews() && sentiment.label() != null) {
@@ -101,8 +153,14 @@ public class DiscordAlertService {
         } else if (context != null && context.vixLabel() != null && !"normal".equals(context.vixRegime())) {
             fields.add(f("VIX Regime", context.vixLabel(), true));
         }
+
         Map<String,Object> e=new HashMap<>();
-        e.put("title",arrow+" "+s.getTicker()+" — "+s.getDirection().toUpperCase()+" Setup");
+        String title = s.hasOptionsData()
+                ? arrow + " " + s.getTicker() + " — BUY " + s.getOptionsType().toUpperCase()
+                  + " $" + String.format("%.0f", s.getOptionsStrike())
+                  + " " + s.getOptionsExpiry()
+                : arrow + " " + s.getTicker() + " — " + s.getDirection().toUpperCase() + " Setup";
+        e.put("title", title);
         e.put("color",isLong?0x2ECC71:0xE74C3C); e.put("fields",fields); e.put("footer",Map.of("text","SD Scanner | "+ts));
         return e;
     }
