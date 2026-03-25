@@ -152,8 +152,8 @@ public class BacktestService {
                         : 20; // smc
             boolean tradePlacedToday = false;
             for (int end = minBars; end <= dayBars.size() && !tradePlacedToday; end++) {
-                // For VWAP/ORB: skip windows where the most recent bar is still pre-market
-                if (isSessionStrat) {
+                // ALL equity strategies: skip pre-market bars — options don't trade before 9:30 ET
+                if (!ticker.startsWith("X:")) {
                     ZonedDateTime lastZdt = Instant.ofEpochMilli(
                         Long.parseLong(dayBars.get(end-1).getTimestamp())).atZone(ET);
                     if (lastZdt.toLocalTime().isBefore(LocalTime.of(9, 30))) continue;

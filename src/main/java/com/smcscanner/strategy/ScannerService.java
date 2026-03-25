@@ -221,14 +221,14 @@ public class ScannerService {
                 }
 
                 // ── Options flow HARD GATE ─────────────────────────────────────
-                // Block the trade entirely if institutional flow conflicts with direction.
-                // Smart money betting the other way = don't fight it.
-                if (flow.hasData() && flow.isConflicting(s.getDirection())) {
-                    log.info("{} FLOW_BLOCKED: {} setup vs {} flow (P/C ratio {})",
-                            ticker, s.getDirection().toUpperCase(), flow.flowDirection(),
+                // Only block when UNUSUAL institutional activity conflicts (vol > 3× OI).
+                // Normal directional disagreement already penalised by -10 conf above.
+                if (flow.hasData() && flow.unusualActivity() && flow.isConflicting(s.getDirection())) {
+                    log.info("{} FLOW_BLOCKED: unusual {} flow vs {} setup (P/C ratio {})",
+                            ticker, flow.flowDirection(), s.getDirection().toUpperCase(),
                             String.format("%.2f", flow.pcRatioVol()));
                     setTs(ticker, "idle", null, 0,
-                            "⛔ Blocked — options flow conflicts (" + flow.flowDirection() + ")");
+                            "⛔ Blocked — unusual institutional flow conflicts (" + flow.flowDirection() + ")");
                     removeSetup(ticker);
                 } else {
                     setTs(ticker,"long".equals(s.getDirection())?"setup-long":"setup-short",s.getDirection(),s.getConfidence(),

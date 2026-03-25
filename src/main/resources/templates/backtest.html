@@ -205,7 +205,9 @@
             <thead>
                 <tr>
                     <th>#</th><th>ENTRY TIME (ET)</th><th>EXIT TIME (ET)</th><th>DIR</th>
-                    <th>ENTRY</th><th>STOP LOSS</th><th>TAKE PROFIT</th><th>OUTCOME</th><th>P&L %</th><th>CONF</th>
+                    <th>ENTRY</th><th>STOP LOSS</th><th>TAKE PROFIT</th><th>OUTCOME</th><th>P&L %</th>
+                    <th>OPT ENTRY</th><th>OPT EXIT</th><th>OPT P&L</th>
+                    <th>CONF</th>
                 </tr>
             </thead>
             <tbody id="trades-tbody"></tbody>
@@ -317,6 +319,21 @@ function renderSingle(d) {
         <div class="stat-card"><div class="val c-purple">${d.lookback_days}d</div><div class="lbl">Lookback</div></div>
     `;
 
+    // Options aggregate stats (if available)
+    if (d.opt_total_pnl !== undefined) {
+        const optRetColor = d.opt_total_return >= 0 ? 'var(--green)' : 'var(--red)';
+        const optExpColor = d.opt_expectancy >= 0 ? 'var(--green)' : 'var(--red)';
+        document.getElementById('stats-grid').innerHTML += `
+            <div style="grid-column:1/-1;height:1px;background:var(--border);margin:4px 0"></div>
+            <div style="grid-column:1/-1;font-size:10px;color:var(--purple);text-transform:uppercase;letter-spacing:.8px;font-weight:600">📋 Options P&L (estimated · 1 contract per trade)</div>
+            <div class="stat-card"><div class="val" style="color:${optRetColor}">${d.opt_total_pnl >= 0 ? '+' : ''}$${d.opt_total_pnl.toFixed(0)}</div><div class="lbl">Options Total P&L</div></div>
+            <div class="stat-card"><div class="val" style="color:${optRetColor}">${d.opt_total_return >= 0 ? '+' : ''}${d.opt_total_return}%</div><div class="lbl">Options Return</div></div>
+            <div class="stat-card"><div class="val" style="color:${optExpColor}">${d.opt_expectancy >= 0 ? '+' : ''}$${d.opt_expectancy.toFixed(0)}</div><div class="lbl">Opt Expectancy/Trade</div></div>
+            <div class="stat-card"><div class="val c-green">+$${(d.opt_avg_win_pnl||0).toFixed(0)}</div><div class="lbl">Avg Win / Contract</div></div>
+            <div class="stat-card"><div class="val c-red">-$${Math.abs(d.opt_avg_loss_pnl||0).toFixed(0)}</div><div class="lbl">Avg Loss / Contract</div></div>
+        `;
+    }
+
     // Equity curve — exclude all filtered outcomes (trades were never entered)
     const FILTERED_OUTCOMES = new Set(['NEWS_FILTERED','CTX_FILTERED','QUALITY_FILTERED','MULTI_FILTERED']);
     let cum = 0;
@@ -385,6 +402,9 @@ function renderSingle(d) {
             <td style="color:var(--green)">$${t.tp.toFixed(2)}</td>
             <td><span class="${badgeClass}">${t.outcome}</span></td>
             ${pnlCell}
+            ${t.opt_entry_premium ? `<td style="font-size:11px;color:var(--muted)">$${t.opt_entry_premium.toFixed(2)}</td>` : '<td style="color:var(--muted);font-size:10px">—</td>'}
+            ${t.opt_exit_premium  ? `<td style="font-size:11px;color:var(--muted)">$${t.opt_exit_premium.toFixed(2)}</td>`  : '<td style="color:var(--muted);font-size:10px">—</td>'}
+            ${t.opt_pnl_per_contract ? `<td style="font-size:11px;font-weight:600;color:${t.opt_pnl_per_contract >= 0 ? 'var(--green)' : 'var(--red)'}">${t.opt_pnl_per_contract >= 0 ? '+' : ''}$${t.opt_pnl_per_contract.toFixed(0)}</td>` : '<td style="color:var(--muted);font-size:10px">—</td>'}
             <td style="color:${confColor};font-size:11px">${t.confidence}/100${newsTag}${ctxTag}${qualTag}</td>
         </tr>`;
     }).join('');
@@ -399,11 +419,13 @@ function renderBatch(results, days) {
     let totalTrades = 0, totalWins = 0, totalLosses = 0, totalFiltered = 0;
     let sumWinPnl = 0, sumLossPnl = 0, sumExpectancy = 0, tickersWithTrades = 0;
     let bestTicker = null, worstTicker = null;
+    let totalOptPnl = 0;
     results.forEach(d => {
         totalTrades  += (d.total_trades || 0);
         totalWins    += (d.wins   || 0);
         totalLosses  += (d.losses || 0);
         totalFiltered += (d.news_filtered||0) + (d.ctx_filtered||0) + (d.quality_filtered||0);
+        totalOptPnl  += (d.opt_total_pnl || 0);
         if ((d.wins   || 0) > 0) sumWinPnl  += (d.avg_win_pct  || 0) * d.wins;
         if ((d.losses || 0) > 0) sumLossPnl += (d.avg_loss_pct || 0) * d.losses;
         if (d.total_trades > 0) {
@@ -452,6 +474,11 @@ function renderBatch(results, days) {
             <div class="bs-lbl">Avg Loss</div>
         </div>
         <div class="bs-sep"></div>
+        <div class="bs-sep"></div>
+        <div class="bs-stat">
+            <div class="bs-val" style="color:${totalOptPnl >= 0 ? 'var(--green)' : 'var(--red)'}">${totalOptPnl >= 0 ? '+' : ''}$${totalOptPnl.toFixed(0)}</div>
+            <div class="bs-lbl">Options P&L (1 contract)</div>
+        </div>
         ${totalFiltered > 0 ? `<div class="bs-stat"><div class="bs-val" style="color:var(--muted)">${totalFiltered}</div><div class="bs-lbl">Filtered</div></div>` : ''}
         ${bestTicker  ? `<div class="bs-stat"><div class="bs-val" style="color:var(--green);font-size:15px">${bestTicker.ticker}</div><div class="bs-lbl">Best (+${bestTicker.expectancy}%)</div></div>` : ''}
         ${worstTicker ? `<div class="bs-stat"><div class="bs-val" style="color:var(--red);font-size:15px">${worstTicker.ticker}</div><div class="bs-lbl">Worst (${worstTicker.expectancy}%)</div></div>` : ''}
@@ -474,6 +501,7 @@ function renderBatch(results, days) {
                 <span class="bt-val" style="color:${positive ? '#3fb950' : '#f85149'}">${d.expectancy >= 0 ? '+' : ''}${d.expectancy}%</span>
             </div>
             <div class="bt-row"><span>Avg Win</span><span class="bt-val c-green">+${(d.avg_win_pct||0).toFixed(2)}%</span></div>
+            ${d.opt_total_pnl ? `<div class="bt-row"><span>Opt P&L</span><span class="bt-val" style="color:${d.opt_total_pnl >= 0 ? '#3fb950' : '#f85149'}">${d.opt_total_pnl >= 0 ? '+' : ''}$${d.opt_total_pnl.toFixed(0)}</span></div>` : ''}
         </div>`;
     }).join('');
 }
