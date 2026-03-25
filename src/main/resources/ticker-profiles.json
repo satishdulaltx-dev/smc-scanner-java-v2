@@ -34,13 +34,11 @@
     },
     {
       "ticker": "HOOD",
-      "skip": true,
-      "skipReason": "0% WR 90d (-2.37% expectancy) despite minConf=80. No consistent intraday edge.",
       "minConfidence": 80,
       "minFvgPct": 0.0012,
       "dispAtrMult": 1.7,
       "minVolMult": 2.0,
-      "note": "skip=true Mar 2026."
+      "note": "Speculative fintech — only fire on very high-quality setups"
     },
     {
       "ticker": "AMZN",
@@ -87,10 +85,8 @@
     },
     {
       "ticker": "ABNB",
-      "skip": true,
-      "skipReason": "0% WR 90d (-0.92% expectancy). Was 60% WR historically but no edge in current regime.",
       "minConfidence": 62,
-      "note": "skip=true Mar 2026."
+      "note": "Strong performer historically — keep in watchlist"
     },
     {
       "ticker": "SNAP",
