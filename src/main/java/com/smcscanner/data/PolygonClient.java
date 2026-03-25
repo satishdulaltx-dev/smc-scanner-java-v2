@@ -98,7 +98,11 @@ public class PolygonClient {
         if (apiKey == null || apiKey.isBlank()) { log.warn("POLYGON_API_KEY not set for {}", ticker); return new ArrayList<>(); }
         String to   = LocalDate.now(ZoneOffset.UTC).format(DateTimeFormatter.ISO_LOCAL_DATE);
         String from = LocalDate.now(ZoneOffset.UTC).minusDays(lookbackDays).format(DateTimeFormatter.ISO_LOCAL_DATE);
-        String url  = String.format("https://api.polygon.io/v2/aggs/ticker/%s/range/%s/%s/%s/%s?adjusted=true&sort=asc&limit=%d&apiKey=%s",
+        // Use sort=desc so Polygon returns the MOST RECENT `limit` bars first,
+        // then reverse to restore chronological order. Using sort=asc with a wide
+        // lookback window returns the OLDEST bars (e.g. 90-day limit over 180-day
+        // window returns bars from 90–180 days ago, not the last 90 days).
+        String url  = String.format("https://api.polygon.io/v2/aggs/ticker/%s/range/%s/%s/%s/%s?adjusted=true&sort=desc&limit=%d&apiKey=%s",
                 ticker, tf[0], tf[1], from, to, limit, apiKey);
         try (Response resp = http.newCall(new Request.Builder().url(url).build()).execute()) {
             if (!resp.isSuccessful() || resp.body() == null) return new ArrayList<>();
@@ -112,6 +116,7 @@ public class PolygonClient {
                         .low(bar.get("l").asDouble()).close(bar.get("c").asDouble())
                         .volume(bar.get("v").asDouble()).build());
             }
+            java.util.Collections.reverse(bars); // restore chronological order
             return bars;
         } catch (Exception e) { log.error("Polygon error {}: {}", ticker, e.getMessage()); return new ArrayList<>(); }
     }
