@@ -170,6 +170,19 @@
       "ticker": "PLTR",
       "strategyType": "breakout",
       "note": "Volatile defense/AI — ORB breakout"
+    },
+    {
+      "ticker": "TSLA",
+      "minConfidence": 95,
+      "minFvgPct": 0.0015,
+      "dispAtrMult": 2.0,
+      "note": "0% WR 90d at avg conf=94. Musk-news driven. Only fire on extreme quality. Flow gate will block most trades."
+    },
+    {
+      "ticker": "AMD",
+      "minConfidence": 90,
+      "minFvgPct": 0.0012,
+      "note": "0% WR 90d. Semiconductor moves with NVDA/macro. Tight filters, flow gate should block conflicting trades."
     }
   ]
 }

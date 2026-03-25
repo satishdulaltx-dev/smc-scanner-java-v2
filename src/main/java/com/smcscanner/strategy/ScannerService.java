@@ -220,14 +220,26 @@ public class ScannerService {
                     s = sb.build();
                 }
 
-                setTs(ticker,"long".equals(s.getDirection())?"setup-long":"setup-short",s.getDirection(),s.getConfidence(),
-                    String.format("ENTRY %s | Score %d | $%.2f",s.getDirection().toUpperCase(),s.getConfidence(),s.getEntry()));
-                if (s.getConfidence() >= effectiveMinConf && !dedup.isDuplicate(ticker,s.getDirection(),s.getEntry())) {
-                    log.info("INTRADAY ALERT {} {} conf={} entry={} adj=news{}/ctx{}/qual{}",
-                            ticker, s.getDirection().toUpperCase(), s.getConfidence(), s.getEntry(), newsAdj, ctxAdj, qualityAdj);
-                    discord.sendSetupAlert(s, sentiment, context); dedup.markSent(ticker,s.getDirection(),s.getEntry());
-                } else if (s.getConfidence() < effectiveMinConf) {
-                    log.debug("{} LOW_CONF conf={} min={} adj=news{}/ctx{}/qual{}", ticker, s.getConfidence(), effectiveMinConf, newsAdj, ctxAdj, qualityAdj);
+                // ── Options flow HARD GATE ─────────────────────────────────────
+                // Block the trade entirely if institutional flow conflicts with direction.
+                // Smart money betting the other way = don't fight it.
+                if (flow.hasData() && flow.isConflicting(s.getDirection())) {
+                    log.info("{} FLOW_BLOCKED: {} setup vs {} flow (P/C ratio {})",
+                            ticker, s.getDirection().toUpperCase(), flow.flowDirection(),
+                            String.format("%.2f", flow.pcRatioVol()));
+                    setTs(ticker, "idle", null, 0,
+                            "⛔ Blocked — options flow conflicts (" + flow.flowDirection() + ")");
+                    removeSetup(ticker);
+                } else {
+                    setTs(ticker,"long".equals(s.getDirection())?"setup-long":"setup-short",s.getDirection(),s.getConfidence(),
+                        String.format("ENTRY %s | Score %d | $%.2f",s.getDirection().toUpperCase(),s.getConfidence(),s.getEntry()));
+                    if (s.getConfidence() >= effectiveMinConf && !dedup.isDuplicate(ticker,s.getDirection(),s.getEntry())) {
+                        log.info("INTRADAY ALERT {} {} conf={} entry={} adj=news{}/ctx{}/qual{}/flow{}",
+                                ticker, s.getDirection().toUpperCase(), s.getConfidence(), s.getEntry(), newsAdj, ctxAdj, qualityAdj, flowAdj);
+                        discord.sendSetupAlert(s, sentiment, context); dedup.markSent(ticker,s.getDirection(),s.getEntry());
+                    } else if (s.getConfidence() < effectiveMinConf) {
+                        log.debug("{} LOW_CONF conf={} min={} adj=news{}/ctx{}/qual{}/flow{}", ticker, s.getConfidence(), effectiveMinConf, newsAdj, ctxAdj, qualityAdj, flowAdj);
+                    }
                 }
                 tracker.recordSetup(s); updateSetup(s);
             } else {
