@@ -64,6 +64,7 @@
         tbody tr.win-row     { border-left:3px solid var(--green); }
         tbody tr.loss-row    { border-left:3px solid var(--red); }
         tbody tr.timeout-row      { border-left:3px solid var(--yellow); }
+        tbody tr.be-stop-row      { border-left:3px solid #58d68d; }
         tbody tr.news-filtered-row { border-left:3px solid #8b949e; opacity:0.65; }
         tbody tr.ctx-filtered-row     { border-left:3px solid #6e40c9; opacity:0.65; }
         tbody tr.quality-filtered-row { border-left:3px solid #e36209; opacity:0.65; }
@@ -74,6 +75,7 @@
         .win-badge               { background:rgba(63,185,80,.15);   color:var(--green);  padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; }
         .loss-badge              { background:rgba(248,81,73,.15);   color:var(--red);    padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; }
         .timeout-badge           { background:rgba(210,153,34,.15);  color:var(--yellow); padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; }
+        .be-stop-badge           { background:rgba(88,214,141,.15);  color:#58d68d;       padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; }
         .news-filtered-badge     { background:rgba(139,148,158,.12); color:#8b949e;       padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; }
         .ctx-filtered-badge      { background:rgba(110,64,201,.12);  color:#9b6dff;       padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; }
         .quality-filtered-badge  { background:rgba(227,98,9,.12);    color:#e36209;       padding:2px 8px; border-radius:4px; font-size:11px; font-weight:600; }
@@ -307,7 +309,8 @@ function renderSingle(d) {
         <div class="stat-card"><div class="val" style="color:${exColor}">${d.expectancy >= 0 ? '+' : ''}${d.expectancy}%</div><div class="lbl">Expectancy / Trade</div></div>
         <div class="stat-card"><div class="val c-green">+${d.avg_win_pct.toFixed(2)}%</div><div class="lbl">Avg Win</div></div>
         <div class="stat-card"><div class="val c-red">-${d.avg_loss_pct.toFixed(2)}%</div><div class="lbl">Avg Loss</div></div>
-        ${d.timeouts > 0 ? `<div class="stat-card"><div class="val" style="color:var(--yellow)">${d.timeouts}</div><div class="lbl">Time Stops</div></div>` : ''}
+        ${d.timeouts > 0  ? `<div class="stat-card"><div class="val" style="color:var(--yellow)">${d.timeouts}</div><div class="lbl">Time Stops</div></div>` : ''}
+        ${d.be_stops  > 0 ? `<div class="stat-card"><div class="val" style="color:#58d68d">${d.be_stops}</div><div class="lbl">Breakeven Exits</div></div>` : ''}
         ${d.news_filtered > 0 ? `<div class="stat-card"><div class="val" style="color:#8b949e">${d.news_filtered}</div><div class="lbl">News Filtered</div></div>` : ''}
         ${d.ctx_filtered     > 0 ? `<div class="stat-card"><div class="val" style="color:#9b6dff">${d.ctx_filtered}</div><div class="lbl">RS/VIX Filtered</div></div>` : ''}
         ${d.quality_filtered > 0 ? `<div class="stat-card"><div class="val" style="color:#e36209">${d.quality_filtered}</div><div class="lbl">Quality Filtered</div></div>` : ''}
@@ -352,6 +355,7 @@ function renderSingle(d) {
                         : isNewsFiltered    ? 'news-filtered-row'
                         : t.outcome === 'WIN'     ? 'win-row'
                         : t.outcome === 'TIMEOUT' ? 'timeout-row'
+                        : t.outcome === 'BE_STOP' ? 'be-stop-row'
                         : 'loss-row';
         const badgeClass = isMultiFiltered   ? 'multi-filtered-badge'
                          : isQualityFiltered ? 'quality-filtered-badge'
@@ -359,6 +363,7 @@ function renderSingle(d) {
                          : isNewsFiltered    ? 'news-filtered-badge'
                          : t.outcome === 'WIN'     ? 'win-badge'
                          : t.outcome === 'TIMEOUT' ? 'timeout-badge'
+                         : t.outcome === 'BE_STOP' ? 'be-stop-badge'
                          : 'loss-badge';
         // Adjustment tags on confidence cell
         const newsTag  = t.news_adj  ? `<span class="adj-tag" title="${t.news_label||''}">${t.news_adj>0?'+':''}${t.news_adj}📰</span>` : '';

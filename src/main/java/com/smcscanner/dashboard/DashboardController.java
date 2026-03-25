@@ -377,6 +377,7 @@ public class DashboardController {
             resp.put("wins",          result.wins);
             resp.put("losses",        result.losses);
             resp.put("timeouts",      result.timeouts);
+            resp.put("be_stops",      result.beStops);
             resp.put("news_filtered", result.newsFiltered);
             resp.put("ctx_filtered",     result.ctxFiltered);
             resp.put("quality_filtered", result.qualityFiltered);

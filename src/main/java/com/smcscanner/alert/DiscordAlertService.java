@@ -74,7 +74,11 @@ public class DiscordAlertService {
             f("Take Profit",String.format("$%.4f (+%.2f%%)",s.getTakeProfit(),tpPct),true),
             f("R:R",        String.format("%.1f:1",s.rrRatio()),       true),
             f("Session",    s.getSession()!=null?s.getSession():"—",   true),
-            f("ATR",        String.format("$%.4f",s.getAtr()),         true)));
+            f("ATR",        String.format("$%.4f",s.getAtr()),         true),
+            f("🔒 Breakeven", String.format("Move SL → $%.4f once price hits $%.4f (1:1)",
+                    s.getEntry(),
+                    isLong ? s.getEntry() + Math.abs(s.getEntry()-s.getStopLoss())
+                           : s.getEntry() - Math.abs(s.getEntry()-s.getStopLoss())), false)));
 
         // ── News sentiment field ──────────────────────────────────────────────
         if (sentiment != null && sentiment.hasNews() && sentiment.label() != null) {
