@@ -1,6 +1,21 @@
 {
   "profiles": [
     {
+      "ticker": "BABA",
+      "skip": true,
+      "skipReason": "0% WR 6 consecutive losses in 30d — Chinese ADR, different market hours/dynamics, SMC 5m patterns unreliable."
+    },
+    {
+      "ticker": "GS",
+      "skip": true,
+      "skipReason": "0% WR 4 losses in 30d — investment bank moves on macro/Fed news, not intraday technical patterns."
+    },
+    {
+      "ticker": "UBER",
+      "skip": true,
+      "skipReason": "0% WR 3 losses in 30d — recent regime unfavorable, no consistent intraday SMC edge detected."
+    },
+    {
       "ticker": "GOOGL",
       "skip": true,
       "skipReason": "Mega-cap stable stock — SMC 5m FVG patterns unreliable (5.6% win rate over 500 days)",
@@ -9,11 +24,13 @@
     },
     {
       "ticker": "RIVN",
+      "skip": true,
+      "skipReason": "0% WR 3 losses in 30d despite minConf=82 — no edge detected. EV regime unfavorable.",
       "minConfidence": 82,
       "minFvgPct": 0.0014,
       "dispAtrMult": 1.8,
       "minVolMult": 2.0,
-      "note": "Speculative EV stock — high noise, requires very strong displacement + large FVG"
+      "note": "skip=true Mar 2026. Was speculative EV with high noise. Revisit when trend stabilises."
     },
     {
       "ticker": "HOOD",
@@ -31,9 +48,11 @@
     },
     {
       "ticker": "MSTR",
+      "skip": true,
+      "skipReason": "0% WR 2 losses in 30d despite minConf=75 — Bitcoin proxy moves on BTC news, not SMC patterns.",
       "minConfidence": 75,
       "minFvgPct": 0.0010,
-      "note": "Bitcoin proxy — extreme volatility, only strongest setups"
+      "note": "skip=true Mar 2026. Revisit if BTC correlation weakens or SMC edge returns."
     },
     {
       "ticker": "NIO",
@@ -71,10 +90,8 @@
     },
     {
       "ticker": "SNAP",
-      "skip": true,
-      "skipReason": "Regime change — 6 consecutive SHORT losses Jan 2026 despite conf=100. SMC patterns valid but news-driven reversals override technical setups. Re-enable when trend stabilises.",
-      "minConfidence": 62,
-      "note": "Was 58.3% WR historically. Now 14.3% WR 90d (-0.77% expectancy). skip=true until performance recovers."
+      "minConfidence": 68,
+      "note": "Re-enabled Mar 2026. Jan regime change cleared — 50% WR +0.15% expectancy in last 30d. Raised minConf from 62→68 as guard."
     },
     {
       "ticker": "MARA",
