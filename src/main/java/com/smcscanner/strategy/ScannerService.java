@@ -254,7 +254,19 @@ public class ScannerService {
                     if (!sr.setups().isEmpty()) {
                         TradeSetup sw=sr.setups().get(0);
                         String swKey="swing_"+ticker;
-                        if (sw.getConfidence()>=effectiveMinConf
+                        // Staleness guard: current price must be within 1.5×daily ATR of the entry zone.
+                        // Daily setups detected from historical bars may have entry zones that are no longer
+                        // reachable (e.g. NVDA SHORT entry $190 when price is already at $178). Skip those.
+                        double swingCurrentPrice = bars.isEmpty() ? 0 : bars.get(bars.size()-1).getClose();
+                        double maxEntryDrift = dailyAtr * 1.5;
+                        boolean entryReachable = swingCurrentPrice > 0
+                                && Math.abs(swingCurrentPrice - sw.getEntry()) <= maxEntryDrift;
+                        if (!entryReachable) {
+                            log.info("SWING STALE {} {} entry={} currentPrice={} drift={} > 1.5×ATR({}), skipping",
+                                    ticker, sw.getDirection(), sw.getEntry(), swingCurrentPrice,
+                                    String.format("%.2f", Math.abs(swingCurrentPrice - sw.getEntry())),
+                                    String.format("%.2f", dailyAtr));
+                        } else if (sw.getConfidence()>=effectiveMinConf
                                 && !dedup.isDuplicate(swKey,sw.getDirection(),sw.getEntry(),72*60)) {
                             log.info("SWING ALERT {} {} conf={} entry={}", ticker, sw.getDirection().toUpperCase(), sw.getConfidence(), sw.getEntry());
                             discord.sendSwingAlert(sw);
