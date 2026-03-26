@@ -50,6 +50,8 @@
         .ticker-card .name { font-weight: 700; font-size: 13px; }
         .ticker-card .status { font-size: 10px; color: var(--muted); margin-top: 2px; text-transform: uppercase; letter-spacing: .6px; }
         .ticker-card .msg   { font-size: 10px; color: var(--muted); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .tv-badge { font-size: 9px; color: var(--muted); padding: 1px 5px; border: 1px solid var(--border); border-radius: 3px; cursor: pointer; flex-shrink: 0; }
+        .tv-badge:hover { color: var(--blue); border-color: var(--blue); }
         .status-long  { border-left: 3px solid var(--green) !important; }
         .status-short { border-left: 3px solid var(--red) !important; }
         .status-scanning { border-left: 3px solid var(--yellow) !important; }
@@ -314,10 +316,8 @@ function sendEodDiscord() {
            class="ticker-card">
             <div style="display:flex;align-items:center;justify-content:space-between;">
                 <div class="name" th:text="${t.ticker}">TICKER</div>
-                <a th:href="${t.tvUrl}" target="_blank" rel="noopener noreferrer"
-                   onclick="event.stopPropagation()"
-                   style="font-size:9px;color:var(--muted);text-decoration:none;padding:1px 5px;border:1px solid var(--border);border-radius:3px;line-height:1.6;"
-                   title="Open on TradingView">TV↗</a>
+                <span th:onclick="'event.stopPropagation(); window.open(\'' + ${t.tvUrl} + '\',\'_blank\')'"
+                      class="tv-badge">TV↗</span>
             </div>
             <div class="status" th:text="${t.status.toUpperCase()}">IDLE</div>
             <div class="msg" th:text="${t.phaseMsg}">Waiting...</div>
