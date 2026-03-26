@@ -257,6 +257,19 @@ public class ScannerService {
                     s = sb.build();
                 }
 
+                // ── Confidence dead-zone block (70-74) ───────────────────────────
+                // 90-day backtest shows confidence 70-74 = 13.3% WR (-0.809% avg P&L)
+                // across 15 decided trades — worse than random. This range is occupied by:
+                //   • ORB setups that almost-but-not-quite passed confirmation checks
+                //   • SMC setups where news/quality adjustments dragged a 90 down to ~72
+                // Neither sub-group has meaningful edge. Hard-block saves premium waste.
+                if (!isC && s.getConfidence() >= 70 && s.getConfidence() <= 74) {
+                    log.info("{} CONF_DEAD_ZONE: conf={} (70-74 band = 13% WR — blocking)", ticker, s.getConfidence());
+                    setTs(ticker, "idle", null, 0,
+                            "⏸ Confidence 70-74 dead zone (13% WR in 90d) — insufficient edge");
+                    return;
+                }
+
                 // ── Options flow HARD GATE ─────────────────────────────────────
                 // Only block when UNUSUAL institutional activity conflicts (vol > 3× OI).
                 // Normal directional disagreement already penalised by -10 conf above.

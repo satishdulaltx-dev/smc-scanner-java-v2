@@ -24,21 +24,21 @@
     },
     {
       "ticker": "RIVN",
-      "skip": true,
-      "skipReason": "0% WR 3 losses in 30d despite minConf=82 — no edge detected. EV regime unfavorable.",
-      "minConfidence": 82,
-      "minFvgPct": 0.0014,
-      "dispAtrMult": 1.8,
-      "minVolMult": 2.0,
-      "note": "skip=true Mar 2026. Was speculative EV with high noise. Revisit when trend stabilises."
+      "minConfidence": 78,
+      "minFvgPct": 0.0010,
+      "dispAtrMult": 1.5,
+      "minVolMult": 1.8,
+      "note": "RESTORED Mar 2026: 90d backtest shows 58.3% WR +0.88% expectancy — one of the best performers. Skip was based on stale 30d data from Polygon sort bug era."
     },
     {
       "ticker": "HOOD",
+      "skip": true,
+      "skipReason": "20% WR 90d (-1.58% expectancy, 6 trades). Speculative fintech — high noise, no consistent SMC edge.",
       "minConfidence": 80,
       "minFvgPct": 0.0012,
       "dispAtrMult": 1.7,
       "minVolMult": 2.0,
-      "note": "Speculative fintech — only fire on very high-quality setups"
+      "note": "skip=true Mar 2026. Was triggered too often with losses. Revisit if 90d expectancy turns positive."
     },
     {
       "ticker": "AMZN",
@@ -112,10 +112,10 @@
     {
       "ticker": "AAPL",
       "strategyType": "smc",
-      "minConfidence": 65,
+      "minConfidence": 80,
       "minFvgPct": 0.0004,
       "dispAtrMult": 1.3,
-      "note": "Switched keylevel→SMC Mar 2026: keylevel produced 0 signals (levels were stale from Polygon sort bug). SMC with low FVG threshold suits AAPL's tight intraday range (~$5 ATR)."
+      "note": "Tightened Mar 2026: 90d shows 27.3% WR -0.32% exp — raised minConf 65→80. AAPL tight range, only fire on strong high-quality SMC sweeps. User favorite."
     },
     {
       "ticker": "MSFT",
@@ -126,10 +126,12 @@
     },
     {
       "ticker": "META",
+      "skip": true,
+      "skipReason": "25% WR 90d (-0.49% expectancy, 13 trades). Mega-cap stable stock — SMC patterns unreliable. Moves on macro/earnings, not intraday sweeps.",
       "strategyType": "smc",
       "minConfidence": 65,
       "minFvgPct": 0.0006,
-      "note": "Switched keylevel→SMC Mar 2026: keylevel 0 trades 30d (not at key levels). SMC fires on any sweep+FVG."
+      "note": "skip=true Mar 2026. 90d backtest confirmed no edge. Revisit after earnings-driven volatility regime."
     },
     {
       "ticker": "V",
@@ -158,10 +160,10 @@
     {
       "ticker": "NVDA",
       "strategyType": "smc",
-      "minConfidence": 62,
+      "minConfidence": 80,
       "minFvgPct": 0.0005,
       "dispAtrMult": 1.3,
-      "note": "Loosened Mar 2026: was minConf=65/fvg=0.0007/disp=1.5 → 0 signals. NVDA ATR ~$5-7, needs lower FVG threshold. Sort bug fix now gives correct key levels."
+      "note": "Tightened Mar 2026: 90d shows 31.3% WR -0.27% exp overall. Only fire on high-quality setups (80+). User favorite — kept in watchlist."
     },
     {
       "ticker": "BA",
@@ -171,11 +173,11 @@
     },
     {
       "ticker": "ROKU",
-      "minConfidence": 62,
-      "minFvgPct": 0.0008,
-      "dispAtrMult": 1.3,
+      "minConfidence": 92,
+      "minFvgPct": 0.0012,
+      "dispAtrMult": 1.8,
       "strategyType": "smc",
-      "note": "Switched breakout→SMC Mar 2026: 0 signals on ORB. ROKU is volatile enough for SMC sweeps."
+      "note": "Tightened Mar 2026: 0% WR 90d (-1.93% exp, 5 trades) — extremely bad. User favorite so kept in watchlist, but threshold set near-impossible (92) to de-facto block until 90d WR improves. Revisit with different strategy."
     },
     {
       "ticker": "PLTR",
@@ -188,16 +190,26 @@
     {
       "ticker": "TSLA",
       "strategyType": "smc",
-      "minConfidence": 75,
-      "minFvgPct": 0.0008,
-      "dispAtrMult": 1.5,
-      "note": "Relaxed Mar 2026: minConf 95→75, fvg 0.0015→0.0008, disp 2.0→1.5. Old thresholds so tight they produced 0 signals. TSLA ATR ~$10-15, options flow gate handles Musk-news noise."
+      "minConfidence": 85,
+      "minFvgPct": 0.0010,
+      "dispAtrMult": 1.6,
+      "note": "Tightened Mar 2026: 90d shows 33.3% WR -0.43% exp. Raised minConf 75→85 — only ultra-high-quality setups. TSLA moves on Musk news; require very clean SMC setup. User favorite."
     },
     {
       "ticker": "AMD",
+      "skip": true,
+      "skipReason": "20% WR 90d (-0.39% expectancy, 6 trades). Semiconductor that tracks NVDA/SOXX — SMC 5m edge absent. Was at minConf=90 with still negative results.",
       "minConfidence": 90,
       "minFvgPct": 0.0012,
-      "note": "0% WR 90d. Semiconductor moves with NVDA/macro. Tight filters, flow gate should block conflicting trades."
+      "note": "skip=true Mar 2026. Revisit if sector decouples from NVDA or SMC patterns improve."
+    },
+    {
+      "ticker": "SMCI",
+      "skip": true,
+      "skipReason": "28.6% WR 90d (-0.53% expectancy, 20 trades). High-volume semiconductor but SMC intraday patterns unreliable. Moves on AI narrative/supply-chain news.",
+      "minConfidence": 80,
+      "minFvgPct": 0.0010,
+      "note": "skip=true Mar 2026. 20 trades is statistically significant — confirmed no edge."
     }
   ]
 }
