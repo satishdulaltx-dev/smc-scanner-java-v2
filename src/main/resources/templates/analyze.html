@@ -123,10 +123,12 @@
         .level-badge.swpt  { background: rgba(227,179,65,.2); color: var(--orange); }
 
         /* ── asOf timestamp ── */
-        .as-of-bar { display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--muted); margin-bottom: 14px; }
+        .as-of-bar { display: flex; align-items: center; gap: 10px; font-size: 11px; color: var(--muted); margin-bottom: 14px; flex-wrap: wrap; }
         .as-of-bar .as-of-ts { color: var(--blue); font-weight: 600; }
         .btn-refresh { background: none; border: 1px solid var(--border); color: var(--muted); border-radius: 5px; padding: 3px 10px; font-size: 10px; cursor: pointer; transition: all .2s; }
         .btn-refresh:hover { border-color: var(--blue); color: var(--blue); }
+        .auto-refresh-countdown { font-size: 10px; color: var(--muted); }
+        .auto-refresh-countdown.soon { color: var(--yellow); }
 
         /* ── Filters ── */
         .filter-rows { display: flex; flex-direction: column; gap: 8px; }
@@ -264,6 +266,47 @@ const input    = document.getElementById('tickerInput');
 const wlSelect = document.getElementById('watchlistSelect');
 const btn      = document.getElementById('analyzeBtn');
 
+// ── Auto-refresh every 2 minutes ────────────────────────────────────
+const AUTO_REFRESH_SEC = 120;
+let autoRefreshTimer   = null;
+let countdownInterval  = null;
+let secondsLeft        = 0;
+
+function startAutoRefresh() {
+    clearTimeout(autoRefreshTimer);
+    clearInterval(countdownInterval);
+    secondsLeft = AUTO_REFRESH_SEC;
+
+    // live countdown display
+    countdownInterval = setInterval(() => {
+        secondsLeft--;
+        const el = document.getElementById('refresh-countdown');
+        if (!el) return;
+        if (secondsLeft <= 0) {
+            el.textContent = '';
+            return;
+        }
+        const m = Math.floor(secondsLeft / 60);
+        const s = secondsLeft % 60;
+        el.textContent = `· auto-refreshing in ${m > 0 ? m + 'm ' : ''}${s}s`;
+        el.className = 'auto-refresh-countdown' + (secondsLeft <= 20 ? ' soon' : '');
+    }, 1000);
+
+    // fire the actual refresh
+    autoRefreshTimer = setTimeout(() => {
+        const ticker = input.value.trim().toUpperCase();
+        if (ticker) runAnalysis();   // runAnalysis restarts the cycle
+    }, AUTO_REFRESH_SEC * 1000);
+}
+
+function manualRefresh() {
+    clearTimeout(autoRefreshTimer);
+    clearInterval(countdownInterval);
+    const el = document.getElementById('refresh-countdown');
+    if (el) el.textContent = '';
+    runAnalysis();
+}
+
 // ── TradingView chart ────────────────────────────────────────────────
 let tvWidget = null;
 let currentInterval = '15';
@@ -352,6 +395,7 @@ function runAnalysis() {
             document.getElementById('results').innerHTML = renderResults(data);
             document.getElementById('results').style.display = 'block';
             btn.disabled = false;
+            startAutoRefresh();   // restart 2-min cycle after each successful fetch
         })
         .catch(err => {
             document.getElementById('loading').style.display = 'none';
@@ -359,6 +403,7 @@ function runAnalysis() {
                 `<div class="error-card">❌ Request failed: ${err.message}</div>`;
             document.getElementById('results').style.display = 'block';
             btn.disabled = false;
+            startAutoRefresh();   // retry cycle even on error
         });
 }
 
@@ -640,7 +685,8 @@ function renderResults(d) {
 
         <div class="as-of-bar">
             <span>Data as of <span class="as-of-ts">${d.asOf || '—'}</span></span>
-            <button class="btn-refresh" onclick="runAnalysis()">🔄 Refresh</button>
+            <button class="btn-refresh" onclick="manualRefresh()">🔄 Refresh</button>
+            <span class="auto-refresh-countdown" id="refresh-countdown"></span>
         </div>
 
         <div class="nar-structure">${nar.structure || ''}</div>

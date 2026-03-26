@@ -241,6 +241,10 @@ function sendEodDiscord() {
                     <span class="ql-desc">Live watchlist &amp; setups</span>
                 </div>
                 <div class="ql-row">
+                    <a href="/analyze" class="ql-link">/analyze</a>
+                    <span class="ql-desc">Deep ticker analysis (click any card)</span>
+                </div>
+                <div class="ql-row">
                     <a href="/backtest" class="ql-link" target="_blank">/backtest</a>
                     <span class="ql-desc">Historical strategy replay</span>
                 </div>
@@ -305,12 +309,16 @@ function sendEodDiscord() {
     </div>
     <div class="ticker-grid">
         <a th:each="t : ${watchlist}"
-           th:href="${t.tvUrl}"
-           target="_blank"
-           rel="noopener noreferrer"
+           th:href="'/analyze?ticker=' + ${t.ticker}"
            th:classappend="${t.status == 'setup-long'} ? 'status-long' : (${t.status == 'setup-short'} ? 'status-short' : (${t.status == 'scanning'} ? 'status-scanning' : ''))"
            class="ticker-card">
-            <div class="name" th:text="${t.ticker}">TICKER</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+                <div class="name" th:text="${t.ticker}">TICKER</div>
+                <a th:href="${t.tvUrl}" target="_blank" rel="noopener noreferrer"
+                   onclick="event.stopPropagation()"
+                   style="font-size:9px;color:var(--muted);text-decoration:none;padding:1px 5px;border:1px solid var(--border);border-radius:3px;line-height:1.6;"
+                   title="Open on TradingView">TV↗</a>
+            </div>
             <div class="status" th:text="${t.status.toUpperCase()}">IDLE</div>
             <div class="msg" th:text="${t.phaseMsg}">Waiting...</div>
         </a>
@@ -335,7 +343,11 @@ function sendEodDiscord() {
             </thead>
             <tbody>
             <tr th:each="s : ${setups}">
-                <td th:text="${s.ticker}">—</td>
+                <td>
+                    <a th:href="'/analyze?ticker=' + ${s.ticker}"
+                       style="color:var(--blue);font-weight:700;text-decoration:none;"
+                       th:text="${s.ticker}">—</a>
+                </td>
                 <td>
                     <span th:if="${s.direction == 'long'}"  class="dir-long">▲ LONG</span>
                     <span th:if="${s.direction == 'short'}" class="dir-short">▼ SHORT</span>
