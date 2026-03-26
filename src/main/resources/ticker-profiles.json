@@ -40,9 +40,9 @@
     },
     {
       "ticker": "AMZN",
+      "strategyType": "vwap",
       "minConfidence": 65,
-      "minFvgPct": 0.0005,
-      "note": "Relaxed Mar 2026: was minConf=75/fvg=0.0008 → 1 trade in 30d. AMZN moves enough to warrant lower threshold."
+      "note": "Switched SMC→VWAP Mar 2026: AMZN is institutionally driven, mean-reverting intraday. VWAP reversion captures fades off over-extension better than SMC sweeps."
     },
     {
       "ticker": "MSTR",
@@ -117,10 +117,9 @@
     },
     {
       "ticker": "MSFT",
-      "strategyType": "smc",
+      "strategyType": "vwap",
       "minConfidence": 65,
-      "minFvgPct": 0.0006,
-      "note": "Switched keylevel→SMC Mar 2026: keylevel 0 trades 30d. SMC fires on sweep+FVG displacement."
+      "note": "Switched SMC→VWAP Mar 2026: MSFT is slow mega-cap, mean-reverting. VWAP fades its over-extensions better than SMC sweeps. SPY VWAP runs at 57% WR — similar profile."
     },
     {
       "ticker": "META",

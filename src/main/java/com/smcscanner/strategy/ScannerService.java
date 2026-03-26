@@ -93,6 +93,37 @@ public class ScannerService {
                     if (bars15 != null && bars15.size() >= 10) bias15m = mtf.getHtfBias(bars15);
                 } catch (Exception e) { log.debug("{} 15m bias error: {}", ticker, e.getMessage()); }
             }
+
+            // ── Correlation bias override ─────────────────────────────────────
+            // For tickers that are driven by a correlated asset, replace the
+            // stock's own 15m bias with the correlated asset's 15m bias.
+            // The 15m alignment check below then blocks conflicting directions
+            // automatically — no extra code path needed.
+            //
+            // COIN / MARA → BTC 15m  (crypto proxies, ~90% intraday correlation)
+            // AMD  / SMCI → NVDA 15m (AI/semi cluster moves together)
+            //
+            // Only override when the correlated asset has a clear directional bias;
+            // "neutral" keeps the stock's own 15m bias so we don't over-block.
+            String correlatedAsset = null;
+            if (!isC) {
+                if (ticker.equals("COIN") || ticker.equals("MARA"))        correlatedAsset = "X:BTCUSD";
+                else if (ticker.equals("AMD") || ticker.equals("SMCI"))    correlatedAsset = "NVDA";
+            }
+            if (correlatedAsset != null) {
+                try {
+                    List<OHLCV> corrBars = client.getBars(correlatedAsset, "15m", 60);
+                    if (corrBars != null && corrBars.size() >= 10) {
+                        String corrBias = mtf.getHtfBias(corrBars);
+                        if (!"neutral".equals(corrBias)) {
+                            // Only override when correlated asset has a clear trend
+                            bias15m = corrBias;
+                            log.info("{} correlation override: using {} 15m bias={} instead of own bias",
+                                    ticker, correlatedAsset, corrBias);
+                        }
+                    }
+                } catch (Exception e) { log.debug("{} correlation bias error: {}", ticker, e.getMessage()); }
+            }
             try {
                 dailyBars=client.getBars(ticker,"1d",100); // 100 bars: enough for swing detection + ATR
                 if (dailyBars!=null&&dailyBars.size()>=5) {
