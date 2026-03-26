@@ -490,6 +490,28 @@ public class AnalysisService {
         if (ctx != MarketContext.NONE && ctx.rsScore() > 0.03) bullSignals++;
         else if (ctx != MarketContext.NONE && ctx.rsScore() < -0.03) bearSignals++;
 
+        // Day change momentum: up >0.3% = bullish lean, down >0.3% = bearish lean
+        if (changePct > 0.3) bullSignals++;
+        else if (changePct < -0.3) bearSignals++;
+
+        // Intraday momentum from levels: fading from today's high = bearish; near today's high = bullish
+        double todayHighLevel = levels.stream()
+                .filter(lv -> Boolean.TRUE.equals(lv.get("intraday"))
+                        && lv.get("label") != null
+                        && lv.get("label").toString().contains("Today's High"))
+                .mapToDouble(lv -> (double) lv.get("price")).findFirst().orElse(0);
+        double todayLowLevel = levels.stream()
+                .filter(lv -> Boolean.TRUE.equals(lv.get("intraday"))
+                        && lv.get("label") != null
+                        && lv.get("label").toString().contains("Today's Low"))
+                .mapToDouble(lv -> (double) lv.get("price")).findFirst().orElse(0);
+        double pctBelowTodayHigh = todayHighLevel > 0 ? (todayHighLevel - price) / price * 100 : 0;
+        double pctAboveTodayLow  = todayLowLevel  > 0 ? (price - todayLowLevel)  / price * 100 : 0;
+        if      (pctBelowTodayHigh > 1.0) bearSignals++; // Fading >1% from session high
+        else if (pctBelowTodayHigh < 0.3 && todayHighLevel > 0) bullSignals++; // At/near session high
+        if      (pctAboveTodayLow > 2.0)  bullSignals++;  // Bounced strongly off session low
+        else if (pctAboveTodayLow < 0.5 && todayLowLevel > 0) bearSignals++; // Pressing on session low
+
         String overallBias = bullSignals > bearSignals + 1 ? "bullish"
                            : bearSignals > bullSignals + 1 ? "bearish" : "mixed";
 
@@ -534,15 +556,20 @@ public class AnalysisService {
         // ── Long case ────────────────────────────────────────────────────────
         String longCase;
         boolean longLikely = bullSignals >= bearSignals && distToRes > 0.8;
+        // Use today's high as first resistance target if it is closer than the macro level
+        double intradayRes = (todayHighLevel > price) ? todayHighLevel : nearestRes;
+        String intradayResStr = String.format("%.2f", intradayRes);
+        String twoTargets = intradayRes < nearestRes
+                ? "First target $" + intradayResStr + " (today's high), then $" + String.format("%.2f", nearestRes)
+                : "Target $" + intradayResStr;
         if ("bearish".equals(biasDaily) && "bearish".equals(bias1h)) {
             longCase = "LOW probability. Daily and 1H are both bearish — any bounce is fighting the dominant trend. A long would only make sense as a short-term scalp IF price sweeps the $"
                     + String.format("%.2f", nearestSup) + " support, shows a strong bullish displacement candle, and reclaims $"
-                    + String.format("%.2f", price) + " with volume. Target would be the $" + String.format("%.2f", nearestRes) + " resistance zone.";
+                    + String.format("%.2f", price) + " with volume. " + twoTargets + ".";
         } else if ("bullish".equals(biasDaily) && bearSignals > bullSignals) {
             longCase = "MEDIUM probability — this is a pullback in an uptrend. A long is valid if price holds above $"
                     + String.format("%.2f", nearestSup) + " (support) and shows a sweep + bullish displacement back above $"
-                    + String.format("%.2f", price) + ". Target: $" + String.format("%.2f", nearestRes) + ". "
-                    + resComment;
+                    + String.format("%.2f", price) + ". " + twoTargets + ". " + resComment;
         } else if (distToRes < 0.6) {
             longCase = "CAUTION — price is " + String.format("%.1f", distToRes) + "% from resistance at $"
                     + String.format("%.2f", nearestRes) + ". Buying here means buying into a wall. "
@@ -551,16 +578,26 @@ public class AnalysisService {
         } else {
             longCase = "VIABLE. " + resComment + " For a long entry, need: sweep of $"
                     + String.format("%.2f", nearestSup) + " support → strong bullish displacement candle → SMC FVG retest. "
-                    + "Target $" + String.format("%.2f", nearestRes) + ". SL below $" + String.format("%.2f", nearestSup - atr * 0.3) + ".";
+                    + twoTargets + ". SL below $" + String.format("%.2f", nearestSup - atr * 0.3) + ".";
         }
 
         // ── Short case ───────────────────────────────────────────────────────
         String shortCase;
         boolean shortLikely = bearSignals >= bullSignals && distToSup > 0.8;
+        boolean fadingFromHigh = todayHighLevel > 0 && pctBelowTodayHigh > 0.8;
+        // Bounce-entry level: nearest intraday pivot or today's high (whichever is closer above price)
+        double bounceTarget = (todayHighLevel > price) ? Math.min(nearestRes, todayHighLevel) : nearestRes;
         if ("bullish".equals(biasDaily) && "bullish".equals(bias1h)) {
             shortCase = "LOW probability. Daily and 1H are both bullish — shorting here is fighting the trend. Only valid as a scalp if price sweeps $"
                     + String.format("%.2f", nearestRes) + " (liquidity grab), shows a sharp bearish rejection candle, and breaks back below $"
                     + String.format("%.2f", price) + ". Target $" + String.format("%.2f", nearestSup) + ".";
+        } else if (fadingFromHigh) {
+            shortCase = "VIABLE — already fading " + String.format("%.1f", pctBelowTodayHigh) + "% from today's high at $"
+                    + String.format("%.2f", todayHighLevel) + ". "
+                    + "Entry: wait for a weak bounce toward $" + String.format("%.2f", bounceTarget)
+                    + " showing a bearish rejection candle (upper wick, lower close). "
+                    + "Target $" + String.format("%.2f", nearestSup) + ". SL above today's high $"
+                    + String.format("%.2f", todayHighLevel + atr * 0.3) + ".";
         } else if ("bearish".equals(biasDaily) && bullSignals > bearSignals) {
             shortCase = "MEDIUM probability — this is a bounce in a downtrend. A short makes sense if price rallies into the $"
                     + String.format("%.2f", nearestRes) + " resistance zone and fails with a bearish displacement. "
@@ -589,14 +626,22 @@ public class AnalysisService {
 
         // ── Key watch level ──────────────────────────────────────────────────
         String keyWatch;
-        if (Math.abs(price - nearestSup) < Math.abs(nearestRes - price)) {
+        // Prefer today's intraday high as the critical resistance if it's closer than the macro level
+        double criticalRes = (todayHighLevel > price && todayHighLevel < nearestRes) ? todayHighLevel : nearestRes;
+        if (Math.abs(price - nearestSup) < Math.abs(criticalRes - price)) {
             keyWatch = "$" + String.format("%.2f", nearestSup) + " (support) is the critical level. "
                     + "Holding above it = long bias. Breaking below it = short bias toward $"
                     + String.format("%.2f", nearestSup - atr * 1.5) + ".";
+            if (pctBelowTodayHigh > 0.8) {
+                keyWatch += " Note: price is " + String.format("%.1f", pctBelowTodayHigh)
+                        + "% off today's high of $" + String.format("%.2f", todayHighLevel)
+                        + " — short-term momentum is bearish.";
+            }
         } else {
-            keyWatch = "$" + String.format("%.2f", nearestRes) + " (resistance) is the critical level. "
+            String resLabel = (criticalRes == todayHighLevel) ? "today's session high" : "resistance";
+            keyWatch = "$" + String.format("%.2f", criticalRes) + " (" + resLabel + ") is the critical level. "
                     + "Breaking above it with a strong close = long continuation to $"
-                    + String.format("%.2f", nearestRes + atr * 1.5) + ". "
+                    + String.format("%.2f", criticalRes + atr * 1.5) + ". "
                     + "Rejecting here = short toward $" + String.format("%.2f", nearestSup) + ".";
         }
 
