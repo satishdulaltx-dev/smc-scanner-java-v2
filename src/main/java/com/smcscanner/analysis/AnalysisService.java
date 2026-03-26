@@ -146,8 +146,10 @@ public class AnalysisService {
                 }
             }
 
-            // ── Compute key levels from daily bars ───────────────────────────
-            List<Map<String, Object>> levels = computeKeyLevels(bars1d, price);
+            // ── Compute key levels — intraday (15m) + daily ──────────────────
+            // 15m levels capture today's sweeps and recent session structure.
+            // Daily levels provide the macro context (weekly swing points).
+            List<Map<String, Object>> levels = computeKeyLevels(bars15m, bars1d, price, dailyAtr);
 
             // ── Verdict ──────────────────────────────────────────────────────
             String verdict; String verdictClass;
@@ -168,8 +170,10 @@ public class AnalysisService {
             }
 
             // ── Assemble result ──────────────────────────────────────────────
-            result.put("success",  true);
-            result.put("ticker",   ticker);
+            result.put("success",    true);
+            result.put("ticker",     ticker);
+            result.put("asOf", java.time.ZonedDateTime.now(java.time.ZoneId.of("America/New_York"))
+                    .format(java.time.format.DateTimeFormatter.ofPattern("MMM d h:mm a z")));
             result.put("isCrypto", isCrypto);
             result.put("strategy", stratType.toUpperCase());
             result.put("minConf",  effectiveMinConf);
@@ -288,53 +292,176 @@ public class AnalysisService {
         try { return mtf.getHtfBias(bars); } catch (Exception e) { return "neutral"; }
     }
 
-    /** Extract recent swing highs/lows as key supply/demand levels. */
-    private List<Map<String, Object>> computeKeyLevels(List<OHLCV> dailyBars, double price) {
+    /**
+     * Compute key levels from two sources:
+     *  1) 15m intraday bars — today's session high/low, recent pivots, swept levels
+     *  2) Daily bars — macro swing highs/lows over the last 30 days
+     *
+     * Intraday levels are labeled clearly so the user can see where price has been
+     * *today* vs longer-term structure. A level is marked "swept" if price passed
+     * through it and then recovered (classic SMC liquidity grab signal).
+     */
+    private List<Map<String, Object>> computeKeyLevels(
+            List<OHLCV> bars15m, List<OHLCV> bars1d, double price, double dailyAtr) {
+
         List<Map<String, Object>> levels = new ArrayList<>();
-        if (dailyBars == null || dailyBars.size() < 10) return levels;
+        double tolerance = dailyAtr > 0 ? dailyAtr * 0.05 : price * 0.002; // ~0.2% or 5% ATR
 
-        // Last 30 bars: find pivots
-        int lookback = Math.min(30, dailyBars.size());
-        List<OHLCV> recent = dailyBars.subList(dailyBars.size() - lookback, dailyBars.size());
+        // ── 1. INTRADAY levels from 15m bars (last 60 bars ≈ 2–3 trading days) ──
+        if (bars15m != null && bars15m.size() >= 8) {
+            int lookback15 = Math.min(60, bars15m.size());
+            List<OHLCV> recent15 = bars15m.subList(bars15m.size() - lookback15, bars15m.size());
 
-        double highestHigh = recent.stream().mapToDouble(OHLCV::getHigh).max().orElse(price);
-        double lowestLow   = recent.stream().mapToDouble(OHLCV::getLow).min().orElse(price);
+            // Session high and low (all 15m bars in the lookback)
+            double sessionHigh = recent15.stream().mapToDouble(OHLCV::getHigh).max().orElse(price);
+            double sessionLow  = recent15.stream().mapToDouble(OHLCV::getLow).min().orElse(price);
 
-        // Find swing highs (local maxima) and lows (local minima) with a 3-bar pivot
-        List<Double> swingHighs = new ArrayList<>();
-        List<Double> swingLows  = new ArrayList<>();
-        for (int i = 2; i < recent.size() - 1; i++) {
-            double h = recent.get(i).getHigh();
-            if (h > recent.get(i-1).getHigh() && h > recent.get(i-2).getHigh()
-                    && h > recent.get(i+1).getHigh()) swingHighs.add(h);
-            double l = recent.get(i).getLow();
-            if (l < recent.get(i-1).getLow() && l < recent.get(i-2).getLow()
-                    && l < recent.get(i+1).getLow()) swingLows.add(l);
+            // Today's bars only (last 26 bars = 1 full session on 15m)
+            int todayBars = Math.min(26, recent15.size());
+            List<OHLCV> today15 = recent15.subList(recent15.size() - todayBars, recent15.size());
+            double todayHigh = today15.stream().mapToDouble(OHLCV::getHigh).max().orElse(sessionHigh);
+            double todayLow  = today15.stream().mapToDouble(OHLCV::getLow).min().orElse(sessionLow);
+
+            // Check if today's high/low was "swept" — price pierced it then recovered
+            // Swept high: price went above it on one bar's wick, closed back below it
+            boolean todayHighSwept = today15.stream().anyMatch(b ->
+                    b.getHigh() >= todayHigh * 0.9995 && b.getClose() < todayHigh * 0.999
+                    && b.getClose() < b.getOpen()); // bearish close after touching the high
+            boolean todayLowSwept = today15.stream().anyMatch(b ->
+                    b.getLow() <= todayLow * 1.0005 && b.getClose() > todayLow * 1.001
+                    && b.getClose() > b.getOpen()); // bullish close after touching the low
+
+            // Add today's high as resistance (or swept level)
+            if (Math.abs(todayHigh - price) / price > 0.0005) { // not the current price itself
+                Map<String,Object> lv = new LinkedHashMap<>();
+                lv.put("type",      todayHigh > price ? "resistance" : "swept-resistance");
+                lv.put("price",     round2(todayHigh));
+                lv.put("dist",      round2(Math.abs(todayHigh - price) / price * 100));
+                lv.put("intraday",  true);
+                if (todayHighSwept && todayHigh < price) {
+                    lv.put("label", "⚡ Today's High (SWEPT — liquidity taken, watch for reversal)");
+                    lv.put("swept", true);
+                } else {
+                    lv.put("label", todayHigh > price ? "Today's High (Intraday Resistance)" : "Today's High (Broken — now support)");
+                    lv.put("swept", false);
+                }
+                levels.add(lv);
+            }
+
+            // Add today's low as support (or swept level)
+            if (Math.abs(todayLow - price) / price > 0.0005) {
+                Map<String,Object> lv = new LinkedHashMap<>();
+                lv.put("type",      todayLow < price ? "support" : "swept-support");
+                lv.put("price",     round2(todayLow));
+                lv.put("dist",      round2(Math.abs(price - todayLow) / price * 100));
+                lv.put("intraday",  true);
+                if (todayLowSwept && todayLow > price) {
+                    lv.put("label", "⚡ Today's Low (SWEPT — liquidity taken, watch for reversal)");
+                    lv.put("swept", true);
+                } else {
+                    lv.put("label", todayLow < price ? "Today's Low (Intraday Support)" : "Today's Low (Broken — now resistance)");
+                    lv.put("swept", false);
+                }
+                levels.add(lv);
+            }
+
+            // 15m pivot highs/lows with a 3-bar pivot (intraday structure)
+            List<Double> pivotHighs = new ArrayList<>();
+            List<Double> pivotLows  = new ArrayList<>();
+            for (int i = 2; i < recent15.size() - 1; i++) {
+                double h = recent15.get(i).getHigh();
+                if (h > recent15.get(i-1).getHigh() && h > recent15.get(i-2).getHigh()
+                        && h > recent15.get(i+1).getHigh()
+                        && Math.abs(h - todayHigh) / price > 0.002) { // not a duplicate of today's high
+                    pivotHighs.add(h);
+                }
+                double l = recent15.get(i).getLow();
+                if (l < recent15.get(i-1).getLow() && l < recent15.get(i-2).getLow()
+                        && l < recent15.get(i+1).getLow()
+                        && Math.abs(l - todayLow) / price > 0.002) {
+                    pivotLows.add(l);
+                }
+            }
+
+            // Add up to 2 closest intraday pivot resistance levels above price
+            pivotHighs.stream().filter(h -> h > price + tolerance)
+                    .sorted().limit(2).forEach(h -> {
+                Map<String,Object> lv = new LinkedHashMap<>();
+                lv.put("type",      "resistance");
+                lv.put("price",     round2(h));
+                lv.put("dist",      round2((h - price) / price * 100));
+                lv.put("intraday",  true);
+                lv.put("swept",     false);
+                lv.put("label",     "15m Pivot High (Intraday Resistance)");
+                levels.add(lv);
+            });
+
+            // Add up to 2 closest intraday pivot support levels below price
+            pivotLows.stream().filter(l -> l < price - tolerance)
+                    .sorted(Comparator.reverseOrder()).limit(2).forEach(l -> {
+                Map<String,Object> lv = new LinkedHashMap<>();
+                lv.put("type",      "support");
+                lv.put("price",     round2(l));
+                lv.put("dist",      round2((price - l) / price * 100));
+                lv.put("intraday",  true);
+                lv.put("swept",     false);
+                lv.put("label",     "15m Pivot Low (Intraday Support)");
+                levels.add(lv);
+            });
         }
 
-        // Show closest resistance above price
-        swingHighs.stream().filter(h -> h > price)
-                .sorted().limit(3).forEach(h -> {
-            Map<String,Object> lv = new LinkedHashMap<>();
-            lv.put("type",  "resistance");
-            lv.put("price", round2(h));
-            lv.put("dist",  round2((h - price) / price * 100));
-            lv.put("label", h >= highestHigh * 0.995 ? "52d High / Major Resistance" : "Swing High");
-            levels.add(lv);
-        });
+        // ── 2. DAILY macro levels from the last 30 daily bars ──────────────────
+        if (bars1d != null && bars1d.size() >= 10) {
+            int lookback1d = Math.min(30, bars1d.size());
+            List<OHLCV> recent1d = bars1d.subList(bars1d.size() - lookback1d, bars1d.size());
 
-        // Show closest support below price
-        swingLows.stream().filter(l -> l < price)
-                .sorted(Comparator.reverseOrder()).limit(3).forEach(l -> {
-            Map<String,Object> lv = new LinkedHashMap<>();
-            lv.put("type",  "support");
-            lv.put("price", round2(l));
-            lv.put("dist",  round2((price - l) / price * 100));
-            lv.put("label", l <= lowestLow * 1.005 ? "52d Low / Major Support" : "Swing Low");
-            levels.add(lv);
-        });
+            double highestHigh = recent1d.stream().mapToDouble(OHLCV::getHigh).max().orElse(price);
+            double lowestLow   = recent1d.stream().mapToDouble(OHLCV::getLow).min().orElse(price);
 
-        // Sort by distance to price
+            List<Double> swingHighs = new ArrayList<>();
+            List<Double> swingLows  = new ArrayList<>();
+            for (int i = 2; i < recent1d.size() - 1; i++) {
+                double h = recent1d.get(i).getHigh();
+                if (h > recent1d.get(i-1).getHigh() && h > recent1d.get(i-2).getHigh()
+                        && h > recent1d.get(i+1).getHigh()) swingHighs.add(h);
+                double l = recent1d.get(i).getLow();
+                if (l < recent1d.get(i-1).getLow() && l < recent1d.get(i-2).getLow()
+                        && l < recent1d.get(i+1).getLow()) swingLows.add(l);
+            }
+
+            // Check if any intraday level already covers this zone (within tolerance)
+            // to avoid duplicate labels at nearly the same price
+            final List<Double> existingPrices = levels.stream()
+                    .map(lv -> (double) lv.get("price")).collect(java.util.stream.Collectors.toList());
+
+            swingHighs.stream().filter(h -> h > price + tolerance)
+                    .filter(h -> existingPrices.stream().noneMatch(ep -> Math.abs(ep - h) / price < 0.005))
+                    .sorted().limit(3).forEach(h -> {
+                Map<String,Object> lv = new LinkedHashMap<>();
+                lv.put("type",      "resistance");
+                lv.put("price",     round2(h));
+                lv.put("dist",      round2((h - price) / price * 100));
+                lv.put("intraday",  false);
+                lv.put("swept",     false);
+                lv.put("label",     h >= highestHigh * 0.995 ? "30d High / Major Resistance" : "Daily Swing High");
+                levels.add(lv);
+            });
+
+            swingLows.stream().filter(l -> l < price - tolerance)
+                    .filter(l -> existingPrices.stream().noneMatch(ep -> Math.abs(ep - l) / price < 0.005))
+                    .sorted(Comparator.reverseOrder()).limit(3).forEach(l -> {
+                Map<String,Object> lv = new LinkedHashMap<>();
+                lv.put("type",      "support");
+                lv.put("price",     round2(l));
+                lv.put("dist",      round2((price - l) / price * 100));
+                lv.put("intraday",  false);
+                lv.put("swept",     false);
+                lv.put("label",     l <= lowestLow * 1.005 ? "30d Low / Major Support" : "Daily Swing Low");
+                levels.add(lv);
+            });
+        }
+
+        // Sort all levels by distance to price (closest first)
         levels.sort(Comparator.comparingDouble(lv -> (double) lv.get("dist")));
         return levels;
     }
