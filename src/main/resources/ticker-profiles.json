@@ -63,10 +63,10 @@
     },
     {
       "ticker": "COIN",
-      "minConfidence": 68,
-      "minFvgPct": 0.0008,
-      "strategyType": "breakout",
-      "note": "Crypto exchange — ORB breakout strategy"
+      "minConfidence": 62,
+      "minFvgPct": 0.0006,
+      "strategyType": "smc",
+      "note": "Switched breakout→SMC Mar 2026: 0 signals on ORB. COIN tracks crypto closely — SMC sweep+FVG works better. Relaxed thresholds."
     },
     {
       "ticker": "SOFI",
@@ -109,8 +109,11 @@
     },
     {
       "ticker": "AAPL",
-      "strategyType": "keylevel",
-      "note": "Large-cap — Key Level Rejection; price respects multi-touch horizontal S/R zones reliably"
+      "strategyType": "smc",
+      "minConfidence": 65,
+      "minFvgPct": 0.0004,
+      "dispAtrMult": 1.3,
+      "note": "Switched keylevel→SMC Mar 2026: keylevel produced 0 signals (levels were stale from Polygon sort bug). SMC with low FVG threshold suits AAPL's tight intraday range (~$5 ATR)."
     },
     {
       "ticker": "MSFT",
@@ -151,10 +154,10 @@
     {
       "ticker": "NVDA",
       "strategyType": "smc",
-      "minConfidence": 65,
-      "minFvgPct": 0.0007,
-      "dispAtrMult": 1.5,
-      "note": "Switched breakout→SMC Mar 2026: ORB 0 trades 30d. NVDA has large intraday sweeps — SMC suits it better."
+      "minConfidence": 62,
+      "minFvgPct": 0.0005,
+      "dispAtrMult": 1.3,
+      "note": "Loosened Mar 2026: was minConf=65/fvg=0.0007/disp=1.5 → 0 signals. NVDA ATR ~$5-7, needs lower FVG threshold. Sort bug fix now gives correct key levels."
     },
     {
       "ticker": "BA",
@@ -163,20 +166,27 @@
     },
     {
       "ticker": "ROKU",
-      "strategyType": "breakout",
-      "note": "Volatile streaming tech — ORB breakout"
+      "minConfidence": 62,
+      "minFvgPct": 0.0008,
+      "dispAtrMult": 1.3,
+      "strategyType": "smc",
+      "note": "Switched breakout→SMC Mar 2026: 0 signals on ORB. ROKU is volatile enough for SMC sweeps."
     },
     {
       "ticker": "PLTR",
-      "strategyType": "breakout",
-      "note": "Volatile defense/AI — ORB breakout"
+      "minConfidence": 62,
+      "minFvgPct": 0.0006,
+      "dispAtrMult": 1.3,
+      "strategyType": "smc",
+      "note": "Switched breakout→SMC Mar 2026: 0 signals on ORB. PLTR has strong intraday SMC sweeps. Relaxed thresholds."
     },
     {
       "ticker": "TSLA",
-      "minConfidence": 95,
-      "minFvgPct": 0.0015,
-      "dispAtrMult": 2.0,
-      "note": "0% WR 90d at avg conf=94. Musk-news driven. Only fire on extreme quality. Flow gate will block most trades."
+      "strategyType": "smc",
+      "minConfidence": 75,
+      "minFvgPct": 0.0008,
+      "dispAtrMult": 1.5,
+      "note": "Relaxed Mar 2026: minConf 95→75, fvg 0.0015→0.0008, disp 2.0→1.5. Old thresholds so tight they produced 0 signals. TSLA ATR ~$10-15, options flow gate handles Musk-news noise."
     },
     {
       "ticker": "AMD",

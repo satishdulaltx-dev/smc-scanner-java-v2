@@ -169,6 +169,22 @@ public class ScannerService {
                             String.format("%.1f", s.rrRatio()), streak);
                 }
 
+                // ── Time-of-day dead-zone block ───────────────────────────────────
+                // 11:00–11:59 AM ET and 1:00–1:59 PM ET have 0% historical win rate.
+                // Mid-morning and post-lunch consolidation = choppy, fake breakouts.
+                // Hard block prevents wasting options premium on low-probability entries.
+                if (!isC) {
+                    java.time.LocalTime etNow = java.time.ZonedDateTime.now(
+                            java.time.ZoneId.of("America/New_York")).toLocalTime();
+                    int etHour = etNow.getHour();
+                    if (etHour == 11 || etHour == 13) {
+                        log.info("{} TIME_BLOCKED: hour={} ET (dead zone 0% WR)", ticker, etHour);
+                        setTs(ticker, "idle", null, 0,
+                                "⏸ Dead zone — no trades 11 AM or 1 PM ET (0% WR)");
+                        return;
+                    }
+                }
+
                 // ── Options flow check (call/put volume + contract recommendation) ──
                 OptionsFlowResult flow = OptionsFlowResult.NONE;
                 OptionsRecommendation rec = OptionsRecommendation.NONE;
