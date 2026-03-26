@@ -478,7 +478,8 @@ public class BacktestService {
                     "CTX_FILTERED".equals(t.outcome())).count();
             this.qualityFiltered = (int) trades.stream().filter(t ->
                     "QUALITY_FILTERED".equals(t.outcome()) || "MULTI_FILTERED".equals(t.outcome())
-                    || "15M_FILTERED".equals(t.outcome())).count();
+                    || "15M_FILTERED".equals(t.outcome())  || "CORR_FILTERED".equals(t.outcome())
+                    || "REGIME_FILTERED".equals(t.outcome())).count();
 
             // TIMEOUT trades are counted as wins or losses based on their PnL sign.
             // BE_STOP trades exit at breakeven (0% PnL) — counted separately, not wins or losses.
@@ -507,7 +508,9 @@ public class BacktestService {
                               && !"CTX_FILTERED".equals(t.outcome())
                               && !"QUALITY_FILTERED".equals(t.outcome())
                               && !"MULTI_FILTERED".equals(t.outcome())
-                              && !"15M_FILTERED".equals(t.outcome()))
+                              && !"15M_FILTERED".equals(t.outcome())
+                              && !"CORR_FILTERED".equals(t.outcome())
+                              && !"REGIME_FILTERED".equals(t.outcome()))
                     .toList();
 
             this.totalOptPnl = executed.stream().mapToDouble(TradeResult::optPnlPerContract).sum();
