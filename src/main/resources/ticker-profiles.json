@@ -56,10 +56,11 @@
     },
     {
       "ticker": "NIO",
+      "skip": true,
+      "skipReason": "0% WR 90d (2 trades, 2 losses). Chinese EV — moves on ADR premium and Beijing policy, not SMC patterns.",
       "minConfidence": 72,
       "minFvgPct": 0.0008,
-      "strategyType": "breakout",
-      "note": "Chinese EV — moderate tightening; ORB breakout strategy"
+      "strategyType": "breakout"
     },
     {
       "ticker": "COIN",
@@ -75,8 +76,9 @@
     },
     {
       "ticker": "PYPL",
-      "minConfidence": 62,
-      "note": "Strong performer (60% WR) — relaxed"
+      "skip": true,
+      "skipReason": "12% WR 90d across 17 trades — statistically confirmed no edge. Fintech range-bound, SMC patterns unreliable.",
+      "minConfidence": 62
     },
     {
       "ticker": "SQ",
@@ -138,8 +140,9 @@
     },
     {
       "ticker": "DIS",
-      "strategyType": "breakout",
-      "note": "Entertainment — VWAP showed 0/11 losses; switched to ORB breakout"
+      "skip": true,
+      "skipReason": "0% WR 90d (3 trades, 1 loss + 2 BE). Slow-moving entertainment stock — no intraday SMC edge.",
+      "strategyType": "breakout"
     },
     {
       "ticker": "SPY",
@@ -148,8 +151,9 @@
     },
     {
       "ticker": "QQQ",
-      "strategyType": "vwap",
-      "note": "ETF — VWAP reversion strategy"
+      "skip": true,
+      "skipReason": "12% WR 90d (8 trades). VWAP reversion on index ETF not working — QQQ trends too strongly intraday.",
+      "strategyType": "vwap"
     },
     {
       "ticker": "NVDA",
@@ -161,8 +165,9 @@
     },
     {
       "ticker": "BA",
-      "strategyType": "breakout",
-      "note": "Aerospace — ORB breakout strategy"
+      "skip": true,
+      "skipReason": "0% WR 90d (3 trades, 2 losses + 1 BE). Aerospace — moves on defense contracts/FAA news, not technical patterns.",
+      "strategyType": "breakout"
     },
     {
       "ticker": "ROKU",
