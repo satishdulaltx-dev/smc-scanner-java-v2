@@ -162,11 +162,13 @@
             <option value="30">30 days</option>
             <option value="60">60 days</option>
             <option value="90" selected>90 days</option>
-            <option value="180">180 days ⚠ may be partial</option>
+            <option value="180">180 days</option>
+            <option value="365">1 year</option>
+            <option value="730">2 years</option>
         </select>
     </div>
     <div id="days-warn" style="display:none;align-self:center;background:rgba(210,153,34,.1);border:1px solid rgba(210,153,34,.3);border-radius:6px;padding:6px 12px;font-size:11px;color:#d29922;max-width:320px">
-        ⚠ Polygon 5m data is capped at ~5000 bars per call (~90 trading days). Results beyond 90 days may be incomplete.
+        ⚠ 1-2 year backtests fetch multiple pages from Polygon — may take 15-30s per ticker.
     </div>
     <button class="run-btn" id="run-btn" onclick="runBacktest()">▶ Run Backtest</button>
 </div>
@@ -229,7 +231,7 @@
 <div class="empty-state" id="empty-state">
     <div class="empty-icon">📈</div>
     <div>Select a ticker and click Run Backtest</div>
-    <div style="font-size:11px; color:var(--muted); margin-top:6px;">Replays 90 days of price data to find SMC setups and test outcomes</div>
+    <div style="font-size:11px; color:var(--muted); margin-top:6px;">Replays historical price data (30d–2yr) to find setups and test outcomes</div>
 </div>
 
 <div class="footer">SD Scanner — Backtest Engine · Intraday 5m replay · Same logic as live alerts · ⚠ Polygon data is 15-min delayed</div>
@@ -243,7 +245,7 @@ function toggleMode() {
 }
 function checkDaysWarning() {
     const days = parseInt(document.getElementById('days').value);
-    document.getElementById('days-warn').style.display = days > 90 ? 'block' : 'none';
+    document.getElementById('days-warn').style.display = days >= 365 ? 'block' : 'none';
 }
 
 function runBacktest() {

@@ -163,7 +163,7 @@ public class KeyLevelStrategyDetector {
                         double reward = entry - tp;
                         double rr     = risk > 0 ? reward / risk : 0.0;
 
-                        if (rr >= 1.2) {
+                        if (rr >= tpRatio * 0.95) {
                             int confidence = 65;
                             if (touches >= 3)                         confidence += 10; // 3+ tests = high-quality level
                             if (touches >= 4)                         confidence += 5;  // 4+ = institutional distribution
@@ -230,7 +230,7 @@ public class KeyLevelStrategyDetector {
                         double reward = tp - entry;
                         double rr     = risk > 0 ? reward / risk : 0.0;
 
-                        if (rr >= 1.2) {
+                        if (rr >= tpRatio * 0.95) {
                             int confidence = 65;
                             if (touches >= 3)                         confidence += 10;
                             if (touches >= 4)                         confidence += 5;
