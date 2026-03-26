@@ -1,5 +1,6 @@
 package com.smcscanner.dashboard;
 
+import com.smcscanner.analysis.AnalysisService;
 import com.smcscanner.backtest.BacktestService;
 import com.smcscanner.config.ScannerConfig;
 import com.smcscanner.filter.AdaptiveSuppressor;
@@ -44,6 +45,7 @@ public class DashboardController {
     private final ReportCache        reportCache;
     private final BacktestService    backtestService;
     private final AdaptiveSuppressor adaptive;
+    private final AnalysisService    analysisService;
 
     private static final Map<String,String> TV_MAP = Map.of(
         "X:BTCUSD", "BINANCE:BTCUSDT",
@@ -60,10 +62,12 @@ public class DashboardController {
     public DashboardController(SharedState state, ScannerConfig config, SessionFilter sessionFilter,
                                 PerformanceTracker tracker, EodReportService eodReport,
                                 DiscordAlertService discord, ReportCache reportCache,
-                                BacktestService backtestService, AdaptiveSuppressor adaptive) {
+                                BacktestService backtestService, AdaptiveSuppressor adaptive,
+                                AnalysisService analysisService) {
         this.state=state; this.config=config; this.sessionFilter=sessionFilter;
         this.tracker=tracker; this.eodReport=eodReport; this.discord=discord;
         this.reportCache=reportCache; this.backtestService=backtestService; this.adaptive=adaptive;
+        this.analysisService=analysisService;
     }
 
     @GetMapping("/")
@@ -360,6 +364,21 @@ public class DashboardController {
     public String backtestPage(Model model) {
         model.addAttribute("tickers", config.loadWatchlist());
         return "backtest";
+    }
+
+    /** GET /analyze - serve ticker analysis page */
+    @GetMapping("/analyze")
+    public String analyzePage(Model model) {
+        model.addAttribute("watchlist", config.loadWatchlist());
+        return "analyze";
+    }
+
+    /** GET /api/analyze?ticker=JPM - deep analysis of a single ticker */
+    @GetMapping("/api/analyze")
+    @ResponseBody
+    public Map<String, Object> analyzeApi(
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "AAPL") String ticker) {
+        return analysisService.analyze(ticker);
     }
 
     /** GET /api/backtest?ticker=AAPL&days=90 */
