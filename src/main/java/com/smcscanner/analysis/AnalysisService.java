@@ -265,6 +265,13 @@ public class AnalysisService {
             result.put("verdict",      verdict);
             result.put("verdictClass", verdictClass);
 
+            // Narrative — plain-English trader's read of the current situation
+            result.put("narrative", buildNarrative(
+                    ticker, price, dailyAtr, changePct,
+                    biasDaily, bias60m, bias15m, bias5m,
+                    setup, effectiveMinConf, levels,
+                    sentiment, context, flow, rec));
+
         } catch (Exception e) {
             log.error("Analysis failed for {}: {}", ticker, e.getMessage(), e);
             result.put("success", false);
@@ -330,6 +337,178 @@ public class AnalysisService {
         // Sort by distance to price
         levels.sort(Comparator.comparingDouble(lv -> (double) lv.get("dist")));
         return levels;
+    }
+
+    /**
+     * Generates a plain-English trader's read of the current situation —
+     * structure, long case, short case, which has higher probability, what to watch.
+     */
+    private Map<String, Object> buildNarrative(
+            String ticker, double price, double atr, double changePct,
+            String biasDaily, String bias1h, String bias15m, String bias5m,
+            TradeSetup setup, int minConf,
+            List<Map<String, Object>> levels,
+            NewsSentiment news, MarketContext ctx,
+            OptionsFlowResult flow, OptionsRecommendation rec) {
+
+        Map<String, Object> n = new LinkedHashMap<>();
+
+        // ── Count bearish vs bullish signals ────────────────────────────────
+        int bullSignals = 0, bearSignals = 0;
+        if ("bullish".equals(biasDaily)) bullSignals++; else if ("bearish".equals(biasDaily)) bearSignals++;
+        if ("bullish".equals(bias1h))    bullSignals++; else if ("bearish".equals(bias1h))    bearSignals++;
+        if ("bullish".equals(bias15m))   bullSignals++; else if ("bearish".equals(bias15m))   bearSignals++;
+        if ("bullish".equals(bias5m))    bullSignals++; else if ("bearish".equals(bias5m))    bearSignals++;
+        if (news.hasNews() && news.isBullish()) bullSignals++; else if (news.hasNews() && news.isBearish()) bearSignals++;
+        if (ctx != MarketContext.NONE && ctx.rsScore() > 0.03) bullSignals++;
+        else if (ctx != MarketContext.NONE && ctx.rsScore() < -0.03) bearSignals++;
+
+        String overallBias = bullSignals > bearSignals + 1 ? "bullish"
+                           : bearSignals > bullSignals + 1 ? "bearish" : "mixed";
+
+        // ── Nearest levels above and below ──────────────────────────────────
+        double nearestRes = levels.stream()
+                .filter(lv -> "resistance".equals(lv.get("type")))
+                .mapToDouble(lv -> (double) lv.get("price"))
+                .min().orElse(price + atr * 2);
+        double nearestSup = levels.stream()
+                .filter(lv -> "support".equals(lv.get("type")))
+                .mapToDouble(lv -> (double) lv.get("price"))
+                .max().orElse(price - atr * 2);
+
+        double distToRes = (nearestRes - price) / price * 100;
+        double distToSup = (price - nearestSup) / price * 100;
+
+        // ── Structure sentence ───────────────────────────────────────────────
+        String structureSentence;
+        if ("bullish".equals(biasDaily) && "bullish".equals(bias1h)) {
+            structureSentence = ticker + " has bullish structure on both daily and 1H — price is above its SMA20 on higher timeframes, trend is up.";
+        } else if ("bearish".equals(biasDaily) && "bearish".equals(bias1h)) {
+            structureSentence = ticker + " has bearish structure on both daily and 1H — price is below its SMA20 on higher timeframes, trend is down.";
+        } else if ("bullish".equals(biasDaily) && ("bearish".equals(bias1h) || "bearish".equals(bias15m))) {
+            structureSentence = ticker + " has bullish daily structure but short-term weakness on 1H/15m — this is a pullback within an uptrend.";
+        } else if ("bearish".equals(biasDaily) && ("bullish".equals(bias1h) || "bullish".equals(bias15m))) {
+            structureSentence = ticker + " has bearish daily structure with a short-term bounce on 1H/15m — this looks like a relief rally within a downtrend.";
+        } else {
+            structureSentence = ticker + " has mixed/neutral structure across timeframes — no clear dominant trend right now.";
+        }
+
+        // ── Nearest resistance distance assessment ───────────────────────────
+        String resComment;
+        if (distToRes < 0.5) resComment = "Price is pressing right up against resistance at $" + String.format("%.2f", nearestRes) + " — high risk for longs here.";
+        else if (distToRes < 1.0) resComment = "Resistance at $" + String.format("%.2f", nearestRes) + " is " + String.format("%.1f", distToRes) + "% away — limited upside room before the next wall.";
+        else resComment = "Nearest resistance is $" + String.format("%.2f", nearestRes) + " (" + String.format("%.1f", distToRes) + "% away) — reasonable room to run if buyers step in.";
+
+        String supComment;
+        if (distToSup < 0.5) supComment = "Price is sitting right on support at $" + String.format("%.2f", nearestSup) + " — key level, break below is significant.";
+        else if (distToSup < 1.0) supComment = "Support at $" + String.format("%.2f", nearestSup) + " is " + String.format("%.1f", distToSup) + "% below — tight cushion.";
+        else supComment = "Support at $" + String.format("%.2f", nearestSup) + " gives " + String.format("%.1f", distToSup) + "% downside buffer.";
+
+        // ── Long case ────────────────────────────────────────────────────────
+        String longCase;
+        boolean longLikely = bullSignals >= bearSignals && distToRes > 0.8;
+        if ("bearish".equals(biasDaily) && "bearish".equals(bias1h)) {
+            longCase = "LOW probability. Daily and 1H are both bearish — any bounce is fighting the dominant trend. A long would only make sense as a short-term scalp IF price sweeps the $"
+                    + String.format("%.2f", nearestSup) + " support, shows a strong bullish displacement candle, and reclaims $"
+                    + String.format("%.2f", price) + " with volume. Target would be the $" + String.format("%.2f", nearestRes) + " resistance zone.";
+        } else if ("bullish".equals(biasDaily) && bearSignals > bullSignals) {
+            longCase = "MEDIUM probability — this is a pullback in an uptrend. A long is valid if price holds above $"
+                    + String.format("%.2f", nearestSup) + " (support) and shows a sweep + bullish displacement back above $"
+                    + String.format("%.2f", price) + ". Target: $" + String.format("%.2f", nearestRes) + ". "
+                    + resComment;
+        } else if (distToRes < 0.6) {
+            longCase = "CAUTION — price is " + String.format("%.1f", distToRes) + "% from resistance at $"
+                    + String.format("%.2f", nearestRes) + ". Buying here means buying into a wall. "
+                    + "Wait for price to either break through $" + String.format("%.2f", nearestRes)
+                    + " with a strong close, or pull back to $" + String.format("%.2f", nearestSup) + " first.";
+        } else {
+            longCase = "VIABLE. " + resComment + " For a long entry, need: sweep of $"
+                    + String.format("%.2f", nearestSup) + " support → strong bullish displacement candle → SMC FVG retest. "
+                    + "Target $" + String.format("%.2f", nearestRes) + ". SL below $" + String.format("%.2f", nearestSup - atr * 0.3) + ".";
+        }
+
+        // ── Short case ───────────────────────────────────────────────────────
+        String shortCase;
+        boolean shortLikely = bearSignals >= bullSignals && distToSup > 0.8;
+        if ("bullish".equals(biasDaily) && "bullish".equals(bias1h)) {
+            shortCase = "LOW probability. Daily and 1H are both bullish — shorting here is fighting the trend. Only valid as a scalp if price sweeps $"
+                    + String.format("%.2f", nearestRes) + " (liquidity grab), shows a sharp bearish rejection candle, and breaks back below $"
+                    + String.format("%.2f", price) + ". Target $" + String.format("%.2f", nearestSup) + ".";
+        } else if ("bearish".equals(biasDaily) && bullSignals > bearSignals) {
+            shortCase = "MEDIUM probability — this is a bounce in a downtrend. A short makes sense if price rallies into the $"
+                    + String.format("%.2f", nearestRes) + " resistance zone and fails with a bearish displacement. "
+                    + "Target: $" + String.format("%.2f", nearestSup) + ". SL above $" + String.format("%.2f", nearestRes + atr * 0.3) + ".";
+        } else if (distToSup < 0.6) {
+            shortCase = "CAUTION — price is " + String.format("%.1f", distToSup) + "% from support at $"
+                    + String.format("%.2f", nearestSup) + ". Shorting into support is risky. "
+                    + "Wait for price to either break below $" + String.format("%.2f", nearestSup)
+                    + " decisively, or bounce to $" + String.format("%.2f", nearestRes) + " for a better short entry.";
+        } else {
+            shortCase = "VIABLE. " + supComment + " For a short entry, need: sweep of $"
+                    + String.format("%.2f", nearestRes) + " resistance (liquidity grab) → strong bearish displacement candle → SMC FVG retest. "
+                    + "Target $" + String.format("%.2f", nearestSup) + ". SL above $" + String.format("%.2f", nearestRes + atr * 0.3) + ".";
+        }
+
+        // ── Probability verdict ──────────────────────────────────────────────
+        String probabilityVerdict;
+        if (bearSignals >= bullSignals + 2) {
+            probabilityVerdict = "SHORT has higher probability right now. " + bearSignals + " bearish signals vs " + bullSignals + " bullish. Dominant trend is down.";
+        } else if (bullSignals >= bearSignals + 2) {
+            probabilityVerdict = "LONG has higher probability right now. " + bullSignals + " bullish signals vs " + bearSignals + " bearish. Dominant trend is up.";
+        } else {
+            probabilityVerdict = "Neither direction has a clear edge right now (" + bullSignals + " bullish vs " + bearSignals + " bearish signals). "
+                    + "Wait for a decisive move — don't force a trade in a mixed market.";
+        }
+
+        // ── Key watch level ──────────────────────────────────────────────────
+        String keyWatch;
+        if (Math.abs(price - nearestSup) < Math.abs(nearestRes - price)) {
+            keyWatch = "$" + String.format("%.2f", nearestSup) + " (support) is the critical level. "
+                    + "Holding above it = long bias. Breaking below it = short bias toward $"
+                    + String.format("%.2f", nearestSup - atr * 1.5) + ".";
+        } else {
+            keyWatch = "$" + String.format("%.2f", nearestRes) + " (resistance) is the critical level. "
+                    + "Breaking above it with a strong close = long continuation to $"
+                    + String.format("%.2f", nearestRes + atr * 1.5) + ". "
+                    + "Rejecting here = short toward $" + String.format("%.2f", nearestSup) + ".";
+        }
+
+        // ── Max pain warning ─────────────────────────────────────────────────
+        String maxPainNote = null;
+        if (flow.hasData() && flow.maxPainStrike() > 0) {
+            double mp = flow.maxPainStrike();
+            double mpDist = (mp - price) / price * 100;
+            if (Math.abs(mpDist) < 2.0) {
+                maxPainNote = "⚠️ Max pain at $" + String.format("%.2f", mp) + " (" + String.format("%+.1f", mpDist) + "%) — "
+                        + (mpDist < 0 ? "gravitational pull downward into expiry. Be careful with calls."
+                                      : "gravitational pull upward into expiry. Supports longs.");
+            }
+        }
+
+        // ── Existing setup note ──────────────────────────────────────────────
+        String setupNote = null;
+        if (setup != null && setup.getConfidence() >= minConf) {
+            setupNote = "🔥 Scanner has an active " + setup.getDirection().toUpperCase()
+                    + " setup right now at $" + String.format("%.2f", setup.getEntry())
+                    + " (confidence " + setup.getConfidence() + "/100). Entry is live.";
+        } else if (setup != null) {
+            setupNote = "Scanner detected a " + setup.getDirection() + " pattern but confidence ("
+                    + setup.getConfidence() + ") is below the minimum (" + minConf + ") — not strong enough to alert.";
+        }
+
+        // ── Assemble into named sections ─────────────────────────────────────
+        n.put("structure",    structureSentence);
+        n.put("overallBias",  overallBias);
+        n.put("bullSignals",  bullSignals);
+        n.put("bearSignals",  bearSignals);
+        n.put("longCase",     longCase);
+        n.put("shortCase",    shortCase);
+        n.put("probability",  probabilityVerdict);
+        n.put("keyWatch",     keyWatch);
+        if (maxPainNote != null) n.put("maxPain", maxPainNote);
+        if (setupNote   != null) n.put("setupNote", setupNote);
+
+        return n;
     }
 
     private String buildNoSetupReason(String biasDaily, String bias15m, String bias5m, String strat) {

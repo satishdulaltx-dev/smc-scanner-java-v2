@@ -133,6 +133,32 @@
         .pnl-win  { color: var(--green); font-weight: 700; }
         .pnl-loss { color: var(--red); font-weight: 700; }
 
+        /* ── Narrative ── */
+        .narrative-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 22px 26px; margin-top: 18px; }
+        .narrative-card .nar-title { font-size: 11px; font-weight: 700; letter-spacing: 1px; color: var(--muted); text-transform: uppercase; margin-bottom: 18px; }
+        .nar-structure { font-size: 14px; color: var(--text); line-height: 1.6; margin-bottom: 18px; }
+        .nar-signal-bar { display: flex; gap: 8px; align-items: center; margin-bottom: 18px; }
+        .nar-signal-pill { padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+        .nar-signal-pill.bull { background: rgba(63,185,80,.15); color: var(--green); border: 1px solid rgba(63,185,80,.3); }
+        .nar-signal-pill.bear { background: rgba(248,81,73,.15); color: var(--red); border: 1px solid rgba(248,81,73,.3); }
+        .nar-signal-pill.neut { background: rgba(139,148,158,.1); color: var(--muted); border: 1px solid var(--border); }
+        .nar-cases { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 18px; }
+        .nar-case { border-radius: 8px; padding: 14px 16px; }
+        .nar-case.long-case  { background: rgba(63,185,80,.07); border: 1px solid rgba(63,185,80,.25); }
+        .nar-case.short-case { background: rgba(248,81,73,.07); border: 1px solid rgba(248,81,73,.25); }
+        .nar-case .case-hdr  { font-size: 12px; font-weight: 700; margin-bottom: 8px; }
+        .nar-case.long-case  .case-hdr { color: var(--green); }
+        .nar-case.short-case .case-hdr { color: var(--red); }
+        .nar-case .case-body { font-size: 12px; color: var(--muted); line-height: 1.6; }
+        .nar-probability { background: rgba(88,166,255,.08); border: 1px solid rgba(88,166,255,.2); border-radius: 8px; padding: 12px 16px; font-size: 13px; font-weight: 600; color: var(--blue); margin-bottom: 12px; }
+        .nar-watch   { background: var(--bg); border-radius: 8px; padding: 12px 16px; font-size: 13px; color: var(--text); line-height: 1.5; margin-bottom: 10px; }
+        .nar-watch strong { color: var(--yellow); }
+        .nar-maxpain { background: rgba(210,153,34,.08); border: 1px solid rgba(210,153,34,.3); border-radius: 8px; padding: 10px 14px; font-size: 12px; color: var(--yellow); margin-bottom: 10px; }
+        .nar-setupnote { background: rgba(63,185,80,.08); border: 1px solid rgba(63,185,80,.3); border-radius: 8px; padding: 10px 14px; font-size: 12px; color: var(--green); }
+        .toggle-details { background: none; border: 1px solid var(--border); color: var(--muted); border-radius: 6px; padding: 6px 14px; font-size: 11px; cursor: pointer; margin-top: 16px; }
+        .toggle-details:hover { border-color: var(--blue); color: var(--blue); }
+        #detail-section { margin-top: 0; }
+
         /* ── Two column layout ── */
         .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 
@@ -179,23 +205,100 @@
     <p class="search-hint">Supports all stocks in your watchlist + any NYSE/NASDAQ/Crypto symbol</p>
 </div>
 
-<!-- ── Results ── -->
-<div class="main">
-    <div id="placeholder" class="placeholder">
-        <div class="icon">🔍</div>
-        <p>Enter a ticker above to get a full SMC analysis — structure, setup, key levels, options</p>
+<!-- ── Main layout: chart left, analysis right ── -->
+<div style="display:flex; gap:0; max-width:1600px; margin:0 auto; padding:0 16px 40px; align-items:flex-start;">
+
+    <!-- Chart panel -->
+    <div style="flex:0 0 680px; position:sticky; top:0; padding-top:20px;">
+        <div style="background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden;">
+            <div style="padding:10px 16px; font-size:11px; font-weight:700; letter-spacing:1px; color:var(--muted); text-transform:uppercase; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between;">
+                <span>📈 Live Chart (15m)</span>
+                <div style="display:flex;gap:6px;">
+                    <button onclick="setChartInterval('15')" id="tf-15" style="background:var(--blue);color:#fff;border:none;border-radius:4px;padding:3px 8px;font-size:10px;cursor:pointer;font-weight:600;">15m</button>
+                    <button onclick="setChartInterval('60')" id="tf-60" style="background:var(--bg);color:var(--muted);border:1px solid var(--border);border-radius:4px;padding:3px 8px;font-size:10px;cursor:pointer;">1H</button>
+                    <button onclick="setChartInterval('D')"  id="tf-D"  style="background:var(--bg);color:var(--muted);border:1px solid var(--border);border-radius:4px;padding:3px 8px;font-size:10px;cursor:pointer;">1D</button>
+                </div>
+            </div>
+            <div id="tv-chart" style="height:520px;">
+                <div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px;">
+                    Enter a ticker to load chart
+                </div>
+            </div>
+        </div>
     </div>
-    <div id="loading" class="loading" style="display:none">
-        <div class="spinner"></div>
-        <p>Fetching live data from Polygon...</p>
+
+    <!-- Analysis panel -->
+    <div style="flex:1; min-width:0; padding-top:20px; padding-left:18px;">
+        <div id="placeholder" class="placeholder" style="padding:40px 20px;">
+            <div class="icon">🔍</div>
+            <p>Enter a ticker above to get a full SMC analysis</p>
+        </div>
+        <div id="loading" class="loading" style="display:none; padding:40px;">
+            <div class="spinner"></div>
+            <p>Fetching live data from Polygon...</p>
+        </div>
+        <div id="results" style="display:none"></div>
     </div>
-    <div id="results" style="display:none"></div>
+
 </div>
+
+<!-- TradingView widget script (loaded once) -->
+<script src="https://s3.tradingview.com/tv.js"></script>
 
 <script>
 const input    = document.getElementById('tickerInput');
 const wlSelect = document.getElementById('watchlistSelect');
 const btn      = document.getElementById('analyzeBtn');
+
+// ── TradingView chart ────────────────────────────────────────────────
+let tvWidget = null;
+let currentInterval = '15';
+
+const TV_CRYPTO_MAP = {
+    'X:BTCUSD': 'BINANCE:BTCUSDT',
+    'X:ETHUSD': 'BINANCE:ETHUSDT'
+};
+
+function tvSymbol(ticker) {
+    return TV_CRYPTO_MAP[ticker] || ticker;
+}
+
+function loadChart(ticker) {
+    if (!ticker || typeof TradingView === 'undefined') return;
+    const sym = tvSymbol(ticker);
+    document.getElementById('tv-chart').innerHTML = '';
+    tvWidget = new TradingView.widget({
+        container_id: 'tv-chart',
+        symbol:       sym,
+        interval:     currentInterval,
+        timezone:     'America/New_York',
+        theme:        'dark',
+        style:        '1',
+        locale:       'en',
+        toolbar_bg:   '#161b22',
+        enable_publishing: false,
+        hide_top_toolbar: false,
+        hide_legend:  false,
+        save_image:   false,
+        height:       520,
+        width:        '100%',
+        studies: ['MASimple@tv-basicstudies'],  // SMA20 overlay
+        withdateranges: true,
+    });
+}
+
+function setChartInterval(tf) {
+    currentInterval = tf;
+    ['15','60','D'].forEach(t => {
+        const el = document.getElementById('tf-' + t);
+        if (!el) return;
+        el.style.background = t === tf ? 'var(--blue)' : 'var(--bg)';
+        el.style.color      = t === tf ? '#fff' : 'var(--muted)';
+        el.style.border     = t === tf ? 'none' : '1px solid var(--border)';
+    });
+    const ticker = input.value.trim().toUpperCase();
+    if (ticker) loadChart(ticker);
+}
 
 // Select from watchlist → populate input
 wlSelect.addEventListener('change', () => {
@@ -225,6 +328,9 @@ function runAnalysis() {
     document.getElementById('loading').style.display     = 'block';
     btn.disabled = true;
 
+    // Load chart immediately (don't wait for API)
+    loadChart(ticker);
+
     fetch('/api/analyze?ticker=' + encodeURIComponent(ticker))
         .then(r => r.json())
         .then(data => {
@@ -240,6 +346,15 @@ function runAnalysis() {
             document.getElementById('results').style.display = 'block';
             btn.disabled = false;
         });
+}
+
+function toggleDetails() {
+    const el  = document.getElementById('detail-section');
+    const btn = document.querySelector('.toggle-details');
+    if (!el) return;
+    const open = el.style.display !== 'none';
+    el.style.display = open ? 'none' : 'block';
+    btn.textContent  = open ? '▼ Show data cards' : '▲ Hide data cards';
 }
 
 function biasClass(b) {
@@ -476,9 +591,51 @@ function renderResults(d) {
         </div>`;
     }
 
-    return verdictHtml + priceHtml + biasHtml + setupHtml
+    // ── Narrative ──
+    const nar = d.narrative || {};
+    const biasColor = nar.overallBias === 'bullish' ? 'var(--green)'
+                    : nar.overallBias === 'bearish' ? 'var(--red)' : 'var(--muted)';
+    const biasLabel = nar.overallBias === 'bullish' ? '▲ Bullish Lean'
+                    : nar.overallBias === 'bearish' ? '▼ Bearish Lean' : '— Mixed / No Edge';
+
+    const narrativeHtml = `
+    <div class="narrative-card">
+        <div class="nar-title">🧠 Trader's Read — ${d.ticker} @ $${fmt(p.current)}</div>
+
+        <div class="nar-structure">${nar.structure || ''}</div>
+
+        <div class="nar-signal-bar">
+            <span class="nar-signal-pill ${nar.overallBias === 'bullish' ? 'bull' : nar.overallBias === 'bearish' ? 'bear' : 'neut'}"
+                  style="font-size:13px">${biasLabel}</span>
+            <span class="nar-signal-pill bull">▲ ${nar.bullSignals || 0} bullish signals</span>
+            <span class="nar-signal-pill bear">▼ ${nar.bearSignals || 0} bearish signals</span>
+        </div>
+
+        <div class="nar-cases">
+            <div class="nar-case long-case">
+                <div class="case-hdr">▲ LONG</div>
+                <div class="case-body">${nar.longCase || '—'}</div>
+            </div>
+            <div class="nar-case short-case">
+                <div class="case-hdr">▼ SHORT</div>
+                <div class="case-body">${nar.shortCase || '—'}</div>
+            </div>
+        </div>
+
+        <div class="nar-probability">📊 ${nar.probability || ''}</div>
+        <div class="nar-watch"><strong>👁 Watch:</strong> ${nar.keyWatch || ''}</div>
+        ${nar.maxPain  ? `<div class="nar-maxpain">${nar.maxPain}</div>` : ''}
+        ${nar.setupNote ? `<div class="nar-setupnote">${nar.setupNote}</div>` : ''}
+
+        <button class="toggle-details" onclick="toggleDetails()">▼ Show data cards</button>
+    </div>`;
+
+    return narrativeHtml
+         + `<div id="detail-section" style="display:none">`
+         + verdictHtml + priceHtml + biasHtml + setupHtml
          + `<div class="two-col">${levelsHtml}${filterHtml}</div>`
-         + optHtml;
+         + optHtml
+         + `</div>`;
 }
 </script>
 </body>
