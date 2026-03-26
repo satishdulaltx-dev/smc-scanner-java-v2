@@ -145,7 +145,7 @@ public class ScannerService {
                     setups = breakout.detect(bars, ticker, dailyAtr);
                     phaseMsg = setups.isEmpty() ? "Waiting for ORB breakout..." : "";
                 } else if ("keylevel".equals(strategyType)) {
-                    setups = keyLevel.detect(bars, dailyBars, ticker, dailyAtr);
+                    setups = keyLevel.detect(bars, dailyBars, ticker, dailyAtr, profile);
                     phaseMsg = setups.isEmpty() ? "Waiting for key level rejection..." : "";
                 } else {
                     SetupDetector.DetectResult r=setupDetector.detectSetups(bars,htfBias,ticker,false,dailyAtr);

@@ -1,6 +1,7 @@
 package com.smcscanner.strategy;
 
 import com.smcscanner.model.OHLCV;
+import com.smcscanner.model.TickerProfile;
 import com.smcscanner.model.TradeSetup;
 import org.springframework.stereotype.Service;
 
@@ -52,7 +53,9 @@ public class KeyLevelStrategyDetector {
      * @return             0 or 1 detected setup
      */
     public List<TradeSetup> detect(List<OHLCV> fiveMinBars, List<OHLCV> htfBars,
-                                    String ticker, double dailyAtr) {
+                                    String ticker, double dailyAtr, TickerProfile profile) {
+        double slMult  = profile != null ? profile.resolveSlAtrMult() : 0.5;
+        double tpRatio = profile != null ? profile.resolveTpRrRatio() : 1.5;
         List<TradeSetup> result = new ArrayList<>();
         if (fiveMinBars == null || fiveMinBars.isEmpty()) return result;
         if (htfBars == null || htfBars.size() < 10)       return result;
@@ -149,11 +152,11 @@ public class KeyLevelStrategyDetector {
 
                 if (touched && rejectedDown && bearishBar && volConfirmed) {
                     double entry = r4(curClose);
-                    double sl    = r4(levelPrice + atr * 0.5);
+                    double sl    = r4(levelPrice + atr * slMult);
                     // Safety guard: sl must be above entry for a short
-                    if (sl <= entry) sl = r4(entry + atr * 0.5);
-                    // TP = exactly 1.5:1 R:R (news-aligned extension to 3:1 applied later)
-                    double tp    = r4(entry - (sl - entry) * 1.5);
+                    if (sl <= entry) sl = r4(entry + atr * slMult);
+                    // TP = tpRatio:1 R:R (news-aligned extension to 3:1 applied later)
+                    double tp    = r4(entry - (sl - entry) * tpRatio);
 
                     if (sl > entry && tp < entry) {
                         double risk   = sl - entry;
@@ -216,11 +219,11 @@ public class KeyLevelStrategyDetector {
 
                 if (touched && bouncedUp && bullishBar && volConfirmed) {
                     double entry = r4(curClose);
-                    double sl    = r4(levelPrice - atr * 0.5);
+                    double sl    = r4(levelPrice - atr * slMult);
                     // Safety guard: sl must be below entry for a long
-                    if (sl >= entry) sl = r4(entry - atr * 0.5);
-                    // TP = exactly 1.5:1 R:R (news-aligned extension to 3:1 applied later)
-                    double tp    = r4(entry + (entry - sl) * 1.5);
+                    if (sl >= entry) sl = r4(entry - atr * slMult);
+                    // TP = tpRatio:1 R:R (news-aligned extension to 3:1 applied later)
+                    double tp    = r4(entry + (entry - sl) * tpRatio);
 
                     if (sl < entry && tp > entry) {
                         double risk   = entry - sl;

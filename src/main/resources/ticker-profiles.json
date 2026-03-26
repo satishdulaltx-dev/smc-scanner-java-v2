@@ -119,11 +119,9 @@
     },
     {
       "ticker": "AAPL",
-      "strategyType": "smc",
-      "minConfidence": 80,
-      "minFvgPct": 0.0004,
-      "dispAtrMult": 1.3,
-      "note": "Tightened Mar 2026: 90d shows 27.3% WR -0.32% exp \u2014 raised minConf 65\u219280. AAPL tight range, only fire on strong high-quality SMC sweeps. User favorite."
+      "strategyType": "vwap",
+      "minConfidence": 70,
+      "note": "Switched SMC\u2192VWAP Mar 2026: SMC 29%WR/-0.36exp over 365d. AAPL is the most HFT-efficient stock \u2014 SMC FVG patterns arbitraged instantly. AAPL grinds; edge is mean-reversion to VWAP when it deviates, not sweep+FVG breakouts. minConf=70."
     },
     {
       "ticker": "MSFT",
@@ -221,18 +219,18 @@
     },
     {
       "ticker": "SMCI",
-      "minConfidence": 75,
-      "minFvgPct": 0.0012,
-      "dispAtrMult": 2.0,
-      "note": "Switched SMC\u2192KeyLevel Mar 2026: SMC FVG sweeps 14.3%WR/-1.21%exp (7 trades). Root cause: SMCI low-priced ($28-35), news-driven, FVGs catch fake moves. All 5 entries clustered at $31 pivot \u2014 KeyLevel rejection strategy targets those clean bounces at prior-day high/low and round numbers. minConf reset to 75, dispAtrMult=2.0 for wider stops on volatile stock.",
-      "strategyType": "keylevel"
+      "strategyType": "keylevel",
+      "minConfidence": 70,
+      "slAtrMult": 1.2,
+      "note": "Switched SMC\u2192KeyLevel Mar 2026. 365d: 3 exec trades 0%WR \u2014 all LOSS. SMCI has massive wicks ($2-4 ATR range) \u2014 standard 0.5 ATR stop gets shaken out by noise before the actual move. Increased slAtrMult 0.5\u21921.2: SL is now 1.2 ATR above/below the key level, past the wick noise. TP scales proportionally (1.5x the wider risk). minConf lowered to 70 to see more setups."
     },
     {
       "ticker": "JPM",
       "strategyType": "keylevel",
       "minConfidence": 70,
       "maxConfidence": 84,
-      "note": "Switched SMC\u2192KeyLevel Mar 2026: SMC 33.3%WR/-0.12%exp (4 trades). 2 of 4 SHORT signals fired against strong bullish news (news=-15/-8). JPM is range-bound financial \u2014 reacts cleanly at prior-day high/low and key S/R levels. KeyLevel catches the rejection, not the momentum sweep. maxConf=84 kept to avoid over-extended entries. minConf=70. 365d update: 5 exec trades 0%WR (3 BE_STOP 2 LOSS) — all LONGs at support hit BE then reversed. KeyLevel identifying correct direction but R:R too tight for JPM range. Monitor."
+      "tpRrRatio": 1.0,
+      "note": "Switched SMC\u2192KeyLevel Mar 2026. 365d: 5 exec trades 0%WR \u2014 all 3 BE_STOPs confirm entry direction is right, TP too far. JPM moves in $0.50-1.00 increments then stalls. Reduced tpRrRatio 1.5\u21921.0: take profit at 1:1 R:R (reached before reversal). ATR-aware SL unchanged (0.5 ATR above/below level)."
     },
     {
       "ticker": "SHOP",

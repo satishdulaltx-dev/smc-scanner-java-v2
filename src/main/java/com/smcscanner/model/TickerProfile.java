@@ -19,6 +19,10 @@ public class TickerProfile {
     private Double  dispAtrMult   = null; // overrides DISP_ATR_MULT
     private Double  minVolMult    = null; // overrides MIN_VOL_MULT
 
+    // KeyLevel exit overrides — ticker-specific stop/target sizing
+    private Double  slAtrMult  = null; // SL = levelPrice ± atr * slAtrMult (default 0.5)
+    private Double  tpRrRatio  = null; // TP = entry ± risk * tpRrRatio    (default 1.5)
+
     public static final TickerProfile DEFAULT = new TickerProfile();
 
     // ── Getters ───────────────────────────────────────────────────────────────
@@ -44,6 +48,10 @@ public class TickerProfile {
     public double resolveMinFvgPct(double globalDefault)   { return minFvgPct   != null ? minFvgPct   : globalDefault; }
     public double resolveDispAtrMult(double globalDefault) { return dispAtrMult != null ? dispAtrMult : globalDefault; }
     public double resolveMinVolMult(double globalDefault)  { return minVolMult  != null ? minVolMult  : globalDefault; }
+    /** SL distance = levelPrice ± ATR * slAtrMult. Default 0.5 (half-ATR buffer above/below level). */
+    public double resolveSlAtrMult()  { return slAtrMult != null ? slAtrMult : 0.5; }
+    /** TP distance = entry ± risk * tpRrRatio. Default 1.5 (1.5:1 R:R). */
+    public double resolveTpRrRatio()  { return tpRrRatio != null ? tpRrRatio : 1.5; }
 
     // ── Setters (for Jackson) ─────────────────────────────────────────────────
     public void setTicker(String v)        { this.ticker = v; }
@@ -56,4 +64,6 @@ public class TickerProfile {
     public void setMinFvgPct(Double v)     { this.minFvgPct = v; }
     public void setDispAtrMult(Double v)   { this.dispAtrMult = v; }
     public void setMinVolMult(Double v)    { this.minVolMult = v; }
+    public void setSlAtrMult(Double v)     { this.slAtrMult = v; }
+    public void setTpRrRatio(Double v)     { this.tpRrRatio = v; }
 }
