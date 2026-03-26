@@ -59,9 +59,37 @@ public record NewsSentiment(
 
     /** Confidence delta to apply based on news alignment with trade direction. */
     public int confidenceDelta(String tradeDirection) {
+        return confidenceDelta(tradeDirection, "smc");
+    }
+
+    /**
+     * Confidence delta with strategy-awareness.
+     *
+     * For "breakout" (ORB) strategy, news sentiment is treated differently:
+     * A technical breakout AGAINST news sentiment is a high-conviction divergence —
+     * "smart money" is breaking price in one direction despite the news narrative.
+     * This is not a reason to penalise — it's a stronger signal.
+     *
+     * Example: Bullish news + ORB SHORT → price breaking down DESPITE bullish news
+     *   = institutions distributing into retail buying = high-conviction short.
+     *   Instead of -15, apply a small penalty only, or even boost confidence.
+     *
+     * For all other strategies (SMC, VWAP, KeyLevel), news conflicts are penalised
+     * normally because those strategies rely on order-flow alignment with sentiment.
+     */
+    public int confidenceDelta(String tradeDirection, String strategyType) {
         if (!hasNews()) return 0;
+
+        boolean isBreakout = "breakout".equals(strategyType);
+
         if (isConflicting(tradeDirection)) {
-            // Strong conflict: -15; moderate: -8
+            if (isBreakout) {
+                // ORB breaking AGAINST news = divergence = smart money signal.
+                // Apply a small penalty only (not -15) — the divergence itself is informative.
+                // Strong divergence (e.g. strong bullish news + SHORT breakdown): minimal penalty.
+                return netScore <= -0.6 || netScore >= 0.6 ? -3 : -5;
+            }
+            // Non-breakout: full conflict penalty
             return netScore <= -0.6 || netScore >= 0.6 ? -15 : -8;
         }
         if (isAligned(tradeDirection)) {

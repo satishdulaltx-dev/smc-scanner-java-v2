@@ -249,7 +249,7 @@ public class BacktestService {
                 // News: 48h window ending at entry timestamp
                 NewsSentiment sentiment = ticker.startsWith("X:") ? NewsSentiment.NONE
                         : newsService.getSentimentAt(ticker, entryEpochMs);
-                int newsAdj = sentiment.confidenceDelta(setup.getDirection());
+                int newsAdj = sentiment.confidenceDelta(setup.getDirection(), stratType);
 
                 // News-aligned TP extension: 1.5:1 → 3:1 R:R
                 // Mirrors live scanner logic: when news aligns with direction, widen TP

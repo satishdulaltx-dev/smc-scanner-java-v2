@@ -124,18 +124,28 @@ public class KeyLevelStrategyDetector {
 
             if (isResistance) {
                 // ── SHORT: price touched resistance and is rejecting downward ──
-                // • Trend must NOT be strongly up (don't short a rising market)
-                // • Current bar's high reached or poked above the level (it was tested)
-                // • Bar closed below the level (rejection, not breakout)
-                // • Bearish bar (close < open)
-                // • Volume elevated
-                if ("up".equals(htfTrend)) continue; // don't short into uptrend
+                // Vector check: price must be APPROACHING from below (not already above level).
+                // We check that at least 3 of the last 5 bars before this one were BELOW
+                // the level — confirming this is a fresh test from below, not a breakdown
+                // retest from above (which would be a LONG setup, not a SHORT).
+                boolean approachingFromBelow = false;
+                if (sessionBars.size() >= 4) {
+                    int checkStart = Math.max(0, sessionBars.size() - 5);
+                    int belowCount = 0;
+                    for (int bi = checkStart; bi < sessionBars.size() - 1; bi++) {
+                        if (sessionBars.get(bi).getClose() < levelPrice) belowCount++;
+                    }
+                    approachingFromBelow = belowCount >= 2;
+                }
+                if (!approachingFromBelow) continue; // price arriving from wrong side — skip
 
                 boolean touched      = curHigh >= levelPrice * (1 - TOUCH_TOLERANCE);
                 boolean rejectedDown = curClose <= levelPrice * (1 + TOUCH_TOLERANCE * 0.3);
                 boolean bearishBar   = curClose < curOpen;
                 boolean upperWick    = (curHigh - curClose) > atr * 0.15; // significant upper wick
                 boolean volConfirmed = last.getVolume() > avgVol * 1.2;
+                // Counter-trend flag: shorting into an uptrend reduces conviction
+                boolean counterTrend = "up".equals(htfTrend);
 
                 if (touched && rejectedDown && bearishBar && volConfirmed) {
                     double entry = r4(curClose);
@@ -156,6 +166,7 @@ public class KeyLevelStrategyDetector {
                             if (touches >= 4)                         confidence += 5;  // 4+ = institutional distribution
                             if (upperWick)                            confidence += 5;  // clear rejection wick
                             if (last.getVolume() > avgVol * 2.0)     confidence += 5;  // volume surge at level
+                            if (counterTrend)                         confidence -= 8;  // counter-trend penalty (not a block)
 
                             result.add(TradeSetup.builder()
                                     .ticker(ticker)
@@ -180,14 +191,28 @@ public class KeyLevelStrategyDetector {
 
             } else {
                 // ── LONG: price touched support and is bouncing upward ──────────
-                // • Trend must NOT be strongly down (don't buy into a downtrend)
-                if ("down".equals(htfTrend)) continue; // don't long into downtrend
+                // Vector check: price must be APPROACHING from above (not already below level).
+                // At least 2 of the recent bars before this one should have been ABOVE
+                // the level — confirming this is a fresh test from above, not a breakout
+                // retest from below (which would be a SHORT setup).
+                boolean approachingFromAbove = false;
+                if (sessionBars.size() >= 4) {
+                    int checkStart = Math.max(0, sessionBars.size() - 5);
+                    int aboveCount = 0;
+                    for (int bi = checkStart; bi < sessionBars.size() - 1; bi++) {
+                        if (sessionBars.get(bi).getClose() > levelPrice) aboveCount++;
+                    }
+                    approachingFromAbove = aboveCount >= 2;
+                }
+                if (!approachingFromAbove) continue; // price arriving from wrong side — skip
 
                 boolean touched      = curLow <= levelPrice * (1 + TOUCH_TOLERANCE);
                 boolean bouncedUp    = curClose >= levelPrice * (1 - TOUCH_TOLERANCE * 0.3);
                 boolean bullishBar   = curClose > curOpen;
                 boolean lowerWick    = (curClose - curLow) > atr * 0.15; // significant lower wick
                 boolean volConfirmed = last.getVolume() > avgVol * 1.2;
+                // Counter-trend flag: buying into a downtrend reduces conviction
+                boolean counterTrend = "down".equals(htfTrend);
 
                 if (touched && bouncedUp && bullishBar && volConfirmed) {
                     double entry = r4(curClose);
@@ -208,6 +233,7 @@ public class KeyLevelStrategyDetector {
                             if (touches >= 4)                         confidence += 5;
                             if (lowerWick)                            confidence += 5;
                             if (last.getVolume() > avgVol * 2.0)     confidence += 5;
+                            if (counterTrend)                         confidence -= 8;  // counter-trend penalty (not a block)
 
                             result.add(TradeSetup.builder()
                                     .ticker(ticker)

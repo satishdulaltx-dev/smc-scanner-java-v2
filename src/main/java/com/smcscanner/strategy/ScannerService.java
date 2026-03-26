@@ -170,7 +170,7 @@ public class ScannerService {
 
                 // ── News sentiment check ──────────────────────────────────────
                 NewsSentiment sentiment = isC ? NewsSentiment.NONE : news.getSentiment(ticker);
-                int newsAdj = sentiment.confidenceDelta(s.getDirection());
+                int newsAdj = sentiment.confidenceDelta(s.getDirection(), stratType);
                 if (newsAdj != 0) {
                     log.info("{} news adj={} score={} dir={}", ticker, newsAdj, sentiment.netScore(), s.getDirection());
                 }
