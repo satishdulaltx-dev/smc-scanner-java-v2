@@ -80,6 +80,11 @@ public class BacktestService {
         // history even when backtesting 90+ days into the past
         List<OHLCV> dailyBars = client.getBars(ticker, "1d", 200);
 
+        // Fetch 15m bars for the full backtest period — used to compute 15m trend
+        // bias at each entry point, mirroring the live scanner's alignment check.
+        List<OHLCV> all15mBars = ticker.startsWith("X:") ? List.of()
+                : client.getBarsWithLookback(ticker, "15m", 10000, lookbackDays + 5);
+
         // Pre-fetch SPY and VIX bars once for market context computation.
         // getContextAt() slices these in-memory per trade — no extra API calls.
         List<OHLCV> spyBars = marketCtxService.fetchSpyBarsForBacktest(220);
@@ -178,6 +183,44 @@ public class BacktestService {
 
                 // ── Historical context checks (news + market) ────────────────
                 long entryEpochMs = Long.parseLong(dayBars.get(end - 1).getTimestamp());
+
+                // ── 15m alignment check — mirrors live ScannerService logic ──
+                // Compute 15m bias using bars strictly before entry timestamp.
+                // Block if 15m trend directly opposes the setup direction.
+                if (!ticker.startsWith("X:") && !all15mBars.isEmpty()) {
+                    List<OHLCV> slice15 = all15mBars.stream()
+                            .filter(b -> Long.parseLong(b.getTimestamp()) < entryEpochMs)
+                            .collect(java.util.stream.Collectors.toList());
+                    if (slice15.size() >= 20) {
+                        int sz = slice15.size();
+                        double sma15 = slice15.subList(sz - 20, sz).stream()
+                                .mapToDouble(OHLCV::getClose).average().orElse(0);
+                        double last15 = slice15.get(sz - 1).getClose();
+                        String bias15 = last15 > sma15 * 1.002 ? "bullish"
+                                      : last15 < sma15 * 0.998 ? "bearish" : "neutral";
+                        // 5-bar momentum tiebreaker (same as daily bias logic)
+                        if ("neutral".equals(bias15) && sz >= 5) {
+                            double prev5 = slice15.get(sz - 5).getClose();
+                            double mom = (last15 - prev5) / prev5;
+                            if      (mom >  0.015) bias15 = "bullish";
+                            else if (mom < -0.015) bias15 = "bearish";
+                        }
+                        boolean conflicts = ("bullish".equals(bias15) && "short".equals(setup.getDirection()))
+                                         || ("bearish".equals(bias15) && "long".equals(setup.getDirection()));
+                        if (conflicts) {
+                            trades.add(new TradeResult(ticker, setup.getDirection(),
+                                    setup.getEntry(), setup.getStopLoss(), setup.getTakeProfit(),
+                                    "15M_FILTERED", 0.0,
+                                    toDateTime(dayBars.get(end-1).getTimestamp()),
+                                    toDateTime(dayBars.get(end-1).getTimestamp()),
+                                    setup.getConfidence(), setup.getAtr(),
+                                    0, "15M_CONFLICT", 0, bias15, 0, bias15,
+                                    0, 0, 0, 0));
+                            tradePlacedToday = true;
+                            continue;
+                        }
+                    }
+                }
                 TickerProfile bp2 = config.getTickerProfile(ticker);
                 int effectiveMinConf = bp2.resolveMinConfidence(config.getMinConfidence());
 
@@ -397,7 +440,8 @@ public class BacktestService {
             this.ctxFiltered  = (int) trades.stream().filter(t ->
                     "CTX_FILTERED".equals(t.outcome())).count();
             this.qualityFiltered = (int) trades.stream().filter(t ->
-                    "QUALITY_FILTERED".equals(t.outcome()) || "MULTI_FILTERED".equals(t.outcome())).count();
+                    "QUALITY_FILTERED".equals(t.outcome()) || "MULTI_FILTERED".equals(t.outcome())
+                    || "15M_FILTERED".equals(t.outcome())).count();
 
             // TIMEOUT trades are counted as wins or losses based on their PnL sign.
             // BE_STOP trades exit at breakeven (0% PnL) — counted separately, not wins or losses.
@@ -425,7 +469,8 @@ public class BacktestService {
                     .filter(t -> !"NEWS_FILTERED".equals(t.outcome())
                               && !"CTX_FILTERED".equals(t.outcome())
                               && !"QUALITY_FILTERED".equals(t.outcome())
-                              && !"MULTI_FILTERED".equals(t.outcome()))
+                              && !"MULTI_FILTERED".equals(t.outcome())
+                              && !"15M_FILTERED".equals(t.outcome()))
                     .toList();
 
             this.totalOptPnl = executed.stream().mapToDouble(TradeResult::optPnlPerContract).sum();
