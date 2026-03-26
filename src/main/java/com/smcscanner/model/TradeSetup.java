@@ -147,6 +147,7 @@ public class TradeSetup {
         private double optionsStrike, optionsPremium, optionsDelta, optionsIV, optionsBreakEven;
         private double optionsProfitPer, optionsLossPer, optionsRR, optionsMaxPain;
         private int optionsIVPct, optionsSuggested;
+        private String factorBreakdown, convictionTier;
 
         public Builder ticker(String v)        { this.ticker = v;      return this; }
         public Builder direction(String v)     { this.direction = v;   return this; }
@@ -179,6 +180,8 @@ public class TradeSetup {
         public Builder optionsFlowLabel(String v)  { this.optionsFlowLabel = v;  return this; }
         public Builder optionsFlowDir(String v)    { this.optionsFlowDir = v;    return this; }
         public Builder optionsMaxPain(double v)    { this.optionsMaxPain = v;    return this; }
+        public Builder factorBreakdown(String v)   { this.factorBreakdown = v;   return this; }
+        public Builder convictionTier(String v)    { this.convictionTier = v;    return this; }
         public TradeSetup build()              { return new TradeSetup(this); }
     }
 }

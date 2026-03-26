@@ -98,7 +98,7 @@ public class BreakoutStrategyDetector {
             // Safety guard: sl must be below entry for a long
             if (sl >= entry) sl = r4(entry - orbWidth * 0.15);
             // TP = exactly 1.5:1 R:R (news-aligned extension to 3:1 applied later)
-            double tp    = r4(entry + (entry - sl) * 2.0);  // 2:1 R:R
+            double tp    = r4(entry + (entry - sl) * 2.5);  // 2.5:1 R:R
 
             if (sl < entry && tp > entry) {
                 double risk   = entry - sl;
@@ -141,7 +141,7 @@ public class BreakoutStrategyDetector {
             // Safety guard: sl must be above entry for a short
             if (sl <= entry) sl = r4(entry + orbWidth * 0.15);
             // TP = exactly 1.5:1 R:R (news-aligned extension to 3:1 applied later)
-            double tp    = r4(entry - (sl - entry) * 2.0);  // 2:1 R:R
+            double tp    = r4(entry - (sl - entry) * 2.5);  // 2.5:1 R:R
 
             if (sl > entry && tp < entry) {
                 double risk   = sl - entry;

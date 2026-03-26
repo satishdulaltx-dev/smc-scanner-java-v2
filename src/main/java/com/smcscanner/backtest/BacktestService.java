@@ -205,22 +205,6 @@ public class BacktestService {
                     }
                 }
 
-                // ── Confidence dead-zone block (70-74) — mirrors live scanner ──
-                // 90d backtest: confidence 70-74 = 13.3% WR. Hard block.
-                if (!ticker.startsWith("X:") && setup.getConfidence() >= 70 && setup.getConfidence() <= 74) {
-                    trades.add(new TradeResult(ticker, setup.getDirection(),
-                            setup.getEntry(), setup.getStopLoss(), setup.getTakeProfit(),
-                            "QUALITY_FILTERED", 0.0,
-                            toDateTime(dayBars.get(end-1).getTimestamp()),
-                            toDateTime(dayBars.get(end-1).getTimestamp()),
-                            setup.getConfidence(), setup.getAtr(),
-                            0, "⏸ Conf dead-zone 70-74", 0, null,
-                            -100, "Conf dead-zone (-100)",
-                            0, 0, 0, 0));
-                    tradePlacedToday = true;
-                    continue;
-                }
-
                 // ── 15m alignment check — mirrors live ScannerService logic ──
                 // Compute 15m bias using bars strictly before entry timestamp.
                 // Block if 15m trend directly opposes the setup direction.
