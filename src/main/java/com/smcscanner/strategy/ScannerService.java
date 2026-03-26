@@ -170,6 +170,7 @@ public class ScannerService {
 
                 // ── News sentiment check ──────────────────────────────────────
                 NewsSentiment sentiment = isC ? NewsSentiment.NONE : news.getSentiment(ticker);
+                String stratType = profile.getStrategyType();
                 int newsAdj = sentiment.confidenceDelta(s.getDirection(), stratType);
                 if (newsAdj != 0) {
                     log.info("{} news adj={} score={} dir={}", ticker, newsAdj, sentiment.netScore(), s.getDirection());
@@ -198,7 +199,6 @@ public class ScannerService {
                 // SPY while we try to SHORT (or underperforming while going LONG),
                 // reduce confidence. VIX regime check flags when strategy type
                 // (VWAP/ORB) is a poor fit for current market volatility.
-                String stratType = profile.getStrategyType();
                 MarketContext context = isC ? MarketContext.NONE : marketCtx.getContext(ticker);
                 int ctxAdj = context.confidenceDelta(s.getDirection(), stratType);
                 if (ctxAdj != 0) {
