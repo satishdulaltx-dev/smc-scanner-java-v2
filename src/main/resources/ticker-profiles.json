@@ -42,11 +42,13 @@
     },
     {
       "ticker": "AMZN",
-      "strategyType": "vwap",
-      "minConfidence": 75,
-      "note": "Switched SMC\u2192VWAP Mar 2026. minConf raised to 75 \u2014 only take well-confirmed VWAP reversions.",
-      "skip": true,
-      "skipReason": "0% WR 90d (3 trades, 0 wins, 2 BE exits). VWAP strategy produces no edge \u2014 all confidence buckets 0% WR. 34 signals filtered, 3 that survived all lost. Removed Mar 2026."
+      "strategyType": "smc",
+      "minConfidence": 80,
+      "note": "Switched VWAP\u2192SMC Mar 2026. VWAP reversion 0% WR. SMC sweep+FVG targets institutional order flow \u2014 matches how user trades AMZN profitably. minConf 80 \u2014 only clean high-quality sweeps.",
+      "skip": false,
+      "skipReason": null,
+      "minFvgPct": 0.0006,
+      "dispAtrMult": 1.4
     },
     {
       "ticker": "MSTR",
@@ -123,11 +125,11 @@
     },
     {
       "ticker": "MSFT",
-      "strategyType": "vwap",
-      "minConfidence": 75,
-      "note": "Switched SMC\u2192VWAP Mar 2026. minConf raised to 75 \u2014 only clear VWAP deviations with strong vol spike.",
-      "skip": true,
-      "skipReason": "0% WR 90d (3 trades, 0 wins). VWAP on mega-cap slow-mover not working. 38 signals filtered, remainder all losses. Removed Mar 2026."
+      "strategyType": "keylevel",
+      "minConfidence": 78,
+      "note": "Switched VWAP\u2192KeyLevel Mar 2026. VWAP 0% WR. MSFT is slow mega-cap \u2014 key level rejection at daily pivots and S/R levels is the right approach. minConf 78.",
+      "skip": false,
+      "skipReason": null
     },
     {
       "ticker": "META",
@@ -154,11 +156,11 @@
     },
     {
       "ticker": "SPY",
-      "strategyType": "vwap",
-      "note": "VWAP strategy. minConf raised to 75 \u2014 A+ setups only. ETF trends strongly; only take high-confidence mean reversion.",
-      "minConfidence": 75,
-      "skip": true,
-      "skipReason": "33% WR but only 4 trades in 90d after filtering (50 filtered). Near-zero signal frequency. VWAP trend filter + dead zones kill almost all SPY setups. Not worth scan cycles. Removed Mar 2026."
+      "strategyType": "breakout",
+      "note": "Switched VWAP\u2192ORB Breakout Mar 2026. VWAP produced near-zero signals (50 filtered, 4 trades). SPY trends strongly intraday \u2014 ORB breakout after 9:30-9:45 is the correct strategy for an ETF.",
+      "minConfidence": 78,
+      "skip": false,
+      "skipReason": null
     },
     {
       "ticker": "QQQ",
