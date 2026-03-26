@@ -62,7 +62,7 @@ public class BacktestService {
 
     public BacktestResult run(String ticker, int lookbackDays) {
         // Fetch 5m bars for the full lookback — one API call gets it all
-        List<OHLCV> allBars = client.getBarsWithLookback(ticker, "5m", 5000, lookbackDays);
+        List<OHLCV> allBars = client.getBarsWithLookback(ticker, "5m", 50000, lookbackDays);
         if (allBars == null || allBars.size() < 30) {
             return BacktestResult.empty(ticker, "Insufficient data (" + (allBars==null?0:allBars.size()) + " bars)");
         }
