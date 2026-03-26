@@ -170,6 +170,11 @@ public class VwapStrategyDetector {
                 // lower confidence by 15 so it needs 80+ to survive filters.
                 if (trendBearish) confidence -= 15;
 
+                // Enforce 2:1 R:R minimum — raises TP if VWAP is too close
+                double longRisk = entry - sl;
+                double longMin2R = r4(entry + longRisk * 2.0);
+                if (tp < longMin2R) tp = longMin2R;
+
                 if (sl < entry && tp > entry) {
                     result.add(TradeSetup.builder()
                             .ticker(ticker)
@@ -224,6 +229,11 @@ public class VwapStrategyDetector {
                 if (last.getVolume() > avgVol * 2.5)             confidence += 5;
                 // Soft trend penalty for moderate counter-trend setup
                 if (trendBullish) confidence -= 15;
+
+                // Enforce 2:1 R:R minimum
+                double shortRisk = sl - entry;
+                double shortMin2R = r4(entry - shortRisk * 2.0);
+                if (tp > shortMin2R) tp = shortMin2R;
 
                 if (sl > entry && tp < entry) {
                     result.add(TradeSetup.builder()
