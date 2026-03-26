@@ -79,6 +79,32 @@ public class AdaptiveSuppressor {
         return count;
     }
 
+    /**
+     * Returns a confidence delta based on rolling win rate over the last WINDOW outcomes.
+     *
+     * Unlike consecutive-loss streak (which only catches sudden collapses), this catches
+     * slow regime degradation — e.g. 3 wins then 3 losses looks fine to a streak counter
+     * but is 50% WR and sliding toward the unprofitable zone.
+     *
+     * Thresholds (calibrated to 1.5:1 R:R breakeven at ~37.5% WR):
+     *   < 20% WR over last 6 → -25  (regime breakdown — near-block)
+     *   < 33% WR over last 6 → -15  (below breakeven — serious warning)
+     *   < 45% WR over last 6 →  -8  (approaching breakeven — early warning)
+     *   ≥ 45%               →   0  (healthy — no adjustment)
+     *
+     * Requires ≥ 4 outcomes; returns 0 if insufficient history.
+     */
+    public int getRegimeDelta(String ticker) {
+        Deque<Boolean> q = outcomes.get(ticker);
+        if (q == null || q.size() < 4) return 0;
+        long wins = q.stream().filter(b -> Boolean.TRUE.equals(b)).count();
+        double wr = (double) wins / q.size();
+        if (wr < 0.20) return -25;
+        if (wr < 0.33) return -15;
+        if (wr < 0.45) return  -8;
+        return 0;
+    }
+
     /** Returns a summary of all non-zero streak tickers (for the dashboard). */
     public Map<String, Integer> getActiveStreaks() {
         Map<String, Integer> result = new LinkedHashMap<>();

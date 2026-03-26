@@ -94,35 +94,35 @@ public class ScannerService {
                 } catch (Exception e) { log.debug("{} 15m bias error: {}", ticker, e.getMessage()); }
             }
 
-            // ── Correlation bias override ─────────────────────────────────────
-            // For tickers that are driven by a correlated asset, replace the
-            // stock's own 15m bias with the correlated asset's 15m bias.
-            // The 15m alignment check below then blocks conflicting directions
-            // automatically — no extra code path needed.
+            // ── Cross-asset correlation bias (soft penalty, not hard block) ───
+            // COIN/MARA track BTC (~90% intraday correlation).
+            // AMD/SMCI track NVDA (AI/semi cluster moves together).
             //
-            // COIN / MARA → BTC 15m  (crypto proxies, ~90% intraday correlation)
-            // AMD  / SMCI → NVDA 15m (AI/semi cluster moves together)
+            // When the correlated asset DISAGREES with the setup direction:
+            //   -20 for crypto proxies  (BTC is the driver — strong signal)
+            //   -15 for semi cluster    (NVDA leads AMD/SMCI — strong signal)
+            // When correlated asset AGREES: +5 bonus (additional confirmation).
+            // "neutral" correlated asset → 0 adjustment (no clear trend to use).
             //
-            // Only override when the correlated asset has a clear directional bias;
-            // "neutral" keeps the stock's own 15m bias so we don't over-block.
-            String correlatedAsset = null;
+            // Stored in corrAdj; applied in totalAdj below after setup detection.
+            // Uses soft penalty so a 95-conf COIN setup isn't killed by neutral BTC —
+            // only genuinely conflicting setups get penalised.
+            String corrAsset = null;
+            int    corrConflictPenalty = 0;
+            int    corrAgreementBonus  = 0;
+            String corrBias = "neutral";
             if (!isC) {
-                if (ticker.equals("COIN") || ticker.equals("MARA"))        correlatedAsset = "X:BTCUSD";
-                else if (ticker.equals("AMD") || ticker.equals("SMCI"))    correlatedAsset = "NVDA";
+                if      (ticker.equals("COIN") || ticker.equals("MARA")) { corrAsset = "X:BTCUSD"; corrConflictPenalty = -20; corrAgreementBonus = +5; }
+                else if (ticker.equals("AMD")  || ticker.equals("SMCI")) { corrAsset = "NVDA";     corrConflictPenalty = -15; corrAgreementBonus = +5; }
             }
-            if (correlatedAsset != null) {
+            if (corrAsset != null) {
                 try {
-                    List<OHLCV> corrBars = client.getBars(correlatedAsset, "15m", 60);
+                    List<OHLCV> corrBars = client.getBars(corrAsset, "15m", 60);
                     if (corrBars != null && corrBars.size() >= 10) {
-                        String corrBias = mtf.getHtfBias(corrBars);
-                        if (!"neutral".equals(corrBias)) {
-                            // Only override when correlated asset has a clear trend
-                            bias15m = corrBias;
-                            log.info("{} correlation override: using {} 15m bias={} instead of own bias",
-                                    ticker, correlatedAsset, corrBias);
-                        }
+                        corrBias = mtf.getHtfBias(corrBars);
+                        log.debug("{} corr asset={} bias={}", ticker, corrAsset, corrBias);
                     }
-                } catch (Exception e) { log.debug("{} correlation bias error: {}", ticker, e.getMessage()); }
+                } catch (Exception e) { log.debug("{} correlation fetch error: {}", ticker, e.getMessage()); }
             }
             try {
                 dailyBars=client.getBars(ticker,"1d",100); // 100 bars: enough for swing detection + ATR
@@ -221,6 +221,27 @@ public class ScannerService {
                             String.format("%.1f", s.rrRatio()), streak);
                 }
 
+                // ── Regime failure penalty ────────────────────────────────────
+                // Beyond consecutive losses: track rolling win rate over last 6
+                // outcomes. Slow degradation (3 wins then 3 losses) is invisible
+                // to a streak counter but caught here.
+                int regimeAdj = isC ? 0 : adaptive.getRegimeDelta(ticker);
+                if (regimeAdj != 0) {
+                    log.info("{} regime adj={} (rolling WR below threshold)", ticker, regimeAdj);
+                }
+
+                // ── Cross-asset correlation penalty (computed now we know dir) ─
+                int corrAdj = 0;
+                if (corrAsset != null && !corrBias.equals("neutral")) {
+                    String dir = s.getDirection();
+                    boolean conflicts = ("bullish".equals(corrBias) && "short".equals(dir))
+                                     || ("bearish".equals(corrBias) && "long".equals(dir));
+                    boolean agrees    = ("bullish".equals(corrBias) && "long".equals(dir))
+                                     || ("bearish".equals(corrBias) && "short".equals(dir));
+                    if      (conflicts) { corrAdj = corrConflictPenalty; log.info("{} CORR_CONFLICT: {} bias={} vs {} setup → adj={}", ticker, corrAsset, corrBias, dir, corrAdj); }
+                    else if (agrees)    { corrAdj = corrAgreementBonus;  log.info("{} CORR_AGREE:    {} bias={} with {} setup → adj={}", ticker, corrAsset, corrBias, dir, corrAdj); }
+                }
+
                 // ── Time-of-day dead-zone block ───────────────────────────────────
                 // 11:00–11:59 AM ET and 1:00–1:59 PM ET have 0% historical win rate.
                 // Mid-morning and post-lunch consolidation = choppy, fake breakouts.
@@ -259,8 +280,8 @@ public class ScannerService {
                     }
                 }
 
-                // Apply combined confidence adjustment (news + market context + quality + options flow)
-                int totalAdj = newsAdj + ctxAdj + qualityAdj + flowAdj;
+                // Apply combined confidence adjustment (news + context + quality + flow + regime + correlation)
+                int totalAdj = newsAdj + ctxAdj + qualityAdj + flowAdj + regimeAdj + corrAdj;
                 if (totalAdj != 0 || flow.hasData() || rec.hasData()) {
                     TradeSetup.Builder sb = TradeSetup.builder()
                             .ticker(s.getTicker()).direction(s.getDirection())
