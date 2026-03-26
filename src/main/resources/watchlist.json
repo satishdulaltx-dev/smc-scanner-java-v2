@@ -8,7 +8,6 @@
     "AMD",
     "NFLX",
     "COIN",
-    "SHOP",
     "PLTR",
     "SOFI",
     "JPM",
@@ -18,6 +17,8 @@
     "AMZN",
     "MSFT",
     "SPY",
-    "SMCI"
+    "SMCI",
+    "CRWD",
+    "MSTR"
   ]
 }
