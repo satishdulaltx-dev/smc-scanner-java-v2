@@ -78,6 +78,49 @@ public class VwapStrategyDetector {
 
         OHLCV last = sessionBars.get(sessionBars.size() - 1);
 
+        // ── Macro trend filter ────────────────────────────────────────────────
+        // VWAP reversion LONGs in a clearly bearish trending day have very low
+        // win rates — price dips below VWAP, bounces slightly, then continues down.
+        // VWAP reversion SHORTs in a clearly bullish trending day have the same problem.
+        //
+        // Rules:
+        //   1. Compute day change % from first session bar open → current close
+        //   2. Compute SMA20 direction (declining or rising)
+        //   3. trendBearish  = day < -0.8% AND SMA20 declining
+        //      trendBullish  = day >  0.8% AND SMA20 rising
+        //   4. Hard block LONGs when day < -1.5% (strongly trending down)
+        //      Hard block SHORTs when day >  1.5% (strongly trending up)
+        //   5. Soft penalty (-15 conf) for moderate bearish/bullish trend vs LONG/SHORT
+
+        double dayOpen      = sessionBars.get(0).getOpen();
+        double dayChangePct = dayOpen > 0 ? (lastClose - dayOpen) / dayOpen * 100.0 : 0.0;
+
+        // SMA20 of session closes
+        int smaPeriod = Math.min(20, sessionBars.size());
+        double sma20 = 0.0;
+        for (int i = sessionBars.size() - smaPeriod; i < sessionBars.size(); i++) {
+            sma20 += sessionBars.get(i).getClose();
+        }
+        sma20 /= smaPeriod;
+
+        // SMA20 direction: compare to SMA20 from 5 bars ago
+        double sma20Earlier = 0.0;
+        boolean hasSmaEarlier = sessionBars.size() >= smaPeriod + 5;
+        if (hasSmaEarlier) {
+            for (int i = sessionBars.size() - smaPeriod - 5; i < sessionBars.size() - 5; i++) {
+                sma20Earlier += sessionBars.get(i).getClose();
+            }
+            sma20Earlier /= smaPeriod;
+        }
+        boolean smaDeclining = hasSmaEarlier && sma20 < sma20Earlier;
+        boolean smaRising    = hasSmaEarlier && sma20 > sma20Earlier;
+
+        // Composite trend flags
+        boolean trendBearish         = dayChangePct < -0.8  && smaDeclining;
+        boolean trendStronglyBearish = dayChangePct < -1.5;
+        boolean trendBullish         = dayChangePct >  0.8  && smaRising;
+        boolean trendStronglyBullish = dayChangePct >  1.5;
+
         // ── LONG setup ────────────────────────────────────────────────────────
         // Look back 20 bars for lowest close (wider window catches more setups)
         int lookback = Math.min(20, sessionBars.size());
@@ -92,6 +135,15 @@ public class VwapStrategyDetector {
 
         // LONG: price must have dipped meaningfully below VWAP
         if (lowestClose < vwap - 0.5 * curAtr) {
+            // ── Macro trend hard block ─────────────────────────────────────
+            // Don't fire LONG if the whole day is strongly trending down.
+            // A -1.5%+ day with declining SMA is a downtrend, not a dip to buy.
+            if (trendStronglyBearish) {
+                // Day is strongly bearish (< -1.5%) — suppress all VWAP LONGs.
+                // VWAP reversion in a downtrend catches falling knives, not reversals.
+                return result;
+            }
+
             double curClose = last.getClose();
             boolean belowVwap      = curClose < vwap;
             boolean bouncingUp     = curClose > lowestClose + curAtr * 0.2;
@@ -113,6 +165,10 @@ public class VwapStrategyDetector {
                 if (last.getVolume() > avgVol * 1.8)             confidence += 5;
                 if ((vwap - curClose) > 0.8 * curAtr)            confidence += 5;
                 if (last.getVolume() > avgVol * 2.5)             confidence += 5;
+                // ── Soft trend penalty ─────────────────────────────────────
+                // Moderate bearish day (-0.8% to -1.5%) with declining SMA:
+                // lower confidence by 15 so it needs 80+ to survive filters.
+                if (trendBearish) confidence -= 15;
 
                 if (sl < entry && tp > entry) {
                     result.add(TradeSetup.builder()
@@ -139,6 +195,12 @@ public class VwapStrategyDetector {
         // ── SHORT setup ───────────────────────────────────────────────────────
         // Price must have spiked meaningfully above VWAP
         if (highestClose > vwap + 0.5 * curAtr) {
+            // ── Macro trend hard block ─────────────────────────────────────
+            // Don't fire SHORT if the whole day is strongly trending up.
+            if (trendStronglyBullish) {
+                return result;
+            }
+
             double curClose = last.getClose();
             boolean aboveVwap     = curClose > vwap;
             boolean revertingDown  = curClose < highestClose - curAtr * 0.2;
@@ -160,6 +222,8 @@ public class VwapStrategyDetector {
                 if (last.getVolume() > avgVol * 1.8)             confidence += 5;
                 if ((curClose - vwap) > 0.8 * curAtr)            confidence += 5;
                 if (last.getVolume() > avgVol * 2.5)             confidence += 5;
+                // Soft trend penalty for moderate counter-trend setup
+                if (trendBullish) confidence -= 15;
 
                 if (sl > entry && tp < entry) {
                     result.add(TradeSetup.builder()
