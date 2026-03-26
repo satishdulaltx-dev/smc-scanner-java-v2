@@ -50,7 +50,7 @@ public class SetupDetector {
 
         double atrPct=atrCalc.atrPercentile(atrArr,-1,100);
         if (atrPct<config.getMinAtrPercentile()) {
-            log.debug("{} filtered: LOW_VOL atrPct={:.1f}", ticker, atrPct);
+            log.trace("{} filtered: LOW_VOL atrPct={}", ticker, atrPct);
             state.setPhase(SetupPhase.LOW_VOLATILITY); return new DetectResult(List.of(),state);
         }
 
@@ -65,14 +65,14 @@ public class SetupDetector {
 
         state=runStateMachine(bars,atrArr,state,effDispAtrMult);
         if (!state.isComplete()) {
-            log.debug("{} filtered: state={}", ticker, state.getPhase());
+            log.trace("{} filtered: state={}", ticker, state.getPhase());
             return new DetectResult(List.of(),state);
         }
 
         // Staleness check: retest must be recent (within last 20 bars)
         int barsAgoRetest = bars.size() - 1 - state.getRetestBar();
         if (barsAgoRetest > 20) {
-            log.debug("{} filtered: STALE_RETEST retest was {} bars ago", ticker, barsAgoRetest);
+            log.trace("{} filtered: STALE_RETEST retest was {} bars ago", ticker, barsAgoRetest);
             state.setPhase(SetupPhase.IDLE);
             return new DetectResult(List.of(),state);
         }
@@ -80,7 +80,7 @@ public class SetupDetector {
         // Price proximity: current price must be within 3 ATRs of FVG zone
         double fvgMidCheck = (state.getFvgTop() + state.getFvgBottom()) / 2.0;
         if (Math.abs(lastClose - fvgMidCheck) > curAtr * 3.0) {
-            log.debug("{} filtered: PRICE_FAR_FROM_FVG price={} fvgMid={} dist={} atr={}", ticker,
+            log.trace("{} filtered: PRICE_FAR_FROM_FVG price={} fvgMid={} dist={} atr={}", ticker,
                 String.format("%.2f", lastClose), String.format("%.2f", fvgMidCheck),
                 String.format("%.2f", Math.abs(lastClose - fvgMidCheck)), String.format("%.2f", curAtr));
             state.setPhase(SetupPhase.IDLE);
@@ -89,33 +89,33 @@ public class SetupDetector {
 
         double fvgSize=Math.abs(state.getFvgTop()-state.getFvgBottom());
         if (fvgSize/lastClose<effMinFvgPct) {
-            log.debug("{} filtered: FVG_TOO_SMALL fvgSize={} minPct={} (profile)", ticker, fvgSize, effMinFvgPct);
+            log.trace("{} filtered: FVG_TOO_SMALL fvgSize={} minPct={} (profile)", ticker, fvgSize, effMinFvgPct);
             return new DetectResult(List.of(),state);
         }
 
         double avgVol=bars.stream().mapToDouble(OHLCV::getVolume).average().orElse(1.0);
         double peakVol=bars.subList(Math.max(0,bars.size()-10),bars.size()).stream().mapToDouble(OHLCV::getVolume).max().orElse(0);
         if (peakVol<avgVol*effMinVolMult) {
-            log.debug("{} filtered: LOW_VOLUME peak={} avg={} ratio={}", ticker,
+            log.trace("{} filtered: LOW_VOLUME peak={} avg={} ratio={}", ticker,
                 (long)peakVol, (long)avgVol, String.format("%.2f", peakVol/Math.max(avgVol,1)));
             return new DetectResult(List.of(),state);
         }
 
         boolean[] str=detectStructure(bars);
         boolean hasStructure=str[0]||str[1];
-        if (!hasStructure) log.debug("{} note: NO_STRUCTURE — continuing at lower confidence", ticker);
+        if (!hasStructure) log.trace("{} note: NO_STRUCTURE — continuing at lower confidence", ticker);
         if ("bullish".equals(htfBias)&&"short".equals(state.getDirection())) {
-            log.debug("{} filtered: HTF_CONFLICT htf=bullish setup=short", ticker);
+            log.trace("{} filtered: HTF_CONFLICT htf=bullish setup=short", ticker);
             return new DetectResult(List.of(),state);
         }
         if ("bearish".equals(htfBias)&&"long".equals(state.getDirection())) {
-            log.debug("{} filtered: HTF_CONFLICT htf=bearish setup=long", ticker);
+            log.trace("{} filtered: HTF_CONFLICT htf=bearish setup=long", ticker);
             return new DetectResult(List.of(),state);
         }
 
         int conf=scoring.scoreSetup(true,true,true,true,hasStructure,peakVol>avgVol*MIN_VOL_MULT);
         if (conf<config.getMinConfidence()) {
-            log.debug("{} filtered: LOW_CONF conf={} min={}", ticker, conf, config.getMinConfidence());
+            log.trace("{} filtered: LOW_CONF conf={} min={}", ticker, conf, config.getMinConfidence());
             return new DetectResult(List.of(),state);
         }
 
@@ -125,11 +125,11 @@ public class SetupDetector {
         // Long FVG: price closed below the bottom — already filled & moved, stale
         // Short FVG: price closed above the top — already filled & moved, stale
         if ("long".equals(state.getDirection())  && lastClose < state.getFvgBottom() - curAtr * 0.5) {
-            log.debug("{} filtered: FVG_TRADED_THROUGH long fvgBot={} close={}", ticker, state.getFvgBottom(), lastClose);
+            log.trace("{} filtered: FVG_TRADED_THROUGH long fvgBot={} close={}", ticker, state.getFvgBottom(), lastClose);
             return new DetectResult(List.of(),state);
         }
         if ("short".equals(state.getDirection()) && lastClose > state.getFvgTop() + curAtr * 0.5) {
-            log.debug("{} filtered: FVG_TRADED_THROUGH short fvgTop={} close={}", ticker, state.getFvgTop(), lastClose);
+            log.trace("{} filtered: FVG_TRADED_THROUGH short fvgTop={} close={}", ticker, state.getFvgTop(), lastClose);
             return new DetectResult(List.of(),state);
         }
 
