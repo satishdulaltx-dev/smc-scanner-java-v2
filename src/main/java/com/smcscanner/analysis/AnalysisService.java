@@ -112,7 +112,7 @@ public class AnalysisService {
                 } else if ("breakout".equals(stratType)) {
                     setups = breakoutDetector.detect(bars5m, ticker, dailyAtr);
                 } else if ("keylevel".equals(stratType)) {
-                    setups = keyLevelDetector.detect(bars5m, bars1d, ticker, dailyAtr);
+                    setups = keyLevelDetector.detect(bars5m, bars1d, ticker, dailyAtr, profile);
                 } else {
                     SetupDetector.DetectResult dr =
                             setupDetector.detectSetups(bars5m, biasDaily, ticker, isCrypto, dailyAtr);

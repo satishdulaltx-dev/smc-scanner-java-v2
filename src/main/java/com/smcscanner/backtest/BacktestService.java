@@ -171,7 +171,7 @@ public class BacktestService {
                     bSetups = breakoutDetector.detect(window, ticker, dailyAtr);
                 } else if ("keylevel".equals(stratType)) {
                     // Pass daily bars up to this date (htfSlice) as the level-detection source
-                    bSetups = keyLevelDetector.detect(window, htfSlice, ticker, dailyAtr, bp2);
+                    bSetups = keyLevelDetector.detect(window, htfSlice, ticker, dailyAtr, bp);
                 } else {
                     SetupDetector.DetectResult dr = setupDetector.detectSetups(
                             window, htfBias, ticker, false, dailyAtr, true); // backtestMode=true, real dailyAtr for TP/SL
