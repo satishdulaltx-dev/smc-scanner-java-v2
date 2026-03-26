@@ -467,6 +467,13 @@ public class BacktestService {
         public final double avgOptLossPnl;      // avg $ loss per losing contract
         public final double optExpectancy;      // avg $ per trade (options)
         public final double optTotalReturn;     // % return on total premium invested
+        // Confidence bucket analysis: shows WR and expectancy by score tier
+        // Key insight: if 85+ WR >> 75-84 WR, raise min confidence threshold
+        public final int    bucket85PlusTotal,  bucket85PlusWins;
+        public final int    bucket75to84Total,  bucket75to84Wins;
+        public final int    bucketBelow75Total, bucketBelow75Wins;
+        public final double bucket85PlusWR,     bucket75to84WR,    bucketBelow75WR;
+        public final double bucket85PlusExp,    bucket75to84Exp,   bucketBelow75Exp;
 
         private BacktestResult(String ticker, List<TradeResult> trades, int lookbackDays, String error) {
             this.ticker = ticker; this.trades = trades;
@@ -525,6 +532,54 @@ public class BacktestService {
                     .mapToDouble(t -> t.optEntryPremium() * 100).sum(); // ×100 shares per contract
             this.optTotalReturn = totalPremiumInvested > 0
                     ? Math.round(totalOptPnl / totalPremiumInvested * 100 * 10) / 10.0 : 0;
+
+            // ── Confidence bucket analysis ────────────────────────────────────
+            // Excludes filtered trades — only look at actually-executed setups.
+            // Counts wins per bucket using the same WIN/TIMEOUT>0 logic as global WR.
+            java.util.function.Predicate<TradeResult> isWin = t ->
+                    "WIN".equals(t.outcome()) || ("TIMEOUT".equals(t.outcome()) && t.pnlPct() > 0);
+            java.util.function.Predicate<TradeResult> isExecuted = t ->
+                    !"NEWS_FILTERED".equals(t.outcome()) && !"CTX_FILTERED".equals(t.outcome())
+                    && !"QUALITY_FILTERED".equals(t.outcome()) && !"MULTI_FILTERED".equals(t.outcome())
+                    && !"15M_FILTERED".equals(t.outcome()) && !"CORR_FILTERED".equals(t.outcome())
+                    && !"REGIME_FILTERED".equals(t.outcome());
+
+            List<TradeResult> b85  = executed.stream().filter(t -> t.confidence() >= 85).toList();
+            List<TradeResult> b75  = executed.stream().filter(t -> t.confidence() >= 75 && t.confidence() < 85).toList();
+            List<TradeResult> bLow = executed.stream().filter(t -> t.confidence() <  75).toList();
+
+            this.bucket85PlusTotal  = b85.size();
+            this.bucket85PlusWins   = (int) b85.stream().filter(isWin).count();
+            this.bucket75to84Total  = b75.size();
+            this.bucket75to84Wins   = (int) b75.stream().filter(isWin).count();
+            this.bucketBelow75Total = bLow.size();
+            this.bucketBelow75Wins  = (int) bLow.stream().filter(isWin).count();
+
+            this.bucket85PlusWR  = bucket85PlusTotal  > 0 ? Math.round(bucket85PlusWins  * 100.0 / bucket85PlusTotal  * 10) / 10.0 : 0;
+            this.bucket75to84WR  = bucket75to84Total  > 0 ? Math.round(bucket75to84Wins  * 100.0 / bucket75to84Total  * 10) / 10.0 : 0;
+            this.bucketBelow75WR = bucketBelow75Total > 0 ? Math.round(bucketBelow75Wins * 100.0 / bucketBelow75Total * 10) / 10.0 : 0;
+
+            // Expectancy per bucket: WR × avgWin - (1-WR) × avgLoss
+            this.bucket85PlusExp  = computeBucketExp(b85,  isWin);
+            this.bucket75to84Exp  = computeBucketExp(b75,  isWin);
+            this.bucketBelow75Exp = computeBucketExp(bLow, isWin);
+        }
+
+        private static double computeBucketExp(List<TradeResult> bucket,
+                                               java.util.function.Predicate<TradeResult> isWin) {
+            if (bucket.isEmpty()) return 0;
+            double avgW = bucket.stream().filter(isWin).mapToDouble(TradeResult::pnlPct)
+                    .average().orElse(0);
+            double avgL = bucket.stream().filter(isWin.negate())
+                    .filter(t -> !"BE_STOP".equals(t.outcome()))
+                    .mapToDouble(t -> Math.abs(t.pnlPct())).average().orElse(0);
+            long wins   = bucket.stream().filter(isWin).count();
+            long losses = bucket.stream().filter(isWin.negate())
+                    .filter(t -> !"BE_STOP".equals(t.outcome())).count();
+            int decided = (int)(wins + losses);
+            if (decided == 0) return 0;
+            double wr = (double) wins / decided;
+            return Math.round(((wr * avgW) - ((1 - wr) * avgL)) * 100.0) / 100.0;
         }
 
         public static BacktestResult of(String t, List<TradeResult> trades, int days) {

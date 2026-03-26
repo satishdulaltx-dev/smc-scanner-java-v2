@@ -132,6 +132,14 @@ public class DiscordAlertService {
             fields.add(f("🧲 Max Pain", String.format("$%.1f (price magnet by expiry)", s.getOptionsMaxPain()), true));
         }
 
+        // ── Conviction tier + factor attribution ─────────────────────────────
+        if (s.getConvictionTier() != null) {
+            fields.add(f("📐 Conviction", s.getConvictionTier(), false));
+        }
+        if (s.getFactorBreakdown() != null) {
+            fields.add(f("🔬 Signal Factors", s.getFactorBreakdown(), false));
+        }
+
         // ── News sentiment field ──────────────────────────────────────────────
         if (sentiment != null && sentiment.hasNews() && sentiment.label() != null) {
             String newsConflict = sentiment.isConflicting(s.getDirection()) ? " ⚠️ CONFLICTS" : "";

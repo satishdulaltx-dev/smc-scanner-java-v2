@@ -29,6 +29,10 @@ public class TradeSetup {
     private final String optionsFlowDir;      // "BULLISH" | "BEARISH" | "NEUTRAL"
     private final double optionsMaxPain;
 
+    // ── Performance intelligence fields ─────────────────────────────────────
+    private final String factorBreakdown;   // e.g. "news+8 | RS-5 | regime-8 | corr+0"
+    private final String convictionTier;    // "🔥 HIGH (2 contracts)" | "✅ STANDARD (1)" | "🟡 LITE (1)"
+
     private TradeSetup(Builder b) {
         this.ticker = b.ticker; this.direction = b.direction; this.session = b.session;
         this.volatility = b.volatility; this.entry = b.entry; this.stopLoss = b.stopLoss;
@@ -46,6 +50,8 @@ public class TradeSetup {
         this.optionsRR = b.optionsRR; this.optionsSuggested = b.optionsSuggested;
         this.optionsFlowLabel = b.optionsFlowLabel; this.optionsFlowDir = b.optionsFlowDir;
         this.optionsMaxPain = b.optionsMaxPain;
+        this.factorBreakdown = b.factorBreakdown;
+        this.convictionTier  = b.convictionTier;
     }
 
     public String        getTicker()     { return ticker; }
@@ -79,6 +85,8 @@ public class TradeSetup {
     public int    getOptionsSuggested()  { return optionsSuggested; }
     public String getOptionsFlowLabel()  { return optionsFlowLabel; }
     public String getOptionsFlowDir()    { return optionsFlowDir; }
+    public String getFactorBreakdown()   { return factorBreakdown; }
+    public String getConvictionTier()    { return convictionTier; }
     public double getOptionsMaxPain()    { return optionsMaxPain; }
     public boolean hasOptionsData()      { return optionsContract != null && optionsPremium > 0; }
 

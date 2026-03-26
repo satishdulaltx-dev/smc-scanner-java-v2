@@ -410,6 +410,19 @@ public class DashboardController {
             resp.put("opt_avg_loss_pnl",   Math.round(result.avgOptLossPnl*100)/100.0);
             resp.put("opt_expectancy",     Math.round(result.optExpectancy*100)/100.0);
             resp.put("opt_total_return",   result.optTotalReturn);
+            // Confidence bucket analysis
+            resp.put("bucket_85plus_total",  result.bucket85PlusTotal);
+            resp.put("bucket_85plus_wins",   result.bucket85PlusWins);
+            resp.put("bucket_85plus_wr",     result.bucket85PlusWR);
+            resp.put("bucket_85plus_exp",    result.bucket85PlusExp);
+            resp.put("bucket_75to84_total",  result.bucket75to84Total);
+            resp.put("bucket_75to84_wins",   result.bucket75to84Wins);
+            resp.put("bucket_75to84_wr",     result.bucket75to84WR);
+            resp.put("bucket_75to84_exp",    result.bucket75to84Exp);
+            resp.put("bucket_below75_total", result.bucketBelow75Total);
+            resp.put("bucket_below75_wins",  result.bucketBelow75Wins);
+            resp.put("bucket_below75_wr",    result.bucketBelow75WR);
+            resp.put("bucket_below75_exp",   result.bucketBelow75Exp);
             if (result.error != null) resp.put("error", result.error);
             List<Map<String,Object>> tradeList = result.trades.stream().map(t -> {
                 Map<String,Object> m = new LinkedHashMap<>();

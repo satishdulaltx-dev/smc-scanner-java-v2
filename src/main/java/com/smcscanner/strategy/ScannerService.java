@@ -344,7 +344,60 @@ public class ScannerService {
                 } else {
                     setTs(ticker,"long".equals(s.getDirection())?"setup-long":"setup-short",s.getDirection(),s.getConfidence(),
                         String.format("ENTRY %s | Score %d | $%.2f",s.getDirection().toUpperCase(),s.getConfidence(),s.getEntry()));
-                    if (s.getConfidence() >= effectiveMinConf && !dedup.isDuplicate(ticker,s.getDirection(),s.getEntry())) {
+                    // ── Dynamic quality gate (VIX-aware) ──────────────────────────
+                // When VIX is elevated, the market is in fear/volatility regime.
+                // Only take highest-conviction setups: raise bar by 5 pts above 25,
+                // another 5 pts above 35 (crisis). Prevents marginal calls in chaos.
+                int vixBoost = 0;
+                if (!isC && context.vixLevel() > 25) vixBoost  = 5;
+                if (!isC && context.vixLevel() > 35) vixBoost += 5;
+                int dynamicMinConf = effectiveMinConf + vixBoost;
+
+                // ── Attribution string (factor breakdown) ──────────────────────
+                // Tells trader EXACTLY why confidence is what it is.
+                // Every factor that moved conf > ±2 is shown.
+                String factorBreakdown = buildFactorBreakdown(
+                        newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj,
+                        vixBoost, s.getConfidence());
+
+                // ── Conviction tier (suggested contract size) ─────────────────
+                // Based on final adjusted confidence — scales exposure to signal quality.
+                // 90+ = rare A+ setup → 3 contracts max
+                // 82–89 = strong setup → 2 contracts
+                // 75–81 = standard → 1 contract
+                // <75   = borderline → 1 contract (minimum size, treat as paper trade)
+                String convictionTier;
+                int suggestedOverride;
+                if      (s.getConfidence() >= 90) { convictionTier = "🔥 HIGH CONVICTION (3 contracts)";  suggestedOverride = 3; }
+                else if (s.getConfidence() >= 82) { convictionTier = "✅ STRONG (2 contracts)";            suggestedOverride = 2; }
+                else if (s.getConfidence() >= 75) { convictionTier = "🟡 STANDARD (1 contract)";           suggestedOverride = 1; }
+                else                              { convictionTier = "⚪ BORDERLINE (1 contract — lite)";  suggestedOverride = 1; }
+
+                // Attach attribution + conviction to setup
+                if (factorBreakdown != null || convictionTier != null) {
+                    TradeSetup.Builder sb2 = TradeSetup.builder()
+                            .ticker(s.getTicker()).direction(s.getDirection())
+                            .entry(s.getEntry()).stopLoss(s.getStopLoss()).takeProfit(s.getTakeProfit())
+                            .confidence(s.getConfidence()).session(s.getSession()).volatility(s.getVolatility())
+                            .atr(s.getAtr()).hasBos(s.isHasBos()).hasChoch(s.isHasChoch())
+                            .fvgTop(s.getFvgTop()).fvgBottom(s.getFvgBottom()).timestamp(s.getTimestamp())
+                            .factorBreakdown(factorBreakdown).convictionTier(convictionTier);
+                    if (s.hasOptionsData()) {
+                        sb2.optionsFlowLabel(s.getOptionsFlowLabel()).optionsFlowDir(s.getOptionsFlowDir())
+                           .optionsMaxPain(s.getOptionsMaxPain())
+                           .optionsContract(s.getOptionsContract()).optionsType(s.getOptionsType())
+                           .optionsStrike(s.getOptionsStrike()).optionsExpiry(s.getOptionsExpiry())
+                           .optionsPremium(s.getOptionsPremium()).optionsDelta(s.getOptionsDelta())
+                           .optionsIV(s.getOptionsIV()).optionsIVPct(s.getOptionsIVPct())
+                           .optionsBreakEven(s.getOptionsBreakEven())
+                           .optionsProfitPer(s.getOptionsProfitPer()).optionsLossPer(s.getOptionsLossPer())
+                           .optionsRR(s.getOptionsRR())
+                           .optionsSuggested(suggestedOverride); // override with conviction-scaled count
+                    }
+                    s = sb2.build();
+                }
+
+                if (s.getConfidence() >= dynamicMinConf && !dedup.isDuplicate(ticker,s.getDirection(),s.getEntry())) {
                         if (dedup.isStartupQuiet()) {
                             // Startup quiet window — seed dedup without firing Discord alert.
                             // This prevents re-sending an alert that fired before the last restart/redeploy.
@@ -352,9 +405,9 @@ public class ScannerService {
                                     ticker, s.getDirection().toUpperCase(), s.getConfidence(), s.getEntry());
                             dedup.markSent(ticker, s.getDirection(), s.getEntry());
                         } else {
-                            log.info("INTRADAY ALERT {} {} conf={} entry={} adj=news{}/ctx{}/qual{}/flow{}/regime{}/corr{}",
+                            log.info("INTRADAY ALERT {} {} conf={} entry={} adj=news{}/ctx{}/qual{}/flow{}/regime{}/corr{} vixBoost={} dynamicMin={}",
                                     ticker, s.getDirection().toUpperCase(), s.getConfidence(), s.getEntry(),
-                                    newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj);
+                                    newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj, vixBoost, dynamicMinConf);
                             discord.sendSetupAlert(s, sentiment, context);
                             dedup.markSent(ticker, s.getDirection(), s.getEntry());
                         }
@@ -429,4 +482,24 @@ public class ScannerService {
         cur.add(m); if (cur.size()>20) cur=cur.subList(cur.size()-20,cur.size()); state.setSetups(cur);
     }
     private void removeSetup(String t) { List<Map<String,Object>> c=new ArrayList<>(state.getSetups()); c.removeIf(x->t.equals(x.get("ticker"))); state.setSetups(c); }
+
+    /**
+     * Build a compact factor attribution string for the Discord alert.
+     * Only shows factors that moved confidence by ±2 or more — keeps it readable.
+     * Example: "news +8 | RS -5 | regime -15 | vix gate +5"
+     */
+    private String buildFactorBreakdown(int newsAdj, int ctxAdj, int qualityAdj,
+                                         int flowAdj, int regimeAdj, int corrAdj,
+                                         int vixBoost, int finalConf) {
+        java.util.List<String> parts = new java.util.ArrayList<>();
+        if (Math.abs(newsAdj)    >= 2) parts.add("news "    + (newsAdj    > 0 ? "+" : "") + newsAdj);
+        if (Math.abs(ctxAdj)     >= 2) parts.add("RS/VIX "  + (ctxAdj     > 0 ? "+" : "") + ctxAdj);
+        if (Math.abs(qualityAdj) >= 2) parts.add("quality " + (qualityAdj > 0 ? "+" : "") + qualityAdj);
+        if (Math.abs(flowAdj)    >= 2) parts.add("flow "    + (flowAdj    > 0 ? "+" : "") + flowAdj);
+        if (Math.abs(regimeAdj)  >= 2) parts.add("regime "  + (regimeAdj  > 0 ? "+" : "") + regimeAdj);
+        if (Math.abs(corrAdj)    >= 2) parts.add("corr "    + (corrAdj    > 0 ? "+" : "") + corrAdj);
+        if (vixBoost             >= 5) parts.add("⚠️ VIX gate +" + vixBoost + " to min");
+        if (parts.isEmpty()) return "Base score — no adjustments";
+        return String.join(" | ", parts) + " → **" + finalConf + "**";
+    }
 }
