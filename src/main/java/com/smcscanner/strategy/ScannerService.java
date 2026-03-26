@@ -281,7 +281,16 @@ public class ScannerService {
                 }
 
                 // Apply combined confidence adjustment (news + context + quality + flow + regime + correlation)
-                int totalAdj = newsAdj + ctxAdj + qualityAdj + flowAdj + regimeAdj + corrAdj;
+                // Clamp total penalty to -40 so stacking filters can't silence strong setups.
+                // Worst-case stack without clamp: corr(-20) + regime(-25) + RS(-15) + streak(-25) = -85
+                // With clamp: floor at -40, so a 90-conf setup always reaches at least 50.
+                // Positive adjustments are NOT clamped — good setups can still be boosted.
+                int rawAdj   = newsAdj + ctxAdj + qualityAdj + flowAdj + regimeAdj + corrAdj;
+                int totalAdj = rawAdj < 0 ? Math.max(-40, rawAdj) : rawAdj;
+                if (rawAdj != totalAdj) {
+                    log.info("{} ADJ_CLAMPED: raw={} → clamped={} (breakdown: news{} ctx{} qual{} flow{} regime{} corr{})",
+                            ticker, rawAdj, totalAdj, newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj);
+                }
                 if (totalAdj != 0 || flow.hasData() || rec.hasData()) {
                     TradeSetup.Builder sb = TradeSetup.builder()
                             .ticker(s.getTicker()).direction(s.getDirection())
@@ -336,11 +345,21 @@ public class ScannerService {
                     setTs(ticker,"long".equals(s.getDirection())?"setup-long":"setup-short",s.getDirection(),s.getConfidence(),
                         String.format("ENTRY %s | Score %d | $%.2f",s.getDirection().toUpperCase(),s.getConfidence(),s.getEntry()));
                     if (s.getConfidence() >= effectiveMinConf && !dedup.isDuplicate(ticker,s.getDirection(),s.getEntry())) {
-                        log.info("INTRADAY ALERT {} {} conf={} entry={} adj=news{}/ctx{}/qual{}/flow{}",
-                                ticker, s.getDirection().toUpperCase(), s.getConfidence(), s.getEntry(), newsAdj, ctxAdj, qualityAdj, flowAdj);
+                        log.info("INTRADAY ALERT {} {} conf={} entry={} adj=news{}/ctx{}/qual{}/flow{}/regime{}/corr{}",
+                                ticker, s.getDirection().toUpperCase(), s.getConfidence(), s.getEntry(),
+                                newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj);
                         discord.sendSetupAlert(s, sentiment, context); dedup.markSent(ticker,s.getDirection(),s.getEntry());
                     } else if (s.getConfidence() < effectiveMinConf) {
-                        log.debug("{} LOW_CONF conf={} min={} adj=news{}/ctx{}/qual{}/flow{}", ticker, s.getConfidence(), effectiveMinConf, newsAdj, ctxAdj, qualityAdj, flowAdj);
+                        // Warn loudly when a strong base setup gets filtered — helps catch over-filtering
+                        int baseConf = setups.get(0).getConfidence(); // raw score before any adjustments
+                        if (baseConf >= 85) {
+                            log.warn("SUPPRESSED_STRONG {} {} baseConf={} finalConf={} min={} | breakdown: news{} ctx{} qual{} flow{} regime{} corr{} (rawAdj={} clampedAdj={})",
+                                    ticker, s.getDirection().toUpperCase(), baseConf, s.getConfidence(), effectiveMinConf,
+                                    newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj, rawAdj, totalAdj);
+                        } else {
+                            log.debug("{} LOW_CONF conf={} min={} adj=news{}/ctx{}/qual{}/flow{}/regime{}/corr{}",
+                                    ticker, s.getConfidence(), effectiveMinConf, newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj);
+                        }
                     }
                 }
                 tracker.recordSetup(s); updateSetup(s);
