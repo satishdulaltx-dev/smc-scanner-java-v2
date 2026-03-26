@@ -98,24 +98,34 @@ public class PolygonClient {
         if (apiKey == null || apiKey.isBlank()) { log.warn("POLYGON_API_KEY not set for {}", ticker); return new ArrayList<>(); }
         String to   = LocalDate.now(ZoneOffset.UTC).format(DateTimeFormatter.ISO_LOCAL_DATE);
         String from = LocalDate.now(ZoneOffset.UTC).minusDays(lookbackDays).format(DateTimeFormatter.ISO_LOCAL_DATE);
-        // Use sort=desc so Polygon returns the MOST RECENT `limit` bars first,
-        // then reverse to restore chronological order. Using sort=asc with a wide
-        // lookback window returns the OLDEST bars (e.g. 90-day limit over 180-day
-        // window returns bars from 90–180 days ago, not the last 90 days).
-        String url  = String.format("https://api.polygon.io/v2/aggs/ticker/%s/range/%s/%s/%s/%s?adjusted=true&sort=desc&limit=%d&apiKey=%s",
-                ticker, tf[0], tf[1], from, to, limit, apiKey);
-        try (Response resp = http.newCall(new Request.Builder().url(url).build()).execute()) {
-            if (!resp.isSuccessful() || resp.body() == null) return new ArrayList<>();
-            JsonNode root    = mapper.readTree(resp.body().string());
-            JsonNode results = root.get("results");
-            if (results == null || !results.isArray()) return new ArrayList<>();
-            List<OHLCV> bars = new ArrayList<>();
-            for (JsonNode bar : results) {
-                bars.add(OHLCV.builder().timestamp(String.valueOf(bar.get("t").asLong()))
-                        .open(bar.get("o").asDouble()).high(bar.get("h").asDouble())
-                        .low(bar.get("l").asDouble()).close(bar.get("c").asDouble())
-                        .volume(bar.get("v").asDouble()).build());
+        // Paginate via next_url: Polygon Starter returns max ~5,000 bars per page
+        // regardless of limit param. Must follow next_url to get full history.
+        // 1 year of 5m bars = ~19,656 bars = ~4 pages. 2 years = ~8 pages.
+        String url = String.format(
+                "https://api.polygon.io/v2/aggs/ticker/%s/range/%s/%s/%s/%s?adjusted=true&sort=desc&limit=50000&apiKey=%s",
+                ticker, tf[0], tf[1], from, to, apiKey);
+        List<OHLCV> bars = new ArrayList<>();
+        int maxPages = 25; // safety cap: 25 pages x 5,000 = 125,000 bars max
+        try {
+            while (url != null && maxPages-- > 0 && bars.size() < limit) {
+                String fetchUrl = url.contains("apiKey=") ? url : url + "&apiKey=" + apiKey;
+                try (Response resp = http.newCall(new Request.Builder().url(fetchUrl).build()).execute()) {
+                    if (!resp.isSuccessful() || resp.body() == null) break;
+                    JsonNode root    = mapper.readTree(resp.body().string());
+                    JsonNode results = root.get("results");
+                    if (results == null || !results.isArray() || results.size() == 0) break;
+                    for (JsonNode bar : results) {
+                        bars.add(OHLCV.builder().timestamp(String.valueOf(bar.get("t").asLong()))
+                                .open(bar.get("o").asDouble()).high(bar.get("h").asDouble())
+                                .low(bar.get("l").asDouble()).close(bar.get("c").asDouble())
+                                .volume(bar.get("v").asDouble()).build());
+                    }
+                    JsonNode nextUrl = root.get("next_url");
+                    url = (nextUrl != null && !nextUrl.isNull()) ? nextUrl.asText() : null;
+                }
             }
+            log.debug("Polygon {}: fetched {} bars ({} days lookback, {} tf)",
+                    ticker, bars.size(), lookbackDays, tf[1]);
             java.util.Collections.reverse(bars); // restore chronological order
             return bars;
         } catch (Exception e) { log.error("Polygon error {}: {}", ticker, e.getMessage()); return new ArrayList<>(); }
