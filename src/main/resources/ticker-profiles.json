@@ -32,13 +32,11 @@
     },
     {
       "ticker": "HOOD",
-      "skip": true,
-      "skipReason": "20% WR 90d (-1.58% expectancy, 6 trades). Speculative fintech — high noise, no consistent SMC edge.",
-      "minConfidence": 80,
-      "minFvgPct": 0.0012,
-      "dispAtrMult": 1.7,
-      "minVolMult": 2.0,
-      "note": "skip=true Mar 2026. Was triggered too often with losses. Revisit if 90d expectancy turns positive."
+      "minConfidence": 85,
+      "minFvgPct": 0.0015,
+      "dispAtrMult": 1.8,
+      "minVolMult": 2.2,
+      "note": "Tightened Mar 2026: 20% WR 90d -1.58% exp. Raised minConf to 85 — only take ultra-clean SMC sweeps with strong volume. High-beta fintech needs exceptional setup quality."
     },
     {
       "ticker": "AMZN",
@@ -126,12 +124,11 @@
     },
     {
       "ticker": "META",
-      "skip": true,
-      "skipReason": "25% WR 90d (-0.49% expectancy, 13 trades). Mega-cap stable stock — SMC patterns unreliable. Moves on macro/earnings, not intraday sweeps.",
       "strategyType": "smc",
-      "minConfidence": 65,
-      "minFvgPct": 0.0006,
-      "note": "skip=true Mar 2026. 90d backtest confirmed no edge. Revisit after earnings-driven volatility regime."
+      "minConfidence": 85,
+      "minFvgPct": 0.0007,
+      "dispAtrMult": 1.5,
+      "note": "Tightened Mar 2026: 25% WR 90d -0.49% exp. Raised minConf 65→85. META is a slow mega-cap — only ultra-high-confidence SMC sweeps with clear displacement worth taking."
     },
     {
       "ticker": "V",
@@ -197,19 +194,17 @@
     },
     {
       "ticker": "AMD",
-      "skip": true,
-      "skipReason": "20% WR 90d (-0.39% expectancy, 6 trades). Semiconductor that tracks NVDA/SOXX — SMC 5m edge absent. Was at minConf=90 with still negative results.",
-      "minConfidence": 90,
-      "minFvgPct": 0.0012,
-      "note": "skip=true Mar 2026. Revisit if sector decouples from NVDA or SMC patterns improve."
+      "minConfidence": 85,
+      "minFvgPct": 0.0010,
+      "dispAtrMult": 1.5,
+      "note": "Tightened Mar 2026: 20% WR 90d -0.39% exp. Semiconductor that tracks NVDA — only fire on very strong SMC setups (85+) with clear sweep and volume confirmation."
     },
     {
       "ticker": "SMCI",
-      "skip": true,
-      "skipReason": "28.6% WR 90d (-0.53% expectancy, 20 trades). High-volume semiconductor but SMC intraday patterns unreliable. Moves on AI narrative/supply-chain news.",
-      "minConfidence": 80,
-      "minFvgPct": 0.0010,
-      "note": "skip=true Mar 2026. 20 trades is statistically significant — confirmed no edge."
+      "minConfidence": 85,
+      "minFvgPct": 0.0012,
+      "dispAtrMult": 1.6,
+      "note": "Tightened Mar 2026: 28.6% WR 90d -0.53% exp (20 trades). High-beta AI play — only ultra-high-quality setups. Needs strong sweep + volume + clean FVG at 85+ confidence."
     }
   ]
 }
