@@ -96,7 +96,8 @@
     {
       "ticker": "ABNB",
       "minConfidence": 62,
-      "note": "Strong performer historically \u2014 keep in watchlist"
+      "note": "Strong performer historically \u2014 keep in watchlist maxConf=84 Mar 2026: 85+ bucket 22.2%WR (9t) vs 75-84 50%WR (2t) \u2014 same over-extended pattern as PLTR/SOFI. Cap at 84 to take only earlier entries.",
+      "maxConfidence": 84
     },
     {
       "ticker": "SNAP",
@@ -221,10 +222,18 @@
     },
     {
       "ticker": "SMCI",
-      "minConfidence": 85,
+      "minConfidence": 75,
       "minFvgPct": 0.0012,
-      "dispAtrMult": 1.6,
-      "note": "Tightened Mar 2026: 28.6% WR 90d -0.53% exp (20 trades). High-beta AI play \u2014 only ultra-high-quality setups. Needs strong sweep + volume + clean FVG at 85+ confidence."
+      "dispAtrMult": 2.0,
+      "note": "Switched SMC\u2192KeyLevel Mar 2026: SMC FVG sweeps 14.3%WR/-1.21%exp (7 trades). Root cause: SMCI low-priced ($28-35), news-driven, FVGs catch fake moves. All 5 entries clustered at $31 pivot \u2014 KeyLevel rejection strategy targets those clean bounces at prior-day high/low and round numbers. minConf reset to 75, dispAtrMult=2.0 for wider stops on volatile stock.",
+      "strategyType": "keylevel"
+    },
+    {
+      "ticker": "JPM",
+      "strategyType": "smc",
+      "minConfidence": 62,
+      "maxConfidence": 84,
+      "note": "Added Mar 2026: 90d backtest shows 30.8%WR/-0.21%exp. Reversed confidence pattern: 85+ bucket 12.5%WR (8t) vs 75-84 37.5%WR (8t). maxConf=84 to block over-extended late signals. High-beta financials move fast \u2014 earlier entries in 75-84 consistently outperform."
     }
   ]
 }
