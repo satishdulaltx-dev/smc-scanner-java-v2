@@ -44,7 +44,9 @@
       "ticker": "AMZN",
       "strategyType": "vwap",
       "minConfidence": 75,
-      "note": "Switched SMC\u2192VWAP Mar 2026. minConf raised to 75 \u2014 only take well-confirmed VWAP reversions."
+      "note": "Switched SMC\u2192VWAP Mar 2026. minConf raised to 75 \u2014 only take well-confirmed VWAP reversions.",
+      "skip": true,
+      "skipReason": "0% WR 90d (3 trades, 0 wins, 2 BE exits). VWAP strategy produces no edge \u2014 all confidence buckets 0% WR. 34 signals filtered, 3 that survived all lost. Removed Mar 2026."
     },
     {
       "ticker": "MSTR",
@@ -123,7 +125,9 @@
       "ticker": "MSFT",
       "strategyType": "vwap",
       "minConfidence": 75,
-      "note": "Switched SMC\u2192VWAP Mar 2026. minConf raised to 75 \u2014 only clear VWAP deviations with strong vol spike."
+      "note": "Switched SMC\u2192VWAP Mar 2026. minConf raised to 75 \u2014 only clear VWAP deviations with strong vol spike.",
+      "skip": true,
+      "skipReason": "0% WR 90d (3 trades, 0 wins). VWAP on mega-cap slow-mover not working. 38 signals filtered, remainder all losses. Removed Mar 2026."
     },
     {
       "ticker": "META",
@@ -152,7 +156,9 @@
       "ticker": "SPY",
       "strategyType": "vwap",
       "note": "VWAP strategy. minConf raised to 75 \u2014 A+ setups only. ETF trends strongly; only take high-confidence mean reversion.",
-      "minConfidence": 75
+      "minConfidence": 75,
+      "skip": true,
+      "skipReason": "33% WR but only 4 trades in 90d after filtering (50 filtered). Near-zero signal frequency. VWAP trend filter + dead zones kill almost all SPY setups. Not worth scan cycles. Removed Mar 2026."
     },
     {
       "ticker": "QQQ",

@@ -288,7 +288,7 @@ public class BacktestService {
                 int adjConf  = Math.max(0, Math.min(100, setup.getConfidence() + totalAdj));
 
                 // Skip trade if combined filters knocked confidence below threshold
-                if (adjConf < effectiveMinConf && totalAdj < 0) {
+                if (adjConf < effectiveMinConf) {  // filter any setup below threshold, regardless of adjustment direction
                     String filteredOutcome = (newsAdj < 0 && (ctxAdj < 0 || qualityAdj < 0)) ? "MULTI_FILTERED"
                                            : newsAdj < 0    ? "NEWS_FILTERED"
                                            : qualityAdj < 0 ? "QUALITY_FILTERED"
