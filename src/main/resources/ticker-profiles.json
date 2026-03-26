@@ -28,7 +28,8 @@
       "minFvgPct": 0.001,
       "dispAtrMult": 1.5,
       "minVolMult": 1.8,
-      "note": "RESTORED Mar 2026: 90d backtest shows 58.3% WR +0.88% expectancy \u2014 one of the best performers. Skip was based on stale 30d data from Polygon sort bug era."
+      "note": "RESTORED Mar 2026: 90d backtest shows 58.3% WR +0.88% expectancy \u2014 one of the best performers. Skip was based on stale 30d data from Polygon sort bug era. maxConf=84 Mar 2026: applying reversed-pattern cap as a precaution given its high-beta nature.",
+      "maxConfidence": 84
     },
     {
       "ticker": "HOOD",
@@ -76,7 +77,8 @@
     {
       "ticker": "SOFI",
       "minConfidence": 62,
-      "note": "Strong performer (65.9% WR) \u2014 relaxed to catch more signals"
+      "note": "Strong performer (65.9% WR) \u2014 relaxed to catch more signals maxConf=84 Mar 2026: 85+ bucket 22.2% WR/-0.98% (over-extended); 75-84 bucket 66.7% WR/+3.63% \u2014 sweet spot is the earlier signals.",
+      "maxConfidence": 84
     },
     {
       "ticker": "PYPL",
@@ -108,7 +110,8 @@
       "minConfidence": 63,
       "minFvgPct": 0.0005,
       "dispAtrMult": 1.4,
-      "note": "Fast-moving large-cap \u2014 1 trade 30d on defaults. Relaxed to catch more sweep+FVG setups."
+      "note": "Fast-moving large-cap \u2014 1 trade 30d on defaults. Relaxed to catch more sweep+FVG setups. maxConf=84 Mar 2026: 85+ bucket 22.2% WR/-0.37% (over-extended late entries); 75-84 bucket 75% WR/+0.65% \u2014 earlier entries clearly better.",
+      "maxConfidence": 84
     },
     {
       "ticker": "MARA",
@@ -157,8 +160,8 @@
     {
       "ticker": "SPY",
       "strategyType": "breakout",
-      "note": "Switched VWAP\u2192ORB Breakout Mar 2026. VWAP produced near-zero signals (50 filtered, 4 trades). SPY trends strongly intraday \u2014 ORB breakout after 9:30-9:45 is the correct strategy for an ETF.",
-      "minConfidence": 78,
+      "note": "Switched VWAP\u2192ORB Breakout Mar 2026. VWAP produced near-zero signals (50 filtered, 4 trades). SPY trends strongly intraday \u2014 ORB breakout after 9:30-9:45 is the correct strategy for an ETF. minConf lowered 78\u219270 Mar 2026: ORB base conf is 70; min of 78 was blocking all signals.",
+      "minConfidence": 70,
       "skip": false,
       "skipReason": null
     },
@@ -198,7 +201,8 @@
       "minFvgPct": 0.0006,
       "dispAtrMult": 1.3,
       "strategyType": "smc",
-      "note": "Switched breakout\u2192SMC Mar 2026: 0 signals on ORB. PLTR has strong intraday SMC sweeps. Relaxed thresholds."
+      "note": "Switched breakout\u2192SMC Mar 2026: 0 signals on ORB. PLTR has strong intraday SMC sweeps. Relaxed thresholds. maxConf=84 Mar 2026: 85+ bucket 16.7% WR/-0.84% (over-extended late entries); 75-84 bucket 66.7% WR/+1.47% \u2014 only take the earlier entries.",
+      "maxConfidence": 84
     },
     {
       "ticker": "TSLA",

@@ -72,6 +72,7 @@ public class ScannerService {
                 return;
             }
             int effectiveMinConf = profile.resolveMinConfidence(config.getMinConfidence());
+            int effectiveMaxConf = profile.resolveMaxConfidence(); // per-ticker upper cap (blocks over-extended 85+ signals)
 
             setTs(ticker,"scanning",null,0,"Fetching data...");
             boolean isC=isCrypto(ticker);
@@ -384,7 +385,13 @@ public class ScannerService {
                     s = sb2.build();
                 }
 
-                if (s.getConfidence() >= dynamicMinConf && !dedup.isDuplicate(ticker,s.getDirection(),s.getEntry())) {
+                // ── Max-confidence gate (blocks over-extended signals) ────────────
+                // For tickers where 85+ bucket historically underperforms 75-84 bucket
+                // (reversed confidence pattern), cap signals above maxConf.
+                if (s.getConfidence() > effectiveMaxConf) {
+                    log.debug("{} OVEREXTENDED conf={} maxConf={} — skipping over-extended signal",
+                            ticker, s.getConfidence(), effectiveMaxConf);
+                } else if (s.getConfidence() >= dynamicMinConf && !dedup.isDuplicate(ticker,s.getDirection(),s.getEntry())) {
                         if (dedup.isStartupQuiet()) {
                             // Startup quiet window — seed dedup without firing Discord alert.
                             // This prevents re-sending an alert that fired before the last restart/redeploy.

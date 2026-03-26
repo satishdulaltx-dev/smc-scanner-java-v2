@@ -244,6 +244,7 @@ public class BacktestService {
                 }
                 TickerProfile bp2 = config.getTickerProfile(ticker);
                 int effectiveMinConf = bp2.resolveMinConfidence(config.getMinConfidence());
+                int effectiveMaxConf = bp2.resolveMaxConfidence(); // upper cap for reversed-pattern tickers
 
                 // News: 48h window ending at entry timestamp
                 NewsSentiment sentiment = ticker.startsWith("X:") ? NewsSentiment.NONE
@@ -301,6 +302,20 @@ public class BacktestService {
                             adjConf, setup.getAtr(), newsAdj, sentiment.label(), ctxAdj, context.rsLabel(),
                             qualityAdj, filteredLabel,
                             0, 0, 0, 0)); // no options P&L for filtered trades
+                    tradePlacedToday = true;
+                    continue;
+                }
+
+                // Over-extended gate: skip signals above per-ticker maxConfidence
+                // Reverses the reversed-confidence pattern (PLTR/SOFI/NFLX: 85+ underperforms 75-84)
+                if (adjConf > effectiveMaxConf) {
+                    trades.add(new TradeResult(ticker, setup.getDirection(),
+                            setup.getEntry(), setup.getStopLoss(), setup.getTakeProfit(),
+                            "OVEREXTENDED_FILTERED", 0.0,
+                            toDateTime(dayBars.get(end - 1).getTimestamp()), toDateTime(dayBars.get(end - 1).getTimestamp()),
+                            adjConf, setup.getAtr(), newsAdj, sentiment.label(), ctxAdj, context.rsLabel(),
+                            qualityAdj, "CONF_CAP",
+                            0, 0, 0, 0));
                     tradePlacedToday = true;
                     continue;
                 }

@@ -14,6 +14,7 @@ public class TickerProfile {
 
     // Detection overrides (null = use global default from SetupDetector constants)
     private Integer minConfidence = null; // overrides scanner.min-confidence
+    private Integer maxConfidence = null; // upper cap — skip signals above this (blocks over-extended setups)
     private Double  minFvgPct     = null; // overrides MIN_FVG_PCT
     private Double  dispAtrMult   = null; // overrides DISP_ATR_MULT
     private Double  minVolMult    = null; // overrides MIN_VOL_MULT
@@ -27,6 +28,7 @@ public class TickerProfile {
     public String  getSkipReason()    { return skipReason != null ? skipReason : "Profile marked skip=true"; }
     public String  getNote()          { return note; }
     public Integer getMinConfidence() { return minConfidence; }
+    public Integer getMaxConfidence() { return maxConfidence; }
     public Double  getMinFvgPct()     { return minFvgPct; }
     public Double  getDispAtrMult()   { return dispAtrMult; }
     public Double  getMinVolMult()    { return minVolMult; }
@@ -34,6 +36,10 @@ public class TickerProfile {
     /** Resolve effective minConfidence: use override if set, else fall back to globalDefault. */
     public int resolveMinConfidence(int globalDefault) {
         return minConfidence != null ? minConfidence : globalDefault;
+    }
+    /** Resolve effective maxConfidence: use override if set, else 100 (no cap). */
+    public int resolveMaxConfidence() {
+        return maxConfidence != null ? maxConfidence : 100;
     }
     public double resolveMinFvgPct(double globalDefault)   { return minFvgPct   != null ? minFvgPct   : globalDefault; }
     public double resolveDispAtrMult(double globalDefault) { return dispAtrMult != null ? dispAtrMult : globalDefault; }
@@ -46,6 +52,7 @@ public class TickerProfile {
     public void setSkipReason(String v)    { this.skipReason = v; }
     public void setNote(String v)          { this.note = v; }
     public void setMinConfidence(Integer v){ this.minConfidence = v; }
+    public void setMaxConfidence(Integer v){ this.maxConfidence = v; }
     public void setMinFvgPct(Double v)     { this.minFvgPct = v; }
     public void setDispAtrMult(Double v)   { this.dispAtrMult = v; }
     public void setMinVolMult(Double v)    { this.minVolMult = v; }
