@@ -312,12 +312,12 @@ function sendEodDiscord() {
     <div class="ticker-grid">
         <a th:each="t : ${watchlist}"
            th:href="'/analyze?ticker=' + ${t.ticker}"
+           th:attr="data-tvurl=${t.tvUrl}"
            th:classappend="${t.status == 'setup-long'} ? 'status-long' : (${t.status == 'setup-short'} ? 'status-short' : (${t.status == 'scanning'} ? 'status-scanning' : ''))"
            class="ticker-card">
             <div style="display:flex;align-items:center;justify-content:space-between;">
                 <div class="name" th:text="${t.ticker}">TICKER</div>
-                <span th:onclick="'event.stopPropagation(); window.open(\'' + ${t.tvUrl} + '\',\'_blank\')'"
-                      class="tv-badge">TV↗</span>
+                <span class="tv-badge" onclick="openTV(event,this)">TV↗</span>
             </div>
             <div class="status" th:text="${t.status.toUpperCase()}">IDLE</div>
             <div class="msg" th:text="${t.phaseMsg}">Waiting...</div>
@@ -532,6 +532,13 @@ setInterval(loadAdaptive, 60000);
 if (sessionStorage.getItem('scrollAdaptive') === '1') {
     sessionStorage.removeItem('scrollAdaptive');
     setTimeout(scrollToAdaptive, 300);
+}
+
+function openTV(e, span) {
+    e.preventDefault();
+    e.stopPropagation();
+    var url = span.closest('[data-tvurl]').getAttribute('data-tvurl');
+    if (url) window.open(url, '_blank');
 }
 </script>
 

@@ -345,10 +345,19 @@ public class ScannerService {
                     setTs(ticker,"long".equals(s.getDirection())?"setup-long":"setup-short",s.getDirection(),s.getConfidence(),
                         String.format("ENTRY %s | Score %d | $%.2f",s.getDirection().toUpperCase(),s.getConfidence(),s.getEntry()));
                     if (s.getConfidence() >= effectiveMinConf && !dedup.isDuplicate(ticker,s.getDirection(),s.getEntry())) {
-                        log.info("INTRADAY ALERT {} {} conf={} entry={} adj=news{}/ctx{}/qual{}/flow{}/regime{}/corr{}",
-                                ticker, s.getDirection().toUpperCase(), s.getConfidence(), s.getEntry(),
-                                newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj);
-                        discord.sendSetupAlert(s, sentiment, context); dedup.markSent(ticker,s.getDirection(),s.getEntry());
+                        if (dedup.isStartupQuiet()) {
+                            // Startup quiet window — seed dedup without firing Discord alert.
+                            // This prevents re-sending an alert that fired before the last restart/redeploy.
+                            log.info("{} STARTUP_SEED: {} conf={} entry={} — seeded (no alert, startup quiet active)",
+                                    ticker, s.getDirection().toUpperCase(), s.getConfidence(), s.getEntry());
+                            dedup.markSent(ticker, s.getDirection(), s.getEntry());
+                        } else {
+                            log.info("INTRADAY ALERT {} {} conf={} entry={} adj=news{}/ctx{}/qual{}/flow{}/regime{}/corr{}",
+                                    ticker, s.getDirection().toUpperCase(), s.getConfidence(), s.getEntry(),
+                                    newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj);
+                            discord.sendSetupAlert(s, sentiment, context);
+                            dedup.markSent(ticker, s.getDirection(), s.getEntry());
+                        }
                     } else if (s.getConfidence() < effectiveMinConf) {
                         // Warn loudly when a strong base setup gets filtered — helps catch over-filtering
                         int baseConf = setups.get(0).getConfidence(); // raw score before any adjustments
