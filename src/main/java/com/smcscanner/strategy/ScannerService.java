@@ -84,6 +84,15 @@ public class ScannerService {
 
             try { List<OHLCV> hb=client.getBars(ticker,"60m",50); if (hb!=null&&hb.size()>=10) htfBias=mtf.getHtfBias(hb); }
             catch (Exception e) { log.debug("{} HTF error: {}",ticker,e.getMessage()); }
+
+            // ── 15m bias (pre-fetched here, used for alignment check after setup detection) ──
+            String bias15m = "neutral";
+            if (!isC) {
+                try {
+                    List<OHLCV> bars15 = client.getBars(ticker, "15m", 60);
+                    if (bars15 != null && bars15.size() >= 10) bias15m = mtf.getHtfBias(bars15);
+                } catch (Exception e) { log.debug("{} 15m bias error: {}", ticker, e.getMessage()); }
+            }
             try {
                 dailyBars=client.getBars(ticker,"1d",100); // 100 bars: enough for swing detection + ATR
                 if (dailyBars!=null&&dailyBars.size()>=5) {
@@ -114,6 +123,19 @@ public class ScannerService {
             if (!setups.isEmpty()) {
                 TradeSetup s=setups.get(0);
 
+                // ── 15m alignment check ───────────────────────────────────────
+                // Block if 15m trend directly opposes the setup direction.
+                // "bullish" 15m + short setup = fighting the trend → skip.
+                // "bearish" 15m + long  setup = fighting the trend → skip.
+                // "neutral" 15m → let it through (no strong trend to fight).
+                if (!isC && (
+                        ("bullish".equals(bias15m) && "short".equals(s.getDirection())) ||
+                        ("bearish".equals(bias15m) && "long".equals(s.getDirection())))) {
+                    log.info("{} 15M_BLOCKED: {} setup vs {} 15m trend", ticker, s.getDirection(), bias15m);
+                    setTs(ticker, "idle", null, 0, "⛔ 15m trend conflict — " + bias15m + " vs " + s.getDirection());
+                    return;
+                }
+
                 // ── News sentiment check ──────────────────────────────────────
                 NewsSentiment sentiment = isC ? NewsSentiment.NONE : news.getSentiment(ticker);
                 int newsAdj = sentiment.confidenceDelta(s.getDirection());
@@ -123,8 +145,7 @@ public class ScannerService {
 
                 // ── News-aligned TP extension: 1.5:1 → 3:1 ──────────────────
                 // When news aligns with the trade direction, widen TP to 3:1 R:R.
-                // The default from detectors is 1.5:1 (better win rate on neutral days).
-                // Strong aligned news signals a momentum-driven move with more follow-through.
+                // The default from detectors is 1.5:1. Aligned news signals strong follow-through.
                 if (!isC && sentiment.isAligned(s.getDirection())) {
                     double risk = Math.abs(s.getEntry() - s.getStopLoss());
                     double tp3x = "long".equals(s.getDirection())
