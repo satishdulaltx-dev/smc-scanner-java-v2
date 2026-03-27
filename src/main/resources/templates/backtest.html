@@ -417,7 +417,7 @@ function renderSingle(d) {
 
     // Trades are already sorted by date from backend — extract date from entry_time (format: "MM/dd HH:mm ET")
     let lastDate = '';
-    let tradeNum = 0;
+    tradeNum = 0;
     const FILTERED_SET = new Set(['NEWS_FILTERED','CTX_FILTERED','QUALITY_FILTERED','MULTI_FILTERED','15M_FILTERED','CORR_FILTERED','REGIME_FILTERED','OVEREXTENDED_FILTERED']);
     const COL_COUNT = 13; // total columns in the table
 
