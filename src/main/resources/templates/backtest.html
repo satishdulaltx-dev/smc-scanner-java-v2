@@ -234,27 +234,29 @@ let equityChart = null, distChart = null;
 
 // Load ticker list dynamically from watchlist API (keeps in sync with watchlist.json)
 // Shows all tickers including skipped ones so you can backtest any ticker
+const FALLBACK_TICKERS = 'AAPL,ABNB,AMD,AMZN,BABA,COIN,CRWD,DIS,GS,GOOGL,HOOD,JPM,MARA,META,MSFT,MSTR,NFLX,NIO,NVDA,PLTR,PYPL,QQQ,RIVN,ROKU,SHOP,SMCI,SNAP,SOFI,SPY,SQ,TSLA,UBER,V,X:BTCUSD,X:ETHUSD,X:SOLUSD,X:XRPUSD';
+
 async function loadTickers() {
+    // Show fallback immediately so the dropdown is never blank
+    const sel = document.getElementById('ticker');
+    sel.innerHTML = FALLBACK_TICKERS.split(',').map(t => `<option value="${t}">${t}</option>`).join('');
+    sel.value = 'AAPL';
+
     try {
-        const resp = await fetch('/api/watchlist').then(r => r.json()).catch(() => []);
-        const sel = document.getElementById('ticker');
-        // Get all available tickers from watchlist; also include common ones not in live watchlist
+        const resp = await fetch('/api/watchlist').then(r => r.json());
         const watchlistTickers = (Array.isArray(resp) ? resp : []).map(t => t.ticker || t).filter(Boolean);
-        // Extra tickers useful for backtesting (skipped from live but still historically interesting)
+        if (watchlistTickers.length === 0) return; // keep fallback
         const extra = ['BABA','DIS','GS','GOOGL','HOOD','META','NIO','PYPL','QQQ','ROKU','SHOP','SNAP','SQ','UBER','V','X:SOLUSD','X:XRPUSD'];
         const all = [...new Set([...watchlistTickers, ...extra])].sort((a,b) => {
-            // Crypto last, then alphabetical
             const ac = a.startsWith('X:'), bc = b.startsWith('X:');
             if (ac && !bc) return 1; if (!ac && bc) return -1;
             return a.localeCompare(b);
         });
         sel.innerHTML = all.map(t => `<option value="${t}">${t}</option>`).join('');
-        // Default to first active watchlist ticker (AAPL)
         const firstActive = watchlistTickers.find(t => !t.startsWith('X:'));
         if (firstActive) sel.value = firstActive;
     } catch(e) {
-        // Fallback to static list if API fails
-        document.getElementById('ticker').innerHTML = 'AAPL,AMZN,COIN,CRWD,JPM,MARA,MSFT,MSTR,NFLX,NVDA,PLTR,RIVN,SMCI,SOFI,SPY,TSLA,X:BTCUSD,X:ETHUSD'.split(',').map(t=>`<option>${t}</option>`).join('');
+        // fallback already set above — nothing to do
     }
 }
 
@@ -666,7 +668,9 @@ function setLoading(on) {
 function show(id) { document.getElementById(id).style.display = ''; }
 function hide(id) { document.getElementById(id).style.display = 'none'; }
 
-// Init
+// Init — call toggleMode first so ticker ctrl visibility matches the mode select
+// (browser may restore the previously selected mode on reload)
+toggleMode();
 loadTickers();
 </script>
 </body>
