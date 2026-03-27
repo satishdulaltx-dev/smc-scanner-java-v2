@@ -382,16 +382,25 @@ function renderSingle(d) {
     const losses = d.trades.filter(t => t.outcome === 'LOSS' || (t.outcome === 'TIMEOUT' && t.pnl_pct <= 0)).map(t => t.pnl_pct);
     drawDist(wins, losses);
 
-    // Trades table
+    // Trades table — sorted by date with date separator headers
     document.getElementById('trade-count').textContent = d.total_trades;
     const ticker = document.getElementById('ticker').value;
     const tvTicker = ticker.startsWith('X:') ? ticker.replace('X:','').replace('USD','USDT') : ticker;
+
+    // Trades are already sorted by date from backend — extract date from entry_time (format: "MM/dd HH:mm ET")
+    let lastDate = '';
+    let tradeNum = 0;
+    const FILTERED_SET = new Set(['NEWS_FILTERED','CTX_FILTERED','QUALITY_FILTERED','MULTI_FILTERED','15M_FILTERED','CORR_FILTERED','REGIME_FILTERED','OVEREXTENDED_FILTERED']);
+    const COL_COUNT = 13; // total columns in the table
+
     document.getElementById('trades-tbody').innerHTML = d.trades.map((t, i) => {
         const isNewsFiltered    = t.outcome === 'NEWS_FILTERED';
         const isCtxFiltered     = t.outcome === 'CTX_FILTERED';
         const isQualityFiltered = t.outcome === 'QUALITY_FILTERED';
         const isMultiFiltered   = t.outcome === 'MULTI_FILTERED';
-        const isFiltered        = isNewsFiltered || isCtxFiltered || isQualityFiltered || isMultiFiltered;
+        const isFiltered        = isNewsFiltered || isCtxFiltered || isQualityFiltered || isMultiFiltered
+                               || t.outcome === '15M_FILTERED' || t.outcome === 'CORR_FILTERED'
+                               || t.outcome === 'REGIME_FILTERED' || t.outcome === 'OVEREXTENDED_FILTERED';
         const tvUrl = `https://www.tradingview.com/chart/?symbol=${tvTicker}&interval=5`;
         const confColor = t.confidence >= 80 ? 'var(--green)' : t.confidence >= 65 ? 'var(--yellow)' : 'var(--muted)';
         const rowClass  = isMultiFiltered   ? 'multi-filtered-row'
@@ -401,6 +410,7 @@ function renderSingle(d) {
                         : t.outcome === 'WIN'     ? 'win-row'
                         : t.outcome === 'TIMEOUT' ? 'timeout-row'
                         : t.outcome === 'BE_STOP' ? 'be-stop-row'
+                        : FILTERED_SET.has(t.outcome) ? 'quality-filtered-row'
                         : 'loss-row';
         const badgeClass = isMultiFiltered   ? 'multi-filtered-badge'
                          : isQualityFiltered ? 'quality-filtered-badge'
@@ -409,6 +419,7 @@ function renderSingle(d) {
                          : t.outcome === 'WIN'     ? 'win-badge'
                          : t.outcome === 'TIMEOUT' ? 'timeout-badge'
                          : t.outcome === 'BE_STOP' ? 'be-stop-badge'
+                         : FILTERED_SET.has(t.outcome) ? 'quality-filtered-badge'
                          : 'loss-badge';
         // Adjustment tags on confidence cell
         const newsTag  = t.news_adj  ? `<span class="adj-tag" title="${t.news_label||''}">${t.news_adj>0?'+':''}${t.news_adj}📰</span>` : '';
@@ -419,9 +430,37 @@ function renderSingle(d) {
         const pnlCell = isFiltered
             ? `<td style="color:#8b949e;font-size:10px;max-width:220px;white-space:normal">${filterReason}</td>`
             : `<td style="color:${t.pnl_pct >= 0 ? 'var(--green)' : 'var(--red)'}; font-weight:600">${t.pnl_pct >= 0 ? '+' : ''}${t.pnl_pct.toFixed(2)}%</td>`;
-        return `
+
+        // Date separator: extract date portion from entry_time (e.g. "03/27 10:45 ET" → "03/27")
+        const curDate = t.entry_time ? t.entry_time.split(' ')[0] : '';
+        let dateSep = '';
+        if (curDate && curDate !== lastDate) {
+            // Count trades on this date
+            const dayTrades = d.trades.filter(x => x.entry_time && x.entry_time.startsWith(curDate));
+            const dayExec = dayTrades.filter(x => !FILTERED_SET.has(x.outcome));
+            const dayWins = dayTrades.filter(x => x.outcome === 'WIN' || (x.outcome === 'TIMEOUT' && x.pnl_pct > 0));
+            const dayLosses = dayTrades.filter(x => x.outcome === 'LOSS' || (x.outcome === 'TIMEOUT' && x.pnl_pct <= 0));
+            const dayFiltered = dayTrades.length - dayExec.length;
+            const dayWr = (dayWins.length + dayLosses.length) > 0
+                ? Math.round(dayWins.length * 100 / (dayWins.length + dayLosses.length)) : 0;
+            const dayPnl = dayExec.reduce((sum, x) => sum + (x.pnl_pct || 0), 0);
+            const wrColor = dayWr >= 50 ? 'var(--green)' : dayWr >= 35 ? 'var(--yellow)' : 'var(--red)';
+            dateSep = `<tr style="background:rgba(88,214,141,0.08);border-top:2px solid var(--border)">
+                <td colspan="${COL_COUNT}" style="padding:8px 12px;font-weight:700;font-size:12px;color:#58d68d;letter-spacing:.5px">
+                    📅 ${curDate}
+                    <span style="font-weight:400;color:var(--muted);margin-left:12px">${dayTrades.length} trade${dayTrades.length!==1?'s':''}</span>
+                    <span style="font-weight:400;margin-left:8px">(${dayExec.length} exec, ${dayFiltered} filtered)</span>
+                    ${(dayWins.length + dayLosses.length) > 0 ? `<span style="margin-left:12px;color:${wrColor};font-weight:600">${dayWr}% WR</span>
+                    <span style="margin-left:8px;color:${dayPnl >= 0 ? 'var(--green)' : 'var(--red)'};font-weight:600">${dayPnl >= 0 ? '+' : ''}${dayPnl.toFixed(2)}%</span>` : ''}
+                </td>
+            </tr>`;
+            lastDate = curDate;
+        }
+        tradeNum++;
+
+        return dateSep + `
         <tr class="${rowClass}">
-            <td style="color:var(--muted)">${i+1}</td>
+            <td style="color:var(--muted)">${tradeNum}</td>
             <td><a href="${tvUrl}" target="_blank" style="color:var(--blue);text-decoration:none;font-size:11px;font-family:monospace" title="View 5m chart on TradingView">${t.entry_time || '—'}</a></td>
             <td style="font-size:11px;font-family:monospace;color:var(--muted)">${isFiltered ? '—' : (t.exit_time || '—')}</td>
             <td class="${t.dir === 'long' ? 'dir-long' : 'dir-short'}">${t.dir === 'long' ? '▲ LONG' : '▼ SHORT'}</td>

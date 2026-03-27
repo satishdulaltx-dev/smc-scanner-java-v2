@@ -1,45 +1,26 @@
 {
   "profiles": [
     {
-      "ticker": "BABA",
-      "skip": true,
-      "skipReason": "0% WR 6 consecutive losses in 30d \u2014 Chinese ADR, different market hours/dynamics, SMC 5m patterns unreliable."
-    },
-    {
-      "ticker": "GS",
-      "skip": true,
-      "skipReason": "0% WR 4 losses in 30d \u2014 investment bank moves on macro/Fed news, not intraday technical patterns."
-    },
-    {
-      "ticker": "UBER",
-      "skip": true,
-      "skipReason": "0% WR 3 losses in 30d \u2014 recent regime unfavorable, no consistent intraday SMC edge detected."
-    },
-    {
-      "ticker": "GOOGL",
-      "skip": true,
-      "skipReason": "Mega-cap stable stock \u2014 SMC 5m FVG patterns unreliable (5.6% win rate over 500 days)",
+      "ticker": "AAPL",
       "strategyType": "vwap",
-      "note": "skip=true intentional; strategyType set for future reference if skip is lifted"
+      "minConfidence": 62,
+      "intradayRsGate": false,
+      "skip": false,
+      "skipReason": null,
+      "note": "VWAP + Z-Score(1.5 SD). RS gate DISABLED — mean-reversion trades ARE relative weakness by definition, RS penalty kills the signal we want. minConf=62. DO NOT SKIP."
     },
     {
-      "ticker": "RIVN",
-      "minConfidence": 78,
-      "minFvgPct": 0.001,
-      "dispAtrMult": 1.5,
-      "minVolMult": 1.8,
-      "note": "RESTORED Mar 2026: 90d backtest shows 58.3% WR +0.88% expectancy \u2014 one of the best performers. Skip was based on stale 30d data from Polygon sort bug era. maxConf=84 Mar 2026: applying reversed-pattern cap as a precaution given its high-beta nature.",
+      "ticker": "ABNB",
+      "minConfidence": 62,
+      "note": "Strong performer historically — keep in watchlist maxConf=84 Mar 2026: 85+ bucket 22.2%WR (9t) vs 75-84 50%WR (2t) — same over-extended pattern as PLTR/SOFI. Cap at 84 to take only earlier entries.",
       "maxConfidence": 84
     },
     {
-      "ticker": "HOOD",
+      "ticker": "AMD",
       "minConfidence": 85,
-      "minFvgPct": 0.0015,
-      "dispAtrMult": 1.8,
-      "minVolMult": 2.2,
-      "note": "Tightened Mar 2026: 20% WR 90d -1.58% exp. Raised minConf to 85 \u2014 only take ultra-clean SMC sweeps with strong volume. High-beta fintech needs exceptional setup quality.",
-      "skip": true,
-      "skipReason": "Removed from watchlist Mar 2026 \u2014 0% WR or negative expectancy over 90d."
+      "minFvgPct": 0.001,
+      "dispAtrMult": 1.5,
+      "note": "Tightened Mar 2026: 20% WR 90d -0.39% exp. Semiconductor that tracks NVDA — only fire on very strong SMC setups (85+) with clear sweep and volume confirmation."
     },
     {
       "ticker": "AMZN",
@@ -53,81 +34,80 @@
       "note": "Switched VWAP→SMC Mar 2026: VWAP 0%WR (5 trades), ORB 0%WR (0 trades). AMZN has strong FVG mechanics when trending. SMC with relaxed thresholds + RS gate (trend-following needs RS). DO NOT SKIP."
     },
     {
-      "ticker": "MSTR",
-      "skip": false,
-      "minConfidence": 70,
-      "minFvgPct": 0.001,
-      "maxConfidence": 89,
-      "note": "Un-skipped Mar 2026: 365d backtest shows 13 trades 55% WR +1.22 exp. Prior skip was based on 2 losses in 30d (too small sample). Bitcoin proxy with high-beta SMC sweeps — maxConf=89 to avoid over-extended entries (b85:10@40% vs b75-84:3@67%). Restored to watchlist."
+      "ticker": "BA",
+      "skip": true,
+      "skipReason": "0% WR 90d (3 trades, 2 losses + 1 BE). Aerospace — moves on defense contracts/FAA news, not technical patterns.",
+      "strategyType": "breakout"
     },
     {
-      "ticker": "NIO",
+      "ticker": "BABA",
       "skip": true,
-      "skipReason": "0% WR 90d (2 trades, 2 losses). Chinese EV \u2014 moves on ADR premium and Beijing policy, not SMC patterns.",
-      "minConfidence": 72,
-      "minFvgPct": 0.0008,
-      "strategyType": "breakout"
+      "skipReason": "0% WR 6 consecutive losses in 30d — Chinese ADR, different market hours/dynamics, SMC 5m patterns unreliable."
     },
     {
       "ticker": "COIN",
       "minConfidence": 62,
       "minFvgPct": 0.0006,
       "strategyType": "smc",
-      "note": "Switched breakout\u2192SMC Mar 2026: 0 signals on ORB. COIN tracks crypto closely \u2014 SMC sweep+FVG works better. Relaxed thresholds."
+      "note": "Switched breakout→SMC Mar 2026: 0 signals on ORB. COIN tracks crypto closely — SMC sweep+FVG works better. Relaxed thresholds."
     },
     {
-      "ticker": "SOFI",
+      "ticker": "CRWD",
+      "strategyType": "smc",
       "minConfidence": 62,
-      "note": "Strong performer (65.9% WR) \u2014 relaxed to catch more signals maxConf=84 Mar 2026: 85+ bucket 22.2% WR/-0.98% (over-extended); 75-84 bucket 66.7% WR/+3.63% \u2014 sweet spot is the earlier signals.",
-      "maxConfidence": 84
+      "maxConfidence": 84,
+      "note": "Added Mar 2026: 365d backtest 31 exec trades 57%WR +0.33 exp. Clear reversed-confidence pattern: b85:22@27%WR vs b75-84:9@78%WR. Apply maxConf=84 — high-confidence signals fire after move is exhausted. CrowdStrike has strong SMC sweep + FVG mechanics on 5m. minConf=62 to capture early setups."
     },
     {
-      "ticker": "PYPL",
+      "ticker": "DIS",
       "skip": true,
-      "skipReason": "12% WR 90d across 17 trades \u2014 statistically confirmed no edge. Fintech range-bound, SMC patterns unreliable.",
-      "minConfidence": 62
+      "skipReason": "0% WR 90d (3 trades, 1 loss + 2 BE). Slow-moving entertainment stock — no intraday SMC edge.",
+      "strategyType": "breakout"
     },
     {
-      "ticker": "SQ",
-      "minConfidence": 62,
-      "note": "Strong performer (60% WR) \u2014 relaxed",
+      "ticker": "GOOGL",
       "skip": true,
-      "skipReason": "Removed from watchlist Mar 2026 \u2014 0% WR or negative expectancy over 90d."
+      "skipReason": "Mega-cap stable stock — SMC 5m FVG patterns unreliable (5.6% win rate over 500 days)",
+      "strategyType": "vwap",
+      "note": "skip=true intentional; strategyType set for future reference if skip is lifted"
     },
     {
-      "ticker": "ABNB",
-      "minConfidence": 62,
-      "note": "Strong performer historically \u2014 keep in watchlist maxConf=84 Mar 2026: 85+ bucket 22.2%WR (9t) vs 75-84 50%WR (2t) \u2014 same over-extended pattern as PLTR/SOFI. Cap at 84 to take only earlier entries.",
-      "maxConfidence": 84
-    },
-    {
-      "ticker": "SNAP",
+      "ticker": "GS",
       "skip": true,
-      "skipReason": "0% WR 90d (-1.54% expectancy). 30d showed 50% but was only 4 trades \u2014 too small a sample. Full 90d picture shows no edge.",
-      "minConfidence": 68,
-      "note": "skip=true again Mar 2026. Re-evaluate after consistent 90d WR >45%."
+      "skipReason": "0% WR 4 losses in 30d — investment bank moves on macro/Fed news, not intraday technical patterns."
     },
     {
-      "ticker": "NFLX",
-      "minConfidence": 63,
-      "minFvgPct": 0.0005,
-      "dispAtrMult": 1.4,
-      "note": "Fast-moving large-cap \u2014 1 trade 30d on defaults. Relaxed to catch more sweep+FVG setups. maxConf=84 Mar 2026: 85+ bucket 22.2% WR/-0.37% (over-extended late entries); 75-84 bucket 75% WR/+0.65% \u2014 earlier entries clearly better.",
-      "maxConfidence": 84
+      "ticker": "HOOD",
+      "minConfidence": 85,
+      "minFvgPct": 0.0015,
+      "dispAtrMult": 1.8,
+      "minVolMult": 2.2,
+      "note": "Tightened Mar 2026: 20% WR 90d -1.58% exp. Raised minConf to 85 — only take ultra-clean SMC sweeps with strong volume. High-beta fintech needs exceptional setup quality.",
+      "skip": true,
+      "skipReason": "Removed from watchlist Mar 2026 — 0% WR or negative expectancy over 90d."
+    },
+    {
+      "ticker": "JPM",
+      "strategyType": "keylevel",
+      "minConfidence": 70,
+      "maxConfidence": 84,
+      "tpRrRatio": 1.0,
+      "note": "Switched SMC→KeyLevel Mar 2026. 365d: 5 exec trades 0%WR — all 3 BE_STOPs confirm entry direction is right, TP too far. JPM moves in $0.50-1.00 increments then stalls. Reduced tpRrRatio 1.5→1.0: take profit at 1:1 R:R (reached before reversal). ATR-aware SL unchanged (0.5 ATR above/below level)."
     },
     {
       "ticker": "MARA",
       "minConfidence": 62,
-      "note": "Strong expectancy (4.36%) \u2014 relaxed to catch more signals"
+      "note": "Strong expectancy (4.36%) — relaxed to catch more signals"
     },
     {
-      "ticker": "AAPL",
-      "strategyType": "vwap",
-      "minConfidence": 62,
-      "intradayRsGate": false,
-      "skip": false,
-      "skipReason": null,
-      "note": "VWAP + Z-Score(1.5 SD). RS gate DISABLED — mean-reversion trades ARE relative weakness by definition, RS penalty kills the signal we want. minConf=62. DO NOT SKIP."
+      "ticker": "META",
+      "strategyType": "smc",
+      "minConfidence": 85,
+      "minFvgPct": 0.0007,
+      "dispAtrMult": 1.5,
+      "note": "Tightened Mar 2026: 25% WR 90d -0.49% exp. Raised minConf 65→85. META is a slow mega-cap — only ultra-high-confidence SMC sweeps with clear displacement worth taking.",
+      "skip": true,
+      "skipReason": "Removed from watchlist Mar 2026 — 0% WR or negative expectancy over 90d."
     },
     {
       "ticker": "MSFT",
@@ -141,41 +121,28 @@
       "note": "Switched VWAP→SMC Mar 2026: VWAP 0%WR (5 trades), KeyLevel 0%WR. SMC hasn't been tried with current filters. Relaxed thresholds (minFvgPct=0.0004, dispAtr=1.2) + RS gate. DO NOT SKIP."
     },
     {
-      "ticker": "META",
-      "strategyType": "smc",
-      "minConfidence": 85,
-      "minFvgPct": 0.0007,
-      "dispAtrMult": 1.5,
-      "note": "Tightened Mar 2026: 25% WR 90d -0.49% exp. Raised minConf 65\u219285. META is a slow mega-cap \u2014 only ultra-high-confidence SMC sweeps with clear displacement worth taking.",
-      "skip": true,
-      "skipReason": "Removed from watchlist Mar 2026 \u2014 0% WR or negative expectancy over 90d."
-    },
-    {
-      "ticker": "V",
-      "skip": true,
-      "skipReason": "Neither VWAP (0% WR) nor Key Level (18% WR, -0.01% expectancy) produced reliable intraday edge \u2014 too slow-moving for 5m strategy",
-      "strategyType": "keylevel",
-      "note": "skip=true; V is a stable mega-cap with tiny intraday ranges. Revisit with daily-bar swing strategy."
-    },
-    {
-      "ticker": "DIS",
-      "skip": true,
-      "skipReason": "0% WR 90d (3 trades, 1 loss + 2 BE). Slow-moving entertainment stock \u2014 no intraday SMC edge.",
-      "strategyType": "breakout"
-    },
-    {
-      "ticker": "SPY",
-      "strategyType": "vwap",
-      "note": "VWAP Mar 2026. minConf raised to 75: 25%WR at 70 still negative (-$42). 49 filtered = plenty of signals, need higher bar. Only ultra-clean VWAP snaps.",
-      "minConfidence": 75,
+      "ticker": "MSTR",
       "skip": false,
-      "skipReason": null
+      "minConfidence": 70,
+      "minFvgPct": 0.001,
+      "maxConfidence": 89,
+      "note": "Un-skipped Mar 2026: 365d backtest shows 13 trades 55% WR +1.22 exp. Prior skip was based on 2 losses in 30d (too small sample). Bitcoin proxy with high-beta SMC sweeps — maxConf=89 to avoid over-extended entries (b85:10@40% vs b75-84:3@67%). Restored to watchlist."
     },
     {
-      "ticker": "QQQ",
+      "ticker": "NFLX",
+      "minConfidence": 63,
+      "minFvgPct": 0.0005,
+      "dispAtrMult": 1.4,
+      "note": "Fast-moving large-cap — 1 trade 30d on defaults. Relaxed to catch more sweep+FVG setups. maxConf=84 Mar 2026: 85+ bucket 22.2% WR/-0.37% (over-extended late entries); 75-84 bucket 75% WR/+0.65% — earlier entries clearly better.",
+      "maxConfidence": 84
+    },
+    {
+      "ticker": "NIO",
       "skip": true,
-      "skipReason": "12% WR 90d (8 trades). VWAP reversion on index ETF not working \u2014 QQQ trends too strongly intraday.",
-      "strategyType": "vwap"
+      "skipReason": "0% WR 90d (2 trades, 2 losses). Chinese EV — moves on ADR premium and Beijing policy, not SMC patterns.",
+      "minConfidence": 72,
+      "minFvgPct": 0.0008,
+      "strategyType": "breakout"
     },
     {
       "ticker": "NVDA",
@@ -188,10 +155,34 @@
       "maxConfidence": 89
     },
     {
-      "ticker": "BA",
+      "ticker": "PLTR",
+      "minConfidence": 62,
+      "minFvgPct": 0.0006,
+      "dispAtrMult": 1.3,
+      "strategyType": "smc",
+      "note": "Switched breakout→SMC Mar 2026: 0 signals on ORB. PLTR has strong intraday SMC sweeps. Relaxed thresholds. maxConf=84 Mar 2026: 85+ bucket 16.7% WR/-0.84% (over-extended late entries); 75-84 bucket 66.7% WR/+1.47% — only take the earlier entries.",
+      "maxConfidence": 84
+    },
+    {
+      "ticker": "PYPL",
       "skip": true,
-      "skipReason": "0% WR 90d (3 trades, 2 losses + 1 BE). Aerospace \u2014 moves on defense contracts/FAA news, not technical patterns.",
-      "strategyType": "breakout"
+      "skipReason": "12% WR 90d across 17 trades — statistically confirmed no edge. Fintech range-bound, SMC patterns unreliable.",
+      "minConfidence": 62
+    },
+    {
+      "ticker": "QQQ",
+      "skip": true,
+      "skipReason": "12% WR 90d (8 trades). VWAP reversion on index ETF not working — QQQ trends too strongly intraday.",
+      "strategyType": "vwap"
+    },
+    {
+      "ticker": "RIVN",
+      "minConfidence": 78,
+      "minFvgPct": 0.001,
+      "dispAtrMult": 1.5,
+      "minVolMult": 1.8,
+      "note": "RESTORED Mar 2026: 90d backtest shows 58.3% WR +0.88% expectancy — one of the best performers. Skip was based on stale 30d data from Polygon sort bug era. maxConf=84 Mar 2026: applying reversed-pattern cap as a precaution given its high-beta nature.",
+      "maxConfidence": 84
     },
     {
       "ticker": "ROKU",
@@ -199,18 +190,50 @@
       "minFvgPct": 0.0012,
       "dispAtrMult": 1.8,
       "strategyType": "smc",
-      "note": "Tightened Mar 2026: 0% WR 90d (-1.93% exp, 5 trades) \u2014 extremely bad. User favorite so kept in watchlist, but threshold set near-impossible (92) to de-facto block until 90d WR improves. Revisit with different strategy.",
+      "note": "Tightened Mar 2026: 0% WR 90d (-1.93% exp, 5 trades) — extremely bad. User favorite so kept in watchlist, but threshold set near-impossible (92) to de-facto block until 90d WR improves. Revisit with different strategy.",
       "skip": true,
-      "skipReason": "Removed from watchlist Mar 2026 \u2014 0% WR or negative expectancy over 90d."
+      "skipReason": "Removed from watchlist Mar 2026 — 0% WR or negative expectancy over 90d."
     },
     {
-      "ticker": "PLTR",
+      "ticker": "SHOP",
+      "skip": true,
+      "skipReason": "365d backtest 28 trades 42%WR -0.06 exp. Both confidence buckets underperform (b85@38% b75@43%) — not a reversed-confidence issue, SMC strategy has no edge on SHOP. E-commerce stock driven by earnings/macro, not intraday FVG mechanics.",
+      "note": "skip=true Mar 2026. Re-evaluate with KeyLevel or ORB strategy if SMC edge returns."
+    },
+    {
+      "ticker": "SMCI",
+      "strategyType": "keylevel",
+      "minConfidence": 70,
+      "slAtrMult": 1.5,
+      "note": "KeyLevel + slAtrMult=1.5 Mar 2026: 2.0x too wide (bigger losses). 1.5x past wick noise but TP still reachable. 60 filtered/3 exec = entries found but stopped out — wider stop + compressed target should help. DO NOT SKIP."
+    },
+    {
+      "ticker": "SNAP",
+      "skip": true,
+      "skipReason": "0% WR 90d (-1.54% expectancy). 30d showed 50% but was only 4 trades — too small a sample. Full 90d picture shows no edge.",
+      "minConfidence": 68,
+      "note": "skip=true again Mar 2026. Re-evaluate after consistent 90d WR >45%."
+    },
+    {
+      "ticker": "SOFI",
       "minConfidence": 62,
-      "minFvgPct": 0.0006,
-      "dispAtrMult": 1.3,
-      "strategyType": "smc",
-      "note": "Switched breakout\u2192SMC Mar 2026: 0 signals on ORB. PLTR has strong intraday SMC sweeps. Relaxed thresholds. maxConf=84 Mar 2026: 85+ bucket 16.7% WR/-0.84% (over-extended late entries); 75-84 bucket 66.7% WR/+1.47% \u2014 only take the earlier entries.",
+      "note": "Strong performer (65.9% WR) — relaxed to catch more signals maxConf=84 Mar 2026: 85+ bucket 22.2% WR/-0.98% (over-extended); 75-84 bucket 66.7% WR/+3.63% — sweet spot is the earlier signals.",
       "maxConfidence": 84
+    },
+    {
+      "ticker": "SPY",
+      "strategyType": "vwap",
+      "note": "VWAP Mar 2026. minConf raised to 75: 25%WR at 70 still negative (-$42). 49 filtered = plenty of signals, need higher bar. Only ultra-clean VWAP snaps.",
+      "minConfidence": 75,
+      "skip": false,
+      "skipReason": null
+    },
+    {
+      "ticker": "SQ",
+      "minConfidence": 62,
+      "note": "Strong performer (60% WR) — relaxed",
+      "skip": true,
+      "skipReason": "Removed from watchlist Mar 2026 — 0% WR or negative expectancy over 90d."
     },
     {
       "ticker": "TSLA",
@@ -222,39 +245,16 @@
       "note": "minConf reverted to 85 Mar 2026: 78 let in bad trades (0%WR/-$349). 85 was 33.3%/+$180. TSLA needs ultra-clean setups only. slAtrMult=1.5 + 0.8:1 TP ratio. DO NOT SKIP."
     },
     {
-      "ticker": "AMD",
-      "minConfidence": 85,
-      "minFvgPct": 0.001,
-      "dispAtrMult": 1.5,
-      "note": "Tightened Mar 2026: 20% WR 90d -0.39% exp. Semiconductor that tracks NVDA \u2014 only fire on very strong SMC setups (85+) with clear sweep and volume confirmation."
-    },
-    {
-      "ticker": "SMCI",
-      "strategyType": "keylevel",
-      "minConfidence": 70,
-      "slAtrMult": 1.5,
-      "note": "KeyLevel + slAtrMult=1.5 Mar 2026: 2.0x too wide (bigger losses). 1.5x past wick noise but TP still reachable. 60 filtered/3 exec = entries found but stopped out — wider stop + compressed target should help. DO NOT SKIP."
-    },
-    {
-      "ticker": "JPM",
-      "strategyType": "keylevel",
-      "minConfidence": 70,
-      "maxConfidence": 84,
-      "tpRrRatio": 1.0,
-      "note": "Switched SMC\u2192KeyLevel Mar 2026. 365d: 5 exec trades 0%WR \u2014 all 3 BE_STOPs confirm entry direction is right, TP too far. JPM moves in $0.50-1.00 increments then stalls. Reduced tpRrRatio 1.5\u21921.0: take profit at 1:1 R:R (reached before reversal). ATR-aware SL unchanged (0.5 ATR above/below level)."
-    },
-    {
-      "ticker": "SHOP",
+      "ticker": "UBER",
       "skip": true,
-      "skipReason": "365d backtest 28 trades 42%WR -0.06 exp. Both confidence buckets underperform (b85@38% b75@43%) \u2014 not a reversed-confidence issue, SMC strategy has no edge on SHOP. E-commerce stock driven by earnings/macro, not intraday FVG mechanics.",
-      "note": "skip=true Mar 2026. Re-evaluate with KeyLevel or ORB strategy if SMC edge returns."
+      "skipReason": "0% WR 3 losses in 30d — recent regime unfavorable, no consistent intraday SMC edge detected."
     },
     {
-      "ticker": "CRWD",
-      "strategyType": "smc",
-      "minConfidence": 62,
-      "maxConfidence": 84,
-      "note": "Added Mar 2026: 365d backtest 31 exec trades 57%WR +0.33 exp. Clear reversed-confidence pattern: b85:22@27%WR vs b75-84:9@78%WR. Apply maxConf=84 — high-confidence signals fire after move is exhausted. CrowdStrike has strong SMC sweep + FVG mechanics on 5m. minConf=62 to capture early setups."
+      "ticker": "V",
+      "skip": true,
+      "skipReason": "Neither VWAP (0% WR) nor Key Level (18% WR, -0.01% expectancy) produced reliable intraday edge — too slow-moving for 5m strategy",
+      "strategyType": "keylevel",
+      "note": "skip=true; V is a stable mega-cap with tiny intraday ranges. Revisit with daily-bar swing strategy."
     }
   ]
 }

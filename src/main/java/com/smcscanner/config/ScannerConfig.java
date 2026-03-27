@@ -22,6 +22,7 @@ public class ScannerConfig {
     private String discordWebhookUrl      = "";
     private String discordEodWebhookUrl   = "";  // dedicated EOD report channel
     private String discordSwingWebhookUrl = "";  // swing trade alerts channel
+    private String discordDailyReportWebhookUrl = "";  // daily trade report channel
     private int    scanInterval       = 15;
     private int    minConfidence      = 70;
     private int    dashboardPort      = 8080;
@@ -39,6 +40,11 @@ public class ScannerConfig {
     public String getDiscordWebhookUrl()     { return discordWebhookUrl; }
     public String getDiscordEodWebhookUrl()  { return discordEodWebhookUrl; }
     public String getDiscordSwingWebhookUrl(){ return discordSwingWebhookUrl; }
+    public String getDiscordDailyReportWebhookUrl(){ return discordDailyReportWebhookUrl; }
+    public String resolveDailyReportWebhookUrl() {
+        return (discordDailyReportWebhookUrl != null && !discordDailyReportWebhookUrl.isBlank())
+               ? discordDailyReportWebhookUrl : resolveEodWebhookUrl();
+    }
     /** Returns the EOD webhook if set, otherwise falls back to the main webhook. */
     public String resolveEodWebhookUrl()    {
         return (discordEodWebhookUrl != null && !discordEodWebhookUrl.isBlank())
@@ -61,6 +67,7 @@ public class ScannerConfig {
     public void setDiscordWebhookUrl(String v)      { this.discordWebhookUrl = v; }
     public void setDiscordEodWebhookUrl(String v)   { this.discordEodWebhookUrl = v; }
     public void setDiscordSwingWebhookUrl(String v) { this.discordSwingWebhookUrl = v; }
+    public void setDiscordDailyReportWebhookUrl(String v) { this.discordDailyReportWebhookUrl = v; }
     public void setScanInterval(int v)           { this.scanInterval = v; }
     public void setMinConfidence(int v)          { this.minConfidence = v; }
     public void setDashboardPort(int v)          { this.dashboardPort = v; }

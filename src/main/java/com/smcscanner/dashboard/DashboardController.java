@@ -11,6 +11,7 @@ import com.smcscanner.state.ReportCache;
 import com.smcscanner.state.SharedState;
 import com.smcscanner.strategy.EodReportService;
 import com.smcscanner.strategy.SessionFilter;
+import com.smcscanner.tracking.LiveTradeLog;
 import com.smcscanner.tracking.PerformanceTracker;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,6 +47,7 @@ public class DashboardController {
     private final BacktestService    backtestService;
     private final AdaptiveSuppressor adaptive;
     private final AnalysisService    analysisService;
+    private final LiveTradeLog       liveLog;
 
     private static final Map<String,String> TV_MAP = Map.of(
         "X:BTCUSD", "BINANCE:BTCUSDT",
@@ -63,11 +65,11 @@ public class DashboardController {
                                 PerformanceTracker tracker, EodReportService eodReport,
                                 DiscordAlertService discord, ReportCache reportCache,
                                 BacktestService backtestService, AdaptiveSuppressor adaptive,
-                                AnalysisService analysisService) {
+                                AnalysisService analysisService, LiveTradeLog liveLog) {
         this.state=state; this.config=config; this.sessionFilter=sessionFilter;
         this.tracker=tracker; this.eodReport=eodReport; this.discord=discord;
         this.reportCache=reportCache; this.backtestService=backtestService; this.adaptive=adaptive;
-        this.analysisService=analysisService;
+        this.analysisService=analysisService; this.liveLog=liveLog;
     }
 
     @GetMapping("/")
@@ -494,6 +496,57 @@ public class DashboardController {
             @org.springframework.web.bind.annotation.RequestParam String ticker) {
         adaptive.reset(ticker.toUpperCase());
         return ResponseEntity.ok(Map.of("reset", ticker.toUpperCase()));
+    }
+
+    // ── Live trade log endpoints ─────────────────────────────────────────────
+
+    /** GET /api/trades/today — today's live trade alerts. */
+    @GetMapping("/api/trades/today")
+    @ResponseBody
+    public ResponseEntity<Map<String,Object>> todayTrades() {
+        String today = ZonedDateTime.now(ET).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        return ResponseEntity.ok(liveLog.getDailySummary(today));
+    }
+
+    /** GET /api/trades/history — all live trades ever recorded. */
+    @GetMapping("/api/trades/history")
+    @ResponseBody
+    public ResponseEntity<Map<String,Object>> tradeHistory() {
+        Map<String,Object> resp = new LinkedHashMap<>();
+        resp.put("cumulative", liveLog.getCumulativeStats());
+        resp.put("trades", liveLog.getAllTrades());
+        return ResponseEntity.ok(resp);
+    }
+
+    /** GET /api/trades/daily?date=2026-03-27 — summary for a specific date. */
+    @GetMapping("/api/trades/daily")
+    @ResponseBody
+    public ResponseEntity<Map<String,Object>> dailySummary(
+            @org.springframework.web.bind.annotation.RequestParam(required=false) String date) {
+        if (date == null || date.isBlank()) {
+            date = ZonedDateTime.now(ET).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+        }
+        return ResponseEntity.ok(liveLog.getDailySummary(date));
+    }
+
+    /**
+     * POST /api/trades/resolve?ticker=AAPL&outcome=WIN&pnl=1.25
+     * Resolves an open trade. outcome: WIN, LOSS, BE_STOP, TIMEOUT.
+     */
+    @PostMapping("/api/trades/resolve")
+    @ResponseBody
+    public ResponseEntity<Map<String,Object>> resolveTrade(
+            @org.springframework.web.bind.annotation.RequestParam String ticker,
+            @org.springframework.web.bind.annotation.RequestParam String outcome,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue="0") double pnl) {
+        boolean resolved = liveLog.resolveTrade(ticker.toUpperCase(), outcome.toUpperCase(), pnl);
+        if (!resolved) {
+            return ResponseEntity.badRequest().body(Map.of("error", "No open trade found for " + ticker));
+        }
+        // Also record in adaptive suppressor for streak tracking
+        if ("WIN".equalsIgnoreCase(outcome)) adaptive.recordWin(ticker.toUpperCase());
+        else if ("LOSS".equalsIgnoreCase(outcome)) adaptive.recordLoss(ticker.toUpperCase());
+        return ResponseEntity.ok(Map.of("ticker", ticker.toUpperCase(), "outcome", outcome, "pnl", pnl));
     }
 
     @GetMapping("/health")

@@ -16,6 +16,7 @@ import com.smcscanner.options.OptionsFlowAnalyzer;
 import com.smcscanner.options.OptionsFlowResult;
 import com.smcscanner.options.OptionsRecommendation;
 import com.smcscanner.state.SharedState;
+import com.smcscanner.tracking.LiveTradeLog;
 import com.smcscanner.tracking.PerformanceTracker;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -35,6 +36,7 @@ public class ScannerService {
     private final DiscordAlertService    discord;
     private final AlertDedup             dedup;
     private final PerformanceTracker     tracker;
+    private final LiveTradeLog           liveLog;
     private final SharedState            state;
     private final AtrCalculator          atrCalc;
     private final VwapStrategyDetector     vwap;
@@ -49,13 +51,13 @@ public class ScannerService {
     public ScannerService(ScannerConfig config, PolygonClient client, SetupDetector setupDetector,
                           CryptoStrategyService crypto, MultiTimeframeAnalyzer mtf,
                           DiscordAlertService discord, AlertDedup dedup,
-                          PerformanceTracker tracker, SharedState state, AtrCalculator atrCalc,
+                          PerformanceTracker tracker, LiveTradeLog liveLog, SharedState state, AtrCalculator atrCalc,
                           VwapStrategyDetector vwap, BreakoutStrategyDetector breakout,
                           KeyLevelStrategyDetector keyLevel, NewsService news,
                           MarketContextService marketCtx, SignalQualityFilter qualityFilter,
                           AdaptiveSuppressor adaptive, OptionsFlowAnalyzer optionsFlow) {
         this.config=config; this.client=client; this.setupDetector=setupDetector; this.crypto=crypto;
-        this.mtf=mtf; this.discord=discord; this.dedup=dedup; this.tracker=tracker; this.state=state;
+        this.mtf=mtf; this.discord=discord; this.dedup=dedup; this.tracker=tracker; this.liveLog=liveLog; this.state=state;
         this.atrCalc=atrCalc; this.vwap=vwap; this.breakout=breakout; this.keyLevel=keyLevel;
         this.news=news; this.marketCtx=marketCtx; this.qualityFilter=qualityFilter; this.adaptive=adaptive;
         this.optionsFlow=optionsFlow;
@@ -419,6 +421,7 @@ public class ScannerService {
                                     ticker, s.getDirection().toUpperCase(), s.getConfidence(), s.getEntry(),
                                     newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj, vixBoost, dynamicMinConf);
                             discord.sendSetupAlert(s, sentiment, context);
+                            liveLog.recordTrade(s, stratType);
                             dedup.markSent(ticker, s.getDirection(), s.getEntry());
                         }
                     } else if (s.getConfidence() < effectiveMinConf) {

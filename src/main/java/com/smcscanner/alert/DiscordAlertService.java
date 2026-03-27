@@ -219,6 +219,14 @@ public class DiscordAlertService {
         return ok;
     }
 
+    /** Send daily trade report to the dedicated daily report channel. */
+    public boolean sendDailyReport(Map<String,Object> embed) {
+        if (embed == null) return true; // no trades = nothing to send
+        String url = config.resolveDailyReportWebhookUrl();
+        if (url == null || url.isBlank()) { log.warn("No daily report webhook URL"); return false; }
+        return postEmbeds(url, List.of(embed));
+    }
+
     private boolean postEmbeds(String url, List<Map<String,Object>> embeds) {
         try {
             String json=mapper.writeValueAsString(Map.of("username","SD Scanner","embeds",embeds));
