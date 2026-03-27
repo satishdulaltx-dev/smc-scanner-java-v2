@@ -45,9 +45,9 @@
       "ticker": "AMZN",
       "strategyType": "breakout",
       "minConfidence": 70,
-      "skip": true,
-      "skipReason": "0% WR across SMC (0% 6 trades) and ORB Breakout (0% 180d, 2 trades -2.41% exp). AMZN had a -12% macro decline — no 5m strategy can fight the trend. Re-evaluate when AMZN stabilizes.",
-      "note": "skip=true Mar 2026. Tried: SMC (0%WR), ORB Breakout (0%WR). Both failed during strong downtrend."
+      "skip": false,
+      "skipReason": null,
+      "note": "ORB Breakout + narrow range filter shipped Mar 2026. Prior: SMC 0%WR. Working to improve — DO NOT SKIP."
     },
     {
       "ticker": "MSTR",
@@ -121,17 +121,17 @@
       "ticker": "AAPL",
       "strategyType": "vwap",
       "minConfidence": 70,
-      "skip": true,
-      "skipReason": "0% WR across SMC (29% 365d), VWAP (0% 180d, 92 filtered/3 exec). Most HFT-efficient stock — institutional algos arbitrage every pattern before retail can act. Z-Score filter shipped but no edge detected. Re-evaluate with daily timeframe.",
-      "note": "skip=true Mar 2026. Tried: SMC (29%WR), VWAP (0%WR). Neither works on 5m — AAPL is too efficient for intraday technical strategies."
+      "skip": false,
+      "skipReason": null,
+      "note": "VWAP + Z-Score filter (1.5 SD gate) shipped Mar 2026. Prior: SMC 29%WR 365d. Working to improve — DO NOT SKIP."
     },
     {
       "ticker": "MSFT",
       "strategyType": "keylevel",
       "minConfidence": 78,
-      "skip": true,
-      "skipReason": "0% WR across VWAP (0%), KeyLevel (0% 180d, 72 filtered/4 exec). Second-most HFT-efficient stock after AAPL — 5m patterns fully arbitraged. Re-evaluate with daily timeframe.",
-      "note": "skip=true Mar 2026. Tried: VWAP (0%WR), KeyLevel (0%WR). Neither works on 5m."
+      "skip": false,
+      "skipReason": null,
+      "note": "KeyLevel strategy with profile-driven SL/TP. Prior: VWAP 0%WR. Working to improve — DO NOT SKIP."
     },
     {
       "ticker": "META",

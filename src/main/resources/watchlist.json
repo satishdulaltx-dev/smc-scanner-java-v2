@@ -2,6 +2,7 @@
   "tickers": [
     "X:BTCUSD",
     "X:ETHUSD",
+    "AAPL",
     "NVDA",
     "TSLA",
     "AMD",
@@ -13,6 +14,8 @@
     "ABNB",
     "MARA",
     "RIVN",
+    "AMZN",
+    "MSFT",
     "SPY",
     "SMCI",
     "CRWD",
