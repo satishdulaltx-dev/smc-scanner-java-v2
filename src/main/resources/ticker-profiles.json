@@ -43,12 +43,14 @@
     },
     {
       "ticker": "AMZN",
-      "strategyType": "vwap",
+      "strategyType": "smc",
       "minConfidence": 62,
-      "intradayRsGate": false,
+      "minFvgPct": 0.0005,
+      "dispAtrMult": 1.3,
+      "intradayRsGate": true,
       "skip": false,
       "skipReason": null,
-      "note": "Switched ORB→VWAP Mar 2026. RS gate DISABLED (VWAP mean-reversion). minConf=62. DO NOT SKIP."
+      "note": "Switched VWAP→SMC Mar 2026: VWAP 0%WR (5 trades), ORB 0%WR (0 trades). AMZN has strong FVG mechanics when trending. SMC with relaxed thresholds + RS gate (trend-following needs RS). DO NOT SKIP."
     },
     {
       "ticker": "MSTR",
@@ -129,12 +131,14 @@
     },
     {
       "ticker": "MSFT",
-      "strategyType": "vwap",
+      "strategyType": "smc",
       "minConfidence": 62,
-      "intradayRsGate": false,
+      "minFvgPct": 0.0004,
+      "dispAtrMult": 1.2,
+      "intradayRsGate": true,
       "skip": false,
       "skipReason": null,
-      "note": "VWAP + Z-Score(1.5 SD). RS gate DISABLED — same logic as AAPL. minConf=62. DO NOT SKIP."
+      "note": "Switched VWAP→SMC Mar 2026: VWAP 0%WR (5 trades), KeyLevel 0%WR. SMC hasn't been tried with current filters. Relaxed thresholds (minFvgPct=0.0004, dispAtr=1.2) + RS gate. DO NOT SKIP."
     },
     {
       "ticker": "META",
@@ -162,8 +166,8 @@
     {
       "ticker": "SPY",
       "strategyType": "vwap",
-      "note": "Switched ORB→VWAP Mar 2026: ORB found 1 filtered/0 exec in 180d. SPY is the most mean-reverting instrument — deviates from VWAP then pulls back. VWAP + Z-Score(1.5 SD) is the right approach. No RS gate (SPY is the benchmark). minConf=62.",
-      "minConfidence": 62,
+      "note": "VWAP Mar 2026. minConf raised 62→70: 22%WR at 62 means too many bad trades getting through. 44 filtered = room to be pickier. Only take the best VWAP snaps.",
+      "minConfidence": 70,
       "skip": false,
       "skipReason": null
     },
@@ -211,11 +215,11 @@
     {
       "ticker": "TSLA",
       "strategyType": "smc",
-      "minConfidence": 85,
+      "minConfidence": 78,
       "minFvgPct": 0.001,
       "dispAtrMult": 1.6,
       "slAtrMult": 1.5,
-      "note": "slAtrMult=1.5 Mar 2026: 2.0x made losses too large (0%WR), 1.2x was in wick zone. 1.5x is the sweet spot — past noise, but not so wide that TP becomes unreachable. Inverse R:R scaling: 0.8:1 TP ratio (base hits). DO NOT SKIP."
+      "note": "minConf 85→78 Mar 2026: only 3 trades at 85 (25 filtered). R:R compression working (+$180). Lower gate to catch more setups. slAtrMult=1.5 + 0.8:1 TP ratio. DO NOT SKIP."
     },
     {
       "ticker": "AMD",
