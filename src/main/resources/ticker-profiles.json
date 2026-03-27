@@ -129,12 +129,12 @@
     },
     {
       "ticker": "MSFT",
-      "strategyType": "keylevel",
-      "minConfidence": 78,
+      "strategyType": "vwap",
+      "minConfidence": 70,
       "intradayRsGate": true,
       "skip": false,
       "skipReason": null,
-      "note": "KeyLevel + Intraday RS gate (must diverge from SPY on 5m to fire). Gemini insight: MSFT is HFT noise machine — only trade when showing relative strength/weakness vs market. DO NOT SKIP."
+      "note": "Switched KeyLevel→VWAP Mar 2026: KeyLevel 0%WR (4 trades 57 filtered). Gemini: MSFT is a slow rubber band — stretches from VWAP and snaps back. VWAP + Z-Score(1.5 SD) + intraday RS soft gate. DO NOT SKIP."
     },
     {
       "ticker": "META",
@@ -214,8 +214,8 @@
       "minConfidence": 85,
       "minFvgPct": 0.001,
       "dispAtrMult": 1.6,
-      "slAtrMult": 2.0,
-      "note": "Tightened Mar 2026: 90d 33.3%WR. minConf=85 for ultra-clean setups. slAtrMult=2.0 Mar 2026: Chandelier Exit research shows 1.2x ATR captures only 70-75% of price variance in fat-tail stocks — institutional wick hunts end right there. 2.0x ATR gives room past the liquidity sweep zone. Wired into SMC SetupDetector."
+      "slAtrMult": 1.5,
+      "note": "slAtrMult=1.5 Mar 2026: 2.0x made losses too large (0%WR), 1.2x was in wick zone. 1.5x is the sweet spot — past noise, but not so wide that TP becomes unreachable. Inverse R:R scaling: 0.8:1 TP ratio (base hits). DO NOT SKIP."
     },
     {
       "ticker": "AMD",
@@ -228,8 +228,8 @@
       "ticker": "SMCI",
       "strategyType": "keylevel",
       "minConfidence": 70,
-      "slAtrMult": 2.0,
-      "note": "Switched SMC\u2192KeyLevel Mar 2026. 365d: 3 exec trades 0%WR. slAtrMult=2.0 Mar 2026: Chandelier Exit research — 1.2x ATR was still in the wick zone for SMCI ($2-4 intraday wicks). Professional volatility stops use 2-3x ATR. 2.0x puts SL past the institutional liquidity hunt zone. TP scales proportionally."
+      "slAtrMult": 1.5,
+      "note": "KeyLevel + slAtrMult=1.5 Mar 2026: 2.0x too wide (bigger losses). 1.5x past wick noise but TP still reachable. 60 filtered/3 exec = entries found but stopped out — wider stop + compressed target should help. DO NOT SKIP."
     },
     {
       "ticker": "JPM",

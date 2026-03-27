@@ -255,30 +255,18 @@ public class BacktestService {
                     }
                 }
 
-                // ── Intraday RS gate — mirrors live ScannerService logic ─────
-                // For mega-caps with intradayRsGate=true: only fire if ticker
-                // is diverging from SPY in the trade direction (accumulation/distribution).
+                // ── Intraday RS (soft adjustment) — mirrors live ScannerService ──
+                // For mega-caps: confidence bonus when diverging from SPY,
+                // penalty when not. Includes absolute trend anchor to prevent
+                // "falling knife" longs (buying just because bleeding slower).
+                int intradayRsAdj = 0;
                 if (bp.isIntradayRsGate() && !ticker.startsWith("X:")) {
                     List<OHLCV> spyDay = spy5mByDate.getOrDefault(date, List.of());
-                    // Build matching SPY window up to current bar timestamp
                     List<OHLCV> spyWindow = spyDay.stream()
                             .filter(b -> Long.parseLong(b.getTimestamp()) <= entryEpochMs)
                             .collect(Collectors.toList());
                     double intradayRs = marketCtxService.computeIntradayRsFromBars(window, spyWindow);
-                    boolean rsAligned = marketCtxService.isIntradayRsAligned(intradayRs, setup.getDirection());
-                    if (!rsAligned) {
-                        trades.add(new TradeResult(ticker, setup.getDirection(),
-                                setup.getEntry(), setup.getStopLoss(), setup.getTakeProfit(),
-                                "RS_FILTERED", 0.0,
-                                toDateTime(dayBars.get(end-1).getTimestamp()),
-                                toDateTime(dayBars.get(end-1).getTimestamp()),
-                                setup.getConfidence(), setup.getAtr(),
-                                0, "INTRADAY_RS_CONFLICT", 0, String.format("RS=%.4f", intradayRs),
-                                0, "No SPY divergence",
-                                0, 0, 0, 0));
-                        tradePlacedToday = true;
-                        continue;
-                    }
+                    intradayRsAdj = marketCtxService.computeIntradayRsDelta(intradayRs, window, setup.getDirection());
                 }
 
                 TickerProfile bp2 = config.getTickerProfile(ticker);
@@ -326,7 +314,7 @@ public class BacktestService {
                         : qualityFilter.computeDelta(setup, entryEpochMs, streak);
                 String qualityLabel = qualityFilter.buildLabel(setup, entryEpochMs, streak);
 
-                int totalAdj = newsAdj + ctxAdj + qualityAdj;
+                int totalAdj = newsAdj + ctxAdj + qualityAdj + intradayRsAdj;
                 int adjConf  = Math.max(0, Math.min(100, setup.getConfidence() + totalAdj));
 
                 // Skip trade if combined filters knocked confidence below threshold

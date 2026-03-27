@@ -178,6 +178,48 @@ public class MarketContextService {
         return true; // unknown direction — let it through
     }
 
+    /**
+     * Compute confidence adjustment for intraday RS (soft gate instead of hard block).
+     * Also checks absolute trend: ticker must be trending in the trade direction,
+     * not just "bleeding slower" than SPY (the Beta-Blindness fix).
+     *
+     * @param intradayRs   relative return vs SPY
+     * @param tickerBars5m ticker's 5m bars (for absolute trend check)
+     * @param direction    "long" or "short"
+     * @return confidence delta: +10 aligned, -20 conflicting, -30 falling knife
+     */
+    public int computeIntradayRsDelta(double intradayRs, List<OHLCV> tickerBars5m, String direction) {
+        if (tickerBars5m == null || tickerBars5m.size() < INTRADAY_RS_BARS + 1) return 0;
+
+        // Absolute trend: is the ticker itself moving in the trade direction?
+        // Use 12-bar SMA (~1 hour) as the anchor
+        int smaLen = Math.min(12, tickerBars5m.size());
+        double sma = 0;
+        for (int i = tickerBars5m.size() - smaLen; i < tickerBars5m.size(); i++) {
+            sma += tickerBars5m.get(i).getClose();
+        }
+        sma /= smaLen;
+        double lastClose = tickerBars5m.get(tickerBars5m.size() - 1).getClose();
+
+        boolean tickerTrendingUp   = lastClose > sma;
+        boolean tickerTrendingDown = lastClose < sma;
+        boolean rsAligned = isIntradayRsAligned(intradayRs, direction);
+
+        // Best case: RS aligned + ticker trending in direction
+        if (rsAligned && "long".equals(direction)  && tickerTrendingUp)   return +10;
+        if (rsAligned && "short".equals(direction) && tickerTrendingDown) return +10;
+
+        // RS aligned but ticker not trending (relative strength without conviction)
+        if (rsAligned) return +5;
+
+        // Worst case: RS conflict + ticker trending AGAINST direction (falling knife)
+        if (!rsAligned && "long".equals(direction)  && tickerTrendingDown) return -30;
+        if (!rsAligned && "short".equals(direction) && tickerTrendingUp)   return -30;
+
+        // RS conflict but ticker is flat/ambiguous
+        return -20;
+    }
+
     private synchronized List<OHLCV> getLiveSpy5mBars() {
         long now = System.currentTimeMillis();
         if (spy5mBarsCache == null || (now - spy5mCacheTs) > CACHE_TTL_MS) {

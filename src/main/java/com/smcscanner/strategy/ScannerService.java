@@ -155,22 +155,18 @@ public class ScannerService {
             if (!setups.isEmpty()) {
                 TradeSetup s=setups.get(0);
 
-                // ── Intraday RS gate (mega-caps: AAPL, MSFT, etc.) ──────────
-                // Only fire if ticker is diverging from SPY in the trade direction.
-                // LONG: ticker must outperform SPY over last 30 min (accumulation)
-                // SHORT: ticker must underperform SPY over last 30 min (distribution)
+                // ── Intraday RS (mega-caps: AAPL, MSFT, NVDA, AMZN) ────────
+                // Soft confidence adjustment (not hard block) to avoid signal starvation.
+                // Also checks absolute trend anchor to prevent "falling knife" longs
+                // (buying a stock just because it's bleeding slower than SPY).
+                int intradayRsAdj = 0;
                 if (profile.isIntradayRsGate() && !isC) {
                     double intradayRs = marketCtx.computeIntradayRs(bars);
-                    boolean aligned = marketCtx.isIntradayRsAligned(intradayRs, s.getDirection());
-                    if (!aligned) {
-                        log.info("{} INTRADAY_RS_BLOCKED: {} setup but RS={} (no divergence from SPY)",
-                                ticker, s.getDirection(), String.format("%.4f", intradayRs));
-                        setTs(ticker, "idle", null, 0,
-                                "⛔ Intraday RS gate — no SPY divergence (" + String.format("%.2f%%", intradayRs * 100) + ")");
-                        return;
+                    intradayRsAdj = marketCtx.computeIntradayRsDelta(intradayRs, bars, s.getDirection());
+                    if (intradayRsAdj != 0) {
+                        log.info("{} intraday RS adj={} rs={} dir={}", ticker, intradayRsAdj,
+                                String.format("%.4f", intradayRs), s.getDirection());
                     }
-                    log.info("{} intraday RS aligned: {} direction, RS={}", ticker, s.getDirection(),
-                            String.format("%.4f", intradayRs));
                 }
 
                 // ── 15m alignment check ───────────────────────────────────────
@@ -305,11 +301,11 @@ public class ScannerService {
                 // Worst-case stack without clamp: corr(-20) + regime(-25) + RS(-15) + streak(-25) = -85
                 // With clamp: floor at -40, so a 90-conf setup always reaches at least 50.
                 // Positive adjustments are NOT clamped — good setups can still be boosted.
-                int rawAdj   = newsAdj + ctxAdj + qualityAdj + flowAdj + regimeAdj + corrAdj;
+                int rawAdj   = newsAdj + ctxAdj + qualityAdj + flowAdj + regimeAdj + corrAdj + intradayRsAdj;
                 int totalAdj = rawAdj < 0 ? Math.max(-40, rawAdj) : rawAdj;
                 if (rawAdj != totalAdj) {
-                    log.info("{} ADJ_CLAMPED: raw={} → clamped={} (breakdown: news{} ctx{} qual{} flow{} regime{} corr{})",
-                            ticker, rawAdj, totalAdj, newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj);
+                    log.info("{} ADJ_CLAMPED: raw={} → clamped={} (breakdown: news{} ctx{} qual{} flow{} regime{} corr{} iRS{})",
+                            ticker, rawAdj, totalAdj, newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj, intradayRsAdj);
                 }
                 if (totalAdj != 0 || flow.hasData() || rec.hasData()) {
                     TradeSetup.Builder sb = TradeSetup.builder()
