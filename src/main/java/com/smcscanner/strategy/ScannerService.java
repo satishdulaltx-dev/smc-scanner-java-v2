@@ -174,7 +174,11 @@ public class ScannerService {
                 // "bullish" 15m + short setup = fighting the trend → skip.
                 // "bearish" 15m + long  setup = fighting the trend → skip.
                 // "neutral" 15m → let it through (no strong trend to fight).
-                if (!isC && (
+                // BYPASS for VWAP: mean-reversion trades intentionally fight the trend —
+                // a LONG at -1.5 Z-Score WILL conflict with a bearish 15m, and that's the point.
+                String stratTypeForFilter = profile.getStrategyType();
+                boolean is15mApplicable = !"vwap".equals(stratTypeForFilter);
+                if (!isC && is15mApplicable && (
                         ("bullish".equals(bias15m) && "short".equals(s.getDirection())) ||
                         ("bearish".equals(bias15m) && "long".equals(s.getDirection())))) {
                     log.info("{} 15M_BLOCKED: {} setup vs {} 15m trend", ticker, s.getDirection(), bias15m);
@@ -258,19 +262,17 @@ public class ScannerService {
                     else if (agrees)    { corrAdj = corrAgreementBonus;  log.info("{} CORR_AGREE:    {} bias={} with {} setup → adj={}", ticker, corrAsset, corrBias, dir, corrAdj); }
                 }
 
-                // ── Time-of-day dead-zone block ───────────────────────────────────
-                // 11:00–11:59 AM ET and 1:00–1:59 PM ET have 0% historical win rate.
-                // Mid-morning and post-lunch consolidation = choppy, fake breakouts.
-                // Hard block prevents wasting options premium on low-probability entries.
+                // ── Time-of-day soft penalty (was hard block) ─────────────────────
+                // 11:xx AM and 1:xx PM ET have lower WR. Now -15 instead of hard kill.
+                // Strong setups (VWAP rubber-band, high-conf SMC) can still fire at lunch.
+                int deadZoneAdj = 0;
                 if (!isC) {
                     java.time.LocalTime etNow = java.time.ZonedDateTime.now(
                             java.time.ZoneId.of("America/New_York")).toLocalTime();
                     int etHour = etNow.getHour();
                     if (etHour == 11 || etHour == 13) {
-                        log.info("{} TIME_BLOCKED: hour={} ET (dead zone 0% WR)", ticker, etHour);
-                        setTs(ticker, "idle", null, 0,
-                                "⏸ Dead zone — no trades 11 AM or 1 PM ET (0% WR)");
-                        return;
+                        deadZoneAdj = -15;
+                        log.info("{} DEAD_ZONE_PENALTY: hour={} ET adj={}", ticker, etHour, deadZoneAdj);
                     }
                 }
 
@@ -299,7 +301,7 @@ public class ScannerService {
                 // Apply combined confidence adjustment (news + context + quality + flow + regime + correlation + RS)
                 // Penalty floor: secondary filters can reduce base confidence by at most 25%.
                 // e.g. base=80 → floor=60, base=70 → floor=52. Prevents "death by a thousand filters."
-                int rawAdj   = newsAdj + ctxAdj + qualityAdj + flowAdj + regimeAdj + corrAdj + intradayRsAdj;
+                int rawAdj   = newsAdj + ctxAdj + qualityAdj + flowAdj + regimeAdj + corrAdj + intradayRsAdj + deadZoneAdj;
                 int penaltyFloor = (int)(s.getConfidence() * 0.75);
                 int totalAdj = rawAdj; // no longer clamping at -40; floor handles it
                 if (rawAdj != totalAdj) {

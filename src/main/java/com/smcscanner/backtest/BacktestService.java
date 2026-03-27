@@ -196,31 +196,24 @@ public class BacktestService {
                 // ── Historical context checks (news + market) ────────────────
                 long entryEpochMs = Long.parseLong(dayBars.get(end - 1).getTimestamp());
 
-                // ── Time-of-day dead-zone block — mirrors live ScannerService ──
-                // 11:xx AM and 1:xx PM ET historically show 0% WR (post-market-open chop,
-                // post-lunch drift). Hard block in backtest mirrors the live scanner rule.
+                // ── Time-of-day soft penalty (was hard block) ──────────────────
+                // 11:xx AM and 1:xx PM ET have lower WR historically. Now a -15 penalty
+                // instead of -100 kill switch. Strong setups can still fire during lunch.
+                int deadZoneAdj = 0;
                 {
                     ZonedDateTime entryZdt = Instant.ofEpochMilli(entryEpochMs).atZone(ET);
                     int entryHour = entryZdt.toLocalTime().getHour();
                     if (!ticker.startsWith("X:") && (entryHour == 11 || entryHour == 13)) {
-                        trades.add(new TradeResult(ticker, setup.getDirection(),
-                                setup.getEntry(), setup.getStopLoss(), setup.getTakeProfit(),
-                                "QUALITY_FILTERED", 0.0,
-                                toDateTime(dayBars.get(end-1).getTimestamp()),
-                                toDateTime(dayBars.get(end-1).getTimestamp()),
-                                setup.getConfidence(), setup.getAtr(),
-                                0, "⏸ Dead zone 11/13h ET", 0, null,
-                                -100, "Time dead-zone (-100)",
-                                0, 0, 0, 0));
-                        tradePlacedToday = true;
-                        continue;
+                        deadZoneAdj = -15;
                     }
                 }
 
                 // ── 15m alignment check — mirrors live ScannerService logic ──
                 // Compute 15m bias using bars strictly before entry timestamp.
                 // Block if 15m trend directly opposes the setup direction.
-                if (!ticker.startsWith("X:") && !all15mBars.isEmpty()) {
+                // BYPASS for VWAP: mean-reversion intentionally fights the 15m trend.
+                boolean is15mApplicable = !"vwap".equals(stratType);
+                if (is15mApplicable && !ticker.startsWith("X:") && !all15mBars.isEmpty()) {
                     List<OHLCV> slice15 = all15mBars.stream()
                             .filter(b -> Long.parseLong(b.getTimestamp()) < entryEpochMs)
                             .collect(java.util.stream.Collectors.toList());
@@ -314,7 +307,7 @@ public class BacktestService {
                         : qualityFilter.computeDelta(setup, entryEpochMs, streak);
                 String qualityLabel = qualityFilter.buildLabel(setup, entryEpochMs, streak);
 
-                int totalAdj = newsAdj + ctxAdj + qualityAdj + intradayRsAdj;
+                int totalAdj = newsAdj + ctxAdj + qualityAdj + intradayRsAdj + deadZoneAdj;
                 // Penalty floor: secondary filters can reduce base confidence by at most 25%.
                 // A strong base setup (80+) should never be killed by stacking RS + news + quality.
                 // Floor = 75% of base confidence. e.g. base=80 → floor=60, base=70 → floor=52.
@@ -324,8 +317,8 @@ public class BacktestService {
 
                 // Skip trade if combined filters knocked confidence below threshold
                 if (adjConf < effectiveMinConf) {
-                    log.debug("{} CONF_FILTERED: base={} news={} ctx={} qual={} iRS={} → adj={} (min={})",
-                            ticker, setup.getConfidence(), newsAdj, ctxAdj, qualityAdj, intradayRsAdj, adjConf, effectiveMinConf);
+                    log.debug("{} CONF_FILTERED: base={} news={} ctx={} qual={} iRS={} dz={} → adj={} floor={} (min={})",
+                            ticker, setup.getConfidence(), newsAdj, ctxAdj, qualityAdj, intradayRsAdj, deadZoneAdj, adjConf, penaltyFloor, effectiveMinConf);
                     String filteredOutcome = (newsAdj < 0 && (ctxAdj < 0 || qualityAdj < 0)) ? "MULTI_FILTERED"
                                            : newsAdj < 0    ? "NEWS_FILTERED"
                                            : qualityAdj < 0 ? "QUALITY_FILTERED"
