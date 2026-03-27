@@ -138,8 +138,8 @@
 <div class="controls">
     <div class="ctrl-group">
         <label>Mode</label>
-        <select id="mode" onchange="toggleMode()">
-            <option value="single">Single Ticker</option>
+        <select id="mode" onchange="toggleMode()" autocomplete="off">
+            <option value="single" selected>Single Ticker</option>
             <option value="batch">All Watchlist</option>
         </select>
     </div>
@@ -672,10 +672,11 @@ function setLoading(on) {
 function show(id) { document.getElementById(id).style.display = ''; }
 function hide(id) { document.getElementById(id).style.display = 'none'; }
 
-// Init — call toggleMode first so ticker ctrl visibility matches the mode select
-// (browser may restore the previously selected mode on reload)
-toggleMode();
-loadTickers();
+// Init on load — use window.onload to ensure browser value restoration is complete
+window.addEventListener('load', function() {
+    toggleMode();
+    loadTickers();
+});
 </script>
 </body>
 </html>
