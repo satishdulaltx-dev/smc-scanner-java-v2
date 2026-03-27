@@ -146,7 +146,16 @@
     <div class="ctrl-group" id="ticker-ctrl">
         <label>Ticker</label>
         <select id="ticker">
-            <option>Loading...</option>
+            <option>AAPL</option><option>ABNB</option><option>AMD</option><option>AMZN</option>
+            <option>BABA</option><option>COIN</option><option>CRWD</option><option>DIS</option>
+            <option>GS</option><option>GOOGL</option><option>HOOD</option><option>JPM</option>
+            <option>MARA</option><option>META</option><option>MSFT</option><option>MSTR</option>
+            <option>NFLX</option><option>NIO</option><option>NVDA</option><option>PLTR</option>
+            <option>PYPL</option><option>QQQ</option><option>RIVN</option><option>ROKU</option>
+            <option>SHOP</option><option>SMCI</option><option>SNAP</option><option>SOFI</option>
+            <option>SPY</option><option>SQ</option><option>TSLA</option><option>UBER</option>
+            <option>V</option><option>X:BTCUSD</option><option>X:ETHUSD</option>
+            <option>X:SOLUSD</option><option>X:XRPUSD</option>
         </select>
     </div>
     <div class="ctrl-group">
@@ -234,30 +243,25 @@ let equityChart = null, distChart = null;
 
 // Load ticker list dynamically from watchlist API (keeps in sync with watchlist.json)
 // Shows all tickers including skipped ones so you can backtest any ticker
-const FALLBACK_TICKERS = 'AAPL,ABNB,AMD,AMZN,BABA,COIN,CRWD,DIS,GS,GOOGL,HOOD,JPM,MARA,META,MSFT,MSTR,NFLX,NIO,NVDA,PLTR,PYPL,QQQ,RIVN,ROKU,SHOP,SMCI,SNAP,SOFI,SPY,SQ,TSLA,UBER,V,X:BTCUSD,X:ETHUSD,X:SOLUSD,X:XRPUSD';
-
+// Progressive enhancement: refresh ticker list from live watchlist API.
+// The <select> already has a full static list in the HTML as the fallback,
+// so this is purely additive — the page works even if this fails.
 async function loadTickers() {
-    // Show fallback immediately so the dropdown is never blank
-    const sel = document.getElementById('ticker');
-    sel.innerHTML = FALLBACK_TICKERS.split(',').map(t => `<option value="${t}">${t}</option>`).join('');
-    sel.value = 'AAPL';
-
     try {
         const resp = await fetch('/api/watchlist').then(r => r.json());
-        const watchlistTickers = (Array.isArray(resp) ? resp : []).map(t => t.ticker || t).filter(Boolean);
-        if (watchlistTickers.length === 0) return; // keep fallback
+        const live = (Array.isArray(resp) ? resp : []).map(t => t.ticker || t).filter(Boolean);
+        if (live.length === 0) return;
         const extra = ['BABA','DIS','GS','GOOGL','HOOD','META','NIO','PYPL','QQQ','ROKU','SHOP','SNAP','SQ','UBER','V','X:SOLUSD','X:XRPUSD'];
-        const all = [...new Set([...watchlistTickers, ...extra])].sort((a,b) => {
+        const all = [...new Set([...live, ...extra])].sort((a,b) => {
             const ac = a.startsWith('X:'), bc = b.startsWith('X:');
             if (ac && !bc) return 1; if (!ac && bc) return -1;
             return a.localeCompare(b);
         });
+        const sel = document.getElementById('ticker');
+        const prev = sel.value;
         sel.innerHTML = all.map(t => `<option value="${t}">${t}</option>`).join('');
-        const firstActive = watchlistTickers.find(t => !t.startsWith('X:'));
-        if (firstActive) sel.value = firstActive;
-    } catch(e) {
-        // fallback already set above — nothing to do
-    }
+        sel.value = all.includes(prev) ? prev : (live.find(t => !t.startsWith('X:')) || 'AAPL');
+    } catch(e) { /* static list is already in place */ }
 }
 
 function toggleMode() {
