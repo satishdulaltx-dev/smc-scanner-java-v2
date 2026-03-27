@@ -136,9 +136,12 @@ public class SetupDetector {
         // Use daily ATR for meaningful TP/SL; fall back to 4x 5m ATR if daily not available
         double targetAtr = dailyAtr > curAtr * 2 ? dailyAtr : curAtr * 4;
         double sl,tp;
-        // SL = 0.4 ATR, TP = 0.6 ATR → exactly 1.5:1 R:R (news-aligned extension to 3:1 applied in ScannerService/BacktestService)
-        if ("long".equals(state.getDirection())) { sl=r4(entry-targetAtr*0.4); tp=r4(entry+targetAtr*0.6); }
-        else                                     { sl=r4(entry+targetAtr*0.4); tp=r4(entry-targetAtr*0.6); }
+        // SL sizing: default 0.4 ATR for SMC, overridden by slAtrMult for fat-tail stocks (TSLA, SMCI)
+        // TP scales proportionally to maintain 1.5:1 R:R
+        double slMult = profile.resolveSlAtrMult() > 0.5 ? profile.resolveSlAtrMult() : 0.4; // use profile if explicitly set (>0.5), else default 0.4
+        double tpMult = slMult * 1.5; // maintain 1.5:1 R:R
+        if ("long".equals(state.getDirection())) { sl=r4(entry-targetAtr*slMult); tp=r4(entry+targetAtr*tpMult); }
+        else                                     { sl=r4(entry+targetAtr*slMult); tp=r4(entry-targetAtr*tpMult); }
 
         TradeSetup setup=TradeSetup.builder().ticker(ticker).direction(state.getDirection())
             .entry(entry).stopLoss(sl).takeProfit(tp).confidence(conf).session(session).volatility(vol)

@@ -45,9 +45,9 @@
       "ticker": "AMZN",
       "strategyType": "breakout",
       "minConfidence": 70,
-      "note": "Switched SMC\u2192ORB Breakout Mar 2026: SMC 0%WR/-1.02%exp (6 trades). Root cause: SMC fired all LONGs while AMZN dropped $248\u2192$212 (-12%); 2 of 6 entries were EOD (3:35-4:00 PM). ORB is direction-agnostic \u2014 will SHORT when AMZN breaks the opening range low, matching how the user profitably trades AMZN manually on momentum. minConf=70.",
-      "skip": false,
-      "skipReason": null
+      "skip": true,
+      "skipReason": "0% WR across SMC (0% 6 trades) and ORB Breakout (0% 180d, 2 trades -2.41% exp). AMZN had a -12% macro decline — no 5m strategy can fight the trend. Re-evaluate when AMZN stabilizes.",
+      "note": "skip=true Mar 2026. Tried: SMC (0%WR), ORB Breakout (0%WR). Both failed during strong downtrend."
     },
     {
       "ticker": "MSTR",
@@ -121,15 +121,17 @@
       "ticker": "AAPL",
       "strategyType": "vwap",
       "minConfidence": 70,
-      "note": "Switched SMC\u2192VWAP Mar 2026: SMC 29%WR/-0.36exp over 365d. AAPL is the most HFT-efficient stock \u2014 SMC FVG patterns arbitraged instantly. AAPL grinds; edge is mean-reversion to VWAP when it deviates, not sweep+FVG breakouts. minConf=70."
+      "skip": true,
+      "skipReason": "0% WR across SMC (29% 365d), VWAP (0% 180d, 92 filtered/3 exec). Most HFT-efficient stock — institutional algos arbitrage every pattern before retail can act. Z-Score filter shipped but no edge detected. Re-evaluate with daily timeframe.",
+      "note": "skip=true Mar 2026. Tried: SMC (29%WR), VWAP (0%WR). Neither works on 5m — AAPL is too efficient for intraday technical strategies."
     },
     {
       "ticker": "MSFT",
       "strategyType": "keylevel",
       "minConfidence": 78,
-      "note": "Switched VWAP\u2192KeyLevel Mar 2026. VWAP 0% WR. MSFT is slow mega-cap \u2014 key level rejection at daily pivots and S/R levels is the right approach. minConf 78.",
-      "skip": false,
-      "skipReason": null
+      "skip": true,
+      "skipReason": "0% WR across VWAP (0%), KeyLevel (0% 180d, 72 filtered/4 exec). Second-most HFT-efficient stock after AAPL — 5m patterns fully arbitraged. Re-evaluate with daily timeframe.",
+      "note": "skip=true Mar 2026. Tried: VWAP (0%WR), KeyLevel (0%WR). Neither works on 5m."
     },
     {
       "ticker": "META",
@@ -208,8 +210,8 @@
       "minConfidence": 85,
       "minFvgPct": 0.001,
       "dispAtrMult": 1.6,
-      "slAtrMult": 1.2,
-      "note": "Tightened Mar 2026: 90d 33.3%WR. minConf=85 for ultra-clean setups. slAtrMult=1.2 Mar 2026: TSLA has fat-tail volatility clusters like SMCI \u2014 standard 0.5 ATR stop gets wicked out by Musk-tweet-driven noise before the real move. 1.2 ATR gives breathing room past the wick zone."
+      "slAtrMult": 2.0,
+      "note": "Tightened Mar 2026: 90d 33.3%WR. minConf=85 for ultra-clean setups. slAtrMult=2.0 Mar 2026: Chandelier Exit research shows 1.2x ATR captures only 70-75% of price variance in fat-tail stocks — institutional wick hunts end right there. 2.0x ATR gives room past the liquidity sweep zone. Wired into SMC SetupDetector."
     },
     {
       "ticker": "AMD",
@@ -222,8 +224,8 @@
       "ticker": "SMCI",
       "strategyType": "keylevel",
       "minConfidence": 70,
-      "slAtrMult": 1.2,
-      "note": "Switched SMC\u2192KeyLevel Mar 2026. 365d: 3 exec trades 0%WR \u2014 all LOSS. SMCI has massive wicks ($2-4 ATR range) \u2014 standard 0.5 ATR stop gets shaken out by noise before the actual move. Increased slAtrMult 0.5\u21921.2: SL is now 1.2 ATR above/below the key level, past the wick noise. TP scales proportionally (1.5x the wider risk). minConf lowered to 70 to see more setups."
+      "slAtrMult": 2.0,
+      "note": "Switched SMC\u2192KeyLevel Mar 2026. 365d: 3 exec trades 0%WR. slAtrMult=2.0 Mar 2026: Chandelier Exit research — 1.2x ATR was still in the wick zone for SMCI ($2-4 intraday wicks). Professional volatility stops use 2-3x ATR. 2.0x puts SL past the institutional liquidity hunt zone. TP scales proportionally."
     },
     {
       "ticker": "JPM",
