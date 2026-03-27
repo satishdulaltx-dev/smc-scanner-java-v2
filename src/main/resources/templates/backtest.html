@@ -672,11 +672,11 @@ function setLoading(on) {
 function show(id) { document.getElementById(id).style.display = ''; }
 function hide(id) { document.getElementById(id).style.display = 'none'; }
 
-// Init on load — use window.onload to ensure browser value restoration is complete
-window.addEventListener('load', function() {
-    toggleMode();
-    loadTickers();
-});
+// Init — force reset dropdowns (browsers aggressively cache select values)
+document.getElementById('mode').value = 'single';
+document.getElementById('days').value = '90';
+toggleMode();
+loadTickers();
 </script>
 </body>
 </html>
