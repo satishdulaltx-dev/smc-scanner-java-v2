@@ -208,7 +208,8 @@
       "minConfidence": 85,
       "minFvgPct": 0.001,
       "dispAtrMult": 1.6,
-      "note": "Tightened Mar 2026: 90d shows 33.3% WR -0.43% exp. Raised minConf 75\u219285 \u2014 only ultra-high-quality setups. TSLA moves on Musk news; require very clean SMC setup. User favorite."
+      "slAtrMult": 1.2,
+      "note": "Tightened Mar 2026: 90d 33.3%WR. minConf=85 for ultra-clean setups. slAtrMult=1.2 Mar 2026: TSLA has fat-tail volatility clusters like SMCI \u2014 standard 0.5 ATR stop gets wicked out by Musk-tweet-driven noise before the real move. 1.2 ATR gives breathing room past the wick zone."
     },
     {
       "ticker": "AMD",

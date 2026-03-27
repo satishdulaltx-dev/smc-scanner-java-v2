@@ -65,9 +65,20 @@ public class VwapStrategyDetector {
         }
         double vwap = sumVol > 0 ? sumTpVol / sumVol : sessionBars.get(sessionBars.size() - 1).getClose();
 
+        // ── Z-Score: only trade at the extremes (> 2.0 SD from VWAP) ────────
+        // AAPL/MSFT spend 70% of the day within 1 SD of VWAP. Entering near the
+        // mean is a coin flip. The edge is mean-reversion from the tails only.
+        double sumSqDev = 0.0;
+        for (OHLCV bar : sessionBars) {
+            double dev = bar.getClose() - vwap;
+            sumSqDev += dev * dev;
+        }
+        double stdDev = Math.sqrt(sumSqDev / sessionBars.size());
+        double lastClose = sessionBars.get(sessionBars.size() - 1).getClose();
+        double zScore = stdDev > 0 ? (lastClose - vwap) / stdDev : 0.0;
+
         // Compute 14-bar ATR from all (non-session-filtered) bars
         double atr    = computeAtr(bars);
-        double lastClose = sessionBars.get(sessionBars.size() - 1).getClose();
         double curAtr = Math.max(atr, lastClose * 0.002);
 
         // Determine target ATR for TP sizing
@@ -133,8 +144,9 @@ public class VwapStrategyDetector {
             if (c > highestClose) highestClose = c;
         }
 
-        // LONG: price must have dipped meaningfully below VWAP
-        if (lowestClose < vwap - 0.5 * curAtr) {
+        // LONG: price must have dipped meaningfully below VWAP (Z-Score < -1.5)
+        // Old: 0.5 ATR deviation was too close to the mean for mega-caps
+        if (lowestClose < vwap - 0.5 * curAtr && zScore < -1.5) {
             // ── Macro trend hard block ─────────────────────────────────────
             // Don't fire LONG if the whole day is strongly trending down.
             // A -1.5%+ day with declining SMA is a downtrend, not a dip to buy.
@@ -165,6 +177,7 @@ public class VwapStrategyDetector {
                 if (last.getVolume() > avgVol * 1.8)             confidence += 5;
                 if ((vwap - curClose) > 0.8 * curAtr)            confidence += 5;
                 if (last.getVolume() > avgVol * 2.5)             confidence += 5;
+                if (zScore < -2.0)                               confidence += 5;  // extreme Z-Score = high-probability reversion
                 // ── Soft trend penalty ─────────────────────────────────────
                 // Moderate bearish day (-0.8% to -1.5%) with declining SMA:
                 // lower confidence by 15 so it needs 80+ to survive filters.
@@ -198,8 +211,8 @@ public class VwapStrategyDetector {
         }
 
         // ── SHORT setup ───────────────────────────────────────────────────────
-        // Price must have spiked meaningfully above VWAP
-        if (highestClose > vwap + 0.5 * curAtr) {
+        // Price must have spiked meaningfully above VWAP (Z-Score > 1.5)
+        if (highestClose > vwap + 0.5 * curAtr && zScore > 1.5) {
             // ── Macro trend hard block ─────────────────────────────────────
             // Don't fire SHORT if the whole day is strongly trending up.
             if (trendStronglyBullish) {
@@ -227,6 +240,7 @@ public class VwapStrategyDetector {
                 if (last.getVolume() > avgVol * 1.8)             confidence += 5;
                 if ((curClose - vwap) > 0.8 * curAtr)            confidence += 5;
                 if (last.getVolume() > avgVol * 2.5)             confidence += 5;
+                if (zScore > 2.0)                                confidence += 5;  // extreme Z-Score = high-probability reversion
                 // Soft trend penalty for moderate counter-trend setup
                 if (trendBullish) confidence -= 15;
 

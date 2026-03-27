@@ -79,6 +79,13 @@ public class BreakoutStrategyDetector {
 
         double atr = computeAtr(sessionBars);
 
+        // ── Narrow range filter ─────────────────────────────────────────────────
+        // Wide opening ranges (> 1.5x ATR) mean 60%+ of the daily move already
+        // happened in the first 30 min. Breakouts from wide ORBs get faded.
+        // Tight ORBs (< 0.8x ATR) lead to explosive breakouts — that's the edge.
+        if (orbWidth > atr * 2.0) return result; // extremely wide — no trade
+        boolean wideOrb = orbWidth > atr * 1.2;  // moderately wide — penalize later
+
         // Freshness check: scan ALL post-ORB bars before the current one to ensure
         // this is truly the first breakout (works correctly in backtest and live mode)
         boolean prevBrokeHigh = false, prevBrokeLow = false;
@@ -108,7 +115,8 @@ public class BreakoutStrategyDetector {
                 if (rr >= 1.2) {
                     int confidence = 70;
                     if (last.getVolume() > avgVol * 2.5)  confidence += 5;
-                    if (orbWidth < atr * 0.8)             confidence += 5;  // tight ORB
+                    if (orbWidth < atr * 0.8)             confidence += 5;  // tight ORB = explosive
+                    if (wideOrb)                          confidence -= 10; // wide ORB = likely faded
 
                     result.add(TradeSetup.builder()
                             .ticker(ticker)
@@ -151,7 +159,8 @@ public class BreakoutStrategyDetector {
                 if (rr >= 1.2) {
                     int confidence = 70;
                     if (last.getVolume() > avgVol * 2.5)  confidence += 5;
-                    if (orbWidth < atr * 0.8)             confidence += 5;  // tight ORB
+                    if (orbWidth < atr * 0.8)             confidence += 5;  // tight ORB = explosive
+                    if (wideOrb)                          confidence -= 10; // wide ORB = likely faded
 
                     result.add(TradeSetup.builder()
                             .ticker(ticker)
