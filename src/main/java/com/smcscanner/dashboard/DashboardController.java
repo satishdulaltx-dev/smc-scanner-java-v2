@@ -361,9 +361,12 @@ public class DashboardController {
         }).collect(Collectors.toList());
     }
 
-    /** GET /backtest - serve backtest UI page */
+    /** GET /backtest - serve backtest UI page (no-cache to prevent stale dropdown state) */
     @GetMapping("/backtest")
-    public String backtestPage(Model model) {
+    public String backtestPage(Model model, jakarta.servlet.http.HttpServletResponse response) {
+        response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+        response.setHeader("Pragma", "no-cache");
+        response.setDateHeader("Expires", 0);
         model.addAttribute("tickers", config.loadWatchlist());
         return "backtest";
     }
