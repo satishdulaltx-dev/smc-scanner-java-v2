@@ -296,13 +296,12 @@ public class ScannerService {
                     }
                 }
 
-                // Apply combined confidence adjustment (news + context + quality + flow + regime + correlation)
-                // Clamp total penalty to -40 so stacking filters can't silence strong setups.
-                // Worst-case stack without clamp: corr(-20) + regime(-25) + RS(-15) + streak(-25) = -85
-                // With clamp: floor at -40, so a 90-conf setup always reaches at least 50.
-                // Positive adjustments are NOT clamped — good setups can still be boosted.
+                // Apply combined confidence adjustment (news + context + quality + flow + regime + correlation + RS)
+                // Penalty floor: secondary filters can reduce base confidence by at most 25%.
+                // e.g. base=80 → floor=60, base=70 → floor=52. Prevents "death by a thousand filters."
                 int rawAdj   = newsAdj + ctxAdj + qualityAdj + flowAdj + regimeAdj + corrAdj + intradayRsAdj;
-                int totalAdj = rawAdj < 0 ? Math.max(-40, rawAdj) : rawAdj;
+                int penaltyFloor = (int)(s.getConfidence() * 0.75);
+                int totalAdj = rawAdj; // no longer clamping at -40; floor handles it
                 if (rawAdj != totalAdj) {
                     log.info("{} ADJ_CLAMPED: raw={} → clamped={} (breakdown: news{} ctx{} qual{} flow{} regime{} corr{} iRS{})",
                             ticker, rawAdj, totalAdj, newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj, intradayRsAdj);
@@ -311,7 +310,7 @@ public class ScannerService {
                     TradeSetup.Builder sb = TradeSetup.builder()
                             .ticker(s.getTicker()).direction(s.getDirection())
                             .entry(s.getEntry()).stopLoss(s.getStopLoss()).takeProfit(s.getTakeProfit())
-                            .confidence(Math.max(0, Math.min(100, s.getConfidence() + totalAdj)))
+                            .confidence(Math.max(penaltyFloor, Math.min(100, s.getConfidence() + totalAdj)))
                             .session(s.getSession()).volatility(s.getVolatility()).atr(s.getAtr())
                             .hasBos(s.isHasBos()).hasChoch(s.isHasChoch())
                             .fvgTop(s.getFvgTop()).fvgBottom(s.getFvgBottom())

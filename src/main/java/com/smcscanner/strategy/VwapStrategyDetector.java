@@ -144,9 +144,10 @@ public class VwapStrategyDetector {
             if (c > highestClose) highestClose = c;
         }
 
-        // LONG: price must have dipped meaningfully below VWAP (Z-Score < -1.5)
-        // Old: 0.5 ATR deviation was too close to the mean for mega-caps
-        if (lowestClose < vwap - 0.5 * curAtr && zScore < -1.5) {
+        // LONG: price must have dipped meaningfully below VWAP (Z-Score < -1.2)
+        // Lowered from 1.5→1.2: 1.5 SD was starving AMZN/SPY (0 signals in 180d).
+        // 1.2 SD catches more "rubber band snap" setups while still filtering noise.
+        if (lowestClose < vwap - 0.5 * curAtr && zScore < -1.2) {
             // ── Macro trend hard block ─────────────────────────────────────
             // Don't fire LONG if the whole day is strongly trending down.
             // A -1.5%+ day with declining SMA is a downtrend, not a dip to buy.
@@ -211,8 +212,8 @@ public class VwapStrategyDetector {
         }
 
         // ── SHORT setup ───────────────────────────────────────────────────────
-        // Price must have spiked meaningfully above VWAP (Z-Score > 1.5)
-        if (highestClose > vwap + 0.5 * curAtr && zScore > 1.5) {
+        // Price must have spiked meaningfully above VWAP (Z-Score > 1.2)
+        if (highestClose > vwap + 0.5 * curAtr && zScore > 1.2) {
             // ── Macro trend hard block ─────────────────────────────────────
             // Don't fire SHORT if the whole day is strongly trending up.
             if (trendStronglyBullish) {

@@ -45,10 +45,10 @@
       "ticker": "AMZN",
       "strategyType": "vwap",
       "minConfidence": 62,
-      "intradayRsGate": true,
+      "intradayRsGate": false,
       "skip": false,
       "skipReason": null,
-      "note": "Switched ORB→VWAP Mar 2026: ORB found 0 filtered/0 exec in 180d — breakout strategy completely blind to AMZN. AMZN is mean-reverting momentum (traps initial breakouts then returns to POC). VWAP + Z-Score catches the snap-back. minConf=62. DO NOT SKIP."
+      "note": "Switched ORB→VWAP Mar 2026. RS gate DISABLED (VWAP mean-reversion). minConf=62. DO NOT SKIP."
     },
     {
       "ticker": "MSTR",
@@ -122,19 +122,19 @@
       "ticker": "AAPL",
       "strategyType": "vwap",
       "minConfidence": 62,
-      "intradayRsGate": true,
+      "intradayRsGate": false,
       "skip": false,
       "skipReason": null,
-      "note": "VWAP + Z-Score(1.5 SD) + intraday RS soft gate. minConf 70→62 Mar 2026: 15 filtered/0 exec at 70 — mean-reversion setups look 'weak' to RS gate but are statistically valid. 62 is the quant sweet spot for mean-reversion (Gemini). DO NOT SKIP."
+      "note": "VWAP + Z-Score(1.5 SD). RS gate DISABLED — mean-reversion trades ARE relative weakness by definition, RS penalty kills the signal we want. minConf=62. DO NOT SKIP."
     },
     {
       "ticker": "MSFT",
       "strategyType": "vwap",
       "minConfidence": 62,
-      "intradayRsGate": true,
+      "intradayRsGate": false,
       "skip": false,
       "skipReason": null,
-      "note": "VWAP + Z-Score(1.5 SD) + intraday RS soft gate. minConf 70→62 Mar 2026: 16 filtered/0 exec at 70. Same fix as AAPL — mean-reversion needs lower confidence threshold. DO NOT SKIP."
+      "note": "VWAP + Z-Score(1.5 SD). RS gate DISABLED — same logic as AAPL. minConf=62. DO NOT SKIP."
     },
     {
       "ticker": "META",

@@ -315,7 +315,12 @@ public class BacktestService {
                 String qualityLabel = qualityFilter.buildLabel(setup, entryEpochMs, streak);
 
                 int totalAdj = newsAdj + ctxAdj + qualityAdj + intradayRsAdj;
-                int adjConf  = Math.max(0, Math.min(100, setup.getConfidence() + totalAdj));
+                // Penalty floor: secondary filters can reduce base confidence by at most 25%.
+                // A strong base setup (80+) should never be killed by stacking RS + news + quality.
+                // Floor = 75% of base confidence. e.g. base=80 → floor=60, base=70 → floor=52.
+                int penaltyFloor = (int)(setup.getConfidence() * 0.75);
+                int rawAdj = setup.getConfidence() + totalAdj;
+                int adjConf  = Math.max(penaltyFloor, Math.min(100, rawAdj));
 
                 // Skip trade if combined filters knocked confidence below threshold
                 if (adjConf < effectiveMinConf) {
