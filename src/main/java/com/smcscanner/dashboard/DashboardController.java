@@ -549,6 +549,10 @@ public class DashboardController {
         return ResponseEntity.ok(Map.of("ticker", ticker.toUpperCase(), "outcome", outcome, "pnl", pnl));
     }
 
+    /** GET /trades — Live trade log page. */
+    @GetMapping("/trades")
+    public String tradesPage() { return "trades"; }
+
     @GetMapping("/health")
     @ResponseBody
     public ResponseEntity<Map<String,String>> health() { return ResponseEntity.ok(Map.of("status","UP")); }

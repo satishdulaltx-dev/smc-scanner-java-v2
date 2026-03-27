@@ -130,6 +130,7 @@
         <a href="/" class="btn btn-blue">← Dashboard</a>
         <a href="/#adaptive-panel" class="btn" style="background:rgba(227,98,9,.15);color:#e36209;border-color:#e36209" onclick="sessionStorage.setItem('scrollAdaptive','1')">⚡ Adaptive</a>
         <a href="/eod" class="btn btn-purple">📊 EOD Report</a>
+        <a href="/trades" class="btn" style="background:rgba(63,185,80,.15);color:#3fb950;border-color:#3fb950">📋 Live Trades</a>
     </div>
 </div>
 
@@ -145,15 +146,7 @@
     <div class="ctrl-group" id="ticker-ctrl">
         <label>Ticker</label>
         <select id="ticker">
-            <option>AAPL</option><option>MSFT</option><option>GOOGL</option><option>AMZN</option>
-            <option>NVDA</option><option>META</option><option>TSLA</option><option>AMD</option>
-            <option>NFLX</option><option>SPY</option><option>QQQ</option><option>COIN</option>
-            <option>SHOP</option><option>PLTR</option><option>SOFI</option><option>RIVN</option>
-            <option>NIO</option><option>BABA</option><option selected>PYPL</option><option>DIS</option>
-            <option>BA</option><option>JPM</option><option>GS</option><option>V</option>
-            <option>UBER</option><option>ABNB</option><option>SNAP</option><option>ROKU</option>
-            <option>MARA</option><option>HOOD</option><option>MSTR</option>
-            <option>X:BTCUSD</option><option>X:ETHUSD</option><option>X:SOLUSD</option><option>X:XRPUSD</option>
+            <option>Loading...</option>
         </select>
     </div>
     <div class="ctrl-group">
@@ -238,6 +231,32 @@
 
 <script>
 let equityChart = null, distChart = null;
+
+// Load ticker list dynamically from watchlist API (keeps in sync with watchlist.json)
+// Shows all tickers including skipped ones so you can backtest any ticker
+async function loadTickers() {
+    try {
+        const resp = await fetch('/api/watchlist').then(r => r.json()).catch(() => []);
+        const sel = document.getElementById('ticker');
+        // Get all available tickers from watchlist; also include common ones not in live watchlist
+        const watchlistTickers = (Array.isArray(resp) ? resp : []).map(t => t.ticker || t).filter(Boolean);
+        // Extra tickers useful for backtesting (skipped from live but still historically interesting)
+        const extra = ['BABA','DIS','GS','GOOGL','HOOD','META','NIO','PYPL','QQQ','ROKU','SHOP','SNAP','SQ','UBER','V','X:SOLUSD','X:XRPUSD'];
+        const all = [...new Set([...watchlistTickers, ...extra])].sort((a,b) => {
+            // Crypto last, then alphabetical
+            const ac = a.startsWith('X:'), bc = b.startsWith('X:');
+            if (ac && !bc) return 1; if (!ac && bc) return -1;
+            return a.localeCompare(b);
+        });
+        sel.innerHTML = all.map(t => `<option value="${t}">${t}</option>`).join('');
+        // Default to first active watchlist ticker (AAPL)
+        const firstActive = watchlistTickers.find(t => !t.startsWith('X:'));
+        if (firstActive) sel.value = firstActive;
+    } catch(e) {
+        // Fallback to static list if API fails
+        document.getElementById('ticker').innerHTML = 'AAPL,AMZN,COIN,CRWD,JPM,MARA,MSFT,MSTR,NFLX,NVDA,PLTR,RIVN,SMCI,SOFI,SPY,TSLA,X:BTCUSD,X:ETHUSD'.split(',').map(t=>`<option>${t}</option>`).join('');
+    }
+}
 
 function toggleMode() {
     const single = document.getElementById('mode').value === 'single';
@@ -646,6 +665,9 @@ function setLoading(on) {
 }
 function show(id) { document.getElementById(id).style.display = ''; }
 function hide(id) { document.getElementById(id).style.display = 'none'; }
+
+// Init
+loadTickers();
 </script>
 </body>
 </html>
