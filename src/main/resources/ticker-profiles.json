@@ -166,8 +166,8 @@
     {
       "ticker": "SPY",
       "strategyType": "vwap",
-      "note": "VWAP Mar 2026. minConf raised 62→70: 22%WR at 62 means too many bad trades getting through. 44 filtered = room to be pickier. Only take the best VWAP snaps.",
-      "minConfidence": 70,
+      "note": "VWAP Mar 2026. minConf raised to 75: 25%WR at 70 still negative (-$42). 49 filtered = plenty of signals, need higher bar. Only ultra-clean VWAP snaps.",
+      "minConfidence": 75,
       "skip": false,
       "skipReason": null
     },
@@ -215,11 +215,11 @@
     {
       "ticker": "TSLA",
       "strategyType": "smc",
-      "minConfidence": 78,
+      "minConfidence": 85,
       "minFvgPct": 0.001,
       "dispAtrMult": 1.6,
       "slAtrMult": 1.5,
-      "note": "minConf 85→78 Mar 2026: only 3 trades at 85 (25 filtered). R:R compression working (+$180). Lower gate to catch more setups. slAtrMult=1.5 + 0.8:1 TP ratio. DO NOT SKIP."
+      "note": "minConf reverted to 85 Mar 2026: 78 let in bad trades (0%WR/-$349). 85 was 33.3%/+$180. TSLA needs ultra-clean setups only. slAtrMult=1.5 + 0.8:1 TP ratio. DO NOT SKIP."
     },
     {
       "ticker": "AMD",
