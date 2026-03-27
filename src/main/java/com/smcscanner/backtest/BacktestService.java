@@ -251,9 +251,11 @@ public class BacktestService {
                         : newsService.getSentimentAt(ticker, entryEpochMs);
                 int newsAdj = sentiment.confidenceDelta(setup.getDirection(), stratType);
 
-                // News-aligned TP extension: 1.5:1 → 3:1 R:R
-                // Mirrors live scanner logic: when news aligns with direction, widen TP
-                if (sentiment.isAligned(setup.getDirection()) && !ticker.startsWith("X:")) {
+                // News-aligned TP extension: widen TP to 3:1 R:R (but respect ticker tpRrRatio)
+                // If profile sets tpRrRatio (e.g. JPM=1.0), don't override — the low ratio is intentional
+                double profileTpRatio = bp.resolveTpRrRatio();
+                boolean hasTpOverride = profileTpRatio < 1.5; // ticker explicitly requested tighter TP
+                if (sentiment.isAligned(setup.getDirection()) && !ticker.startsWith("X:") && !hasTpOverride) {
                     double risk  = Math.abs(setup.getEntry() - setup.getStopLoss());
                     double tp3x  = "long".equals(setup.getDirection())
                             ? Math.round((setup.getEntry() + risk * 3.0) * 10000.0) / 10000.0

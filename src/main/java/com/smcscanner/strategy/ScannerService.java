@@ -176,10 +176,11 @@ public class ScannerService {
                     log.info("{} news adj={} score={} dir={}", ticker, newsAdj, sentiment.netScore(), s.getDirection());
                 }
 
-                // ── News-aligned TP extension: 1.5:1 → 3:1 ──────────────────
-                // When news aligns with the trade direction, widen TP to 3:1 R:R.
-                // The default from detectors is 1.5:1. Aligned news signals strong follow-through.
-                if (!isC && sentiment.isAligned(s.getDirection())) {
+                // ── News-aligned TP extension: widen TP to 3:1 ──────────────────
+                // Skip extension if ticker has explicit tpRrRatio override (e.g. JPM=1.0)
+                double profileTpRatio = profile.resolveTpRrRatio();
+                boolean hasTpOverride = profileTpRatio < 1.5;
+                if (!isC && sentiment.isAligned(s.getDirection()) && !hasTpOverride) {
                     double risk = Math.abs(s.getEntry() - s.getStopLoss());
                     double tp3x = "long".equals(s.getDirection())
                             ? Math.round((s.getEntry() + risk * 3.0) * 10000.0) / 10000.0
