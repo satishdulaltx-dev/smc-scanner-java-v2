@@ -101,6 +101,23 @@ public class DiscordAlertService {
             fields.add(f("💰 P&L Estimate", pnlLine, false));
 
             fields.add(f("🔓 Break-Even", String.format("$%.2f (stock must reach this)", s.getOptionsBreakEven()), true));
+
+            // ── Bracket order prices — what to enter in your broker ───────────
+            // delta model: option price ≈ premium + delta × (stockPrice - stockEntry)
+            // delta is signed: +0.40 for calls, -0.40 for puts
+            double delta = s.getOptionsDelta();
+            double optAtTP = s.getOptionsPremium() + delta * (s.getTakeProfit() - s.getEntry());
+            double optAtSL = s.getOptionsPremium() + delta * (s.getStopLoss()  - s.getEntry());
+            optAtTP = Math.max(0.01, optAtTP);
+            optAtSL = Math.max(0.01, optAtSL);
+            String bracketLine = String.format(
+                    "**BUY** option @ **$%.2f**\n" +
+                    "✅ **SELL TP** @ **$%.2f** (stock $%.2f)\n" +
+                    "🛑 **SELL SL** @ **$%.2f** (stock $%.2f)",
+                    s.getOptionsPremium(),
+                    optAtTP, s.getTakeProfit(),
+                    optAtSL, s.getStopLoss());
+            fields.add(f("📋 Broker Bracket Orders", bracketLine, false));
         }
 
         // ── Core setup fields ─────────────────────────────────────────────────
@@ -108,14 +125,14 @@ public class DiscordAlertService {
             f("Direction",  arrow+" "+s.getDirection().toUpperCase(), true),
             f("Confidence", grade+" "+s.getConfidence()+"/100",       true),
             f("Strategy",   strategy,                                  true),
-            f("Entry",      String.format("$%.4f",s.getEntry()),       true),
-            f("Stop Loss",  String.format("$%.4f (-%.2f%%)",s.getStopLoss(),slPct),  true),
-            f("Take Profit",String.format("$%.4f (+%.2f%%)",s.getTakeProfit(),tpPct),true),
+            f("Entry",      String.format("$%.2f (stock)",s.getEntry()),       true),
+            f("Stop Loss",  String.format("$%.2f (-%.2f%%)",s.getStopLoss(),slPct),  true),
+            f("Take Profit",String.format("$%.2f (+%.2f%%)",s.getTakeProfit(),tpPct),true),
             f("R:R",        String.format("%.1f:1",s.rrRatio()),       true),
-            f("ATR",        String.format("$%.4f",s.getAtr()),         true)));
+            f("ATR",        String.format("$%.2f",s.getAtr()),         true)));
 
         // ── Breakeven stop instruction ────────────────────────────────────────
-        fields.add(f("🔒 Breakeven", String.format("Move SL → $%.4f once price hits $%.4f (1:1)",
+        fields.add(f("🔒 Breakeven", String.format("Move SL → $%.2f once price hits $%.2f (1:1)",
                     s.getEntry(),
                     isLong ? s.getEntry() + Math.abs(s.getEntry()-s.getStopLoss())
                            : s.getEntry() - Math.abs(s.getEntry()-s.getStopLoss())), false));
