@@ -90,6 +90,18 @@ public class BacktestService {
         List<OHLCV> spyBars = marketCtxService.fetchSpyBarsForBacktest(220);
         List<OHLCV> vixBars = marketCtxService.fetchVixBarsForBacktest(220);
 
+        // Pre-fetch SPY 5m bars for intraday RS gate (only if this ticker uses it)
+        TickerProfile preProfile = config.getTickerProfile(ticker);
+        List<OHLCV> spy5mBars = preProfile.isIntradayRsGate()
+                ? client.getBarsWithLookback("SPY", "5m", 50000, lookbackDays + 5)
+                : List.of();
+        // Group SPY 5m bars by date for per-day slicing
+        TreeMap<LocalDate, List<OHLCV>> spy5mByDate = new TreeMap<>();
+        for (OHLCV bar : spy5mBars) {
+            LocalDate d = Instant.ofEpochMilli(Long.parseLong(bar.getTimestamp())).atZone(ET).toLocalDate();
+            spy5mByDate.computeIfAbsent(d, k -> new ArrayList<>()).add(bar);
+        }
+
         // Per-ticker outcome history for adaptive suppression — mirrors the live
         // AdaptiveSuppressor: bounded to last 6 outcomes so that a win in month 2
         // resets the streak before month 3 (prevents 90-day run from showing fewer
@@ -242,6 +254,33 @@ public class BacktestService {
                         }
                     }
                 }
+
+                // ── Intraday RS gate — mirrors live ScannerService logic ─────
+                // For mega-caps with intradayRsGate=true: only fire if ticker
+                // is diverging from SPY in the trade direction (accumulation/distribution).
+                if (bp.isIntradayRsGate() && !ticker.startsWith("X:")) {
+                    List<OHLCV> spyDay = spy5mByDate.getOrDefault(date, List.of());
+                    // Build matching SPY window up to current bar timestamp
+                    List<OHLCV> spyWindow = spyDay.stream()
+                            .filter(b -> Long.parseLong(b.getTimestamp()) <= entryEpochMs)
+                            .collect(Collectors.toList());
+                    double intradayRs = marketCtxService.computeIntradayRsFromBars(window, spyWindow);
+                    boolean rsAligned = marketCtxService.isIntradayRsAligned(intradayRs, setup.getDirection());
+                    if (!rsAligned) {
+                        trades.add(new TradeResult(ticker, setup.getDirection(),
+                                setup.getEntry(), setup.getStopLoss(), setup.getTakeProfit(),
+                                "RS_FILTERED", 0.0,
+                                toDateTime(dayBars.get(end-1).getTimestamp()),
+                                toDateTime(dayBars.get(end-1).getTimestamp()),
+                                setup.getConfidence(), setup.getAtr(),
+                                0, "INTRADAY_RS_CONFLICT", 0, String.format("RS=%.4f", intradayRs),
+                                0, "No SPY divergence",
+                                0, 0, 0, 0));
+                        tradePlacedToday = true;
+                        continue;
+                    }
+                }
+
                 TickerProfile bp2 = config.getTickerProfile(ticker);
                 int effectiveMinConf = bp2.resolveMinConfidence(config.getMinConfidence());
                 int effectiveMaxConf = bp2.resolveMaxConfidence(); // upper cap for reversed-pattern tickers

@@ -23,6 +23,12 @@ public class TickerProfile {
     private Double  slAtrMult  = null; // SL = levelPrice ± atr * slAtrMult (default 0.5)
     private Double  tpRrRatio  = null; // TP = entry ± risk * tpRrRatio    (default 1.5)
 
+    // Intraday Relative Strength gate — for mega-caps (AAPL, MSFT, etc.)
+    // When true: only fire LONG if ticker outperforms SPY over rolling 30-min window
+    //            only fire SHORT if ticker underperforms SPY over rolling 30-min window
+    // This filters out noise trades in HFT-dominated stocks — the edge is in divergence from SPY.
+    private Boolean intradayRsGate = null; // default false
+
     public static final TickerProfile DEFAULT = new TickerProfile();
 
     // ── Getters ───────────────────────────────────────────────────────────────
@@ -52,6 +58,8 @@ public class TickerProfile {
     public double resolveSlAtrMult()  { return slAtrMult != null ? slAtrMult : 0.5; }
     /** TP distance = entry ± risk * tpRrRatio. Default 1.5 (1.5:1 R:R). */
     public double resolveTpRrRatio()  { return tpRrRatio != null ? tpRrRatio : 1.5; }
+    /** Whether this ticker requires intraday RS vs SPY divergence to fire signals. */
+    public boolean isIntradayRsGate() { return intradayRsGate != null && intradayRsGate; }
 
     // ── Setters (for Jackson) ─────────────────────────────────────────────────
     public void setTicker(String v)        { this.ticker = v; }
@@ -66,4 +74,5 @@ public class TickerProfile {
     public void setMinVolMult(Double v)    { this.minVolMult = v; }
     public void setSlAtrMult(Double v)     { this.slAtrMult = v; }
     public void setTpRrRatio(Double v)     { this.tpRrRatio = v; }
+    public void setIntradayRsGate(Boolean v) { this.intradayRsGate = v; }
 }

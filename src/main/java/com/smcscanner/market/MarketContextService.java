@@ -122,6 +122,77 @@ public class MarketContextService {
         }
     }
 
+    // ── Intraday Relative Strength (5m bars, rolling 30-min window) ───────────
+
+    /** Number of 5-min bars in the rolling RS window (6 bars = 30 minutes). */
+    private static final int INTRADAY_RS_BARS = 6;
+
+    // Cache for intraday SPY 5m bars (shared across all tickers in one scan cycle)
+    private volatile long        spy5mCacheTs   = 0;
+    private volatile List<OHLCV> spy5mBarsCache = null;
+
+    /**
+     * Compute intraday relative strength: ticker's 30-min return minus SPY's 30-min return.
+     * Positive = ticker outperforming SPY (bullish divergence).
+     * Negative = ticker underperforming SPY (bearish divergence).
+     *
+     * @param tickerBars5m  5-minute bars for the ticker (at least INTRADAY_RS_BARS needed)
+     * @return intraday RS score, or 0.0 if insufficient data
+     */
+    public double computeIntradayRs(List<OHLCV> tickerBars5m) {
+        List<OHLCV> spyBars = getLiveSpy5mBars();
+        return computeIntradayRsFromBars(tickerBars5m, spyBars);
+    }
+
+    /**
+     * Pure computation of intraday RS from pre-fetched bars (used by backtest).
+     */
+    public double computeIntradayRsFromBars(List<OHLCV> tickerBars5m, List<OHLCV> spyBars5m) {
+        if (tickerBars5m == null || tickerBars5m.size() < INTRADAY_RS_BARS + 1) return 0.0;
+        if (spyBars5m    == null || spyBars5m.size()    < INTRADAY_RS_BARS + 1) return 0.0;
+
+        int tEnd = tickerBars5m.size() - 1;
+        int tStart = tEnd - INTRADAY_RS_BARS;
+        double tNow  = tickerBars5m.get(tEnd).getClose();
+        double tPrev = tickerBars5m.get(tStart).getClose();
+
+        int sEnd = spyBars5m.size() - 1;
+        int sStart = sEnd - INTRADAY_RS_BARS;
+        double sNow  = spyBars5m.get(sEnd).getClose();
+        double sPrev = spyBars5m.get(sStart).getClose();
+
+        if (tPrev <= 0 || sPrev <= 0) return 0.0;
+        return (tNow - tPrev) / tPrev - (sNow - sPrev) / sPrev;
+    }
+
+    /**
+     * Checks if intraday RS supports the trade direction.
+     * For LONG: RS must be positive (ticker outperforming SPY = accumulation)
+     * For SHORT: RS must be negative (ticker underperforming SPY = distribution)
+     *
+     * @return true if direction is aligned with intraday RS, false if conflicting
+     */
+    public boolean isIntradayRsAligned(double intradayRs, String direction) {
+        if ("long".equals(direction))  return intradayRs > 0.0;
+        if ("short".equals(direction)) return intradayRs < 0.0;
+        return true; // unknown direction — let it through
+    }
+
+    private synchronized List<OHLCV> getLiveSpy5mBars() {
+        long now = System.currentTimeMillis();
+        if (spy5mBarsCache == null || (now - spy5mCacheTs) > CACHE_TTL_MS) {
+            try {
+                spy5mBarsCache = client.getBars("SPY", "5m", 30);
+                spy5mCacheTs   = now;
+                log.debug("SPY 5m bars refreshed ({} bars)", spy5mBarsCache != null ? spy5mBarsCache.size() : 0);
+            } catch (Exception e) {
+                log.warn("SPY 5m bars fetch error: {}", e.getMessage());
+                if (spy5mBarsCache == null) spy5mBarsCache = List.of();
+            }
+        }
+        return spy5mBarsCache;
+    }
+
     // ── Internal helpers ──────────────────────────────────────────────────────
 
     private double computeRs(List<OHLCV> tickerBars, List<OHLCV> spyBars) {

@@ -155,6 +155,24 @@ public class ScannerService {
             if (!setups.isEmpty()) {
                 TradeSetup s=setups.get(0);
 
+                // ── Intraday RS gate (mega-caps: AAPL, MSFT, etc.) ──────────
+                // Only fire if ticker is diverging from SPY in the trade direction.
+                // LONG: ticker must outperform SPY over last 30 min (accumulation)
+                // SHORT: ticker must underperform SPY over last 30 min (distribution)
+                if (profile.isIntradayRsGate() && !isC) {
+                    double intradayRs = marketCtx.computeIntradayRs(bars);
+                    boolean aligned = marketCtx.isIntradayRsAligned(intradayRs, s.getDirection());
+                    if (!aligned) {
+                        log.info("{} INTRADAY_RS_BLOCKED: {} setup but RS={} (no divergence from SPY)",
+                                ticker, s.getDirection(), String.format("%.4f", intradayRs));
+                        setTs(ticker, "idle", null, 0,
+                                "⛔ Intraday RS gate — no SPY divergence (" + String.format("%.2f%%", intradayRs * 100) + ")");
+                        return;
+                    }
+                    log.info("{} intraday RS aligned: {} direction, RS={}", ticker, s.getDirection(),
+                            String.format("%.4f", intradayRs));
+                }
+
                 // ── 15m alignment check ───────────────────────────────────────
                 // Block if 15m trend directly opposes the setup direction.
                 // "bullish" 15m + short setup = fighting the trend → skip.

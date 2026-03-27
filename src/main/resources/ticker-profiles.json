@@ -45,9 +45,10 @@
       "ticker": "AMZN",
       "strategyType": "breakout",
       "minConfidence": 70,
+      "intradayRsGate": true,
       "skip": false,
       "skipReason": null,
-      "note": "ORB Breakout + narrow range filter shipped Mar 2026. Prior: SMC 0%WR. Working to improve — DO NOT SKIP."
+      "note": "ORB Breakout + narrow range filter + Intraday RS gate. Gemini: AMZN traps initial breakouts — RS gate ensures we only trade when AMZN is diverging from SPY (real momentum, not fakeout). DO NOT SKIP."
     },
     {
       "ticker": "MSTR",
@@ -121,17 +122,19 @@
       "ticker": "AAPL",
       "strategyType": "vwap",
       "minConfidence": 70,
+      "intradayRsGate": true,
       "skip": false,
       "skipReason": null,
-      "note": "VWAP + Z-Score filter (1.5 SD gate) shipped Mar 2026. Prior: SMC 29%WR 365d. Working to improve — DO NOT SKIP."
+      "note": "VWAP + Z-Score(1.5 SD) + Intraday RS gate (must outperform/underperform SPY on 5m to fire). Gemini insight: HFTs arbitrage patterns — edge is in SPY divergence, not isolated price action. DO NOT SKIP."
     },
     {
       "ticker": "MSFT",
       "strategyType": "keylevel",
       "minConfidence": 78,
+      "intradayRsGate": true,
       "skip": false,
       "skipReason": null,
-      "note": "KeyLevel strategy with profile-driven SL/TP. Prior: VWAP 0%WR. Working to improve — DO NOT SKIP."
+      "note": "KeyLevel + Intraday RS gate (must diverge from SPY on 5m to fire). Gemini insight: MSFT is HFT noise machine — only trade when showing relative strength/weakness vs market. DO NOT SKIP."
     },
     {
       "ticker": "META",
@@ -176,7 +179,8 @@
       "minConfidence": 80,
       "minFvgPct": 0.0005,
       "dispAtrMult": 1.3,
-      "note": "Tightened Mar 2026: 90d shows 31.3% WR -0.27% exp overall. Only fire on high-quality setups (80+). User favorite \u2014 kept in watchlist. | maxConf=89 Mar 2026: forensic review shows conf=100 signals 0-for-5 (3 losses, 2 BE stops). Mid-range 80-89 conf has actual wins. Reversed confidence pattern \u2014 block over-extended high-confidence entries.",
+      "intradayRsGate": true,
+      "note": "SMC + Intraday RS gate + maxConf=89 (reversed-confidence pattern). Gemini: NVDA driven by dealer hedging/gamma — RS gate ensures we trade only when NVDA diverges from SPY (real institutional flow). 90d 31.3%WR.",
       "maxConfidence": 89
     },
     {
