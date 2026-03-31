@@ -4,6 +4,7 @@ import com.smcscanner.alert.AlertDedup;
 import com.smcscanner.alert.DiscordAlertService;
 import com.smcscanner.filter.AdaptiveSuppressor;
 import com.smcscanner.filter.SignalQualityFilter;
+import com.smcscanner.market.EarningsCalendar;
 import com.smcscanner.market.MarketContext;
 import com.smcscanner.market.MarketContextService;
 import com.smcscanner.news.NewsSentiment;
@@ -47,6 +48,7 @@ public class ScannerService {
     private final SignalQualityFilter      qualityFilter;
     private final AdaptiveSuppressor       adaptive;
     private final OptionsFlowAnalyzer      optionsFlow;
+    private final EarningsCalendar         earnings;
 
     public ScannerService(ScannerConfig config, PolygonClient client, SetupDetector setupDetector,
                           CryptoStrategyService crypto, MultiTimeframeAnalyzer mtf,
@@ -55,12 +57,13 @@ public class ScannerService {
                           VwapStrategyDetector vwap, BreakoutStrategyDetector breakout,
                           KeyLevelStrategyDetector keyLevel, NewsService news,
                           MarketContextService marketCtx, SignalQualityFilter qualityFilter,
-                          AdaptiveSuppressor adaptive, OptionsFlowAnalyzer optionsFlow) {
+                          AdaptiveSuppressor adaptive, OptionsFlowAnalyzer optionsFlow,
+                          EarningsCalendar earnings) {
         this.config=config; this.client=client; this.setupDetector=setupDetector; this.crypto=crypto;
         this.mtf=mtf; this.discord=discord; this.dedup=dedup; this.tracker=tracker; this.liveLog=liveLog; this.state=state;
         this.atrCalc=atrCalc; this.vwap=vwap; this.breakout=breakout; this.keyLevel=keyLevel;
         this.news=news; this.marketCtx=marketCtx; this.qualityFilter=qualityFilter; this.adaptive=adaptive;
-        this.optionsFlow=optionsFlow;
+        this.optionsFlow=optionsFlow; this.earnings=earnings;
     }
 
     public boolean isCrypto(String t) { return t.startsWith("X:"); }
@@ -267,7 +270,9 @@ public class ScannerService {
                 // ── Time-of-day soft penalty (was hard block) ─────────────────────
                 // 11:xx AM and 1:xx PM ET have lower WR. Now -15 instead of hard kill.
                 // Strong setups (VWAP rubber-band, high-conf SMC) can still fire at lunch.
+                // Also detect late-day (after 3:30 PM ET) — route to swing channel instead.
                 int deadZoneAdj = 0;
+                boolean lateDay = false;
                 if (!isC) {
                     java.time.LocalTime etNow = java.time.ZonedDateTime.now(
                             java.time.ZoneId.of("America/New_York")).toLocalTime();
@@ -275,6 +280,10 @@ public class ScannerService {
                     if (etHour == 11 || etHour == 13) {
                         deadZoneAdj = -15;
                         log.info("{} DEAD_ZONE_PENALTY: hour={} ET adj={}", ticker, etHour, deadZoneAdj);
+                    }
+                    // After 3:30 PM ET — not enough time for intraday, route to swing
+                    if (etHour >= 16 || (etHour == 15 && etNow.getMinute() >= 30)) {
+                        lateDay = true;
                     }
                 }
 
@@ -417,10 +426,24 @@ public class ScannerService {
                                     ticker, s.getDirection().toUpperCase(), s.getConfidence(), s.getEntry());
                             dedup.markSent(ticker, s.getDirection(), s.getEntry());
                         } else {
-                            log.info("INTRADAY ALERT {} {} conf={} entry={} adj=news{}/ctx{}/qual{}/flow{}/regime{}/corr{} vixBoost={} dynamicMin={}",
-                                    ticker, s.getDirection().toUpperCase(), s.getConfidence(), s.getEntry(),
-                                    newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj, vixBoost, dynamicMinConf);
-                            discord.sendSetupAlert(s, sentiment, context);
+                            // Earnings proximity check — warn but don't block
+                            EarningsCalendar.EarningsCheck earningsCheck = earnings.check(ticker);
+                            if (earningsCheck.isNearEarnings()) {
+                                log.warn("EARNINGS WARNING {} — {} near alert {} {}",
+                                        ticker, earningsCheck.label(), s.getDirection().toUpperCase(), s.getConfidence());
+                            }
+
+                            if (lateDay) {
+                                // After 3:30 PM ET — not enough time for intraday trade, route to swing channel
+                                log.info("LATE_DAY SWING REROUTE {} {} conf={} entry={} (after 3:30 PM ET)",
+                                        ticker, s.getDirection().toUpperCase(), s.getConfidence(), s.getEntry());
+                                discord.sendSwingAlert(s);
+                            } else {
+                                log.info("INTRADAY ALERT {} {} conf={} entry={} adj=news{}/ctx{}/qual{}/flow{}/regime{}/corr{} vixBoost={} dynamicMin={}",
+                                        ticker, s.getDirection().toUpperCase(), s.getConfidence(), s.getEntry(),
+                                        newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj, vixBoost, dynamicMinConf);
+                                discord.sendSetupAlert(s, sentiment, context, earningsCheck);
+                            }
                             liveLog.recordTrade(s, stratType);
                             dedup.markSent(ticker, s.getDirection(), s.getEntry());
                         }

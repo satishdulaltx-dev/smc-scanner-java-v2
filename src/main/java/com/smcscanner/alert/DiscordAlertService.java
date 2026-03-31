@@ -2,6 +2,7 @@ package com.smcscanner.alert;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smcscanner.config.ScannerConfig;
+import com.smcscanner.market.EarningsCalendar;
 import com.smcscanner.market.MarketContext;
 import com.smcscanner.model.TradeSetup;
 import com.smcscanner.news.NewsSentiment;
@@ -43,16 +44,22 @@ public class DiscordAlertService {
     }
 
     public boolean sendSetupAlert(TradeSetup s, NewsSentiment sentiment, MarketContext context) {
+        return sendSetupAlert(s, sentiment, context, EarningsCalendar.EarningsCheck.NONE);
+    }
+
+    public boolean sendSetupAlert(TradeSetup s, NewsSentiment sentiment, MarketContext context,
+                                   EarningsCalendar.EarningsCheck earningsCheck) {
         String url=config.getDiscordWebhookUrl();
         if (url==null||url.isBlank()) { log.warn("No Discord webhook URL"); return false; }
-        return postEmbeds(url, List.of(buildEmbed(s, sentiment, context)));
+        return postEmbeds(url, List.of(buildEmbed(s, sentiment, context, earningsCheck)));
     }
 
     private Map<String,Object> buildEmbed(TradeSetup s) {
-        return buildEmbed(s, NewsSentiment.NONE, MarketContext.NONE);
+        return buildEmbed(s, NewsSentiment.NONE, MarketContext.NONE, EarningsCalendar.EarningsCheck.NONE);
     }
 
-    private Map<String,Object> buildEmbed(TradeSetup s, NewsSentiment sentiment, MarketContext context) {
+    private Map<String,Object> buildEmbed(TradeSetup s, NewsSentiment sentiment, MarketContext context,
+                                              EarningsCalendar.EarningsCheck earningsCheck) {
         boolean isLong="long".equals(s.getDirection());
         String arrow=isLong?"⬆️":"⬇️";
         String grade=s.getConfidence()>=85?"⭐":(s.getConfidence()>=75?"✅":(s.getConfidence()>=65?"🟡":"⚪"));
@@ -166,6 +173,11 @@ public class DiscordAlertService {
                        : sentiment.headline())
                     : "";
             fields.add(f("News (48h)", sentiment.label() + newsConflict + "\n" + headline, false));
+        }
+
+        // ── Earnings proximity warning ──────────────────────────────────────
+        if (earningsCheck != null && earningsCheck.isNearEarnings() && earningsCheck.label() != null) {
+            fields.add(f("📅 Earnings", earningsCheck.label(), false));
         }
 
         // ── Market context fields (RS + VIX) ─────────────────────────────────
