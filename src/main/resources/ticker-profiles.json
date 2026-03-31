@@ -17,10 +17,10 @@
     },
     {
       "ticker": "AMD",
-      "minConfidence": 85,
+      "minConfidence": 72,
       "minFvgPct": 0.001,
       "dispAtrMult": 1.5,
-      "note": "Tightened Mar 2026: 20% WR 90d -0.39% exp. Semiconductor that tracks NVDA — only fire on very strong SMC setups (85+) with clear sweep and volume confirmation."
+      "note": "Loosened Mar 2026: 85 was over-filtering (20% WR but only 5 trades). 72 lets more setups through — with 1.5:1 R:R, 40% WR is profitable. Semiconductor — tracks NVDA."
     },
     {
       "ticker": "AMZN",
@@ -147,12 +147,11 @@
     {
       "ticker": "NVDA",
       "strategyType": "smc",
-      "minConfidence": 80,
+      "minConfidence": 72,
       "minFvgPct": 0.0005,
       "dispAtrMult": 1.3,
       "intradayRsGate": true,
-      "note": "SMC + Intraday RS gate + maxConf=89 (reversed-confidence pattern). Gemini: NVDA driven by dealer hedging/gamma — RS gate ensures we trade only when NVDA diverges from SPY (real institutional flow). 90d 31.3%WR.",
-      "maxConfidence": 89
+      "note": "Loosened Mar 2026: 80-89 window was too narrow (3 trades/17 filtered). 72 + no maxConf cap lets more setups through. With 1.5:1 R:R (no more 0.8 compression), 35% WR is profitable."
     },
     {
       "ticker": "PLTR",
@@ -238,11 +237,11 @@
     {
       "ticker": "TSLA",
       "strategyType": "smc",
-      "minConfidence": 85,
+      "minConfidence": 72,
       "minFvgPct": 0.001,
       "dispAtrMult": 1.6,
       "slAtrMult": 1.5,
-      "note": "minConf reverted to 85 Mar 2026: 78 let in bad trades (0%WR/-$349). 85 was 33.3%/+$180. TSLA needs ultra-clean setups only. slAtrMult=1.5 + 0.8:1 TP ratio. DO NOT SKIP."
+      "note": "Loosened Mar 2026: 85 was over-filtering (1 trade/7 filtered). TP ratio now 1.5:1 (was 0.8:1 due to wide stop compression). With proper R:R, 35% WR is profitable. slAtrMult=1.5 for TSLA volatility. DO NOT SKIP."
     },
     {
       "ticker": "UBER",

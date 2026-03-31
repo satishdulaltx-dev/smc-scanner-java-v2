@@ -137,11 +137,10 @@ public class SetupDetector {
         double targetAtr = dailyAtr > curAtr * 2 ? dailyAtr : curAtr * 4;
         double sl,tp;
         // SL sizing: default 0.4 ATR for SMC, overridden by slAtrMult for fat-tail stocks (TSLA, SMCI)
-        // Inverse R:R scaling: as SL widens, TP contracts to maintain reachable targets.
-        // Wide stops (≥1.5x) need only 0.8:1 R:R (base hits) — a 2.0 ATR SL + 1.6 ATR TP is realistic.
-        // Normal stops use standard 1.5:1 R:R.
+        // TP ratio always uses profile tpRrRatio (default 1.5:1).
+        // Previous 0.8:1 compression for wide stops was cutting winners short on high-beta names.
         double slMult = profile.resolveSlAtrMult() > 0.5 ? profile.resolveSlAtrMult() : 0.4;
-        double tpRatio = slMult >= 1.5 ? 0.8 : 1.5; // wide stop = compress target
+        double tpRatio = profile.resolveTpRrRatio();
         double tpMult = slMult * tpRatio;
         if ("long".equals(state.getDirection())) { sl=r4(entry-targetAtr*slMult); tp=r4(entry+targetAtr*tpMult); }
         else                                     { sl=r4(entry+targetAtr*slMult); tp=r4(entry-targetAtr*tpMult); }
