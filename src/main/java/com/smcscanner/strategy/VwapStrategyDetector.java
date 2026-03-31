@@ -89,6 +89,16 @@ public class VwapStrategyDetector {
 
         OHLCV last = sessionBars.get(sessionBars.size() - 1);
 
+        // ── Z-Score velocity filter ─────────────────────────────────────────
+        // Compute Z-Score of previous bar to detect if deviation is still expanding.
+        // Only enter when Z-Score has peaked and is reverting (velocity turning).
+        double prevZScore = 0.0;
+        if (sessionBars.size() >= 2) {
+            double prevClose = sessionBars.get(sessionBars.size() - 2).getClose();
+            prevZScore = stdDev > 0 ? (prevClose - vwap) / stdDev : 0.0;
+        }
+        boolean zScoreReverting = Math.abs(zScore) < Math.abs(prevZScore);
+
         // ── Macro trend filter ────────────────────────────────────────────────
         // VWAP reversion LONGs in a clearly bearish trending day have very low
         // win rates — price dips below VWAP, bounces slightly, then continues down.
@@ -164,7 +174,7 @@ public class VwapStrategyDetector {
             boolean volSpike       = last.getVolume() > avgVol * 1.1;
             boolean notFreeFall    = curClose >= vwap - curAtr * 3.0;
 
-            if (belowVwap && bouncingUp && bullishBar && volSpike && notFreeFall) {
+            if (belowVwap && bouncingUp && bullishBar && volSpike && notFreeFall && zScoreReverting) {
                 double entry = r4(curClose);
                 double slRaw = r4(lowestClose - curAtr * 0.3);
                 double sl    = Math.min(slRaw, r4(entry - targetAtr * 0.35));
@@ -227,7 +237,7 @@ public class VwapStrategyDetector {
             boolean volSpike      = last.getVolume() > avgVol * 1.1;
             boolean notFreeRocket = curClose <= vwap + curAtr * 3.0;
 
-            if (aboveVwap && revertingDown && bearishBar && volSpike && notFreeRocket) {
+            if (aboveVwap && revertingDown && bearishBar && volSpike && notFreeRocket && zScoreReverting) {
                 double entry = r4(curClose);
                 double slRaw = r4(highestClose + curAtr * 0.3);
                 double sl    = Math.max(slRaw, r4(entry + targetAtr * 0.35));
