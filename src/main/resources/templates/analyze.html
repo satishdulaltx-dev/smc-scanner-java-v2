@@ -228,11 +228,12 @@
     <div style="flex:0 0 680px; position:sticky; top:0; padding-top:20px;">
         <div style="background:var(--surface); border:1px solid var(--border); border-radius:10px; overflow:hidden;">
             <div style="padding:10px 16px; font-size:11px; font-weight:700; letter-spacing:1px; color:var(--muted); text-transform:uppercase; border-bottom:1px solid var(--border); display:flex; align-items:center; justify-content:space-between;">
-                <span>📈 Live Chart (15m)</span>
+                <span id="chart-label">📈 Real-Time Chart (5m)</span>
                 <div style="display:flex;gap:6px;">
-                    <button onclick="setChartInterval('15')" id="tf-15" style="background:var(--blue);color:#fff;border:none;border-radius:4px;padding:3px 8px;font-size:10px;cursor:pointer;font-weight:600;">15m</button>
-                    <button onclick="setChartInterval('60')" id="tf-60" style="background:var(--bg);color:var(--muted);border:1px solid var(--border);border-radius:4px;padding:3px 8px;font-size:10px;cursor:pointer;">1H</button>
-                    <button onclick="setChartInterval('D')"  id="tf-D"  style="background:var(--bg);color:var(--muted);border:1px solid var(--border);border-radius:4px;padding:3px 8px;font-size:10px;cursor:pointer;">1D</button>
+                    <button onclick="setChartInterval('5m')"  id="tf-5m"  style="background:var(--blue);color:#fff;border:none;border-radius:4px;padding:3px 8px;font-size:10px;cursor:pointer;font-weight:600;">5m</button>
+                    <button onclick="setChartInterval('15m')" id="tf-15m" style="background:var(--bg);color:var(--muted);border:1px solid var(--border);border-radius:4px;padding:3px 8px;font-size:10px;cursor:pointer;">15m</button>
+                    <button onclick="setChartInterval('60m')" id="tf-60m" style="background:var(--bg);color:var(--muted);border:1px solid var(--border);border-radius:4px;padding:3px 8px;font-size:10px;cursor:pointer;">1H</button>
+                    <button onclick="setChartInterval('1d')"  id="tf-1d"  style="background:var(--bg);color:var(--muted);border:1px solid var(--border);border-radius:4px;padding:3px 8px;font-size:10px;cursor:pointer;">1D</button>
                 </div>
             </div>
             <div id="tv-chart" style="height:520px;">
@@ -258,8 +259,8 @@
 
 </div>
 
-<!-- TradingView widget script (loaded once) -->
-<script src="https://s3.tradingview.com/tv.js"></script>
+<!-- Lightweight Charts (open source, no subscription needed) -->
+<script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
 
 <script>
 const input    = document.getElementById('tickerInput');
@@ -307,52 +308,73 @@ function manualRefresh() {
     runAnalysis();
 }
 
-// ── TradingView chart ────────────────────────────────────────────────
-let tvWidget = null;
-let currentInterval = '15';
+// ── Polygon-powered chart (Lightweight Charts) ─────────────────────
+let lwChart = null;
+let candleSeries = null;
+let volumeSeries = null;
+let currentInterval = '5m';
 
-const TV_CRYPTO_MAP = {
-    'X:BTCUSD': 'BINANCE:BTCUSDT',
-    'X:ETHUSD': 'BINANCE:ETHUSDT'
-};
-
-function tvSymbol(ticker) {
-    return TV_CRYPTO_MAP[ticker] || ticker;
-}
+const TF_LABELS = { '5m': '5m', '15m': '15m', '60m': '1H', '1d': '1D' };
 
 function loadChart(ticker) {
-    if (!ticker || typeof TradingView === 'undefined') return;
-    const sym = tvSymbol(ticker);
-    document.getElementById('tv-chart').innerHTML = '';
-    tvWidget = new TradingView.widget({
-        container_id: 'tv-chart',
-        symbol:       sym,
-        interval:     currentInterval,
-        timezone:     'America/New_York',
-        theme:        'dark',
-        style:        '1',
-        locale:       'en',
-        toolbar_bg:   '#161b22',
-        enable_publishing: false,
-        hide_top_toolbar: false,
-        hide_legend:  false,
-        save_image:   false,
-        height:       520,
-        width:        '100%',
-        studies: ['MASimple@tv-basicstudies'],  // SMA20 overlay
-        withdateranges: true,
+    if (!ticker || typeof LightweightCharts === 'undefined') return;
+    const container = document.getElementById('tv-chart');
+    container.innerHTML = '';
+
+    lwChart = LightweightCharts.createChart(container, {
+        width: container.clientWidth,
+        height: 520,
+        layout: { background: { type: 'solid', color: '#161b22' }, textColor: '#8b949e', fontSize: 11 },
+        grid: { vertLines: { color: '#21262d' }, horzLines: { color: '#21262d' } },
+        crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+        rightPriceScale: { borderColor: '#30363d' },
+        timeScale: { borderColor: '#30363d', timeVisible: currentInterval !== '1d', secondsVisible: false },
     });
+
+    candleSeries = lwChart.addCandlestickSeries({
+        upColor: '#3fb950', downColor: '#f85149', borderDownColor: '#f85149', borderUpColor: '#3fb950',
+        wickDownColor: '#f85149', wickUpColor: '#3fb950',
+    });
+
+    volumeSeries = lwChart.addHistogramSeries({
+        priceFormat: { type: 'volume' },
+        priceScaleId: 'volume',
+    });
+    lwChart.priceScale('volume').applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } });
+
+    // Fetch candles from Polygon via our API
+    fetch(`/api/chart?ticker=${encodeURIComponent(ticker)}&tf=${currentInterval}`)
+        .then(r => r.json())
+        .then(data => {
+            if (!data || data.length === 0) {
+                container.innerHTML = '<div style="height:100%;display:flex;align-items:center;justify-content:center;color:#8b949e;">No chart data available</div>';
+                return;
+            }
+            candleSeries.setData(data.map(d => ({ time: d.time, open: d.open, high: d.high, low: d.low, close: d.close })));
+            volumeSeries.setData(data.map(d => ({ time: d.time, value: d.volume, color: d.close >= d.open ? 'rgba(63,185,80,0.3)' : 'rgba(248,81,73,0.3)' })));
+            lwChart.timeScale().fitContent();
+        })
+        .catch(() => {
+            container.innerHTML = '<div style="height:100%;display:flex;align-items:center;justify-content:center;color:#f85149;">Chart load failed</div>';
+        });
+
+    // Responsive resize
+    new ResizeObserver(entries => {
+        if (lwChart) lwChart.applyOptions({ width: entries[0].contentRect.width });
+    }).observe(container);
 }
 
 function setChartInterval(tf) {
     currentInterval = tf;
-    ['15','60','D'].forEach(t => {
+    ['5m','15m','60m','1d'].forEach(t => {
         const el = document.getElementById('tf-' + t);
         if (!el) return;
         el.style.background = t === tf ? 'var(--blue)' : 'var(--bg)';
         el.style.color      = t === tf ? '#fff' : 'var(--muted)';
         el.style.border     = t === tf ? 'none' : '1px solid var(--border)';
     });
+    const label = document.getElementById('chart-label');
+    if (label) label.textContent = `📈 Real-Time Chart (${TF_LABELS[tf] || tf})`;
     const ticker = input.value.trim().toUpperCase();
     if (ticker) loadChart(ticker);
 }

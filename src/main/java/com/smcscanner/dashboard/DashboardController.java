@@ -3,7 +3,9 @@ package com.smcscanner.dashboard;
 import com.smcscanner.analysis.AnalysisService;
 import com.smcscanner.backtest.BacktestService;
 import com.smcscanner.config.ScannerConfig;
+import com.smcscanner.data.PolygonClient;
 import com.smcscanner.filter.AdaptiveSuppressor;
+import com.smcscanner.model.OHLCV;
 import com.smcscanner.model.TickerStatus;
 import com.smcscanner.model.eod.Level;
 import com.smcscanner.model.eod.TickerReport;
@@ -48,6 +50,7 @@ public class DashboardController {
     private final AdaptiveSuppressor adaptive;
     private final AnalysisService    analysisService;
     private final LiveTradeLog       liveLog;
+    private final PolygonClient      polygon;
 
     private static final Map<String,String> TV_MAP = Map.of(
         "X:BTCUSD", "BINANCE:BTCUSDT",
@@ -65,11 +68,12 @@ public class DashboardController {
                                 PerformanceTracker tracker, EodReportService eodReport,
                                 DiscordAlertService discord, ReportCache reportCache,
                                 BacktestService backtestService, AdaptiveSuppressor adaptive,
-                                AnalysisService analysisService, LiveTradeLog liveLog) {
+                                AnalysisService analysisService, LiveTradeLog liveLog,
+                                PolygonClient polygon) {
         this.state=state; this.config=config; this.sessionFilter=sessionFilter;
         this.tracker=tracker; this.eodReport=eodReport; this.discord=discord;
         this.reportCache=reportCache; this.backtestService=backtestService; this.adaptive=adaptive;
-        this.analysisService=analysisService; this.liveLog=liveLog;
+        this.analysisService=analysisService; this.liveLog=liveLog; this.polygon=polygon;
     }
 
     @GetMapping("/")
@@ -146,6 +150,32 @@ public class DashboardController {
             return m;
         }).collect(Collectors.toList());
         return ResponseEntity.ok(result);
+    }
+
+    /** GET /api/chart?ticker=AAPL&tf=5m — real-time OHLCV candles from Polygon */
+    @GetMapping("/api/chart")
+    @ResponseBody
+    public ResponseEntity<List<Map<String,Object>>> apiChart(
+            @org.springframework.web.bind.annotation.RequestParam String ticker,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "5m") String tf) {
+        // Map timeframe to lookback: daily=365d, hourly=30d, minute=2d
+        int limit = tf.endsWith("d") || tf.equals("1d") || tf.equals("D") ? 365 : (tf.contains("h") || tf.equals("60m") ? 200 : 200);
+        String normalizedTf = tf.equals("D") ? "1d" : tf;
+        List<OHLCV> bars = polygon.getBars(ticker, normalizedTf, limit);
+        List<Map<String,Object>> candles = new ArrayList<>();
+        for (OHLCV b : bars) {
+            Map<String,Object> c = new LinkedHashMap<>();
+            // Lightweight Charts expects time in seconds (Unix epoch)
+            long ts = Long.parseLong(b.getTimestamp());
+            c.put("time", ts > 9999999999L ? ts / 1000 : ts); // ms→sec if needed
+            c.put("open",   b.getOpen());
+            c.put("high",   b.getHigh());
+            c.put("low",    b.getLow());
+            c.put("close",  b.getClose());
+            c.put("volume", b.getVolume());
+            candles.add(c);
+        }
+        return ResponseEntity.ok(candles);
     }
 
     @GetMapping("/api/performance")
