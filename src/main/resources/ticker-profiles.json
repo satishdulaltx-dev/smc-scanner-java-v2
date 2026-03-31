@@ -2,12 +2,14 @@
   "profiles": [
     {
       "ticker": "AAPL",
-      "strategyType": "vwap",
+      "strategyType": "keylevel",
       "minConfidence": 62,
+      "slAtrMult": 0.4,
+      "tpRrRatio": 2.0,
       "intradayRsGate": false,
       "skip": false,
       "skipReason": null,
-      "note": "VWAP + Z-Score(1.5 SD). RS gate DISABLED — mean-reversion trades ARE relative weakness by definition, RS penalty kills the signal we want. minConf=62. DO NOT SKIP."
+      "note": "Optimizer Mar 2026: VWAP→KeyLevel. VWAP produced 0 viable trades. KeyLevel 62/0.4/2:1 = 17 trades, 40% WR, +0.05% exp, $266 opt P&L. SMC 1:1 also viable (50% WR, $402 opt). DO NOT SKIP."
     },
     {
       "ticker": "ABNB",
@@ -17,10 +19,11 @@
     },
     {
       "ticker": "AMD",
-      "minConfidence": 72,
+      "minConfidence": 78,
       "minFvgPct": 0.001,
       "dispAtrMult": 1.5,
-      "note": "Loosened Mar 2026: 85 was over-filtering (20% WR but only 5 trades). 72 lets more setups through — with 1.5:1 R:R, 40% WR is profitable. Semiconductor — tracks NVDA."
+      "slAtrMult": 1.0,
+      "note": "365d optimizer: SMC mc=78 sl=1.0 → 5t 100%WR +3.43% exp $1793 opt P&L. Wider stop (1.0 ATR) avoids premature stops on semiconductor volatility."
     },
     {
       "ticker": "AMZN",
@@ -46,10 +49,11 @@
     },
     {
       "ticker": "COIN",
-      "minConfidence": 62,
+      "minConfidence": 78,
       "minFvgPct": 0.0006,
       "strategyType": "smc",
-      "note": "Switched breakout→SMC Mar 2026: 0 signals on ORB. COIN tracks crypto closely — SMC sweep+FVG works better. Relaxed thresholds."
+      "tpRrRatio": 2.0,
+      "note": "365d optimizer: SMC mc=78 sl=0.4 tp=2.0 → 9t 71%WR +2.64% exp $2045 opt P&L. Higher bar filters noise, wider TP captures crypto-proxy momentum."
     },
     {
       "ticker": "CRWD",
@@ -88,11 +92,11 @@
     },
     {
       "ticker": "JPM",
-      "strategyType": "keylevel",
+      "strategyType": "vwap",
       "minConfidence": 70,
       "maxConfidence": 84,
       "tpRrRatio": 1.0,
-      "note": "Switched SMC→KeyLevel Mar 2026. 365d: 5 exec trades 0%WR — all 3 BE_STOPs confirm entry direction is right, TP too far. JPM moves in $0.50-1.00 increments then stalls. Reduced tpRrRatio 1.5→1.0: take profit at 1:1 R:R (reached before reversal). ATR-aware SL unchanged (0.5 ATR above/below level)."
+      "note": "365d optimizer: VWAP mc=70 tp=1.0 → 4t 67%WR +0.97% exp $493 opt P&L. KeyLevel had 0%WR. JPM mean-reverts to VWAP better than bouncing off levels."
     },
     {
       "ticker": "MARA",
@@ -123,10 +127,12 @@
     {
       "ticker": "MSTR",
       "skip": false,
-      "minConfidence": 70,
+      "minConfidence": 78,
       "minFvgPct": 0.001,
       "maxConfidence": 89,
-      "note": "Un-skipped Mar 2026: 365d backtest shows 13 trades 55% WR +1.22 exp. Prior skip was based on 2 losses in 30d (too small sample). Bitcoin proxy with high-beta SMC sweeps — maxConf=89 to avoid over-extended entries (b85:10@40% vs b75-84:3@67%). Restored to watchlist."
+      "slAtrMult": 1.0,
+      "tpRrRatio": 2.0,
+      "note": "365d optimizer: SMC mc=78 sl=1.0 tp=2.0 → 9t 78%WR +2.01% exp $1695 opt P&L. Bitcoin proxy needs wider stop (1.0 ATR) and wider TP (2:1) to capture momentum. maxConf=89 retained."
     },
     {
       "ticker": "NFLX",
@@ -202,9 +208,9 @@
     {
       "ticker": "SMCI",
       "strategyType": "keylevel",
-      "minConfidence": 70,
-      "slAtrMult": 1.5,
-      "note": "KeyLevel + slAtrMult=1.5 Mar 2026: 2.0x too wide (bigger losses). 1.5x past wick noise but TP still reachable. 60 filtered/3 exec = entries found but stopped out — wider stop + compressed target should help. DO NOT SKIP."
+      "minConfidence": 78,
+      "slAtrMult": 0.4,
+      "note": "365d optimizer: KeyLevel mc=78 sl=0.4 → 4t 50%WR +0.85% exp $35 opt P&L. Tighter SL (0.4 ATR) forces precise entries near key levels — reduces loss magnitude. DO NOT SKIP."
     },
     {
       "ticker": "SNAP",
@@ -215,15 +221,18 @@
     },
     {
       "ticker": "SOFI",
-      "minConfidence": 62,
-      "note": "Strong performer (65.9% WR) — relaxed to catch more signals maxConf=84 Mar 2026: 85+ bucket 22.2% WR/-0.98% (over-extended); 75-84 bucket 66.7% WR/+3.63% — sweet spot is the earlier signals.",
+      "minConfidence": 78,
+      "slAtrMult": 1.0,
+      "note": "365d optimizer: SMC mc=78 sl=1.0 → 9t 78%WR +3.28% exp $296 opt P&L. Higher confidence bar + wider stop eliminates noise trades. maxConf=84 retained.",
       "maxConfidence": 84
     },
     {
       "ticker": "SPY",
-      "strategyType": "vwap",
-      "note": "VWAP Mar 2026. minConf raised to 75: 25%WR at 70 still negative (-$42). 49 filtered = plenty of signals, need higher bar. Only ultra-clean VWAP snaps.",
-      "minConfidence": 75,
+      "strategyType": "smc",
+      "note": "365d optimizer: SMC mc=70 sl=1.0 tp=2.0 → 11t 56%WR +0.36% exp $1709 opt P&L. VWAP had negative expectancy. SMC with wider stop/TP better captures index momentum.",
+      "minConfidence": 70,
+      "slAtrMult": 1.0,
+      "tpRrRatio": 2.0,
       "skip": false,
       "skipReason": null
     },
@@ -240,8 +249,8 @@
       "minConfidence": 72,
       "minFvgPct": 0.001,
       "dispAtrMult": 1.6,
-      "slAtrMult": 1.5,
-      "note": "Loosened Mar 2026: 85 was over-filtering (1 trade/7 filtered). TP ratio now 1.5:1 (was 0.8:1 due to wide stop compression). With proper R:R, 35% WR is profitable. slAtrMult=1.5 for TSLA volatility. DO NOT SKIP."
+      "slAtrMult": 1.0,
+      "note": "365d optimizer: SMC mc=62-78 sl=1.0 tp=1.5 → 6t 67%WR +1.08% exp $2155 opt P&L. Tighter stop (1.0 vs 1.5 ATR) reduces loss per trade while maintaining 67% WR. DO NOT SKIP."
     },
     {
       "ticker": "UBER",
