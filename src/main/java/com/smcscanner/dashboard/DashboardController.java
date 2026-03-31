@@ -2,6 +2,7 @@ package com.smcscanner.dashboard;
 
 import com.smcscanner.analysis.AnalysisService;
 import com.smcscanner.backtest.BacktestService;
+import com.smcscanner.backtest.ProfileOptimizer;
 import com.smcscanner.config.ScannerConfig;
 import com.smcscanner.data.PolygonClient;
 import com.smcscanner.filter.AdaptiveSuppressor;
@@ -51,6 +52,7 @@ public class DashboardController {
     private final AnalysisService    analysisService;
     private final LiveTradeLog       liveLog;
     private final PolygonClient      polygon;
+    private final ProfileOptimizer   optimizer;
 
     private static final Map<String,String> TV_MAP = Map.of(
         "X:BTCUSD", "BINANCE:BTCUSDT",
@@ -69,11 +71,12 @@ public class DashboardController {
                                 DiscordAlertService discord, ReportCache reportCache,
                                 BacktestService backtestService, AdaptiveSuppressor adaptive,
                                 AnalysisService analysisService, LiveTradeLog liveLog,
-                                PolygonClient polygon) {
+                                PolygonClient polygon, ProfileOptimizer optimizer) {
         this.state=state; this.config=config; this.sessionFilter=sessionFilter;
         this.tracker=tracker; this.eodReport=eodReport; this.discord=discord;
         this.reportCache=reportCache; this.backtestService=backtestService; this.adaptive=adaptive;
         this.analysisService=analysisService; this.liveLog=liveLog; this.polygon=polygon;
+        this.optimizer=optimizer;
     }
 
     @GetMapping("/")
@@ -185,6 +188,16 @@ public class DashboardController {
         resp.put("stats",  tracker.getStats());
         resp.put("recent", tracker.getRecent(20));
         return ResponseEntity.ok(resp);
+    }
+
+    /** GET /api/optimize?ticker=AAPL&days=90 — find best strategy+params for a ticker */
+    @GetMapping("/api/optimize")
+    @ResponseBody
+    public ResponseEntity<ProfileOptimizer.OptimizeResult> apiOptimize(
+            @org.springframework.web.bind.annotation.RequestParam String ticker,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "90") int days) {
+        ProfileOptimizer.OptimizeResult result = optimizer.optimize(ticker, days);
+        return ResponseEntity.ok(result);
     }
 
     @GetMapping("/api/eod-report")

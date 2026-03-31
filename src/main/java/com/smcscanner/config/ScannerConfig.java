@@ -89,6 +89,20 @@ public class ScannerConfig {
         return profileCache.getOrDefault(ticker, TickerProfile.DEFAULT);
     }
 
+    /** Temporarily override a profile (for optimizer backtests). Returns the previous profile. */
+    public TickerProfile setProfileOverride(String ticker, TickerProfile override) {
+        if (!profilesLoaded) loadTickerProfiles();
+        TickerProfile prev = profileCache.get(ticker);
+        profileCache.put(ticker, override);
+        return prev;
+    }
+
+    /** Restore a previously saved profile after optimizer run. */
+    public void restoreProfile(String ticker, TickerProfile original) {
+        if (original != null) profileCache.put(ticker, original);
+        else profileCache.remove(ticker);
+    }
+
     private synchronized void loadTickerProfiles() {
         if (profilesLoaded) return;
         try {

@@ -176,11 +176,33 @@
         ⚠ 1-2 year backtests fetch multiple pages from Polygon — may take 15-30s per ticker.
     </div>
     <button class="run-btn" id="run-btn" onclick="runBacktest()">▶ Run Backtest</button>
+    <button class="run-btn" id="optimize-btn" onclick="runOptimize()" style="background:#bc8cff;margin-left:8px;">🧠 Optimize</button>
 </div>
 
 <!-- Loading -->
 <div class="loading" id="loading">
     <span class="spinner"></span> Running backtest...
+</div>
+
+<!-- Optimize loading -->
+<div class="loading" id="opt-loading" style="display:none">
+    <span class="spinner"></span> Optimizing — testing 240 parameter combos (this takes ~60s)...
+</div>
+
+<!-- Optimize results -->
+<div id="optimize-results" style="display:none;padding:16px 24px;">
+    <h3 style="margin-bottom:12px;color:var(--purple);">🧠 Profile Optimizer Results</h3>
+    <p style="font-size:11px;color:var(--muted);margin-bottom:12px;" id="opt-summary"></p>
+    <div style="overflow-x:auto;">
+        <table>
+            <thead><tr>
+                <th>Rank</th><th>Strategy</th><th>MinConf</th><th>SL (ATR×)</th><th>TP (R:R)</th>
+                <th>Trades</th><th>W</th><th>L</th><th>BE</th><th>WR%</th>
+                <th>Avg Win%</th><th>Avg Loss%</th><th>Expectancy</th><th>Opt P&L</th>
+            </tr></thead>
+            <tbody id="opt-tbody"></tbody>
+        </table>
+    </div>
 </div>
 
 <!-- Single ticker results -->
@@ -286,6 +308,56 @@ function runBacktest() {
         .then(r => r.json())
         .then(d => { setLoading(false); renderSingle(d); })
         .catch(() => { setLoading(false); alert('Backtest failed'); });
+}
+
+function runOptimize() {
+    const ticker = document.getElementById('ticker').value;
+    const days   = document.getElementById('days').value;
+    if (!ticker) { alert('Select a ticker first'); return; }
+    hide('single-results'); hide('batch-results'); hide('empty-state'); hide('optimize-results');
+    document.getElementById('opt-loading').style.display = 'block';
+    document.getElementById('optimize-btn').disabled = true;
+    fetch(`/api/optimize?ticker=${ticker}&days=${days}`)
+        .then(r => r.json())
+        .then(d => {
+            document.getElementById('opt-loading').style.display = 'none';
+            document.getElementById('optimize-btn').disabled = false;
+            renderOptimize(d);
+        })
+        .catch(() => {
+            document.getElementById('opt-loading').style.display = 'none';
+            document.getElementById('optimize-btn').disabled = false;
+            alert('Optimize failed');
+        });
+}
+
+function renderOptimize(d) {
+    show('optimize-results');
+    const summary = document.getElementById('opt-summary');
+    summary.textContent = `${d.ticker} · ${d.lookbackDays}d lookback · Current strategy: ${d.currentStrategy.toUpperCase()} · ${d.results.length} viable combos found (min 3 trades)`;
+
+    const tbody = document.getElementById('opt-tbody');
+    tbody.innerHTML = d.results.slice(0, 20).map((r, i) => {
+        const isCurrent = r.strategy === d.currentStrategy;
+        const expColor = r.expectancy > 0 ? 'var(--green)' : r.expectancy < 0 ? 'var(--red)' : 'var(--muted)';
+        const rowBg = i === 0 ? 'background:rgba(63,185,80,.08);' : (isCurrent ? 'background:rgba(88,166,255,.08);' : '');
+        return `<tr style="${rowBg}">
+            <td>${i === 0 ? '🏆' : i + 1}</td>
+            <td style="font-weight:600;${isCurrent ? 'color:var(--blue);' : ''}">${r.strategy.toUpperCase()}${isCurrent ? ' ◀' : ''}</td>
+            <td>${r.minConfidence}</td>
+            <td>${r.slAtrMult}</td>
+            <td>${r.tpRrRatio}:1</td>
+            <td>${r.totalTrades}</td>
+            <td style="color:var(--green)">${r.wins}</td>
+            <td style="color:var(--red)">${r.losses}</td>
+            <td>${r.beStops}</td>
+            <td style="font-weight:700;color:${r.winRate >= 50 ? 'var(--green)' : r.winRate >= 35 ? 'var(--yellow)' : 'var(--red)'}">${r.winRate}%</td>
+            <td style="color:var(--green)">+${r.avgWinPct.toFixed(2)}%</td>
+            <td style="color:var(--red)">-${r.avgLossPct.toFixed(2)}%</td>
+            <td style="font-weight:700;color:${expColor}">${r.expectancy > 0 ? '+' : ''}${r.expectancy.toFixed(2)}%</td>
+            <td style="color:${r.optTotalPnl >= 0 ? 'var(--green)' : 'var(--red)'}">$${r.optTotalPnl.toFixed(0)}</td>
+        </tr>`;
+    }).join('');
 }
 
 async function runBatch() {
