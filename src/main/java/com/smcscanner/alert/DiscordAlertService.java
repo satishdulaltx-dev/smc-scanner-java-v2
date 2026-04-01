@@ -215,21 +215,28 @@ public class DiscordAlertService {
         double slPts   = Math.abs(s.getEntry()-s.getStopLoss()), tpPts = Math.abs(s.getTakeProfit()-s.getEntry());
         double slPct   = s.getEntry()>0?slPts/s.getEntry()*100:0, tpPct = s.getEntry()>0?tpPts/s.getEntry()*100:0;
         String ts      = ZonedDateTime.now(ZoneOffset.UTC).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))+" UTC";
-        List<Map<String,Object>> fields = List.of(
+        boolean isConsolidation = "swing".equals(s.getVolatility());
+        String timeframe = isConsolidation ? "📅 Hourly Consolidation" : "📅 Daily SMC";
+        List<Map<String,Object>> fields = new java.util.ArrayList<>(List.of(
             f("Direction",  arrow+" "+s.getDirection().toUpperCase(), true),
             f("Confidence", grade+" "+s.getConfidence()+"/100",       true),
-            f("Timeframe",  "📅 Daily",                               true),
-            f("Entry Zone", String.format("$%.4f", s.getEntry()),     true),
-            f("Stop Loss",  String.format("$%.4f (-%.2f%%)", s.getStopLoss(),  slPct), true),
-            f("Take Profit",String.format("$%.4f (+%.2f%%)", s.getTakeProfit(), tpPct), true),
+            f("Strategy",   isConsolidation ? "📦 Consolidation Breakout" : "🔷 SMC Sweep+FVG", true),
+            f("Timeframe",  timeframe,                                true),
+            f("Entry Zone", String.format("$%.2f", s.getEntry()),     true),
+            f("Stop Loss",  String.format("$%.2f (-%.2f%%)", s.getStopLoss(),  slPct), true),
+            f("Take Profit",String.format("$%.2f (+%.2f%%)", s.getTakeProfit(), tpPct), true),
             f("R:R",        String.format("%.1f:1", s.rrRatio()),     true),
-            f("ATR (Daily)",String.format("$%.4f",  s.getAtr()),      true),
-            f("Hold",       "1–5 days (swing)",                       true));
+            f("ATR (Daily)",String.format("$%.2f",  s.getAtr()),      true),
+            f("Hold",       "2–5 days (swing)",                       true)));
+        if (isConsolidation) {
+            fields.add(f("📦 Squeeze Zone", String.format("$%.2f – $%.2f", s.getFvgBottom(), s.getFvgTop()), false));
+        }
         Map<String,Object> e = new HashMap<>();
         e.put("title",  "📊 "+s.getTicker()+" — SWING "+s.getDirection().toUpperCase());
         e.put("color",  isLong ? 0xFF8C00 : 0x6A5ACD); // orange long / purple short
         e.put("fields", fields);
-        e.put("footer", Map.of("text", "SD Scanner · Swing · Daily Bars | "+ts));
+        String source = isConsolidation ? "Hourly Consolidation" : "Daily Bars";
+        e.put("footer", Map.of("text", "SD Scanner · Swing · " + source + " | "+ts));
         return e;
     }
 

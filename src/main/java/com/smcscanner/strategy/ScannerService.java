@@ -49,6 +49,7 @@ public class ScannerService {
     private final AdaptiveSuppressor       adaptive;
     private final OptionsFlowAnalyzer      optionsFlow;
     private final EarningsCalendar         earnings;
+    private final SwingTradeDetector       swingDetector;
 
     public ScannerService(ScannerConfig config, PolygonClient client, SetupDetector setupDetector,
                           CryptoStrategyService crypto, MultiTimeframeAnalyzer mtf,
@@ -58,12 +59,12 @@ public class ScannerService {
                           KeyLevelStrategyDetector keyLevel, NewsService news,
                           MarketContextService marketCtx, SignalQualityFilter qualityFilter,
                           AdaptiveSuppressor adaptive, OptionsFlowAnalyzer optionsFlow,
-                          EarningsCalendar earnings) {
+                          EarningsCalendar earnings, SwingTradeDetector swingDetector) {
         this.config=config; this.client=client; this.setupDetector=setupDetector; this.crypto=crypto;
         this.mtf=mtf; this.discord=discord; this.dedup=dedup; this.tracker=tracker; this.liveLog=liveLog; this.state=state;
         this.atrCalc=atrCalc; this.vwap=vwap; this.breakout=breakout; this.keyLevel=keyLevel;
         this.news=news; this.marketCtx=marketCtx; this.qualityFilter=qualityFilter; this.adaptive=adaptive;
-        this.optionsFlow=optionsFlow; this.earnings=earnings;
+        this.optionsFlow=optionsFlow; this.earnings=earnings; this.swingDetector=swingDetector;
     }
 
     public boolean isCrypto(String t) { return t.startsWith("X:"); }
@@ -87,8 +88,9 @@ public class ScannerService {
             String htfBias="neutral";
             double dailyAtr=0.0;
             List<OHLCV> dailyBars=null;
+            List<OHLCV> hourlyBars=null;
 
-            try { List<OHLCV> hb=client.getBars(ticker,"60m",50); if (hb!=null&&hb.size()>=10) htfBias=mtf.getHtfBias(hb); }
+            try { hourlyBars=client.getBars(ticker,"60m",50); if (hourlyBars!=null&&hourlyBars.size()>=10) htfBias=mtf.getHtfBias(hourlyBars); }
             catch (Exception e) { log.debug("{} HTF error: {}",ticker,e.getMessage()); }
 
             // ── 15m bias (pre-fetched here, used for alignment check after setup detection) ──
@@ -463,6 +465,25 @@ public class ScannerService {
             } else {
                 log.debug("{} intraday phase={}", ticker, phaseMsg);
                 removeSetup(ticker); setTs(ticker,"idle",null,0,phaseMsg);
+            }
+
+            // ── Hourly consolidation swing alert (hourly + daily bars → swing channel) ──
+            if (!isC && hourlyBars != null && hourlyBars.size() >= 50
+                    && dailyBars != null && dailyBars.size() >= 20) {
+                try {
+                    List<TradeSetup> swingSetups = swingDetector.detect(hourlyBars, dailyBars, ticker, dailyAtr);
+                    if (!swingSetups.isEmpty()) {
+                        TradeSetup sw = swingSetups.get(0);
+                        String swKey = "hswing_" + ticker;
+                        if (sw.getConfidence() >= effectiveMinConf
+                                && !dedup.isDuplicate(swKey, sw.getDirection(), sw.getEntry(), 72 * 60)) {
+                            log.info("HOURLY_SWING ALERT {} {} conf={} entry={}", ticker,
+                                    sw.getDirection().toUpperCase(), sw.getConfidence(), sw.getEntry());
+                            discord.sendSwingAlert(sw);
+                            dedup.markSent(swKey, sw.getDirection(), sw.getEntry());
+                        }
+                    }
+                } catch (Exception e) { log.debug("{} hourly swing scan error: {}", ticker, e.getMessage()); }
             }
 
             // ── Swing alert (daily bars → swing Discord channel) ────────────
