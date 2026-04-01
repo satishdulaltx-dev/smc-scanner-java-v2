@@ -358,8 +358,18 @@ public class BacktestService {
                 String entryTime = toDateTime(dayBars.get(end - 1).getTimestamp());
 
                 // Forward test: rest of today + all of next trading day
-                List<OHLCV> fwdBars = new ArrayList<>(dayBars.subList(end, dayBars.size()));
-                if (di + 1 < dates.size()) fwdBars.addAll(byDate.get(dates.get(di + 1)));
+                // Filter to regular session only (9:30 AM–4:00 PM ET) — pre-market/after-hours
+                // bars have thin liquidity and unrealistic fills; exits there are not executable.
+                List<OHLCV> fwdBarsRaw = new ArrayList<>(dayBars.subList(end, dayBars.size()));
+                if (di + 1 < dates.size()) fwdBarsRaw.addAll(byDate.get(dates.get(di + 1)));
+                List<OHLCV> fwdBars = new ArrayList<>();
+                for (OHLCV fb : fwdBarsRaw) {
+                    ZonedDateTime fbZdt = Instant.ofEpochMilli(Long.parseLong(fb.getTimestamp())).atZone(ET);
+                    LocalTime fbTime = fbZdt.toLocalTime();
+                    if (!fbTime.isBefore(LocalTime.of(9, 30)) && fbTime.isBefore(LocalTime.of(16, 0))) {
+                        fwdBars.add(fb);
+                    }
+                }
 
                 String outcome = "EXPIRED";
                 String exitTime = null;
