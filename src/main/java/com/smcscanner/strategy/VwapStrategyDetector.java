@@ -147,7 +147,7 @@ public class VwapStrategyDetector {
         int lookback = Math.min(20, sessionBars.size());
         int startIdx = sessionBars.size() - lookback;
         double lowestClose  = Double.MAX_VALUE;
-        double highestClose = Double.MIN_VALUE;
+        double highestClose = -Double.MAX_VALUE;
         for (int i = startIdx; i < sessionBars.size(); i++) {
             double c = sessionBars.get(i).getClose();
             if (c < lowestClose)  lowestClose  = c;
@@ -157,16 +157,10 @@ public class VwapStrategyDetector {
         // LONG: price must have dipped meaningfully below VWAP (Z-Score < -1.2)
         // Lowered from 1.5→1.2: 1.5 SD was starving AMZN/SPY (0 signals in 180d).
         // 1.2 SD catches more "rubber band snap" setups while still filtering noise.
-        if (lowestClose < vwap - 0.5 * curAtr && zScore < -1.2) {
-            // ── Macro trend hard block ─────────────────────────────────────
-            // Don't fire LONG if the whole day is strongly trending down.
-            // A -1.5%+ day with declining SMA is a downtrend, not a dip to buy.
-            if (trendStronglyBearish) {
-                // Day is strongly bearish (< -1.5%) — suppress all VWAP LONGs.
-                // VWAP reversion in a downtrend catches falling knives, not reversals.
-                return result;
-            }
-
+        //
+        // Hard block: trendStronglyBearish only blocks LONG, NOT the whole method.
+        // SHORT evaluation continues below regardless.
+        if (!trendStronglyBearish && lowestClose < vwap - 0.5 * curAtr && zScore < -1.2) {
             double curClose = last.getClose();
             boolean belowVwap      = curClose < vwap;
             boolean bouncingUp     = curClose > lowestClose + curAtr * 0.2;
@@ -223,13 +217,10 @@ public class VwapStrategyDetector {
 
         // ── SHORT setup ───────────────────────────────────────────────────────
         // Price must have spiked meaningfully above VWAP (Z-Score > 1.2)
-        if (highestClose > vwap + 0.5 * curAtr && zScore > 1.2) {
-            // ── Macro trend hard block ─────────────────────────────────────
-            // Don't fire SHORT if the whole day is strongly trending up.
-            if (trendStronglyBullish) {
-                return result;
-            }
-
+        //
+        // Hard block: trendStronglyBullish only blocks SHORT, NOT the whole method.
+        // LONG evaluation above runs independently.
+        if (!trendStronglyBullish && highestClose > vwap + 0.5 * curAtr && zScore > 1.2) {
             double curClose = last.getClose();
             boolean aboveVwap     = curClose > vwap;
             boolean revertingDown  = curClose < highestClose - curAtr * 0.2;
