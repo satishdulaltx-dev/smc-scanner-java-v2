@@ -144,9 +144,20 @@ public class KeyLevelStrategyDetector {
 
                 boolean touched      = curHigh >= levelPrice * (1 - TOUCH_TOLERANCE);
                 boolean rejectedDown = curClose <= levelPrice * (1 + TOUCH_TOLERANCE * 0.3);
-                boolean bearishBar   = curClose < curOpen;
-                boolean upperWick    = (curHigh - curClose) > atr * 0.15; // significant upper wick
-                boolean volConfirmed = last.getVolume() > avgVol * 1.2;
+                // ── 2-bar confirmation: if previous bar was the rejection candle, use it ──
+                OHLCV shortConfirm = last;
+                if (sessionBars.size() >= 2) {
+                    OHLCV prev = sessionBars.get(sessionBars.size() - 2);
+                    if (prev.getClose() < prev.getOpen() && prev.getVolume() > avgVol * 1.2
+                            && prev.getHigh() >= levelPrice * (1 - TOUCH_TOLERANCE)
+                            && last.getClose() <= prev.getClose() * 1.002) {
+                        shortConfirm = prev;
+                        touched = true; // prev bar touched the level
+                    }
+                }
+                boolean bearishBar   = shortConfirm.getClose() < shortConfirm.getOpen();
+                boolean upperWick    = (shortConfirm.getHigh() - shortConfirm.getClose()) > atr * 0.15;
+                boolean volConfirmed = shortConfirm.getVolume() > avgVol * 1.2;
                 // Counter-trend flag: shorting into an uptrend reduces conviction
                 boolean counterTrend = "up".equals(htfTrend);
 
@@ -211,9 +222,20 @@ public class KeyLevelStrategyDetector {
 
                 boolean touched      = curLow <= levelPrice * (1 + TOUCH_TOLERANCE);
                 boolean bouncedUp    = curClose >= levelPrice * (1 - TOUCH_TOLERANCE * 0.3);
-                boolean bullishBar   = curClose > curOpen;
-                boolean lowerWick    = (curClose - curLow) > atr * 0.15; // significant lower wick
-                boolean volConfirmed = last.getVolume() > avgVol * 1.2;
+                // ── 2-bar confirmation: if previous bar was the bounce candle, use it ──
+                OHLCV longConfirm = last;
+                if (sessionBars.size() >= 2) {
+                    OHLCV prev = sessionBars.get(sessionBars.size() - 2);
+                    if (prev.getClose() > prev.getOpen() && prev.getVolume() > avgVol * 1.2
+                            && prev.getLow() <= levelPrice * (1 + TOUCH_TOLERANCE)
+                            && last.getClose() >= prev.getClose() * 0.998) {
+                        longConfirm = prev;
+                        touched = true; // prev bar touched the level
+                    }
+                }
+                boolean bullishBar   = longConfirm.getClose() > longConfirm.getOpen();
+                boolean lowerWick    = (longConfirm.getClose() - longConfirm.getLow()) > atr * 0.15;
+                boolean volConfirmed = longConfirm.getVolume() > avgVol * 1.2;
                 // Counter-trend flag: buying into a downtrend reduces conviction
                 boolean counterTrend = "down".equals(htfTrend);
 

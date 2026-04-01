@@ -159,7 +159,7 @@ public class SetupDetector {
         int swingWindow = 20;
         for (int winStart = scanFrom; winStart < n - swingWindow - 3; winStart++) {
             int winEnd = winStart + swingWindow;
-            double swHigh = Double.MIN_VALUE, swLow = Double.MAX_VALUE;
+            double swHigh = -Double.MAX_VALUE, swLow = Double.MAX_VALUE;
             for (int k = winStart; k < winEnd; k++) {
                 if (bars.get(k).getHigh() > swHigh) swHigh = bars.get(k).getHigh();
                 if (bars.get(k).getLow()  < swLow)  swLow  = bars.get(k).getLow();

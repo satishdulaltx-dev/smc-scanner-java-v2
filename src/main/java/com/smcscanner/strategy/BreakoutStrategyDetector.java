@@ -71,9 +71,28 @@ public class BreakoutStrategyDetector {
 
         OHLCV last = sessionBars.get(sessionBars.size() - 1);
 
+        // ── 2-bar confirmation window ────────────────────────────────────────
+        // Check last 2 bars for breakout criteria. If the breakout bar was the
+        // previous one (big candle + volume), the current bar is confirmation.
+        OHLCV breakoutBar = last;
+        if (sessionBars.size() >= 2) {
+            OHLCV prev = sessionBars.get(sessionBars.size() - 2);
+            boolean prevVol  = prev.getVolume() > avgVol * 1.5;
+            boolean prevSize = (prev.getHigh() - prev.getLow()) > orbWidth * 0.3;
+            // If prev bar had the breakout characteristics AND current bar holds direction
+            if (prevVol && prevSize) {
+                boolean prevBrokeUp   = prev.getClose() > orbHigh && prev.getClose() > prev.getOpen();
+                boolean prevBrokeDown = prev.getClose() < orbLow  && prev.getClose() < prev.getOpen();
+                if ((prevBrokeUp && last.getClose() >= prev.getClose() * 0.998)
+                        || (prevBrokeDown && last.getClose() <= prev.getClose() * 1.002)) {
+                    breakoutBar = prev;
+                }
+            }
+        }
+
         // Breakout bar validation (common to both directions)
-        boolean volConfirmed  = last.getVolume() > avgVol * 1.5;
-        boolean sizeConfirmed = (last.getHigh() - last.getLow()) > orbWidth * 0.3;
+        boolean volConfirmed  = breakoutBar.getVolume() > avgVol * 1.5;
+        boolean sizeConfirmed = (breakoutBar.getHigh() - breakoutBar.getLow()) > orbWidth * 0.3;
 
         if (!volConfirmed || !sizeConfirmed) return result;
 

@@ -175,20 +175,19 @@ public class ScannerService {
                 }
 
                 // ── 15m alignment check ───────────────────────────────────────
-                // Block if 15m trend directly opposes the setup direction.
-                // "bullish" 15m + short setup = fighting the trend → skip.
-                // "bearish" 15m + long  setup = fighting the trend → skip.
-                // "neutral" 15m → let it through (no strong trend to fight).
-                // BYPASS for VWAP: mean-reversion trades intentionally fight the trend —
-                // a LONG at -1.5 Z-Score WILL conflict with a bearish 15m, and that's the point.
+                // Changed from hard block → soft penalty (-15 confidence).
+                // Hard block was wiping valid counter-trend entries that had strong
+                // conviction from other signals (volume, key level, etc).
+                // BYPASS for VWAP: mean-reversion trades intentionally fight the trend.
                 String stratTypeForFilter = profile.getStrategyType();
                 boolean is15mApplicable = !"vwap".equals(stratTypeForFilter);
-                if (!isC && is15mApplicable && (
+                int bias15mAdj = 0;
+                boolean is15mConflict = !isC && is15mApplicable && (
                         ("bullish".equals(bias15m) && "short".equals(s.getDirection())) ||
-                        ("bearish".equals(bias15m) && "long".equals(s.getDirection())))) {
-                    log.info("{} 15M_BLOCKED: {} setup vs {} 15m trend", ticker, s.getDirection(), bias15m);
-                    setTs(ticker, "idle", null, 0, "⛔ 15m trend conflict — " + bias15m + " vs " + s.getDirection());
-                    return;
+                        ("bearish".equals(bias15m) && "long".equals(s.getDirection())));
+                if (is15mConflict) {
+                    bias15mAdj = -15;
+                    log.info("{} 15M_PENALTY: {} setup vs {} 15m trend ({})", ticker, s.getDirection(), bias15m, bias15mAdj);
                 }
 
                 // ── News sentiment check ──────────────────────────────────────
@@ -312,12 +311,12 @@ public class ScannerService {
                 // Apply combined confidence adjustment (news + context + quality + flow + regime + correlation + RS)
                 // Penalty floor: secondary filters can reduce base confidence by at most 25%.
                 // e.g. base=80 → floor=60, base=70 → floor=52. Prevents "death by a thousand filters."
-                int rawAdj   = newsAdj + ctxAdj + qualityAdj + flowAdj + regimeAdj + corrAdj + intradayRsAdj + deadZoneAdj;
+                int rawAdj   = newsAdj + ctxAdj + qualityAdj + flowAdj + regimeAdj + corrAdj + intradayRsAdj + deadZoneAdj + bias15mAdj;
                 int penaltyFloor = (int)(s.getConfidence() * 0.75);
                 int totalAdj = rawAdj; // no longer clamping at -40; floor handles it
                 if (rawAdj != totalAdj) {
-                    log.info("{} ADJ_CLAMPED: raw={} → clamped={} (breakdown: news{} ctx{} qual{} flow{} regime{} corr{} iRS{})",
-                            ticker, rawAdj, totalAdj, newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj, intradayRsAdj);
+                    log.info("{} ADJ_CLAMPED: raw={} → clamped={} (breakdown: news{} ctx{} qual{} flow{} regime{} corr{} iRS{} 15m{})",
+                            ticker, rawAdj, totalAdj, newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj, intradayRsAdj, bias15mAdj);
                 }
                 if (totalAdj != 0 || flow.hasData() || rec.hasData()) {
                     TradeSetup.Builder sb = TradeSetup.builder()
@@ -373,7 +372,7 @@ public class ScannerService {
                 // Every factor that moved conf > ±2 is shown.
                 String factorBreakdown = buildFactorBreakdown(
                         newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj,
-                        vixBoost, s.getConfidence());
+                        bias15mAdj, vixBoost, s.getConfidence());
 
                 // ── Conviction tier (suggested contract size) ─────────────────
                 // Based on final adjusted confidence — scales exposure to signal quality.
@@ -526,7 +525,7 @@ public class ScannerService {
      */
     private String buildFactorBreakdown(int newsAdj, int ctxAdj, int qualityAdj,
                                          int flowAdj, int regimeAdj, int corrAdj,
-                                         int vixBoost, int finalConf) {
+                                         int bias15mAdj, int vixBoost, int finalConf) {
         java.util.List<String> parts = new java.util.ArrayList<>();
         if (Math.abs(newsAdj)    >= 2) parts.add("news "    + (newsAdj    > 0 ? "+" : "") + newsAdj);
         if (Math.abs(ctxAdj)     >= 2) parts.add("RS/VIX "  + (ctxAdj     > 0 ? "+" : "") + ctxAdj);
@@ -534,6 +533,7 @@ public class ScannerService {
         if (Math.abs(flowAdj)    >= 2) parts.add("flow "    + (flowAdj    > 0 ? "+" : "") + flowAdj);
         if (Math.abs(regimeAdj)  >= 2) parts.add("regime "  + (regimeAdj  > 0 ? "+" : "") + regimeAdj);
         if (Math.abs(corrAdj)    >= 2) parts.add("corr "    + (corrAdj    > 0 ? "+" : "") + corrAdj);
+        if (Math.abs(bias15mAdj) >= 2) parts.add("15m "     + (bias15mAdj > 0 ? "+" : "") + bias15mAdj);
         if (vixBoost             >= 5) parts.add("⚠️ VIX gate +" + vixBoost + " to min");
         if (parts.isEmpty()) return "Base score — no adjustments";
         return String.join(" | ", parts) + " → **" + finalConf + "**";

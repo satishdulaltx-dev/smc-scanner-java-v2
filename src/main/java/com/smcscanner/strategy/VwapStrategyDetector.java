@@ -161,11 +161,26 @@ public class VwapStrategyDetector {
         // Hard block: trendStronglyBearish only blocks LONG, NOT the whole method.
         // SHORT evaluation continues below regardless.
         if (!trendStronglyBearish && lowestClose < vwap - 0.5 * curAtr && zScore < -1.2) {
+            // ── 2-bar confirmation window ────────────────────────────────────
+            // Check last 2 bars, not just the final one. If the real reversal
+            // started 1 bar earlier (bullish bar + volume spike), we pick it up
+            // on the next bar as confirmation rather than missing it entirely.
+            OHLCV confirmBar = last;
+            if (sessionBars.size() >= 2) {
+                OHLCV prev = sessionBars.get(sessionBars.size() - 2);
+                // If previous bar was the reversal candle (bullish + volume), use it
+                // Current bar just needs to hold above the low (confirmation)
+                if (prev.getClose() > prev.getOpen() && prev.getVolume() > avgVol * 1.1
+                        && last.getClose() >= prev.getClose() * 0.998) {
+                    confirmBar = prev;
+                }
+            }
+
             double curClose = last.getClose();
             boolean belowVwap      = curClose < vwap;
             boolean bouncingUp     = curClose > lowestClose + curAtr * 0.2;
-            boolean bullishBar     = last.getClose() > last.getOpen();
-            boolean volSpike       = last.getVolume() > avgVol * 1.1;
+            boolean bullishBar     = confirmBar.getClose() > confirmBar.getOpen();
+            boolean volSpike       = confirmBar.getVolume() > avgVol * 1.1;
             boolean notFreeFall    = curClose >= vwap - curAtr * 3.0;
 
             if (belowVwap && bouncingUp && bullishBar && volSpike && notFreeFall && zScoreReverting) {
@@ -221,11 +236,21 @@ public class VwapStrategyDetector {
         // Hard block: trendStronglyBullish only blocks SHORT, NOT the whole method.
         // LONG evaluation above runs independently.
         if (!trendStronglyBullish && highestClose > vwap + 0.5 * curAtr && zScore > 1.2) {
+            // ── 2-bar confirmation window (SHORT side) ───────────────────────
+            OHLCV confirmBarShort = last;
+            if (sessionBars.size() >= 2) {
+                OHLCV prev = sessionBars.get(sessionBars.size() - 2);
+                if (prev.getClose() < prev.getOpen() && prev.getVolume() > avgVol * 1.1
+                        && last.getClose() <= prev.getClose() * 1.002) {
+                    confirmBarShort = prev;
+                }
+            }
+
             double curClose = last.getClose();
             boolean aboveVwap     = curClose > vwap;
             boolean revertingDown  = curClose < highestClose - curAtr * 0.2;
-            boolean bearishBar    = last.getClose() < last.getOpen();
-            boolean volSpike      = last.getVolume() > avgVol * 1.1;
+            boolean bearishBar    = confirmBarShort.getClose() < confirmBarShort.getOpen();
+            boolean volSpike      = confirmBarShort.getVolume() > avgVol * 1.1;
             boolean notFreeRocket = curClose <= vwap + curAtr * 3.0;
 
             if (aboveVwap && revertingDown && bearishBar && volSpike && notFreeRocket && zScoreReverting) {

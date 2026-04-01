@@ -13,9 +13,12 @@
     },
     {
       "ticker": "ABNB",
-      "minConfidence": 62,
-      "note": "Strong performer historically — keep in watchlist maxConf=84 Mar 2026: 85+ bucket 22.2%WR (9t) vs 75-84 50%WR (2t) — same over-extended pattern as PLTR/SOFI. Cap at 84 to take only earlier entries.",
-      "maxConfidence": 84
+      "strategyType": "smc",
+      "minConfidence": 78,
+      "slAtrMult": 0.4,
+      "tpRrRatio": 1.5,
+      "maxConfidence": 84,
+      "note": "365d optimizer: KeyLevel→SMC. SMC mc=78 sl=0.4 tp=1.5 → 41t 54.5%WR +0.27% exp $855 opt P&L. KeyLevel best was #10 (5t 62.5%WR $107) — too few trades. SMC captures more setups with solid edge."
     },
     {
       "ticker": "AMD",
