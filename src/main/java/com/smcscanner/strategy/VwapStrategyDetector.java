@@ -225,7 +225,8 @@ public class VwapStrategyDetector {
                             .fvgBottom(r4(lowestClose))
                             .timestamp(LocalDateTime.now())
                             .build());
-                    return result;
+                    // Don't return here — continue to evaluate SHORT side.
+                    // If both fire, pick the higher-confidence one at the end.
                 }
             }
         }
@@ -297,6 +298,14 @@ public class VwapStrategyDetector {
             }
         }
 
+        // If both LONG and SHORT fired (rare — range-bound day), keep only the
+        // higher-confidence setup. Prevents sending conflicting signals.
+        if (result.size() > 1) {
+            result.sort((a, b) -> Integer.compare(b.getConfidence(), a.getConfidence()));
+            TradeSetup best = result.get(0);
+            result.clear();
+            result.add(best);
+        }
         return result;
     }
 
