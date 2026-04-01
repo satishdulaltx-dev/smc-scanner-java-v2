@@ -191,6 +191,22 @@ public class TradeSetup {
         public Builder factorBreakdown(String v)   { this.factorBreakdown = v;   return this; }
         public Builder convictionTier(String v)    { this.convictionTier = v;    return this; }
         public Builder riskTier(String v)          { this.riskTier = v;          return this; }
-        public TradeSetup build()              { return new TradeSetup(this); }
+        public TradeSetup build() {
+            // Sanitize: replace NaN/Infinity with 0.0 to prevent propagation
+            this.entry      = sanitize(this.entry);
+            this.stopLoss   = sanitize(this.stopLoss);
+            this.takeProfit = sanitize(this.takeProfit);
+            this.atr        = sanitize(this.atr);
+            this.fvgTop     = sanitize(this.fvgTop);
+            this.fvgBottom  = sanitize(this.fvgBottom);
+            this.optionsStrike    = sanitize(this.optionsStrike);
+            this.optionsPremium   = sanitize(this.optionsPremium);
+            this.optionsBreakEven = sanitize(this.optionsBreakEven);
+            return new TradeSetup(this);
+        }
+
+        private static double sanitize(double v) {
+            return Double.isFinite(v) ? v : 0.0;
+        }
     }
 }

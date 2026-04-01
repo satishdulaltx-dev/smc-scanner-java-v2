@@ -81,8 +81,8 @@ public class BreakoutStrategyDetector {
             boolean prevSize = (prev.getHigh() - prev.getLow()) > orbWidth * 0.3;
             // If prev bar had the breakout characteristics AND current bar holds direction
             if (prevVol && prevSize) {
-                boolean prevBrokeUp   = prev.getClose() > orbHigh && prev.getClose() > prev.getOpen();
-                boolean prevBrokeDown = prev.getClose() < orbLow  && prev.getClose() < prev.getOpen();
+                boolean prevBrokeUp   = prev.getClose() > orbHigh && prev.getClose() >= prev.getOpen();
+                boolean prevBrokeDown = prev.getClose() < orbLow  && prev.getClose() <= prev.getOpen();
                 if ((prevBrokeUp && last.getClose() >= prev.getClose() * 0.998)
                         || (prevBrokeDown && last.getClose() <= prev.getClose() * 1.002)) {
                     breakoutBar = prev;
@@ -117,7 +117,7 @@ public class BreakoutStrategyDetector {
         // ── LONG breakout ─────────────────────────────────────────────────────
         if (!prevBrokeHigh
                 && last.getClose() > orbHigh
-                && last.getClose() > last.getOpen()) {
+                && last.getClose() >= last.getOpen()) { // >= handles doji bars
 
             double entry = r4(last.getClose());
             double sl    = r4(orbLow + orbWidth * 0.15);
@@ -161,7 +161,7 @@ public class BreakoutStrategyDetector {
         // ── SHORT breakdown ───────────────────────────────────────────────────
         if (!prevBrokeLow
                 && last.getClose() < orbLow
-                && last.getClose() < last.getOpen()) {
+                && last.getClose() <= last.getOpen()) { // <= handles doji bars
 
             double entry = r4(last.getClose());
             double sl    = r4(orbHigh - orbWidth * 0.15);

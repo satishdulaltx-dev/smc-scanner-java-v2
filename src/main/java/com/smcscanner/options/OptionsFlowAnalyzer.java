@@ -145,6 +145,7 @@ public class OptionsFlowAnalyzer {
         List<OptionsDataService.ContractData> candidates = chain.stream()
                 .filter(c -> targetType.equals(c.contractType()))
                 .filter(c -> c.close() > 0)         // must have a price
+                .filter(c -> Math.abs(c.delta()) >= 0.05) // filter dead options (delta~0)
                 .filter(c -> c.dte() >= 7 && c.dte() <= 21)  // 7-21 DTE
                 .collect(Collectors.toList());
 
@@ -153,6 +154,7 @@ public class OptionsFlowAnalyzer {
             candidates = chain.stream()
                     .filter(c -> targetType.equals(c.contractType()))
                     .filter(c -> c.close() > 0)
+                    .filter(c -> Math.abs(c.delta()) >= 0.05) // filter dead options
                     .filter(c -> c.dte() >= 5 && c.dte() <= 30)
                     .collect(Collectors.toList());
             if (candidates.isEmpty()) return OptionsRecommendation.NONE;

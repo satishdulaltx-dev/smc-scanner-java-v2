@@ -380,8 +380,9 @@ public class KeyLevelStrategyDetector {
         return clusters;
     }
 
-    /** Compute 14-bar simple ATR. */
+    /** Compute 14-bar simple ATR. Requires at least 5 bars for meaningful result. */
     private double computeAtr(List<OHLCV> bars) {
+        if (bars.size() < 6) return 0.0; // need 5+ true range samples
         int period = Math.min(14, bars.size() - 1);
         if (period <= 0) return 0.0;
         int start = bars.size() - period - 1;

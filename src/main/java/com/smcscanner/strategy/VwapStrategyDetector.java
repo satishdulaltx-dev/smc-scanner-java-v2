@@ -116,7 +116,8 @@ public class VwapStrategyDetector {
         double dayOpen      = sessionBars.get(0).getOpen();
         double dayChangePct = dayOpen > 0 ? (lastClose - dayOpen) / dayOpen * 100.0 : 0.0;
 
-        // SMA20 of session closes
+        // SMA20 of session closes — only reliable with 20+ bars
+        boolean smaReliable = sessionBars.size() >= 20;
         int smaPeriod = Math.min(20, sessionBars.size());
         double sma20 = 0.0;
         for (int i = sessionBars.size() - smaPeriod; i < sessionBars.size(); i++) {
@@ -126,7 +127,7 @@ public class VwapStrategyDetector {
 
         // SMA20 direction: compare to SMA20 from 5 bars ago
         double sma20Earlier = 0.0;
-        boolean hasSmaEarlier = sessionBars.size() >= smaPeriod + 5;
+        boolean hasSmaEarlier = smaReliable && sessionBars.size() >= smaPeriod + 5;
         if (hasSmaEarlier) {
             for (int i = sessionBars.size() - smaPeriod - 5; i < sessionBars.size() - 5; i++) {
                 sma20Earlier += sessionBars.get(i).getClose();
