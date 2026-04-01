@@ -50,6 +50,7 @@ public class ScannerService {
     private final OptionsFlowAnalyzer      optionsFlow;
     private final EarningsCalendar         earnings;
     private final SwingTradeDetector       swingDetector;
+    private final RangeDetector            rangeDetector;
 
     public ScannerService(ScannerConfig config, PolygonClient client, SetupDetector setupDetector,
                           CryptoStrategyService crypto, MultiTimeframeAnalyzer mtf,
@@ -59,12 +60,14 @@ public class ScannerService {
                           KeyLevelStrategyDetector keyLevel, NewsService news,
                           MarketContextService marketCtx, SignalQualityFilter qualityFilter,
                           AdaptiveSuppressor adaptive, OptionsFlowAnalyzer optionsFlow,
-                          EarningsCalendar earnings, SwingTradeDetector swingDetector) {
+                          EarningsCalendar earnings, SwingTradeDetector swingDetector,
+                          RangeDetector rangeDetector) {
         this.config=config; this.client=client; this.setupDetector=setupDetector; this.crypto=crypto;
         this.mtf=mtf; this.discord=discord; this.dedup=dedup; this.tracker=tracker; this.liveLog=liveLog; this.state=state;
         this.atrCalc=atrCalc; this.vwap=vwap; this.breakout=breakout; this.keyLevel=keyLevel;
         this.news=news; this.marketCtx=marketCtx; this.qualityFilter=qualityFilter; this.adaptive=adaptive;
         this.optionsFlow=optionsFlow; this.earnings=earnings; this.swingDetector=swingDetector;
+        this.rangeDetector=rangeDetector;
     }
 
     public boolean isCrypto(String t) { return t.startsWith("X:"); }
@@ -310,15 +313,34 @@ public class ScannerService {
                     }
                 }
 
+                // ── Cross-timeframe alignment bonus ──────────────────────────
+                // When daily trend (htfBias), 15m trend (bias15m), and setup
+                // direction all agree, this is a high-probability aligned trade.
+                // Award bonus. When all three disagree, extra penalty.
+                int alignmentAdj = 0;
+                if (!isC) {
+                    boolean dailyAligned = ("bullish".equals(htfBias) && "long".equals(s.getDirection()))
+                                        || ("bearish".equals(htfBias) && "short".equals(s.getDirection()));
+                    boolean m15Aligned   = ("bullish".equals(bias15m) && "long".equals(s.getDirection()))
+                                        || ("bearish".equals(bias15m) && "short".equals(s.getDirection()));
+                    if (dailyAligned && m15Aligned) {
+                        alignmentAdj = +10; // triple alignment: daily + 15m + setup direction
+                        log.info("{} TRIPLE_ALIGN: daily={} 15m={} dir={} → +10", ticker, htfBias, bias15m, s.getDirection());
+                    } else if (!dailyAligned && !m15Aligned && !"neutral".equals(htfBias) && !"neutral".equals(bias15m)) {
+                        alignmentAdj = -10; // triple conflict: both timeframes oppose setup
+                        log.info("{} TRIPLE_CONFLICT: daily={} 15m={} dir={} → -10", ticker, htfBias, bias15m, s.getDirection());
+                    }
+                }
+
                 // Apply combined confidence adjustment (news + context + quality + flow + regime + correlation + RS)
                 // Penalty floor: secondary filters can reduce base confidence by at most 25%.
                 // e.g. base=80 → floor=60, base=70 → floor=52. Prevents "death by a thousand filters."
-                int rawAdj   = newsAdj + ctxAdj + qualityAdj + flowAdj + regimeAdj + corrAdj + intradayRsAdj + deadZoneAdj + bias15mAdj;
+                int rawAdj   = newsAdj + ctxAdj + qualityAdj + flowAdj + regimeAdj + corrAdj + intradayRsAdj + deadZoneAdj + bias15mAdj + alignmentAdj;
                 int penaltyFloor = (int)(s.getConfidence() * 0.75);
                 int totalAdj = rawAdj; // no longer clamping at -40; floor handles it
                 if (rawAdj != totalAdj) {
-                    log.info("{} ADJ_CLAMPED: raw={} → clamped={} (breakdown: news{} ctx{} qual{} flow{} regime{} corr{} iRS{} 15m{})",
-                            ticker, rawAdj, totalAdj, newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj, intradayRsAdj, bias15mAdj);
+                    log.info("{} ADJ_CLAMPED: raw={} → clamped={} (breakdown: news{} ctx{} qual{} flow{} regime{} corr{} iRS{} 15m{} align{})",
+                            ticker, rawAdj, totalAdj, newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj, intradayRsAdj, bias15mAdj, alignmentAdj);
                 }
                 if (totalAdj != 0 || flow.hasData() || rec.hasData()) {
                     TradeSetup.Builder sb = TradeSetup.builder()
@@ -392,6 +414,17 @@ public class ScannerService {
                 else if (s.getConfidence() >= 75) { convictionTier = "🟡 STANDARD (1 contract)";           suggestedOverride = 1; }
                 else                              { convictionTier = "⚪ BORDERLINE (1 contract — lite)";  suggestedOverride = 1; }
 
+                // ── Risk tier classification ─────────────────────────────────
+                // Guides position sizing and stop width based on final confidence.
+                String riskTier;
+                if (s.getConfidence() >= 86) {
+                    riskTier = "🔴 AGGRESSIVE — 2-3% risk, ATR-based stop, max 3d hold";
+                } else if (s.getConfidence() >= 70) {
+                    riskTier = "🟡 STANDARD — 1-2% risk, 1x ATR stop, max 5d hold";
+                } else {
+                    riskTier = "🟢 CONSERVATIVE — 0.5% risk, 1.5x ATR stop, spreads preferred";
+                }
+
                 // Attach attribution + conviction to setup
                 if (factorBreakdown != null || convictionTier != null) {
                     TradeSetup.Builder sb2 = TradeSetup.builder()
@@ -400,7 +433,8 @@ public class ScannerService {
                             .confidence(s.getConfidence()).session(s.getSession()).volatility(s.getVolatility())
                             .atr(s.getAtr()).hasBos(s.isHasBos()).hasChoch(s.isHasChoch())
                             .fvgTop(s.getFvgTop()).fvgBottom(s.getFvgBottom()).timestamp(s.getTimestamp())
-                            .factorBreakdown(factorBreakdown).convictionTier(convictionTier);
+                            .factorBreakdown(factorBreakdown).convictionTier(convictionTier)
+                            .riskTier(riskTier);
                     if (s.hasOptionsData()) {
                         sb2.optionsFlowLabel(s.getOptionsFlowLabel()).optionsFlowDir(s.getOptionsFlowDir())
                            .optionsMaxPain(s.getOptionsMaxPain())
@@ -443,9 +477,9 @@ public class ScannerService {
                                         ticker, s.getDirection().toUpperCase(), s.getConfidence(), s.getEntry());
                                 discord.sendSwingAlert(s);
                             } else {
-                                log.info("INTRADAY ALERT {} {} conf={} entry={} adj=news{}/ctx{}/qual{}/flow{}/regime{}/corr{} vixBoost={} dynamicMin={}",
+                                log.info("INTRADAY ALERT {} {} conf={} entry={} adj=news{}/ctx{}/qual{}/flow{}/regime{}/corr{}/align{} vixBoost={} dynamicMin={}",
                                         ticker, s.getDirection().toUpperCase(), s.getConfidence(), s.getEntry(),
-                                        newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj, vixBoost, dynamicMinConf);
+                                        newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj, alignmentAdj, vixBoost, dynamicMinConf);
                                 discord.sendSetupAlert(s, sentiment, context, earningsCheck);
                             }
                             liveLog.recordTrade(s, stratType);
@@ -455,12 +489,12 @@ public class ScannerService {
                         // Warn loudly when a strong base setup gets filtered — helps catch over-filtering
                         int baseConf = setups.get(0).getConfidence(); // raw score before any adjustments
                         if (baseConf >= 85) {
-                            log.warn("SUPPRESSED_STRONG {} {} baseConf={} finalConf={} min={} | breakdown: news{} ctx{} qual{} flow{} regime{} corr{} (rawAdj={} clampedAdj={})",
+                            log.warn("SUPPRESSED_STRONG {} {} baseConf={} finalConf={} min={} | breakdown: news{} ctx{} qual{} flow{} regime{} corr{} align{} (rawAdj={} clampedAdj={})",
                                     ticker, s.getDirection().toUpperCase(), baseConf, s.getConfidence(), effectiveMinConf,
-                                    newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj, rawAdj, totalAdj);
+                                    newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj, alignmentAdj, rawAdj, totalAdj);
                         } else {
-                            log.debug("{} LOW_CONF conf={} min={} adj=news{}/ctx{}/qual{}/flow{}/regime{}/corr{}",
-                                    ticker, s.getConfidence(), effectiveMinConf, newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj);
+                            log.debug("{} LOW_CONF conf={} min={} adj=news{}/ctx{}/qual{}/flow{}/regime{}/corr{}/align{}",
+                                    ticker, s.getConfidence(), effectiveMinConf, newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj, alignmentAdj);
                         }
                     }
                 }
@@ -516,6 +550,26 @@ public class ScannerService {
                         }
                     }
                 } catch (Exception e) { log.debug("{} swing scan error: {}",ticker,e.getMessage()); }
+            }
+
+            // ── Range detection (neutral/spreads → swing channel) ─────────────
+            // Only run when no directional intraday setup was found — range and
+            // directional signals are mutually exclusive for the same ticker.
+            if (!isC && setups.isEmpty() && dailyBars != null && dailyBars.size() >= 20 && bars.size() >= 50) {
+                try {
+                    List<TradeSetup> rangeSetups = rangeDetector.detect(bars, dailyBars, ticker, dailyAtr);
+                    if (!rangeSetups.isEmpty()) {
+                        TradeSetup rng = rangeSetups.get(0);
+                        String rngKey = "range_" + ticker;
+                        if (rng.getConfidence() >= 60
+                                && !dedup.isDuplicate(rngKey, "range", rng.getEntry(), 24 * 60)) {
+                            log.info("RANGE ALERT {} conf={} band={}-{}", ticker, rng.getConfidence(),
+                                    String.format("%.2f", rng.getFvgBottom()), String.format("%.2f", rng.getFvgTop()));
+                            discord.sendSwingAlert(rng); // route to swing channel (spread plays)
+                            dedup.markSent(rngKey, "range", rng.getEntry());
+                        }
+                    }
+                } catch (Exception e) { log.debug("{} range scan error: {}", ticker, e.getMessage()); }
             }
 
         } catch (Exception e) { log.error("Error scanning {}: {}",ticker,e.getMessage()); setTs(ticker,"idle",null,0,"Error: "+e.getMessage()); }

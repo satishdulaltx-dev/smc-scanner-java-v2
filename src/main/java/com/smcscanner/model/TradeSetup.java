@@ -34,6 +34,7 @@ public class TradeSetup {
     // ── Performance intelligence fields ─────────────────────────────────────
     private final String factorBreakdown;   // e.g. "news+8 | RS-5 | regime-8 | corr+0"
     private final String convictionTier;    // "🔥 HIGH (2 contracts)" | "✅ STANDARD (1)" | "🟡 LITE (1)"
+    private final String riskTier;          // position-sizing guidance based on confidence
 
     private TradeSetup(Builder b) {
         this.ticker = b.ticker; this.direction = b.direction; this.session = b.session;
@@ -54,6 +55,7 @@ public class TradeSetup {
         this.optionsMaxPain = b.optionsMaxPain; this.optionsGreeksWarning = b.optionsGreeksWarning;
         this.factorBreakdown = b.factorBreakdown;
         this.convictionTier  = b.convictionTier;
+        this.riskTier        = b.riskTier;
     }
 
     public String        getTicker()     { return ticker; }
@@ -90,6 +92,7 @@ public class TradeSetup {
     public String getOptionsGreeksWarning() { return optionsGreeksWarning; }
     public String getFactorBreakdown()   { return factorBreakdown; }
     public String getConvictionTier()    { return convictionTier; }
+    public String getRiskTier()          { return riskTier; }
     public double getOptionsMaxPain()    { return optionsMaxPain; }
     public boolean hasOptionsData()      { return optionsContract != null && optionsPremium > 0; }
 
@@ -151,7 +154,7 @@ public class TradeSetup {
         private double optionsProfitPer, optionsLossPer, optionsRR, optionsMaxPain;
         private int optionsIVPct, optionsSuggested;
         private String optionsGreeksWarning;
-        private String factorBreakdown, convictionTier;
+        private String factorBreakdown, convictionTier, riskTier;
 
         public Builder ticker(String v)        { this.ticker = v;      return this; }
         public Builder direction(String v)     { this.direction = v;   return this; }
@@ -187,6 +190,7 @@ public class TradeSetup {
         public Builder optionsGreeksWarning(String v) { this.optionsGreeksWarning = v; return this; }
         public Builder factorBreakdown(String v)   { this.factorBreakdown = v;   return this; }
         public Builder convictionTier(String v)    { this.convictionTier = v;    return this; }
+        public Builder riskTier(String v)          { this.riskTier = v;          return this; }
         public TradeSetup build()              { return new TradeSetup(this); }
     }
 }

@@ -164,6 +164,9 @@ public class DiscordAlertService {
         if (s.getConvictionTier() != null) {
             fields.add(f("📐 Conviction", s.getConvictionTier(), false));
         }
+        if (s.getRiskTier() != null) {
+            fields.add(f("📊 Risk Tier", s.getRiskTier(), false));
+        }
         if (s.getFactorBreakdown() != null) {
             fields.add(f("🔬 Signal Factors", s.getFactorBreakdown(), false));
         }
@@ -213,33 +216,57 @@ public class DiscordAlertService {
     }
 
     private Map<String,Object> buildSwingEmbed(TradeSetup s) {
-        boolean isLong = "long".equals(s.getDirection());
-        String arrow   = isLong ? "⬆️" : "⬇️";
-        String grade   = s.getConfidence()>=85?"⭐":(s.getConfidence()>=75?"✅":(s.getConfidence()>=65?"🟡":"⚪"));
-        double slPts   = Math.abs(s.getEntry()-s.getStopLoss()), tpPts = Math.abs(s.getTakeProfit()-s.getEntry());
-        double slPct   = s.getEntry()>0?slPts/s.getEntry()*100:0, tpPct = s.getEntry()>0?tpPts/s.getEntry()*100:0;
-        String ts      = ZonedDateTime.now(ZoneOffset.UTC).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))+" UTC";
+        boolean isRange = "range".equals(s.getDirection());
+        boolean isLong  = "long".equals(s.getDirection());
+        String arrow    = isRange ? "↔️" : (isLong ? "⬆️" : "⬇️");
+        String grade    = s.getConfidence()>=85?"⭐":(s.getConfidence()>=75?"✅":(s.getConfidence()>=65?"🟡":"⚪"));
+        double slPts    = Math.abs(s.getEntry()-s.getStopLoss()), tpPts = Math.abs(s.getTakeProfit()-s.getEntry());
+        double slPct    = s.getEntry()>0?slPts/s.getEntry()*100:0, tpPct = s.getEntry()>0?tpPts/s.getEntry()*100:0;
+        String ts       = ZonedDateTime.now(ZoneOffset.UTC).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))+" UTC";
         boolean isConsolidation = "swing".equals(s.getVolatility());
-        String timeframe = isConsolidation ? "📅 Hourly Consolidation" : "📅 Daily SMC";
-        List<Map<String,Object>> fields = new java.util.ArrayList<>(List.of(
-            f("Direction",  arrow+" "+s.getDirection().toUpperCase(), true),
-            f("Confidence", grade+" "+s.getConfidence()+"/100",       true),
-            f("Strategy",   isConsolidation ? "📦 Consolidation Breakout" : "🔷 SMC Sweep+FVG", true),
-            f("Timeframe",  timeframe,                                true),
-            f("Entry Zone", String.format("$%.2f", s.getEntry()),     true),
-            f("Stop Loss",  String.format("$%.2f (-%.2f%%)", s.getStopLoss(),  slPct), true),
-            f("Take Profit",String.format("$%.2f (+%.2f%%)", s.getTakeProfit(), tpPct), true),
-            f("R:R",        String.format("%.1f:1", s.rrRatio()),     true),
-            f("ATR (Daily)",String.format("$%.2f",  s.getAtr()),      true),
-            f("Hold",       "2–5 days (swing)",                       true)));
-        if (isConsolidation) {
-            fields.add(f("📦 Squeeze Zone", String.format("$%.2f – $%.2f", s.getFvgBottom(), s.getFvgTop()), false));
+
+        List<Map<String,Object>> fields = new java.util.ArrayList<>();
+
+        if (isRange) {
+            // ── Range/neutral setup — Iron Condor / Straddle ──────────────
+            fields.add(f("Direction",  "↔️ RANGE (Neutral)", true));
+            fields.add(f("Confidence", grade+" "+s.getConfidence()+"/100", true));
+            fields.add(f("Strategy",   "🔲 Iron Condor / Straddle", true));
+            fields.add(f("📦 Range Band",
+                    String.format("$%.2f – $%.2f (%.1f%%)", s.getFvgBottom(), s.getFvgTop(),
+                            s.getEntry() > 0 ? (s.getFvgTop() - s.getFvgBottom()) / s.getEntry() * 100 : 0), false));
+            fields.add(f("Short Put Zone",  String.format("$%.2f area (20-30 delta)", s.getStopLoss()), true));
+            fields.add(f("Short Call Zone", String.format("$%.2f area (20-30 delta)", s.getTakeProfit()), true));
+            fields.add(f("Mid Price",       String.format("$%.2f", s.getEntry()), true));
+            fields.add(f("ATR (Daily)",     String.format("$%.2f", s.getAtr()), true));
+            fields.add(f("Hold",            "5–10 days (theta decay)", true));
+        } else {
+            // ── Directional swing setup ───────────────────────────────────
+            String timeframe = isConsolidation ? "📅 Hourly Consolidation" : "📅 Daily SMC";
+            fields.addAll(List.of(
+                f("Direction",  arrow+" "+s.getDirection().toUpperCase(), true),
+                f("Confidence", grade+" "+s.getConfidence()+"/100",       true),
+                f("Strategy",   isConsolidation ? "📦 Consolidation Breakout" : "🔷 SMC Sweep+FVG", true),
+                f("Timeframe",  timeframe,                                true),
+                f("Entry Zone", String.format("$%.2f", s.getEntry()),     true),
+                f("Stop Loss",  String.format("$%.2f (-%.2f%%)", s.getStopLoss(),  slPct), true),
+                f("Take Profit",String.format("$%.2f (+%.2f%%)", s.getTakeProfit(), tpPct), true),
+                f("R:R",        String.format("%.1f:1", s.rrRatio()),     true),
+                f("ATR (Daily)",String.format("$%.2f",  s.getAtr()),      true),
+                f("Hold",       "2–5 days (swing)",                       true)));
+            if (isConsolidation) {
+                fields.add(f("📦 Squeeze Zone", String.format("$%.2f – $%.2f", s.getFvgBottom(), s.getFvgTop()), false));
+            }
         }
+
         Map<String,Object> e = new HashMap<>();
-        e.put("title",  "📊 "+s.getTicker()+" — SWING "+s.getDirection().toUpperCase());
-        e.put("color",  isLong ? 0xFF8C00 : 0x6A5ACD); // orange long / purple short
+        String title = isRange
+                ? "🔲 "+s.getTicker()+" — RANGE (Iron Condor / Straddle)"
+                : "📊 "+s.getTicker()+" — SWING "+s.getDirection().toUpperCase();
+        e.put("title",  title);
+        e.put("color",  isRange ? 0x3498DB : (isLong ? 0xFF8C00 : 0x6A5ACD)); // blue range / orange long / purple short
         e.put("fields", fields);
-        String source = isConsolidation ? "Hourly Consolidation" : "Daily Bars";
+        String source = isRange ? "Range Detection" : (isConsolidation ? "Hourly Consolidation" : "Daily Bars");
         e.put("footer", Map.of("text", "SD Scanner · Swing · " + source + " | "+ts));
         return e;
     }
