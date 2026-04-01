@@ -539,6 +539,45 @@ function openTV(e, span) {
 }
 </script>
 
+<!-- Strategy Performance Panel -->
+<div id="perf-panel" style="padding:0 24px 24px;">
+    <h3 style="font-size:13px;font-weight:700;color:var(--blue);margin-bottom:12px;display:flex;align-items:center;gap:8px;">
+        Strategy Performance <span id="perf-total" style="font-size:11px;color:var(--muted);font-weight:400;"></span>
+    </h3>
+    <div id="perf-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;"></div>
+</div>
+<script>
+async function loadPerformance() {
+    try {
+        const d = await fetch('/api/performance').then(r => r.json());
+        const total = d.total_setups || 0;
+        const avgC = d.avg_confidence || 0;
+        document.getElementById('perf-total').textContent = `(${total} setups | avg conf ${avgC})`;
+        const strats = d.by_strategy || {};
+        const grid = document.getElementById('perf-grid');
+        if (Object.keys(strats).length === 0) {
+            grid.innerHTML = '<p style="color:var(--muted);font-size:12px;">No strategy signals yet this session.</p>';
+            return;
+        }
+        const colors = {smc:'#3fb950',vwap:'#58a6ff',breakout:'#bc8cff',keylevel:'#f0883e',swing_daily:'#d29922',swing_hourly:'#e36209',swing_lateday:'#58d68d',range:'#8b949e'};
+        grid.innerHTML = Object.entries(strats).sort((a,b) => b[1].signals - a[1].signals).map(([k,v]) => {
+            const c = colors[k] || '#8b949e';
+            return `<div style="background:var(--surface);border:1px solid var(--border);border-left:3px solid ${c};border-radius:8px;padding:12px 14px;">
+                <div style="font-size:14px;font-weight:700;color:${c};text-transform:uppercase;">${k.replace('_',' ')}</div>
+                <div style="display:flex;justify-content:space-between;margin-top:6px;font-size:12px;">
+                    <span style="color:var(--muted);">Signals</span><span style="font-weight:600;">${v.signals}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;margin-top:3px;font-size:12px;">
+                    <span style="color:var(--muted);">Avg Conf</span><span style="font-weight:600;">${v.avg_confidence}</span>
+                </div>
+            </div>`;
+        }).join('');
+    } catch(e) { /* ignore */ }
+}
+loadPerformance();
+setInterval(loadPerformance, 30000);
+</script>
+
 <!-- Footer -->
 <div class="footer">
     Last refresh: <span th:text="${lastScan}">—</span> — auto-refresh every 8s

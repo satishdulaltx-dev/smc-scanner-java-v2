@@ -61,6 +61,10 @@ public class BacktestService {
     }
 
     public BacktestResult run(String ticker, int lookbackDays) {
+        return run(ticker, lookbackDays, BacktestMode.ALL);
+    }
+
+    public BacktestResult run(String ticker, int lookbackDays, BacktestMode mode) {
         // Fetch 5m bars for the full lookback — one API call gets it all
         List<OHLCV> allBars = client.getBarsWithLookback(ticker, "5m", 50000, lookbackDays);
         if (allBars == null || allBars.size() < 30) {
@@ -370,6 +374,10 @@ public class BacktestService {
                         fwdBars.add(fb);
                     }
                 }
+                // Mode-specific hold limit: INTRADAY/OPTIONS cap at 48 bars (~4h)
+                if (fwdBars.size() > mode.maxForwardBars()) {
+                    fwdBars = fwdBars.subList(0, mode.maxForwardBars());
+                }
 
                 String outcome = "EXPIRED";
                 String exitTime = null;
@@ -441,9 +449,9 @@ public class BacktestService {
             }
         }
 
-        log.info("Backtest {} ({} days): {} trades from {} days of 5m data",
-                ticker, lookbackDays, trades.size(), byDate.size());
-        return BacktestResult.of(ticker, trades, lookbackDays);
+        log.info("Backtest {} ({} days, mode={}): {} trades from {} days of 5m data",
+                ticker, lookbackDays, mode, trades.size(), byDate.size());
+        return BacktestResult.of(ticker, trades, lookbackDays, mode);
     }
 
     private String toDateTime(String rawTs) {
@@ -497,6 +505,7 @@ public class BacktestService {
         public final List<TradeResult> trades;
         public final int lookbackDays;
         public final String error;
+        public final BacktestMode mode;
         public final int wins, losses, beStops, timeouts, newsFiltered, ctxFiltered, qualityFiltered, total;
         public final double winRate, avgWinPct, avgLossPct, expectancy;
         // Options aggregate stats
@@ -513,9 +522,10 @@ public class BacktestService {
         public final double bucket85PlusWR,     bucket75to84WR,    bucketBelow75WR;
         public final double bucket85PlusExp,    bucket75to84Exp,   bucketBelow75Exp;
 
-        private BacktestResult(String ticker, List<TradeResult> trades, int lookbackDays, String error) {
+        private BacktestResult(String ticker, List<TradeResult> trades, int lookbackDays, String error, BacktestMode mode) {
             this.ticker = ticker; this.trades = trades;
             this.lookbackDays = lookbackDays; this.error = error;
+            this.mode = mode != null ? mode : BacktestMode.ALL;
 
             // Filtered trades are excluded from win/loss stats — never actually entered.
             this.newsFiltered = (int) trades.stream().filter(t -> "NEWS_FILTERED".equals(t.outcome())).count();
@@ -620,11 +630,14 @@ public class BacktestService {
             return Math.round(((wr * avgW) - ((1 - wr) * avgL)) * 100.0) / 100.0;
         }
 
+        public static BacktestResult of(String t, List<TradeResult> trades, int days, BacktestMode mode) {
+            return new BacktestResult(t, trades, days, null, mode);
+        }
         public static BacktestResult of(String t, List<TradeResult> trades, int days) {
-            return new BacktestResult(t, trades, days, null);
+            return new BacktestResult(t, trades, days, null, BacktestMode.ALL);
         }
         public static BacktestResult empty(String t, String error) {
-            return new BacktestResult(t, List.of(), 0, error);
+            return new BacktestResult(t, List.of(), 0, error, BacktestMode.ALL);
         }
     }
 }

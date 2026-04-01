@@ -162,6 +162,15 @@
         </select>
     </div>
     <div class="ctrl-group">
+        <label>Strategy</label>
+        <select id="strategy-mode" autocomplete="off">
+            <option value="ALL" selected>All (default)</option>
+            <option value="INTRADAY">Intraday (4h max hold)</option>
+            <option value="SWING">Swing (multi-day)</option>
+            <option value="OPTIONS">Options (4h + P&L focus)</option>
+        </select>
+    </div>
+    <div class="ctrl-group">
         <label>Lookback</label>
         <select id="days" onchange="checkDaysWarning()">
             <option value="30">30 days</option>
@@ -303,8 +312,9 @@ function runBacktest() {
     if (mode === 'batch') { runBatch(); return; }
     const ticker = document.getElementById('ticker').value;
     const days   = document.getElementById('days').value;
+    const stratMode = document.getElementById('strategy-mode').value;
     setLoading(true);
-    fetch(`/api/backtest?ticker=${ticker}&days=${days}`)
+    fetch(`/api/backtest?ticker=${ticker}&days=${days}&mode=${stratMode}`)
         .then(r => r.json())
         .then(d => { setLoading(false); renderSingle(d); })
         .catch(() => { setLoading(false); alert('Backtest failed'); });
@@ -368,6 +378,7 @@ async function runBatch() {
         .map(t => t.ticker).filter(t => t && !t.startsWith('X:'));
     if (tickers.length === 0) { alert('Could not load watchlist'); return; }
     const days  = document.getElementById('days').value;
+    const stratMode = document.getElementById('strategy-mode').value;
     const BATCH = 4; // max concurrent Polygon API requests — prevents rate-limit errors on 90d runs
     setLoading(true);
     hide('single-results'); hide('empty-state');
@@ -379,7 +390,7 @@ async function runBatch() {
         const done = Math.min(i + BATCH, tickers.length);
         if (loadBtn) loadBtn.textContent = `⏳ ${done} / ${tickers.length}`;
         const chunk = await Promise.all(
-            group.map(t => fetch(`/api/backtest?ticker=${t}&days=${days}`).then(r => r.json()).catch(() => null))
+            group.map(t => fetch(`/api/backtest?ticker=${t}&days=${days}&mode=${stratMode}`).then(r => r.json()).catch(() => null))
         );
         all.push(...chunk);
     }

@@ -476,6 +476,7 @@ public class ScannerService {
                                 log.info("LATE_DAY SWING REROUTE {} {} conf={} entry={} (after 3:30 PM ET)",
                                         ticker, s.getDirection().toUpperCase(), s.getConfidence(), s.getEntry());
                                 discord.sendSwingAlert(s);
+                                tracker.recordStrategySignal("swing_lateday", s.getConfidence());
                             } else {
                                 log.info("INTRADAY ALERT {} {} conf={} entry={} adj=news{}/ctx{}/qual{}/flow{}/regime{}/corr{}/align{} vixBoost={} dynamicMin={}",
                                         ticker, s.getDirection().toUpperCase(), s.getConfidence(), s.getEntry(),
@@ -483,6 +484,7 @@ public class ScannerService {
                                 discord.sendSetupAlert(s, sentiment, context, earningsCheck);
                             }
                             liveLog.recordTrade(s, stratType);
+                            tracker.recordStrategySignal(stratType, s.getConfidence());
                             dedup.markSent(ticker, s.getDirection(), s.getEntry());
                         }
                     } else if (s.getConfidence() < effectiveMinConf) {
@@ -517,6 +519,7 @@ public class ScannerService {
                             log.info("HOURLY_SWING ALERT {} {} conf={} entry={}", ticker,
                                     sw.getDirection().toUpperCase(), sw.getConfidence(), sw.getEntry());
                             discord.sendSwingAlert(sw);
+                            tracker.recordStrategySignal("swing_hourly", sw.getConfidence());
                             dedup.markSent(swKey, sw.getDirection(), sw.getEntry());
                         }
                     }
@@ -546,6 +549,7 @@ public class ScannerService {
                                 && !dedup.isDuplicate(swKey,sw.getDirection(),sw.getEntry(),72*60)) {
                             log.info("SWING ALERT {} {} conf={} entry={}", ticker, sw.getDirection().toUpperCase(), sw.getConfidence(), sw.getEntry());
                             discord.sendSwingAlert(sw);
+                            tracker.recordStrategySignal("swing_daily", sw.getConfidence());
                             dedup.markSent(swKey,sw.getDirection(),sw.getEntry());
                         }
                     }
@@ -566,6 +570,7 @@ public class ScannerService {
                             log.info("RANGE ALERT {} conf={} band={}-{}", ticker, rng.getConfidence(),
                                     String.format("%.2f", rng.getFvgBottom()), String.format("%.2f", rng.getFvgTop()));
                             discord.sendSwingAlert(rng); // route to swing channel (spread plays)
+                            tracker.recordStrategySignal("range", rng.getConfidence());
                             dedup.markSent(rngKey, "range", rng.getEntry());
                         }
                     }
