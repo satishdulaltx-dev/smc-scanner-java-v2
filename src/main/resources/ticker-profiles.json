@@ -103,8 +103,11 @@
     },
     {
       "ticker": "MARA",
-      "minConfidence": 62,
-      "note": "Strong expectancy (4.36%) — relaxed to catch more signals"
+      "strategyType": "smc",
+      "minConfidence": 78,
+      "slAtrMult": 1.0,
+      "tpRrRatio": 1.0,
+      "note": "365d optimizer: SMC mc=78 sl=1.0 tp=1:1 → 23t 65.2%WR +3.23% exp $640 opt P&L. Wider stop (1.0 ATR) suits BTC-proxy volatility. 1:1 R:R with 65% WR is highly profitable (break-even at 50%). Every SMC combo positive."
     },
     {
       "ticker": "META",
