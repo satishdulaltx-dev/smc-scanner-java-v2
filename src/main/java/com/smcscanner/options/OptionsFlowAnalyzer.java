@@ -158,6 +158,17 @@ public class OptionsFlowAnalyzer {
             if (candidates.isEmpty()) return OptionsRecommendation.NONE;
         }
 
+        // ── IV Rank filter: avoid buying when IV is expensive ──────────────
+        double avgIV = candidates.stream().mapToDouble(OptionsDataService.ContractData::iv)
+                .filter(iv -> iv > 0).average().orElse(0.30);
+        int chainIvPct = avgIV <= 0 ? 50
+                : avgIV < 0.20 ? 15 : avgIV < 0.30 ? 35 : avgIV < 0.40 ? 55
+                : avgIV < 0.50 ? 70 : avgIV < 0.60 ? 82 : 92;
+        if (chainIvPct > 70) {
+            log.info("{} HIGH_IV_RANK: IV percentile ~{} — options premiums expensive, IV crush risk",
+                    ticker, chainIvPct);
+        }
+
         // Score each candidate: prefer 0.35-0.55 delta, good liquidity, reasonable premium
         OptionsDataService.ContractData best = null;
         double bestScore = Double.MIN_VALUE;
@@ -192,6 +203,22 @@ public class OptionsFlowAnalyzer {
             double premiumPct = c.close() / entry * 100;
             if (premiumPct >= 0.5 && premiumPct <= 3.0) score += 10;
             else if (premiumPct < 0.5) score -= 10; // too cheap = far OTM, likely worthless
+
+            // ── Bid-ask spread validation (estimated from day range) ──────
+            if (c.dayHigh() > 0 && c.dayLow() > 0 && c.close() > 0) {
+                double spreadPct = (c.dayHigh() - c.dayLow()) / c.close();
+                if (spreadPct > 0.15) score -= 15;      // very wide spread
+                else if (spreadPct > 0.10) score -= 5;   // moderately wide
+                else if (spreadPct < 0.05) score += 5;   // tight spread bonus
+            }
+
+            // ── OI tier classification ────────────────────────────────────
+            if (c.openInterest() < 100) score -= 25;     // illiquid, avoid
+            else if (c.openInterest() >= 1000) score += 10; // very liquid bonus
+
+            // ── IV Rank penalty for expensive premiums ────────────────────
+            if (chainIvPct > 70) score -= 15;             // IV crush risk
+            else if (chainIvPct < 30) score += 10;        // cheap IV = good for directional buys
 
             if (score > bestScore) {
                 bestScore = score;
@@ -237,6 +264,9 @@ public class OptionsFlowAnalyzer {
         // Suggested contracts: aim for ~$500 total premium
         int suggested = premium > 0 ? Math.max(1, (int) Math.floor(500.0 / (premium * 100))) : 1;
 
+        String greeksWarning = OptionsRecommendation.computeGreeksWarning(
+                theta, gamma, best.vega(), best.iv(), ivPercentile);
+
         OptionsRecommendation rec = new OptionsRecommendation(
                 best.contractTicker(), best.contractType(), best.strike(),
                 best.expirationDate(), best.dte(),
@@ -251,7 +281,7 @@ public class OptionsFlowAnalyzer {
                 Math.round(profitPerContract * 100.0) / 100.0,
                 Math.round(lossPerContract * 100.0) / 100.0,
                 Math.round(optionsRR * 100.0) / 100.0,
-                suggested);
+                suggested, greeksWarning);
 
         log.info("{} contract rec: {} strike={} exp={} premium={} delta={} optRR={}:1",
                 ticker, best.contractTicker(), best.strike(), best.expirationDate(),

@@ -29,6 +29,8 @@ public class TradeSetup {
     private final String optionsFlowDir;      // "BULLISH" | "BEARISH" | "NEUTRAL"
     private final double optionsMaxPain;
 
+    private final String optionsGreeksWarning; // risk warnings from Greeks analysis
+
     // ── Performance intelligence fields ─────────────────────────────────────
     private final String factorBreakdown;   // e.g. "news+8 | RS-5 | regime-8 | corr+0"
     private final String convictionTier;    // "🔥 HIGH (2 contracts)" | "✅ STANDARD (1)" | "🟡 LITE (1)"
@@ -49,7 +51,7 @@ public class TradeSetup {
         this.optionsProfitPer = b.optionsProfitPer; this.optionsLossPer = b.optionsLossPer;
         this.optionsRR = b.optionsRR; this.optionsSuggested = b.optionsSuggested;
         this.optionsFlowLabel = b.optionsFlowLabel; this.optionsFlowDir = b.optionsFlowDir;
-        this.optionsMaxPain = b.optionsMaxPain;
+        this.optionsMaxPain = b.optionsMaxPain; this.optionsGreeksWarning = b.optionsGreeksWarning;
         this.factorBreakdown = b.factorBreakdown;
         this.convictionTier  = b.convictionTier;
     }
@@ -85,6 +87,7 @@ public class TradeSetup {
     public int    getOptionsSuggested()  { return optionsSuggested; }
     public String getOptionsFlowLabel()  { return optionsFlowLabel; }
     public String getOptionsFlowDir()    { return optionsFlowDir; }
+    public String getOptionsGreeksWarning() { return optionsGreeksWarning; }
     public String getFactorBreakdown()   { return factorBreakdown; }
     public String getConvictionTier()    { return convictionTier; }
     public double getOptionsMaxPain()    { return optionsMaxPain; }
@@ -147,6 +150,7 @@ public class TradeSetup {
         private double optionsStrike, optionsPremium, optionsDelta, optionsIV, optionsBreakEven;
         private double optionsProfitPer, optionsLossPer, optionsRR, optionsMaxPain;
         private int optionsIVPct, optionsSuggested;
+        private String optionsGreeksWarning;
         private String factorBreakdown, convictionTier;
 
         public Builder ticker(String v)        { this.ticker = v;      return this; }
@@ -180,6 +184,7 @@ public class TradeSetup {
         public Builder optionsFlowLabel(String v)  { this.optionsFlowLabel = v;  return this; }
         public Builder optionsFlowDir(String v)    { this.optionsFlowDir = v;    return this; }
         public Builder optionsMaxPain(double v)    { this.optionsMaxPain = v;    return this; }
+        public Builder optionsGreeksWarning(String v) { this.optionsGreeksWarning = v; return this; }
         public Builder factorBreakdown(String v)   { this.factorBreakdown = v;   return this; }
         public Builder convictionTier(String v)    { this.convictionTier = v;    return this; }
         public TradeSetup build()              { return new TradeSetup(this); }

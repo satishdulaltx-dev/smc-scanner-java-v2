@@ -23,11 +23,12 @@ public record OptionsRecommendation(
         double profitPerContract, // (premiumAtTP - premium) × 100
         double lossPerContract,   // (premium - premiumAtSL) × 100
         double optionsRR,         // profitPerContract / lossPerContract
-        int    suggestedContracts // based on ~$500 budget
+        int    suggestedContracts, // based on ~$500 budget
+        String greeksWarning      // risk warnings from Greeks analysis (null = none)
 ) {
     public static final OptionsRecommendation NONE =
             new OptionsRecommendation(null, null, 0, null, 0, 0, 0, 0, 0, 0, 50,
-                    0, 0, 0, 0, 0, 0, 0);
+                    0, 0, 0, 0, 0, 0, 0, null);
 
     public boolean hasData() { return contractTicker != null && estimatedPremium > 0; }
 
@@ -41,6 +42,20 @@ public record OptionsRecommendation(
      * @param holdDays       how many days until exit
      * @return estimated new premium (floored at 0.01)
      */
+    /** Generate risk warnings based on Greeks. */
+    public static String computeGreeksWarning(double theta, double gamma, double vega, double iv, int ivPercentile) {
+        StringBuilder warn = new StringBuilder();
+        if (Math.abs(theta) > 0.10)
+            warn.append("⚠️ High theta decay ($").append(String.format("%.2f", Math.abs(theta) * 100)).append("/day per contract) | ");
+        if (Math.abs(gamma) > 0.15)
+            warn.append("⚠️ High gamma (").append(String.format("%.3f", gamma)).append(") — position delta shifts fast | ");
+        if (vega > 0 && ivPercentile > 70)
+            warn.append("⚠️ Long vega + high IV — IV crush risk | ");
+        if (ivPercentile > 80)
+            warn.append("🔴 IV Rank >80% — consider selling premium instead of buying | ");
+        return warn.length() > 0 ? warn.toString().replaceAll(" \\| $", "") : null;
+    }
+
     public static double estimatePremium(double currentPremium, double delta, double gamma,
                                           double theta, double underlyingMove, double holdDays) {
         double newPremium = currentPremium

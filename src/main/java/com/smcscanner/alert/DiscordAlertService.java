@@ -95,6 +95,10 @@ public class DiscordAlertService {
                     : "");
             fields.add(f("📐 Greeks", greeksLine, false));
 
+            if (s.getOptionsGreeksWarning() != null) {
+                fields.add(f("⚠️ Risk Warnings", s.getOptionsGreeksWarning(), false));
+            }
+
             // P&L per contract
             double totalProfit = s.getOptionsProfitPer() * s.getOptionsSuggested();
             double totalLoss   = s.getOptionsLossPer() * s.getOptionsSuggested();

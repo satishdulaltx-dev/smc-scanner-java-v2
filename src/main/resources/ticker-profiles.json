@@ -122,13 +122,15 @@
     {
       "ticker": "MSFT",
       "strategyType": "smc",
-      "minConfidence": 62,
+      "minConfidence": 78,
       "minFvgPct": 0.0004,
       "dispAtrMult": 1.2,
+      "slAtrMult": 1.0,
+      "tpRrRatio": 2.0,
       "intradayRsGate": true,
       "skip": false,
       "skipReason": null,
-      "note": "Switched VWAP→SMC Mar 2026: VWAP 0%WR (5 trades), KeyLevel 0%WR. SMC hasn't been tried with current filters. Relaxed thresholds (minFvgPct=0.0004, dispAtr=1.2) + RS gate. DO NOT SKIP."
+      "note": "365d optimizer: SMC mc=78 sl=1.0 tp=2:1 → 17t 64.7%WR +0.69% exp $3428 opt P&L. Wider stop (1.0 ATR) + higher bar (78) filters noise. Top 8 combos all sl=1.0 — MSFT needs room to breathe. DO NOT SKIP."
     },
     {
       "ticker": "MSTR",

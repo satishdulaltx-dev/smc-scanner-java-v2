@@ -343,6 +343,9 @@ public class ScannerService {
                           .optionsBreakEven(rec.breakEvenPrice())
                           .optionsProfitPer(rec.profitPerContract()).optionsLossPer(rec.lossPerContract())
                           .optionsRR(rec.optionsRR()).optionsSuggested(rec.suggestedContracts());
+                        if (rec.greeksWarning() != null) {
+                            sb.optionsGreeksWarning(rec.greeksWarning());
+                        }
                     }
                     s = sb.build();
                 }
