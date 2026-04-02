@@ -2,6 +2,8 @@ package com.smcscanner.tracking;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.smcscanner.data.PolygonClient;
+import com.smcscanner.model.OHLCV;
 import com.smcscanner.model.TradeSetup;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,7 +38,12 @@ public class LiveTradeLog {
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm");
 
     private final ObjectMapper mapper = new ObjectMapper();
+    private final PolygonClient client;
     private final List<Map<String, Object>> trades = Collections.synchronizedList(new ArrayList<>());
+
+    public LiveTradeLog(PolygonClient client) {
+        this.client = client;
+    }
 
     @EventListener(ContextRefreshedEvent.class)
     public void init() {
@@ -192,6 +199,97 @@ public class LiveTradeLog {
         }
     }
 
+    /**
+     * Auto-resolve OPEN trades by fetching current price and checking SL/TP.
+     * Called before daily report to ensure accurate outcome tracking.
+     */
+    public void resolveOpenTrades() {
+        List<Map<String, Object>> openTrades;
+        synchronized (trades) {
+            openTrades = trades.stream()
+                    .filter(t -> "OPEN".equals(t.get("outcome")))
+                    .collect(Collectors.toList());
+        }
+        if (openTrades.isEmpty()) return;
+
+        // Group by ticker to minimize API calls
+        Map<String, List<Map<String, Object>>> byTicker = openTrades.stream()
+                .collect(Collectors.groupingBy(t -> (String) t.get("ticker")));
+
+        int resolved = 0;
+        for (Map.Entry<String, List<Map<String, Object>>> e : byTicker.entrySet()) {
+            String ticker = e.getKey();
+            try {
+                // Fetch 5m bars to get intraday high/low/close for accurate SL/TP check
+                List<OHLCV> bars = client.getBars(ticker, "5m", 80); // ~6.5h = full session
+                if (bars == null || bars.isEmpty()) continue;
+
+                // Session high, low, and latest close
+                double sessionHigh = bars.stream().mapToDouble(OHLCV::getHigh).max().orElse(0);
+                double sessionLow  = bars.stream().mapToDouble(OHLCV::getLow).min().orElse(0);
+                double lastPrice   = bars.get(bars.size() - 1).getClose();
+
+                for (Map<String, Object> t : e.getValue()) {
+                    double entry = ((Number) t.get("entry")).doubleValue();
+                    double sl    = ((Number) t.get("stopLoss")).doubleValue();
+                    double tp    = ((Number) t.get("takeProfit")).doubleValue();
+                    String dir   = (String) t.get("direction");
+                    boolean isLong = "long".equalsIgnoreCase(dir);
+
+                    String outcome = null;
+                    double pnlPct = 0.0;
+
+                    if (isLong) {
+                        if (sessionLow <= sl) {
+                            outcome = "LOSS";
+                            pnlPct = (sl - entry) / entry * 100.0;
+                        } else if (sessionHigh >= tp) {
+                            outcome = "WIN";
+                            pnlPct = (tp - entry) / entry * 100.0;
+                        } else {
+                            // Still holding — mark with current P&L
+                            pnlPct = (lastPrice - entry) / entry * 100.0;
+                        }
+                    } else { // short
+                        if (sessionHigh >= sl) {
+                            outcome = "LOSS";
+                            pnlPct = (entry - sl) / entry * 100.0;
+                        } else if (sessionLow <= tp) {
+                            outcome = "WIN";
+                            pnlPct = (entry - tp) / entry * 100.0;
+                        } else {
+                            // Still holding — mark with current P&L
+                            pnlPct = (entry - lastPrice) / entry * 100.0;
+                        }
+                    }
+
+                    if (outcome != null) {
+                        t.put("outcome", outcome);
+                        t.put("pnlPct", Math.round(pnlPct * 100.0) / 100.0);
+                        t.put("resolvedAt", ZonedDateTime.now(ET).toInstant().toEpochMilli());
+                        t.put("exitPrice", outcome.equals("WIN") ? tp : sl);
+                        resolved++;
+                        log.info("Auto-resolved {} {} → {} (pnl={}%)", ticker, dir, outcome,
+                                Math.round(pnlPct * 100.0) / 100.0);
+                    } else {
+                        // Still open — update unrealized P&L for display
+                        t.put("unrealizedPnl", Math.round(pnlPct * 100.0) / 100.0);
+                        t.put("lastPrice", lastPrice);
+                        log.info("Still OPEN: {} {} entry={} last={} unrealPnl={}%",
+                                ticker, dir, entry, lastPrice, Math.round(pnlPct * 100.0) / 100.0);
+                    }
+                }
+                Thread.sleep(150); // rate limit between tickers
+            } catch (Exception ex) {
+                log.warn("Failed to resolve {} trades: {}", ticker, ex.getMessage());
+            }
+        }
+        if (resolved > 0) {
+            persist();
+            log.info("Auto-resolved {} open trades via price check", resolved);
+        }
+    }
+
     /** Build Discord embed for daily summary report. */
     public Map<String, Object> buildDailyDiscordEmbed(String date) {
         Map<String, Object> summary = getDailySummary(date);
@@ -235,9 +333,17 @@ public class LiveTradeLog {
                 case "BE_STOP" -> "⏸️";
                 default -> "⏳";
             };
-            tradeLines.append(String.format("%s %s %s %s %s conf=%d\n",
+            String pnlStr = "";
+            if (!"OPEN".equals(t.getOrDefault("outcome", "OPEN"))) {
+                double tradePnl = ((Number) t.getOrDefault("pnlPct", 0.0)).doubleValue();
+                pnlStr = String.format(" %+.1f%%", tradePnl);
+            } else if (t.containsKey("unrealizedPnl")) {
+                double unreal = ((Number) t.get("unrealizedPnl")).doubleValue();
+                pnlStr = String.format(" [%+.1f%%]", unreal);
+            }
+            tradeLines.append(String.format("%s %s %s %s %s conf=%d%s\n",
                     t.get("time"), outcomeEmoji, t.get("ticker"), dir,
-                    t.get("strategy"), ((Number) t.get("confidence")).intValue()));
+                    t.get("strategy"), ((Number) t.get("confidence")).intValue(), pnlStr));
         }
         if (tradeLines.length() > 0) {
             // Discord field value max 1024 chars

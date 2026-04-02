@@ -98,6 +98,8 @@ public class ScannerScheduler {
         log.info("Generating daily trade report...");
         dailyReportSentToday=true;
         try {
+            // Auto-resolve OPEN trades by checking current price vs SL/TP
+            liveLog.resolveOpenTrades();
             String today = nowET.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
             Map<String,Object> embed = liveLog.buildDailyDiscordEmbed(today);
             if (embed != null) {
