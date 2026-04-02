@@ -60,152 +60,108 @@ public class DiscordAlertService {
 
     private Map<String,Object> buildEmbed(TradeSetup s, NewsSentiment sentiment, MarketContext context,
                                               EarningsCalendar.EarningsCheck earningsCheck) {
-        boolean isLong="long".equals(s.getDirection());
-        String arrow=isLong?"⬆️":"⬇️";
-        String grade=s.getConfidence()>=85?"⭐":(s.getConfidence()>=75?"✅":(s.getConfidence()>=65?"🟡":"⚪"));
-        double slPts=Math.abs(s.getEntry()-s.getStopLoss()), tpPts=Math.abs(s.getTakeProfit()-s.getEntry());
-        double slPct=s.getEntry()>0?slPts/s.getEntry()*100:0, tpPct=s.getEntry()>0?tpPts/s.getEntry()*100:0;
-        String ts=ZonedDateTime.now(ZoneOffset.UTC).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))+" UTC";
-        // Detect strategy from volatility field set by each detector
-        String strategy = "normal".equals(s.getVolatility())   ? "📊 VWAP Reversion"
-                        : "high".equals(s.getVolatility())     ? "🚀 ORB Breakout"
-                        : "keylevel".equals(s.getVolatility()) ? "🎯 Key Level Rejection"
-                        : "🔷 SMC Sweep+FVG";
+        boolean isLong = "long".equals(s.getDirection());
+        String arrow   = isLong ? "⬆️" : "⬇️";
+        String grade   = s.getConfidence()>=85 ? "⭐" : (s.getConfidence()>=75 ? "✅" : (s.getConfidence()>=65 ? "🟡" : "⚪"));
+        double slPct   = s.getEntry()>0 ? Math.abs(s.getEntry()-s.getStopLoss())/s.getEntry()*100 : 0;
+        double tpPct   = s.getEntry()>0 ? Math.abs(s.getTakeProfit()-s.getEntry())/s.getEntry()*100 : 0;
+        String ts      = ZonedDateTime.now(ZoneOffset.UTC).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))+" UTC";
+        String strategy = "normal".equals(s.getVolatility())   ? "VWAP Reversion"
+                        : "high".equals(s.getVolatility())     ? "ORB Breakout"
+                        : "keylevel".equals(s.getVolatility()) ? "Key Level Rejection"
+                        : "SMC Sweep+FVG";
 
-        List<Map<String,Object>> fields = new java.util.ArrayList<>();
+        // ── Build compact description instead of 20+ fields ─────────────────
+        StringBuilder desc = new StringBuilder();
 
-        // ── OPTIONS CONTRACT (top priority — this is what they trade) ─────────
+        // Options trade section
         if (s.hasOptionsData()) {
-            String contractLabel = String.format("**%s** $%.0f%s  exp %s (%dd)",
-                    s.getOptionsType().toUpperCase(), s.getOptionsStrike(),
-                    "call".equals(s.getOptionsType()) ? "C" : "P",
-                    s.getOptionsExpiry(), (int)((java.time.LocalDate.parse(s.getOptionsExpiry()).toEpochDay()
-                        - java.time.LocalDate.now().toEpochDay())));
-            fields.add(f("🎯 OPTIONS CONTRACT", contractLabel, false));
+            int dte = (int)((java.time.LocalDate.parse(s.getOptionsExpiry()).toEpochDay()
+                    - java.time.LocalDate.now().toEpochDay()));
+            String typeChar = "call".equals(s.getOptionsType()) ? "C" : "P";
 
-            String premiumLine = String.format("Premium: **$%.2f** /contract ($%.0f total for %d)",
-                    s.getOptionsPremium(), s.getOptionsPremium() * 100 * s.getOptionsSuggested(),
-                    s.getOptionsSuggested());
-            fields.add(f("💵 Entry Cost", premiumLine, false));
-
-            String greeksLine = String.format("Δ %.3f  |  IV %.1f%%  %s",
-                    s.getOptionsDelta(), s.getOptionsIV() * 100,
-                    s.getOptionsIVPct() <= 30 ? "✅ Cheap"
-                    : s.getOptionsIVPct() >= 70 ? "⚠️ Expensive (IV crush risk)"
-                    : "");
-            fields.add(f("📐 Greeks", greeksLine, false));
-
-            if (s.getOptionsGreeksWarning() != null) {
-                fields.add(f("⚠️ Risk Warnings", s.getOptionsGreeksWarning(), false));
-            }
-
-            // P&L per contract
-            double totalProfit = s.getOptionsProfitPer() * s.getOptionsSuggested();
-            double totalLoss   = s.getOptionsLossPer() * s.getOptionsSuggested();
-            String pnlLine = String.format(
-                    "**If TP hit:** +$%.0f per contract → **+$%.0f** (%d contracts)\n" +
-                    "**If SL hit:** -$%.0f per contract → **-$%.0f**\n" +
-                    "**Options R:R:** %.1f:1",
-                    s.getOptionsProfitPer(), totalProfit, s.getOptionsSuggested(),
-                    s.getOptionsLossPer(), totalLoss,
-                    s.getOptionsRR());
-            fields.add(f("💰 P&L Estimate", pnlLine, false));
-
-            fields.add(f("🔓 Break-Even", String.format("$%.2f (stock must reach this)", s.getOptionsBreakEven()), true));
-
-            // ── Bracket order prices — what to enter in your broker ───────────
-            // delta model: option price ≈ premium + delta × (stockPrice - stockEntry)
-            // delta is signed: +0.40 for calls, -0.40 for puts
+            // Bracket orders — what to actually enter in broker
             double delta = s.getOptionsDelta();
-            double optAtTP = s.getOptionsPremium() + delta * (s.getTakeProfit() - s.getEntry());
-            double optAtSL = s.getOptionsPremium() + delta * (s.getStopLoss()  - s.getEntry());
-            optAtTP = Math.max(0.01, optAtTP);
-            optAtSL = Math.max(0.01, optAtSL);
-            String bracketLine = String.format(
-                    "**BUY** option @ **$%.2f**\n" +
-                    "✅ **SELL TP** @ **$%.2f** (stock $%.2f)\n" +
-                    "🛑 **SELL SL** @ **$%.2f** (stock $%.2f)",
-                    s.getOptionsPremium(),
-                    optAtTP, s.getTakeProfit(),
-                    optAtSL, s.getStopLoss());
-            fields.add(f("📋 Broker Bracket Orders", bracketLine, false));
+            double optAtTP = Math.max(0.01, s.getOptionsPremium() + delta * (s.getTakeProfit() - s.getEntry()));
+            double optAtSL = Math.max(0.01, s.getOptionsPremium() + delta * (s.getStopLoss() - s.getEntry()));
+
+            desc.append(String.format("**BUY** $%.0f%s %s (%dd) @ **$%.2f**\n",
+                    s.getOptionsStrike(), typeChar, s.getOptionsExpiry(), dte, s.getOptionsPremium()));
+            desc.append(String.format("TP **$%.2f** | SL **$%.2f** | R:R **%.1f:1**\n",
+                    optAtTP, optAtSL, s.getOptionsRR()));
+            desc.append(String.format("Δ %.2f | IV %.0f%% | BE $%.2f\n",
+                    s.getOptionsDelta(), s.getOptionsIV() * 100, s.getOptionsBreakEven()));
+
+            // P&L one-liner
+            desc.append(String.format("P&L: **+$%.0f** / **-$%.0f** per contract\n",
+                    s.getOptionsProfitPer(), s.getOptionsLossPer()));
+            desc.append("\n");
         }
 
-        // ── Core setup fields ─────────────────────────────────────────────────
-        fields.addAll(List.of(
-            f("Direction",  arrow+" "+s.getDirection().toUpperCase(), true),
-            f("Confidence", grade+" "+s.getConfidence()+"/100",       true),
-            f("Strategy",   strategy,                                  true),
-            f("Entry",      String.format("$%.2f (stock)",s.getEntry()),       true),
-            f("Stop Loss",  String.format("$%.2f (-%.2f%%)",s.getStopLoss(),slPct),  true),
-            f("Take Profit",String.format("$%.2f (+%.2f%%)",s.getTakeProfit(),tpPct),true),
-            f("R:R",        String.format("%.1f:1",s.rrRatio()),       true),
-            f("ATR",        String.format("$%.2f",s.getAtr()),         true)));
+        // Stock levels
+        desc.append(String.format("**Entry** $%.2f → **TP** $%.2f (+%.1f%%) | **SL** $%.2f (-%.1f%%)\n",
+                s.getEntry(), s.getTakeProfit(), tpPct, s.getStopLoss(), slPct));
+        desc.append(String.format("R:R **%.1f:1** | ATR $%.2f | %s\n", s.rrRatio(), s.getAtr(), strategy));
 
-        // ── Breakeven stop instruction ────────────────────────────────────────
-        fields.add(f("🔒 Breakeven", String.format("Move SL → $%.2f once price hits $%.2f (1:1)",
-                    s.getEntry(),
-                    isLong ? s.getEntry() + Math.abs(s.getEntry()-s.getStopLoss())
-                           : s.getEntry() - Math.abs(s.getEntry()-s.getStopLoss())), false));
+        // Breakeven instruction
+        double beTarget = isLong
+                ? s.getEntry() + Math.abs(s.getEntry() - s.getStopLoss())
+                : s.getEntry() - Math.abs(s.getEntry() - s.getStopLoss());
+        desc.append(String.format("Move SL → BE at $%.2f (1:1)\n", beTarget));
 
-        // ── Options flow sentiment ────────────────────────────────────────────
-        if (s.getOptionsFlowLabel() != null) {
-            String flowConflict = s.getOptionsFlowDir() != null
-                    && (("long".equals(s.getDirection()) && "BEARISH".equals(s.getOptionsFlowDir()))
-                     || ("short".equals(s.getDirection()) && "BULLISH".equals(s.getOptionsFlowDir())))
-                    ? " ⚠️ FLOW CONFLICTS" : "";
-            fields.add(f("📊 Options Flow", s.getOptionsFlowLabel() + flowConflict, false));
-        }
-        if (s.getOptionsMaxPain() > 0) {
-            fields.add(f("🧲 Max Pain", String.format("$%.1f (price magnet by expiry)", s.getOptionsMaxPain()), true));
-        }
+        // ── Warnings only (conflicts, earnings, high IV) ────────────────────
+        List<String> warnings = new ArrayList<>();
 
-        // ── Conviction tier + factor attribution ─────────────────────────────
-        if (s.getConvictionTier() != null) {
-            fields.add(f("📐 Conviction", s.getConvictionTier(), false));
+        if (s.getOptionsGreeksWarning() != null) {
+            warnings.add(s.getOptionsGreeksWarning());
         }
-        if (s.getRiskTier() != null) {
-            fields.add(f("📊 Risk Tier", s.getRiskTier(), false));
+        if (s.getOptionsFlowDir() != null
+                && (("long".equals(s.getDirection()) && "BEARISH".equals(s.getOptionsFlowDir()))
+                 || ("short".equals(s.getDirection()) && "BULLISH".equals(s.getOptionsFlowDir())))) {
+            warnings.add("Options flow CONFLICTS with direction");
         }
-        if (s.getFactorBreakdown() != null) {
-            fields.add(f("🔬 Signal Factors", s.getFactorBreakdown(), false));
+        if (sentiment != null && sentiment.hasNews() && sentiment.isConflicting(s.getDirection())) {
+            warnings.add("News sentiment CONFLICTS");
         }
-
-        // ── News sentiment field ──────────────────────────────────────────────
-        if (sentiment != null && sentiment.hasNews() && sentiment.label() != null) {
-            String newsConflict = sentiment.isConflicting(s.getDirection()) ? " ⚠️ CONFLICTS" : "";
-            String headline = sentiment.headline() != null
-                    ? (sentiment.headline().length() > 100
-                       ? sentiment.headline().substring(0, 97) + "…"
-                       : sentiment.headline())
-                    : "";
-            fields.add(f("News (48h)", sentiment.label() + newsConflict + "\n" + headline, false));
-        }
-
-        // ── Earnings proximity warning ──────────────────────────────────────
         if (earningsCheck != null && earningsCheck.isNearEarnings() && earningsCheck.label() != null) {
-            fields.add(f("📅 Earnings", earningsCheck.label(), false));
+            warnings.add(earningsCheck.label());
         }
-
-        // ── Market context fields (RS + VIX) ─────────────────────────────────
-        if (context != null && context.rsLabel() != null) {
-            String rsConflict = context.isRsConflicting(s.getDirection()) ? " ⚠️ CONFLICTS" : "";
-            fields.add(f("RS vs SPY (5d)", context.rsLabel() + rsConflict, true));
+        if (context != null && context.isRsConflicting(s.getDirection()) && context.rsLabel() != null) {
+            warnings.add("RS vs SPY conflicts");
         }
         if (context != null && context.vixLabel() != null && context.isVixConflicting(s.getVolatility())) {
-            fields.add(f("VIX Regime", context.vixLabel() + " ⚠️ WEAK ENV", true));
-        } else if (context != null && context.vixLabel() != null && !"normal".equals(context.vixRegime())) {
-            fields.add(f("VIX Regime", context.vixLabel(), true));
+            warnings.add("VIX: " + context.vixLabel());
         }
 
-        Map<String,Object> e=new HashMap<>();
+        if (!warnings.isEmpty()) {
+            desc.append("\n⚠️ ").append(String.join(" | ", warnings));
+        }
+
+        // ── Build embed ─────────────────────────────────────────────────────
+        List<Map<String,Object>> fields = new java.util.ArrayList<>();
+        // Confidence + conviction as single row
+        String confLine = grade + " " + s.getConfidence() + "/100";
+        if (s.getConvictionTier() != null) confLine += " · " + s.getConvictionTier();
+        fields.add(f("Confidence", confLine, true));
+
+        // Flow + Max Pain as compact context
+        if (s.getOptionsFlowLabel() != null || s.getOptionsMaxPain() > 0) {
+            String ctx = "";
+            if (s.getOptionsFlowLabel() != null) ctx += s.getOptionsFlowLabel();
+            if (s.getOptionsMaxPain() > 0) ctx += (ctx.isEmpty() ? "" : " | ") + "Max Pain $" + String.format("%.0f", s.getOptionsMaxPain());
+            fields.add(f("Flow", ctx, true));
+        }
+
+        Map<String,Object> e = new HashMap<>();
         String title = s.hasOptionsData()
                 ? arrow + " " + s.getTicker() + " — BUY " + s.getOptionsType().toUpperCase()
-                  + " $" + String.format("%.0f", s.getOptionsStrike())
-                  + " " + s.getOptionsExpiry()
-                : arrow + " " + s.getTicker() + " — " + s.getDirection().toUpperCase() + " Setup";
+                  + " $" + String.format("%.0f", s.getOptionsStrike()) + " " + s.getOptionsExpiry()
+                : arrow + " " + s.getTicker() + " — " + s.getDirection().toUpperCase() + " · " + strategy;
         e.put("title", title);
-        e.put("color",isLong?0x2ECC71:0xE74C3C); e.put("fields",fields); e.put("footer",Map.of("text","SD Scanner | "+ts));
+        e.put("description", desc.toString());
+        e.put("color", isLong ? 0x2ECC71 : 0xE74C3C);
+        e.put("fields", fields);
+        e.put("footer", Map.of("text", "SD Scanner | " + ts));
         return e;
     }
 
@@ -219,55 +175,44 @@ public class DiscordAlertService {
         boolean isRange = "range".equals(s.getDirection());
         boolean isLong  = "long".equals(s.getDirection());
         String arrow    = isRange ? "↔️" : (isLong ? "⬆️" : "⬇️");
-        String grade    = s.getConfidence()>=85?"⭐":(s.getConfidence()>=75?"✅":(s.getConfidence()>=65?"🟡":"⚪"));
-        double slPts    = Math.abs(s.getEntry()-s.getStopLoss()), tpPts = Math.abs(s.getTakeProfit()-s.getEntry());
-        double slPct    = s.getEntry()>0?slPts/s.getEntry()*100:0, tpPct = s.getEntry()>0?tpPts/s.getEntry()*100:0;
+        String grade    = s.getConfidence()>=85 ? "⭐" : (s.getConfidence()>=75 ? "✅" : (s.getConfidence()>=65 ? "🟡" : "⚪"));
+        double slPct    = s.getEntry()>0 ? Math.abs(s.getEntry()-s.getStopLoss())/s.getEntry()*100 : 0;
+        double tpPct    = s.getEntry()>0 ? Math.abs(s.getTakeProfit()-s.getEntry())/s.getEntry()*100 : 0;
         String ts       = ZonedDateTime.now(ZoneOffset.UTC).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))+" UTC";
         boolean isConsolidation = "swing".equals(s.getVolatility());
 
-        List<Map<String,Object>> fields = new java.util.ArrayList<>();
+        StringBuilder desc = new StringBuilder();
 
         if (isRange) {
-            // ── Range/neutral setup — Iron Condor / Straddle ──────────────
-            fields.add(f("Direction",  "↔️ RANGE (Neutral)", true));
-            fields.add(f("Confidence", grade+" "+s.getConfidence()+"/100", true));
-            fields.add(f("Strategy",   "🔲 Iron Condor / Straddle", true));
-            fields.add(f("📦 Range Band",
-                    String.format("$%.2f – $%.2f (%.1f%%)", s.getFvgBottom(), s.getFvgTop(),
-                            s.getEntry() > 0 ? (s.getFvgTop() - s.getFvgBottom()) / s.getEntry() * 100 : 0), false));
-            fields.add(f("Short Put Zone",  String.format("$%.2f area (20-30 delta)", s.getStopLoss()), true));
-            fields.add(f("Short Call Zone", String.format("$%.2f area (20-30 delta)", s.getTakeProfit()), true));
-            fields.add(f("Mid Price",       String.format("$%.2f", s.getEntry()), true));
-            fields.add(f("ATR (Daily)",     String.format("$%.2f", s.getAtr()), true));
-            fields.add(f("Hold",            "5–10 days (theta decay)", true));
+            double rangePct = s.getEntry() > 0 ? (s.getFvgTop() - s.getFvgBottom()) / s.getEntry() * 100 : 0;
+            desc.append(String.format("**Range** $%.2f – $%.2f (%.1f%%)\n", s.getFvgBottom(), s.getFvgTop(), rangePct));
+            desc.append(String.format("Short Put $%.2f | Short Call $%.2f\n", s.getStopLoss(), s.getTakeProfit()));
+            desc.append(String.format("Mid $%.2f | ATR $%.2f | Hold 5-10d", s.getEntry(), s.getAtr()));
         } else {
-            // ── Directional swing setup ───────────────────────────────────
-            String timeframe = isConsolidation ? "📅 Hourly Consolidation" : "📅 Daily SMC";
-            fields.addAll(List.of(
-                f("Direction",  arrow+" "+s.getDirection().toUpperCase(), true),
-                f("Confidence", grade+" "+s.getConfidence()+"/100",       true),
-                f("Strategy",   isConsolidation ? "📦 Consolidation Breakout" : "🔷 SMC Sweep+FVG", true),
-                f("Timeframe",  timeframe,                                true),
-                f("Entry Zone", String.format("$%.2f", s.getEntry()),     true),
-                f("Stop Loss",  String.format("$%.2f (-%.2f%%)", s.getStopLoss(),  slPct), true),
-                f("Take Profit",String.format("$%.2f (+%.2f%%)", s.getTakeProfit(), tpPct), true),
-                f("R:R",        String.format("%.1f:1", s.rrRatio()),     true),
-                f("ATR (Daily)",String.format("$%.2f",  s.getAtr()),      true),
-                f("Hold",       "2–5 days (swing)",                       true)));
+            String strat = isConsolidation ? "Consolidation Breakout" : "SMC Sweep+FVG";
+            String tf    = isConsolidation ? "Hourly" : "Daily";
+            desc.append(String.format("**Entry** $%.2f → **TP** $%.2f (+%.1f%%) | **SL** $%.2f (-%.1f%%)\n",
+                    s.getEntry(), s.getTakeProfit(), tpPct, s.getStopLoss(), slPct));
+            desc.append(String.format("R:R **%.1f:1** | ATR $%.2f | %s · %s\n", s.rrRatio(), s.getAtr(), strat, tf));
+            desc.append("Hold 2-5 days");
             if (isConsolidation) {
-                fields.add(f("📦 Squeeze Zone", String.format("$%.2f – $%.2f", s.getFvgBottom(), s.getFvgTop()), false));
+                desc.append(String.format(" | Squeeze $%.2f–$%.2f", s.getFvgBottom(), s.getFvgTop()));
             }
         }
 
+        List<Map<String,Object>> fields = new java.util.ArrayList<>();
+        fields.add(f("Confidence", grade + " " + s.getConfidence() + "/100", true));
+
         Map<String,Object> e = new HashMap<>();
         String title = isRange
-                ? "🔲 "+s.getTicker()+" — RANGE (Iron Condor / Straddle)"
-                : "📊 "+s.getTicker()+" — SWING "+s.getDirection().toUpperCase();
+                ? "🔲 " + s.getTicker() + " — RANGE (Iron Condor / Straddle)"
+                : arrow + " " + s.getTicker() + " — SWING " + s.getDirection().toUpperCase();
         e.put("title",  title);
-        e.put("color",  isRange ? 0x3498DB : (isLong ? 0xFF8C00 : 0x6A5ACD)); // blue range / orange long / purple short
+        e.put("description", desc.toString());
+        e.put("color",  isRange ? 0x3498DB : (isLong ? 0xFF8C00 : 0x6A5ACD));
         e.put("fields", fields);
-        String source = isRange ? "Range Detection" : (isConsolidation ? "Hourly Consolidation" : "Daily Bars");
-        e.put("footer", Map.of("text", "SD Scanner · Swing · " + source + " | "+ts));
+        String source = isRange ? "Range" : (isConsolidation ? "Hourly" : "Daily");
+        e.put("footer", Map.of("text", "SD Scanner · Swing · " + source + " | " + ts));
         return e;
     }
 

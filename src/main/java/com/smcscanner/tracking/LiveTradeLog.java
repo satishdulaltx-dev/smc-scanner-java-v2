@@ -327,23 +327,37 @@ public class LiveTradeLog {
         StringBuilder tradeLines = new StringBuilder();
         for (Map<String, Object> t : dayTrades) {
             String dir = "long".equals(t.get("direction")) ? "▲" : "▼";
-            String outcomeEmoji = switch ((String) t.getOrDefault("outcome", "OPEN")) {
+            String outcome = (String) t.getOrDefault("outcome", "OPEN");
+            String outcomeEmoji = switch (outcome) {
                 case "WIN" -> "✅";
                 case "LOSS" -> "❌";
                 case "BE_STOP" -> "⏸️";
                 default -> "⏳";
             };
-            String pnlStr = "";
-            if (!"OPEN".equals(t.getOrDefault("outcome", "OPEN"))) {
+            double entry = ((Number) t.get("entry")).doubleValue();
+            double sl    = ((Number) t.get("stopLoss")).doubleValue();
+            double tp    = ((Number) t.get("takeProfit")).doubleValue();
+
+            String resultStr;
+            if ("WIN".equals(outcome)) {
                 double tradePnl = ((Number) t.getOrDefault("pnlPct", 0.0)).doubleValue();
-                pnlStr = String.format(" %+.1f%%", tradePnl);
-            } else if (t.containsKey("unrealizedPnl")) {
-                double unreal = ((Number) t.get("unrealizedPnl")).doubleValue();
-                pnlStr = String.format(" [%+.1f%%]", unreal);
+                resultStr = String.format("→TP $%.2f (%+.1f%%)", tp, tradePnl);
+            } else if ("LOSS".equals(outcome)) {
+                double tradePnl = ((Number) t.getOrDefault("pnlPct", 0.0)).doubleValue();
+                resultStr = String.format("→SL $%.2f (%+.1f%%)", sl, tradePnl);
+            } else if ("BE_STOP".equals(outcome)) {
+                resultStr = "→BE (0%)";
+            } else if (t.containsKey("lastPrice")) {
+                double last = ((Number) t.get("lastPrice")).doubleValue();
+                double unreal = ((Number) t.getOrDefault("unrealizedPnl", 0.0)).doubleValue();
+                resultStr = String.format("now $%.2f [%+.1f%%]", last, unreal);
+            } else {
+                resultStr = "HOLDING";
             }
-            tradeLines.append(String.format("%s %s %s %s %s conf=%d%s\n",
+
+            tradeLines.append(String.format("%s %s %s%s $%.2f %s\n",
                     t.get("time"), outcomeEmoji, t.get("ticker"), dir,
-                    t.get("strategy"), ((Number) t.get("confidence")).intValue(), pnlStr));
+                    entry, resultStr));
         }
         if (tradeLines.length() > 0) {
             // Discord field value max 1024 chars

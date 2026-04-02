@@ -27,7 +27,7 @@ public class SmcScannerApplication {
         log.info("  Discord       : {}", config.getDiscordWebhookUrl().isBlank() ? "NOT SET" : "configured");
         log.info("  Dashboard     : http://localhost:{}", config.getDashboardPort());
         log.info("  NY session    : 9:30 AM – 4:00 PM ET  (8:30 AM – 3:00 PM CST)");
-        log.info("  EOD report    : fires at 4:05 PM ET   (3:05 PM CST)");
+        log.info("  EOD report    : fires at 9:00 PM ET   (8:00 PM CST) — includes post-market");
         log.info("=".repeat(60));
     }
 }
