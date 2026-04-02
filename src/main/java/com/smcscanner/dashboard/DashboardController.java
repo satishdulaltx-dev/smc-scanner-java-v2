@@ -598,6 +598,28 @@ public class DashboardController {
         return ResponseEntity.ok(Map.of("ticker", ticker.toUpperCase(), "outcome", outcome, "pnl", pnl));
     }
 
+    /**
+     * POST /api/trades/daily-report — Trigger daily trade report on demand.
+     * Auto-resolves open trades (checks current price vs SL/TP) then sends to Discord.
+     */
+    @PostMapping("/api/trades/daily-report")
+    @ResponseBody
+    public ResponseEntity<Map<String,Object>> triggerDailyReport() {
+        try {
+            liveLog.resolveOpenTrades();
+            String today = ZonedDateTime.now(ET).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+            Map<String,Object> embed = liveLog.buildDailyDiscordEmbed(today);
+            if (embed == null) {
+                return ResponseEntity.ok(Map.of("status", "no_trades", "message", "No trades today"));
+            }
+            discord.sendDailyReport(embed);
+            return ResponseEntity.ok(Map.of("status", "sent", "date", today));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("error", e.getMessage()));
+        }
+    }
+
     /** GET /trades — Live trade log page. */
     @GetMapping("/trades")
     public String tradesPage() { return "trades"; }
