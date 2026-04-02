@@ -73,6 +73,10 @@ public class DiscordAlertService {
 
         List<Map<String,Object>> fields = new java.util.ArrayList<>();
 
+        // ══════════════════════════════════════════════════════════════════════
+        // TOP SECTION — Actionable trade info
+        // ══════════════════════════════════════════════════════════════════════
+
         // ── OPTIONS CONTRACT ─────────────────────────────────────────────────
         if (s.hasOptionsData()) {
             int dte = (int)((java.time.LocalDate.parse(s.getOptionsExpiry()).toEpochDay()
@@ -88,6 +92,10 @@ public class DiscordAlertService {
                     s.getOptionsSuggested());
             fields.add(f("💵 Entry Cost", premiumLine, false));
 
+            String greeksLine = String.format("Δ %.3f  |  IV %.1f%%",
+                    s.getOptionsDelta(), s.getOptionsIV() * 100);
+            fields.add(f("📐 Greeks", greeksLine, false));
+
             // P&L estimate
             double totalProfit = s.getOptionsProfitPer() * s.getOptionsSuggested();
             double totalLoss   = s.getOptionsLossPer() * s.getOptionsSuggested();
@@ -99,6 +107,8 @@ public class DiscordAlertService {
                     s.getOptionsLossPer(), totalLoss,
                     s.getOptionsRR());
             fields.add(f("💰 P&L Estimate", pnlLine, false));
+
+            fields.add(f("🔓 Break-Even", String.format("$%.2f (stock must reach this)", s.getOptionsBreakEven()), false));
 
             // Bracket order prices — what to enter in broker
             double delta = s.getOptionsDelta();
@@ -131,6 +141,15 @@ public class DiscordAlertService {
                     isLong ? s.getEntry() + Math.abs(s.getEntry()-s.getStopLoss())
                            : s.getEntry() - Math.abs(s.getEntry()-s.getStopLoss())), false));
 
+        // ══════════════════════════════════════════════════════════════════════
+        // SEPARATOR
+        // ══════════════════════════════════════════════════════════════════════
+        fields.add(f("\u200B", "══════════════════════════════", false));
+
+        // ══════════════════════════════════════════════════════════════════════
+        // BOTTOM SECTION — Context & secondary info
+        // ══════════════════════════════════════════════════════════════════════
+
         // ── Options flow sentiment ────────────────────────────────────────
         if (s.getOptionsFlowLabel() != null) {
             String flowConflict = s.getOptionsFlowDir() != null
@@ -139,10 +158,19 @@ public class DiscordAlertService {
                     ? " ⚠️ FLOW CONFLICTS" : "";
             fields.add(f("📊 Options Flow", s.getOptionsFlowLabel() + flowConflict, true));
         }
+        if (s.getOptionsMaxPain() > 0) {
+            fields.add(f("🧲 Max Pain", String.format("$%.1f (price magnet by expiry)", s.getOptionsMaxPain()), true));
+        }
 
         // ── Conviction tier ─────────────────────────────────────────────────
         if (s.getConvictionTier() != null) {
-            fields.add(f("📐 Conviction", s.getConvictionTier(), true));
+            fields.add(f("📐 Conviction", s.getConvictionTier(), false));
+        }
+        if (s.getRiskTier() != null) {
+            fields.add(f("📊 Risk Tier", s.getRiskTier(), false));
+        }
+        if (s.getFactorBreakdown() != null) {
+            fields.add(f("🔬 Signal Factors", s.getFactorBreakdown(), false));
         }
 
         // ── News sentiment ──────────────────────────────────────────────────
@@ -159,25 +187,6 @@ public class DiscordAlertService {
         // ── Earnings proximity warning ──────────────────────────────────────
         if (earningsCheck != null && earningsCheck.isNearEarnings() && earningsCheck.label() != null) {
             fields.add(f("📅 Earnings", earningsCheck.label(), false));
-        }
-
-        // ── Secondary info (bottom section) ─────────────────────────────────
-        if (s.hasOptionsData()) {
-            String greeksLine = String.format("Δ %.3f | IV %.1f%% %s",
-                    s.getOptionsDelta(), s.getOptionsIV() * 100,
-                    s.getOptionsIVPct() <= 30 ? "✅ Cheap"
-                    : s.getOptionsIVPct() >= 70 ? "⚠️ Expensive (IV crush risk)"
-                    : "");
-            fields.add(f("📐 Greeks", greeksLine, true));
-            if (s.getOptionsMaxPain() > 0) {
-                fields.add(f("🧲 Max Pain", String.format("$%.1f", s.getOptionsMaxPain()), true));
-            }
-        }
-        if (s.getRiskTier() != null) {
-            fields.add(f("📊 Risk Tier", s.getRiskTier(), false));
-        }
-        if (s.getFactorBreakdown() != null) {
-            fields.add(f("🔬 Signal Factors", s.getFactorBreakdown(), false));
         }
 
         // ── Market context (RS + VIX) ───────────────────────────────────────
