@@ -2,6 +2,7 @@ package com.smcscanner.strategy;
 
 import com.smcscanner.alert.AlertDedup;
 import com.smcscanner.alert.DiscordAlertService;
+import com.smcscanner.broker.AlpacaOrderService;
 import com.smcscanner.filter.AdaptiveSuppressor;
 import com.smcscanner.filter.SignalQualityFilter;
 import com.smcscanner.market.EarningsCalendar;
@@ -51,6 +52,7 @@ public class ScannerService {
     private final EarningsCalendar         earnings;
     private final SwingTradeDetector       swingDetector;
     private final RangeDetector            rangeDetector;
+    private final AlpacaOrderService       alpaca;
 
     public ScannerService(ScannerConfig config, PolygonClient client, SetupDetector setupDetector,
                           CryptoStrategyService crypto, MultiTimeframeAnalyzer mtf,
@@ -61,13 +63,13 @@ public class ScannerService {
                           MarketContextService marketCtx, SignalQualityFilter qualityFilter,
                           AdaptiveSuppressor adaptive, OptionsFlowAnalyzer optionsFlow,
                           EarningsCalendar earnings, SwingTradeDetector swingDetector,
-                          RangeDetector rangeDetector) {
+                          RangeDetector rangeDetector, AlpacaOrderService alpaca) {
         this.config=config; this.client=client; this.setupDetector=setupDetector; this.crypto=crypto;
         this.mtf=mtf; this.discord=discord; this.dedup=dedup; this.tracker=tracker; this.liveLog=liveLog; this.state=state;
         this.atrCalc=atrCalc; this.vwap=vwap; this.breakout=breakout; this.keyLevel=keyLevel;
         this.news=news; this.marketCtx=marketCtx; this.qualityFilter=qualityFilter; this.adaptive=adaptive;
         this.optionsFlow=optionsFlow; this.earnings=earnings; this.swingDetector=swingDetector;
-        this.rangeDetector=rangeDetector;
+        this.rangeDetector=rangeDetector; this.alpaca=alpaca;
     }
 
     public boolean isCrypto(String t) { return t.startsWith("X:"); }
@@ -482,6 +484,13 @@ public class ScannerService {
                                         ticker, s.getDirection().toUpperCase(), s.getConfidence(), s.getEntry(),
                                         newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj, alignmentAdj, vixBoost, dynamicMinConf);
                                 discord.sendSetupAlert(s, sentiment, context, earningsCheck);
+                            }
+                            // ── Auto-trade via Alpaca (if enabled) ──────────
+                            if (alpaca.isEnabled()) {
+                                String orderId = alpaca.placeOrder(s);
+                                if (orderId != null) {
+                                    log.info("ALPACA ORDER {} {} orderId={}", ticker, s.getDirection(), orderId);
+                                }
                             }
                             liveLog.recordTrade(s, stratType);
                             tracker.recordStrategySignal(stratType, s.getConfidence());

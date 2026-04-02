@@ -53,6 +53,7 @@ public class DashboardController {
     private final LiveTradeLog       liveLog;
     private final PolygonClient      polygon;
     private final ProfileOptimizer   optimizer;
+    private final com.smcscanner.broker.AlpacaOrderService alpaca;
 
     private static final Map<String,String> TV_MAP = Map.of(
         "X:BTCUSD", "BINANCE:BTCUSDT",
@@ -71,12 +72,13 @@ public class DashboardController {
                                 DiscordAlertService discord, ReportCache reportCache,
                                 BacktestService backtestService, AdaptiveSuppressor adaptive,
                                 AnalysisService analysisService, LiveTradeLog liveLog,
-                                PolygonClient polygon, ProfileOptimizer optimizer) {
+                                PolygonClient polygon, ProfileOptimizer optimizer,
+                                com.smcscanner.broker.AlpacaOrderService alpaca) {
         this.state=state; this.config=config; this.sessionFilter=sessionFilter;
         this.tracker=tracker; this.eodReport=eodReport; this.discord=discord;
         this.reportCache=reportCache; this.backtestService=backtestService; this.adaptive=adaptive;
         this.analysisService=analysisService; this.liveLog=liveLog; this.polygon=polygon;
-        this.optimizer=optimizer;
+        this.optimizer=optimizer; this.alpaca=alpaca;
     }
 
     @GetMapping("/")
@@ -655,6 +657,51 @@ public class DashboardController {
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
         }
+    }
+
+    // ── Alpaca Trading endpoints ────────────────────────────────────────────
+
+    /** GET /api/alpaca/account — account balance, buying power, etc. */
+    @GetMapping("/api/alpaca/account")
+    @ResponseBody
+    public ResponseEntity<Map<String,Object>> alpacaAccount() {
+        return ResponseEntity.ok(alpaca.getAccount());
+    }
+
+    /** GET /api/alpaca/positions — open positions with P&L. */
+    @GetMapping("/api/alpaca/positions")
+    @ResponseBody
+    public ResponseEntity<List<Map<String,Object>>> alpacaPositions() {
+        return ResponseEntity.ok(alpaca.getPositions());
+    }
+
+    /** GET /api/alpaca/orders — today's orders. */
+    @GetMapping("/api/alpaca/orders")
+    @ResponseBody
+    public ResponseEntity<List<Map<String,Object>>> alpacaOrders() {
+        return ResponseEntity.ok(alpaca.getOrders());
+    }
+
+    /** POST /api/alpaca/cancel-all — cancel all open orders (emergency). */
+    @PostMapping("/api/alpaca/cancel-all")
+    @ResponseBody
+    public ResponseEntity<Map<String,Object>> alpacaCancelAll() {
+        boolean ok = alpaca.cancelAllOrders();
+        return ResponseEntity.ok(Map.of("cancelled", ok));
+    }
+
+    /** GET /api/alpaca/status — is Alpaca enabled + paper/live mode. */
+    @GetMapping("/api/alpaca/status")
+    @ResponseBody
+    public ResponseEntity<Map<String,Object>> alpacaStatus() {
+        Map<String,Object> status = new LinkedHashMap<>();
+        status.put("enabled", alpaca.isEnabled());
+        status.put("paper", config.isAlpacaPaper());
+        status.put("max_position", config.getAlpacaMaxPosition());
+        status.put("daily_loss_limit", config.getAlpacaDailyLossLimit());
+        status.put("max_daily_orders", config.getAlpacaMaxDailyOrders());
+        status.put("min_confidence", config.getAlpacaMinConfidence());
+        return ResponseEntity.ok(status);
     }
 
     @GetMapping("/health")

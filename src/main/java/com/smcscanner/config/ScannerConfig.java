@@ -35,6 +35,17 @@ public class ScannerConfig {
     private double minAtrPercentile   = 30.0;
     private double maxSpreadPct       = 0.15;
 
+    // ── Alpaca trading config ───────────────────────────────────────────────
+    private String  alpacaApiKey        = "";
+    private String  alpacaSecretKey     = "";
+    private String  alpacaBaseUrl       = "";   // blank = auto (paper/live based on flag)
+    private boolean alpacaEnabled       = false; // master switch — must explicitly enable
+    private boolean alpacaPaper         = true;  // default to paper trading
+    private double  alpacaMaxPosition   = 500;   // max $ per trade
+    private double  alpacaDailyLossLimit= -200;  // stop trading after this loss
+    private int     alpacaMaxDailyOrders= 10;
+    private int     alpacaMinConfidence = 75;    // only auto-trade this confidence+
+
     // getters
     public String getPolygonApiKey()         { return polygonApiKey; }
     public String getDiscordWebhookUrl()     { return discordWebhookUrl; }
@@ -62,6 +73,17 @@ public class ScannerConfig {
     public double getMinAtrPercentile()    { return minAtrPercentile; }
     public double getMaxSpreadPct()        { return maxSpreadPct; }
 
+    // Alpaca getters
+    public String  getAlpacaApiKey()         { return alpacaApiKey; }
+    public String  getAlpacaSecretKey()      { return alpacaSecretKey; }
+    public String  getAlpacaBaseUrl()        { return alpacaBaseUrl; }
+    public boolean isAlpacaEnabled()         { return alpacaEnabled; }
+    public boolean isAlpacaPaper()           { return alpacaPaper; }
+    public double  getAlpacaMaxPosition()    { return alpacaMaxPosition; }
+    public double  getAlpacaDailyLossLimit() { return alpacaDailyLossLimit; }
+    public int     getAlpacaMaxDailyOrders() { return alpacaMaxDailyOrders; }
+    public int     getAlpacaMinConfidence()  { return alpacaMinConfidence; }
+
     // setters (required by @ConfigurationProperties)
     public void setPolygonApiKey(String v)          { this.polygonApiKey = v; }
     public void setDiscordWebhookUrl(String v)      { this.discordWebhookUrl = v; }
@@ -79,6 +101,17 @@ public class ScannerConfig {
     public void setMinRvol(double v)             { this.minRvol = v; }
     public void setMinAtrPercentile(double v)    { this.minAtrPercentile = v; }
     public void setMaxSpreadPct(double v)        { this.maxSpreadPct = v; }
+
+    // Alpaca setters
+    public void setAlpacaApiKey(String v)         { this.alpacaApiKey = v; }
+    public void setAlpacaSecretKey(String v)      { this.alpacaSecretKey = v; }
+    public void setAlpacaBaseUrl(String v)        { this.alpacaBaseUrl = v; }
+    public void setAlpacaEnabled(boolean v)       { this.alpacaEnabled = v; }
+    public void setAlpacaPaper(boolean v)         { this.alpacaPaper = v; }
+    public void setAlpacaMaxPosition(double v)    { this.alpacaMaxPosition = v; }
+    public void setAlpacaDailyLossLimit(double v) { this.alpacaDailyLossLimit = v; }
+    public void setAlpacaMaxDailyOrders(int v)    { this.alpacaMaxDailyOrders = v; }
+    public void setAlpacaMinConfidence(int v)     { this.alpacaMinConfidence = v; }
 
     // ── Per-ticker profiles ───────────────────────────────────────────────────
     private final Map<String, TickerProfile> profileCache = new ConcurrentHashMap<>();
