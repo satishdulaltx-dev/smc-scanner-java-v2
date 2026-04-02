@@ -635,6 +635,7 @@ public class DashboardController {
                     .confidence(80).session("NYSE").volatility("keylevel")
                     .atr(1.06).hasBos(false).hasChoch(false).fvgTop(0).fvgBottom(0)
                     .timestamp(java.time.LocalDateTime.now())
+                    .optionsContract("O:AAPL260417C00255000")
                     .optionsType("call").optionsStrike(255).optionsExpiry("2026-04-17")
                     .optionsPremium(4.11).optionsDelta(0.432).optionsIV(0.257)
                     .optionsIVPct(26).optionsBreakEven(259.11)
@@ -644,8 +645,12 @@ public class DashboardController {
                     .optionsMaxPain(255.0)
                     .convictionTier("STANDARD (1 contract)")
                     .riskTier("STANDARD — 1-2% risk, 1x ATR stop, max 5d hold")
+                    .factorBreakdown("Base score — no adjustments")
                     .build();
-            discord.sendSetupAlert(s);
+            var newsSentiment = new com.smcscanner.news.NewsSentiment(
+                    "AAPL", 2, 1, 3, 0.1,
+                    "What Happens if the S&P 500 Joins the Nasdaq and Dow in Correction Territory?");
+            discord.sendSetupAlert(s, newsSentiment);
             return ResponseEntity.ok(Map.of("status", "sent", "ticker", "AAPL"));
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
