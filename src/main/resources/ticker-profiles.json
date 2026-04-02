@@ -13,12 +13,11 @@
     },
     {
       "ticker": "ABNB",
-      "strategyType": "smc",
-      "minConfidence": 78,
-      "slAtrMult": 0.4,
-      "tpRrRatio": 1.5,
-      "maxConfidence": 84,
-      "note": "365d optimizer: KeyLevel→SMC. SMC mc=78 sl=0.4 tp=1.5 → 41t 54.5%WR +0.27% exp $855 opt P&L. KeyLevel best was #10 (5t 62.5%WR $107) — too few trades. SMC captures more setups with solid edge."
+      "strategyType": "keylevel",
+      "minConfidence": 70,
+      "slAtrMult": 1.0,
+      "tpRrRatio": 2.0,
+      "note": "180d optimizer: SMC→KeyLevel. KL mc=70 sl=1.0 tp=2:1 → 14t 44.4%WR +0.39% exp $275 opt. #2 KL mc=62 sl=0.4 tp=1:1 69.2%WR but lower exp +0.21%. Wider stop + 2:1 RR captures more reward."
     },
     {
       "ticker": "AMD",
