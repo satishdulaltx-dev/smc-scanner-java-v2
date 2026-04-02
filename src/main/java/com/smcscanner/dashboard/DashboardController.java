@@ -624,6 +624,34 @@ public class DashboardController {
     @GetMapping("/trades")
     public String tradesPage() { return "trades"; }
 
+    /** POST /api/test-alert — sends a fake AAPL alert to Discord to preview embed format. */
+    @PostMapping("/api/test-alert")
+    @ResponseBody
+    public ResponseEntity<Map<String,Object>> testAlert() {
+        try {
+            var s = com.smcscanner.model.TradeSetup.builder()
+                    .ticker("AAPL").direction("long")
+                    .entry(253.49).stopLoss(251.56).takeProfit(257.34)
+                    .confidence(80).session("NYSE").volatility("keylevel")
+                    .atr(1.06).hasBos(false).hasChoch(false).fvgTop(0).fvgBottom(0)
+                    .timestamp(java.time.LocalDateTime.now())
+                    .optionsType("call").optionsStrike(255).optionsExpiry("2026-04-17")
+                    .optionsPremium(4.11).optionsDelta(0.432).optionsIV(0.257)
+                    .optionsIVPct(26).optionsBreakEven(259.11)
+                    .optionsProfitPer(170).optionsLossPer(96).optionsRR(1.8)
+                    .optionsSuggested(1)
+                    .optionsFlowLabel("Neutral flow").optionsFlowDir("NEUTRAL")
+                    .optionsMaxPain(255.0)
+                    .convictionTier("STANDARD (1 contract)")
+                    .riskTier("STANDARD — 1-2% risk, 1x ATR stop, max 5d hold")
+                    .build();
+            discord.sendSetupAlert(s);
+            return ResponseEntity.ok(Map.of("status", "sent", "ticker", "AAPL"));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
+    }
+
     @GetMapping("/health")
     @ResponseBody
     public ResponseEntity<Map<String,String>> health() { return ResponseEntity.ok(Map.of("status","UP")); }
