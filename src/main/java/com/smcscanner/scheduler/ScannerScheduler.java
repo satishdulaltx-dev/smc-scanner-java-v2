@@ -27,7 +27,7 @@ public class ScannerScheduler {
     private static final Logger log = LoggerFactory.getLogger(ScannerScheduler.class);
     private static final ZoneId ET = ZoneId.of("America/New_York");
     private static final LocalTime NY_OPEN=LocalTime.of(9,30), NY_CLOSE=LocalTime.of(16,0);
-    private static final LocalTime EOD_TRIGGER=LocalTime.of(16,5), EOD_CUTOFF=LocalTime.of(16,20);
+    private static final LocalTime EOD_TRIGGER=LocalTime.of(21,0), EOD_CUTOFF=LocalTime.of(22,0); // 9-10 PM ET (8-9 PM CST) — includes post-market data
     private static final LocalTime DAILY_REPORT_TRIGGER=LocalTime.of(16,30), DAILY_REPORT_CUTOFF=LocalTime.of(16,45);
 
     private volatile boolean eodSentToday=false;
@@ -78,7 +78,7 @@ public class ScannerScheduler {
         if (day!=lastEodDay) { eodSentToday=false; dailyReportSentToday=false; lastEodDay=day; }
         if (nowET.getDayOfWeek().getValue()>=6||eodSentToday) return;
         if (time.isBefore(EOD_TRIGGER)||time.isAfter(EOD_CUTOFF)) return;
-        log.info("Generating EOD watchlist report...");
+        log.info("Generating overnight watchlist report (post-market + next morning prep)...");
         eodSentToday=true;
         try {
             List<TickerReport> reports=eodReport.generateReport(config.loadWatchlist());
