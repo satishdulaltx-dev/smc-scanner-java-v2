@@ -60,108 +60,145 @@ public class DiscordAlertService {
 
     private Map<String,Object> buildEmbed(TradeSetup s, NewsSentiment sentiment, MarketContext context,
                                               EarningsCalendar.EarningsCheck earningsCheck) {
-        boolean isLong = "long".equals(s.getDirection());
-        String arrow   = isLong ? "⬆️" : "⬇️";
-        String grade   = s.getConfidence()>=85 ? "⭐" : (s.getConfidence()>=75 ? "✅" : (s.getConfidence()>=65 ? "🟡" : "⚪"));
-        double slPct   = s.getEntry()>0 ? Math.abs(s.getEntry()-s.getStopLoss())/s.getEntry()*100 : 0;
-        double tpPct   = s.getEntry()>0 ? Math.abs(s.getTakeProfit()-s.getEntry())/s.getEntry()*100 : 0;
-        String ts      = ZonedDateTime.now(ZoneOffset.UTC).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))+" UTC";
-        String strategy = "normal".equals(s.getVolatility())   ? "VWAP Reversion"
-                        : "high".equals(s.getVolatility())     ? "ORB Breakout"
-                        : "keylevel".equals(s.getVolatility()) ? "Key Level Rejection"
-                        : "SMC Sweep+FVG";
+        boolean isLong="long".equals(s.getDirection());
+        String arrow=isLong?"⬆️":"⬇️";
+        String grade=s.getConfidence()>=85?"⭐":(s.getConfidence()>=75?"✅":(s.getConfidence()>=65?"🟡":"⚪"));
+        double slPts=Math.abs(s.getEntry()-s.getStopLoss()), tpPts=Math.abs(s.getTakeProfit()-s.getEntry());
+        double slPct=s.getEntry()>0?slPts/s.getEntry()*100:0, tpPct=s.getEntry()>0?tpPts/s.getEntry()*100:0;
+        String ts=ZonedDateTime.now(ZoneOffset.UTC).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))+" UTC";
+        String strategy = "normal".equals(s.getVolatility())   ? "📊 VWAP Reversion"
+                        : "high".equals(s.getVolatility())     ? "🚀 ORB Breakout"
+                        : "keylevel".equals(s.getVolatility()) ? "🎯 Key Level Rejection"
+                        : "🔷 SMC Sweep+FVG";
 
-        // ── Build compact description instead of 20+ fields ─────────────────
-        StringBuilder desc = new StringBuilder();
+        List<Map<String,Object>> fields = new java.util.ArrayList<>();
 
-        // Options trade section
+        // ── OPTIONS CONTRACT ─────────────────────────────────────────────────
         if (s.hasOptionsData()) {
             int dte = (int)((java.time.LocalDate.parse(s.getOptionsExpiry()).toEpochDay()
                     - java.time.LocalDate.now().toEpochDay()));
-            String typeChar = "call".equals(s.getOptionsType()) ? "C" : "P";
+            String contractLabel = String.format("**%s** $%.0f%s  exp %s (%dd)",
+                    s.getOptionsType().toUpperCase(), s.getOptionsStrike(),
+                    "call".equals(s.getOptionsType()) ? "C" : "P",
+                    s.getOptionsExpiry(), dte);
+            fields.add(f("🎯 OPTIONS CONTRACT", contractLabel, false));
 
-            // Bracket orders — what to actually enter in broker
+            String premiumLine = String.format("Premium: **$%.2f** /contract ($%.0f total for %d)",
+                    s.getOptionsPremium(), s.getOptionsPremium() * 100 * s.getOptionsSuggested(),
+                    s.getOptionsSuggested());
+            fields.add(f("💵 Entry Cost", premiumLine, false));
+
+            // P&L estimate
+            double totalProfit = s.getOptionsProfitPer() * s.getOptionsSuggested();
+            double totalLoss   = s.getOptionsLossPer() * s.getOptionsSuggested();
+            String pnlLine = String.format(
+                    "**If TP hit:** +$%.0f per contract → **+$%.0f** (%d contracts)\n" +
+                    "**If SL hit:** -$%.0f per contract → **-$%.0f**\n" +
+                    "**Options R:R:** %.1f:1",
+                    s.getOptionsProfitPer(), totalProfit, s.getOptionsSuggested(),
+                    s.getOptionsLossPer(), totalLoss,
+                    s.getOptionsRR());
+            fields.add(f("💰 P&L Estimate", pnlLine, false));
+
+            // Bracket order prices — what to enter in broker
             double delta = s.getOptionsDelta();
             double optAtTP = Math.max(0.01, s.getOptionsPremium() + delta * (s.getTakeProfit() - s.getEntry()));
-            double optAtSL = Math.max(0.01, s.getOptionsPremium() + delta * (s.getStopLoss() - s.getEntry()));
-
-            desc.append(String.format("**BUY** $%.0f%s %s (%dd) @ **$%.2f**\n",
-                    s.getOptionsStrike(), typeChar, s.getOptionsExpiry(), dte, s.getOptionsPremium()));
-            desc.append(String.format("TP **$%.2f** | SL **$%.2f** | R:R **%.1f:1**\n",
-                    optAtTP, optAtSL, s.getOptionsRR()));
-            desc.append(String.format("Δ %.2f | IV %.0f%% | BE $%.2f\n",
-                    s.getOptionsDelta(), s.getOptionsIV() * 100, s.getOptionsBreakEven()));
-
-            // P&L one-liner
-            desc.append(String.format("P&L: **+$%.0f** / **-$%.0f** per contract\n",
-                    s.getOptionsProfitPer(), s.getOptionsLossPer()));
-            desc.append("\n");
+            double optAtSL = Math.max(0.01, s.getOptionsPremium() + delta * (s.getStopLoss()  - s.getEntry()));
+            String bracketLine = String.format(
+                    "**BUY** option @ **$%.2f**\n" +
+                    "✅ **SELL TP** @ **$%.2f** (stock $%.2f)\n" +
+                    "🛑 **SELL SL** @ **$%.2f** (stock $%.2f)",
+                    s.getOptionsPremium(),
+                    optAtTP, s.getTakeProfit(),
+                    optAtSL, s.getStopLoss());
+            fields.add(f("📋 Broker Bracket Orders", bracketLine, false));
         }
 
-        // Stock levels
-        desc.append(String.format("**Entry** $%.2f → **TP** $%.2f (+%.1f%%) | **SL** $%.2f (-%.1f%%)\n",
-                s.getEntry(), s.getTakeProfit(), tpPct, s.getStopLoss(), slPct));
-        desc.append(String.format("R:R **%.1f:1** | ATR $%.2f | %s\n", s.rrRatio(), s.getAtr(), strategy));
+        // ── Core setup fields ─────────────────────────────────────────────────
+        fields.addAll(List.of(
+            f("Direction",  arrow+" "+s.getDirection().toUpperCase(), true),
+            f("Confidence", grade+" "+s.getConfidence()+"/100",       true),
+            f("Strategy",   strategy,                                  true),
+            f("Entry",      String.format("$%.2f (stock)",s.getEntry()),       true),
+            f("Stop Loss",  String.format("$%.2f (-%.2f%%)",s.getStopLoss(),slPct),  true),
+            f("Take Profit",String.format("$%.2f (+%.2f%%)",s.getTakeProfit(),tpPct),true),
+            f("R:R",        String.format("%.1f:1",s.rrRatio()),       true),
+            f("ATR",        String.format("$%.2f",s.getAtr()),         true)));
 
-        // Breakeven instruction
-        double beTarget = isLong
-                ? s.getEntry() + Math.abs(s.getEntry() - s.getStopLoss())
-                : s.getEntry() - Math.abs(s.getEntry() - s.getStopLoss());
-        desc.append(String.format("Move SL → BE at $%.2f (1:1)\n", beTarget));
+        // ── Breakeven stop instruction ────────────────────────────────────────
+        fields.add(f("🔒 Breakeven", String.format("Move SL → $%.2f once price hits $%.2f (1:1)",
+                    s.getEntry(),
+                    isLong ? s.getEntry() + Math.abs(s.getEntry()-s.getStopLoss())
+                           : s.getEntry() - Math.abs(s.getEntry()-s.getStopLoss())), false));
 
-        // ── Warnings only (conflicts, earnings, high IV) ────────────────────
-        List<String> warnings = new ArrayList<>();
+        // ── Options flow sentiment ────────────────────────────────────────
+        if (s.getOptionsFlowLabel() != null) {
+            String flowConflict = s.getOptionsFlowDir() != null
+                    && (("long".equals(s.getDirection()) && "BEARISH".equals(s.getOptionsFlowDir()))
+                     || ("short".equals(s.getDirection()) && "BULLISH".equals(s.getOptionsFlowDir())))
+                    ? " ⚠️ FLOW CONFLICTS" : "";
+            fields.add(f("📊 Options Flow", s.getOptionsFlowLabel() + flowConflict, true));
+        }
 
-        if (s.getOptionsGreeksWarning() != null) {
-            warnings.add(s.getOptionsGreeksWarning());
+        // ── Conviction tier ─────────────────────────────────────────────────
+        if (s.getConvictionTier() != null) {
+            fields.add(f("📐 Conviction", s.getConvictionTier(), true));
         }
-        if (s.getOptionsFlowDir() != null
-                && (("long".equals(s.getDirection()) && "BEARISH".equals(s.getOptionsFlowDir()))
-                 || ("short".equals(s.getDirection()) && "BULLISH".equals(s.getOptionsFlowDir())))) {
-            warnings.add("Options flow CONFLICTS with direction");
+
+        // ── News sentiment ──────────────────────────────────────────────────
+        if (sentiment != null && sentiment.hasNews() && sentiment.label() != null) {
+            String newsConflict = sentiment.isConflicting(s.getDirection()) ? " ⚠️ CONFLICTS" : "";
+            String headline = sentiment.headline() != null
+                    ? (sentiment.headline().length() > 100
+                       ? sentiment.headline().substring(0, 97) + "…"
+                       : sentiment.headline())
+                    : "";
+            fields.add(f("News (48h)", sentiment.label() + newsConflict + "\n" + headline, false));
         }
-        if (sentiment != null && sentiment.hasNews() && sentiment.isConflicting(s.getDirection())) {
-            warnings.add("News sentiment CONFLICTS");
-        }
+
+        // ── Earnings proximity warning ──────────────────────────────────────
         if (earningsCheck != null && earningsCheck.isNearEarnings() && earningsCheck.label() != null) {
-            warnings.add(earningsCheck.label());
+            fields.add(f("📅 Earnings", earningsCheck.label(), false));
         }
-        if (context != null && context.isRsConflicting(s.getDirection()) && context.rsLabel() != null) {
-            warnings.add("RS vs SPY conflicts");
+
+        // ── Secondary info (bottom section) ─────────────────────────────────
+        if (s.hasOptionsData()) {
+            String greeksLine = String.format("Δ %.3f | IV %.1f%% %s",
+                    s.getOptionsDelta(), s.getOptionsIV() * 100,
+                    s.getOptionsIVPct() <= 30 ? "✅ Cheap"
+                    : s.getOptionsIVPct() >= 70 ? "⚠️ Expensive (IV crush risk)"
+                    : "");
+            fields.add(f("📐 Greeks", greeksLine, true));
+            if (s.getOptionsMaxPain() > 0) {
+                fields.add(f("🧲 Max Pain", String.format("$%.1f", s.getOptionsMaxPain()), true));
+            }
+        }
+        if (s.getRiskTier() != null) {
+            fields.add(f("📊 Risk Tier", s.getRiskTier(), false));
+        }
+        if (s.getFactorBreakdown() != null) {
+            fields.add(f("🔬 Signal Factors", s.getFactorBreakdown(), false));
+        }
+
+        // ── Market context (RS + VIX) ───────────────────────────────────────
+        if (context != null && context.rsLabel() != null) {
+            String rsConflict = context.isRsConflicting(s.getDirection()) ? " ⚠️ CONFLICTS" : "";
+            fields.add(f("RS vs SPY (5d)", context.rsLabel() + rsConflict, true));
         }
         if (context != null && context.vixLabel() != null && context.isVixConflicting(s.getVolatility())) {
-            warnings.add("VIX: " + context.vixLabel());
+            fields.add(f("VIX Regime", context.vixLabel() + " ⚠️ WEAK ENV", true));
+        } else if (context != null && context.vixLabel() != null && !"normal".equals(context.vixRegime())) {
+            fields.add(f("VIX Regime", context.vixLabel(), true));
         }
 
-        if (!warnings.isEmpty()) {
-            desc.append("\n⚠️ ").append(String.join(" | ", warnings));
-        }
-
-        // ── Build embed ─────────────────────────────────────────────────────
-        List<Map<String,Object>> fields = new java.util.ArrayList<>();
-        // Confidence + conviction as single row
-        String confLine = grade + " " + s.getConfidence() + "/100";
-        if (s.getConvictionTier() != null) confLine += " · " + s.getConvictionTier();
-        fields.add(f("Confidence", confLine, true));
-
-        // Flow + Max Pain as compact context
-        if (s.getOptionsFlowLabel() != null || s.getOptionsMaxPain() > 0) {
-            String ctx = "";
-            if (s.getOptionsFlowLabel() != null) ctx += s.getOptionsFlowLabel();
-            if (s.getOptionsMaxPain() > 0) ctx += (ctx.isEmpty() ? "" : " | ") + "Max Pain $" + String.format("%.0f", s.getOptionsMaxPain());
-            fields.add(f("Flow", ctx, true));
-        }
-
-        Map<String,Object> e = new HashMap<>();
+        Map<String,Object> e=new HashMap<>();
         String title = s.hasOptionsData()
                 ? arrow + " " + s.getTicker() + " — BUY " + s.getOptionsType().toUpperCase()
-                  + " $" + String.format("%.0f", s.getOptionsStrike()) + " " + s.getOptionsExpiry()
-                : arrow + " " + s.getTicker() + " — " + s.getDirection().toUpperCase() + " · " + strategy;
+                  + " $" + String.format("%.0f", s.getOptionsStrike())
+                  + " " + s.getOptionsExpiry()
+                : arrow + " " + s.getTicker() + " — " + s.getDirection().toUpperCase() + " Setup";
         e.put("title", title);
-        e.put("description", desc.toString());
-        e.put("color", isLong ? 0x2ECC71 : 0xE74C3C);
-        e.put("fields", fields);
-        e.put("footer", Map.of("text", "SD Scanner | " + ts));
+        e.put("color",isLong?0x2ECC71:0xE74C3C); e.put("fields",fields); e.put("footer",Map.of("text","SD Scanner | "+ts));
         return e;
     }
 
