@@ -214,10 +214,11 @@
     },
     {
       "ticker": "SMCI",
-      "strategyType": "keylevel",
+      "strategyType": "smc",
       "minConfidence": 78,
-      "slAtrMult": 0.4,
-      "note": "365d optimizer: KeyLevel mc=78 sl=0.4 → 4t 50%WR +0.85% exp $35 opt P&L. Tighter SL (0.4 ATR) forces precise entries near key levels — reduces loss magnitude. DO NOT SKIP."
+      "slAtrMult": 1.0,
+      "tpRrRatio": 1.5,
+      "note": "180d optimizer: KeyLevel→SMC. SMC mc=78 sl=1.0 tp=1.5:1 → 21t 61.9%WR +4.01%avg win -3.87%avg loss +1.01% exp $924 opt P&L. #2 SMC mc=78 sl=1.0 tp=2:1 similar (60.9%WR +0.96% $1014). Wider stop (1.0 ATR) suits semiconductor volatility."
     },
     {
       "ticker": "SNAP",
