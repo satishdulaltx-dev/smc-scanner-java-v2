@@ -15,9 +15,10 @@
       "ticker": "ABNB",
       "strategyType": "smc",
       "minConfidence": 62,
+      "maxConfidence": 84,
       "slAtrMult": 1.0,
       "tpRrRatio": 1.5,
-      "note": "Apr 2026: KeyLevel→SMC. KL showed 0%WR 365d (0W/6L/6BE, 12 trades) — regime changed, key levels no longer respected. SMC mc=62 sl=1.0 tp=1.5 to get trade volume and find edge. Revisit after 180d backtest."
+      "note": "Apr 2026: SMC mc=62 maxConf=84 sl=1.0 tp=1.5. Reversed-confidence pattern: 75-84 bucket 100%WR (7/7 +2.07% exp) vs 85+ bucket 28.6%WR (8/28 -0.94% exp). All 15M_CONFLICT filtered trades were 100/100 conf — maxConf=84 caps those exhausted late entries."
     },
     {
       "ticker": "AMD",
