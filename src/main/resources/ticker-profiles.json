@@ -13,10 +13,12 @@
     },
     {
       "ticker": "ABNB",
-      "strategyType": "vwap",
-      "minConfidence": 62,
+      "strategyType": "smc",
+      "minConfidence": 75,
+      "maxConfidence": 84,
+      "slAtrMult": 1.0,
       "tpRrRatio": 1.5,
-      "note": "Apr 2026: SMC->VWAP. SMC had 75-84 bucket 100%WR but only 7 trades/year — too few to be statistically reliable. ABNB is a seasonal consumer travel stock that mean-reverts intraday, similar to JPM. Testing VWAP for more consistent signal volume."
+      "note": "Apr 2026: Targeting SMC 75-84 sweet spot only. Tested KeyLevel (0%WR), VWAP (20%WR), SMC mc=62 (44%WR). Only SMC 75-84 bucket showed edge: 7/7 100%WR. Low frequency (~7 trades/year) but zero losses. minConf=75 + maxConf=84 isolates that band."
     },
     {
       "ticker": "AMD",
