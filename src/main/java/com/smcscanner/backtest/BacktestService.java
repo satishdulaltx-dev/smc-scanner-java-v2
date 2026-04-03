@@ -4,6 +4,7 @@ import com.smcscanner.config.ScannerConfig;
 import com.smcscanner.data.PolygonClient;
 import com.smcscanner.filter.SignalQualityFilter;
 import com.smcscanner.indicator.AtrCalculator;
+import com.smcscanner.indicator.TechnicalIndicators;
 import com.smcscanner.market.MarketContext;
 import com.smcscanner.market.MarketContextService;
 import com.smcscanner.model.OHLCV;
@@ -47,17 +48,19 @@ public class BacktestService {
     private final SignalQualityFilter      qualityFilter;
     private final ScannerConfig            config;
     private final OptionsFlowAnalyzer      optionsAnalyzer;
+    private final TechnicalIndicators      techIndicators;
 
     public BacktestService(PolygonClient client, AtrCalculator atrCalc, SetupDetector setupDetector,
                            VwapStrategyDetector vwapDetector, BreakoutStrategyDetector breakoutDetector,
                            KeyLevelStrategyDetector keyLevelDetector, NewsService newsService,
                            MarketContextService marketCtxService, SignalQualityFilter qualityFilter,
-                           ScannerConfig config, OptionsFlowAnalyzer optionsAnalyzer) {
+                           ScannerConfig config, OptionsFlowAnalyzer optionsAnalyzer,
+                           TechnicalIndicators techIndicators) {
         this.client = client; this.atrCalc = atrCalc; this.setupDetector = setupDetector;
         this.vwapDetector = vwapDetector; this.breakoutDetector = breakoutDetector;
         this.keyLevelDetector = keyLevelDetector; this.newsService = newsService;
         this.marketCtxService = marketCtxService; this.qualityFilter = qualityFilter;
-        this.config = config; this.optionsAnalyzer = optionsAnalyzer;
+        this.config = config; this.optionsAnalyzer = optionsAnalyzer; this.techIndicators = techIndicators;
     }
 
     public BacktestResult run(String ticker, int lookbackDays) {
@@ -80,9 +83,9 @@ public class BacktestService {
             byDate.computeIfAbsent(d, k -> new ArrayList<>()).add(bar);
         }
 
-        // Fetch daily bars: 200 bars (~10 months) so keylevel detector has enough
-        // history even when backtesting 90+ days into the past
-        List<OHLCV> dailyBars = client.getBars(ticker, "1d", 200);
+        // Fetch daily bars: 450 bars (~18 months) so SMA 200 + keylevel detector
+        // have enough history even when backtesting 180+ days into the past
+        List<OHLCV> dailyBars = client.getBars(ticker, "1d", 450);
 
         // Fetch 15m bars for the full backtest period — used to compute 15m trend
         // bias at each entry point, mirroring the live scanner's alignment check.
@@ -311,7 +314,18 @@ public class BacktestService {
                         : qualityFilter.computeDelta(setup, entryEpochMs, streak);
                 String qualityLabel = qualityFilter.buildLabel(setup, entryEpochMs, streak);
 
-                int totalAdj = newsAdj + ctxAdj + qualityAdj + intradayRsAdj + deadZoneAdj;
+                // ── Technical indicator adjustments (SMA 200 + RSI + candle + volume) ──
+                // Mirrors the live ScannerService logic for accurate backtesting.
+                int sma200Adj = 0, rsiAdj = 0, candleAdj = 0, volAdj = 0;
+                if (!ticker.startsWith("X:")) {
+                    double currentPrice = window.get(window.size() - 1).getClose();
+                    sma200Adj = techIndicators.sma200Delta(htfSlice, currentPrice, setup.getDirection());
+                    rsiAdj    = techIndicators.rsiDelta(window, setup.getDirection());
+                    candleAdj = techIndicators.candlePatternDelta(window, setup.getDirection());
+                    volAdj    = techIndicators.volumeDelta(window);
+                }
+
+                int totalAdj = newsAdj + ctxAdj + qualityAdj + intradayRsAdj + deadZoneAdj + sma200Adj + rsiAdj + candleAdj + volAdj;
                 // Penalty floor: secondary filters can reduce base confidence by at most 25%.
                 // A strong base setup (80+) should never be killed by stacking RS + news + quality.
                 // Floor = 75% of base confidence. e.g. base=80 → floor=60, base=70 → floor=52.
