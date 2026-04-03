@@ -41,6 +41,13 @@ public class AlpacaOrderService {
     private volatile double dailyPnl = 0.0;
     private volatile String lastResetDate = "";
 
+    // ── Trailing stop tracking ──────────────────────────────────────────────
+    // Tracks each filled position: original entry, SL, TP, current trail level
+    public record TrackedPosition(String symbol, String direction, double entry, double stopLoss,
+                                   double takeProfit, String orderId, String stopOrderId,
+                                   int trailLevel) {} // trailLevel: 0=original, 1=BE, 2=50%, 3=75%
+    private final Map<String, TrackedPosition> trackedPositions = new ConcurrentHashMap<>();
+
     // Config defaults (overridden by env vars)
     private static final double DEFAULT_MAX_POSITION = 500.0;   // max $ per trade
     private static final double DEFAULT_DAILY_LOSS_LIMIT = -200.0; // stop trading after $200 loss
@@ -130,6 +137,11 @@ public class AlpacaOrderService {
                     String orderId = node.path("id").asText();
                     String status = node.path("status").asText();
                     log.info("ALPACA ORDER PLACED: {} {} id={} status={}", s.getTicker(), s.getDirection(), orderId, status);
+
+                    // Track for trailing stop management
+                    trackedPositions.put(s.getTicker(), new TrackedPosition(
+                            s.getTicker(), s.getDirection(), s.getEntry(),
+                            s.getStopLoss(), s.getTakeProfit(), orderId, null, 0));
 
                     dailyOrderCount.merge(s.getTicker(), 1, Integer::sum);
                     return orderId;
@@ -272,6 +284,178 @@ public class AlpacaOrderService {
             log.error("ALPACA cancel error: {}", e.getMessage());
             return false;
         }
+    }
+
+    // ── Trailing Stop Management ────────────────────────────────────────────
+
+    /**
+     * Check all tracked positions and adjust stop losses based on profit level.
+     * Called every 30s by the scheduler during market hours.
+     *
+     * Trail levels:
+     *   Level 0 → original SL (no change)
+     *   Level 1 → at 1:1 R:R (50% to TP): move SL to breakeven (entry)
+     *   Level 2 → at 75% to TP: move SL to lock in 50% of profit
+     *   Level 3 → at 90% to TP: move SL to lock in 75% of profit
+     */
+    public void checkTrailingStops() {
+        if (!isEnabled() || trackedPositions.isEmpty()) return;
+
+        // Fetch current positions from Alpaca
+        List<Map<String, Object>> positions = getPositions();
+        if (positions.isEmpty()) {
+            // No open positions — clear tracking (positions were closed by SL/TP)
+            if (!trackedPositions.isEmpty()) {
+                log.info("TRAIL: No open positions, clearing {} tracked entries", trackedPositions.size());
+                trackedPositions.clear();
+            }
+            return;
+        }
+
+        // Build symbol→currentPrice map
+        Map<String, Double> currentPrices = new HashMap<>();
+        for (Map<String, Object> pos : positions) {
+            String symbol = (String) pos.get("symbol");
+            try {
+                double price = Double.parseDouble((String) pos.get("current_price"));
+                currentPrices.put(symbol, price);
+            } catch (Exception ignored) {}
+        }
+
+        // Check each tracked position
+        for (Map.Entry<String, TrackedPosition> e : trackedPositions.entrySet()) {
+            String symbol = e.getKey();
+            TrackedPosition tp = e.getValue();
+            Double currentPrice = currentPrices.get(symbol);
+
+            if (currentPrice == null) {
+                // Position closed (hit SL or TP) — remove from tracking
+                log.info("TRAIL: {} no longer held — removing from tracker", symbol);
+                trackedPositions.remove(symbol);
+                continue;
+            }
+
+            boolean isLong = "long".equals(tp.direction());
+            double entry = tp.entry();
+            double origSL = tp.stopLoss();
+            double target = tp.takeProfit();
+            double risk = Math.abs(entry - origSL);
+            double totalMove = Math.abs(target - entry);
+
+            // Calculate how far price has moved toward TP (0.0 = at entry, 1.0 = at TP)
+            double progress = isLong
+                    ? (currentPrice - entry) / totalMove
+                    : (entry - currentPrice) / totalMove;
+
+            // Determine new trail level based on progress
+            int newLevel = tp.trailLevel();
+            double newStopPrice = 0;
+
+            if (progress >= 0.90 && tp.trailLevel() < 3) {
+                // 90%+ to TP → lock in 75% of profit
+                newLevel = 3;
+                double profit75 = totalMove * 0.75;
+                newStopPrice = isLong ? entry + profit75 : entry - profit75;
+                log.info("TRAIL L3: {} at {}% to TP → SL to ${} (lock 75% profit)",
+                        symbol, String.format("%.1f", progress * 100), String.format("%.2f", newStopPrice));
+            } else if (progress >= 0.75 && tp.trailLevel() < 2) {
+                // 75%+ to TP → lock in 50% of profit
+                newLevel = 2;
+                double profit50 = totalMove * 0.50;
+                newStopPrice = isLong ? entry + profit50 : entry - profit50;
+                log.info("TRAIL L2: {} at {}% to TP → SL to ${} (lock 50% profit)",
+                        symbol, String.format("%.1f", progress * 100), String.format("%.2f", newStopPrice));
+            } else if (progress >= 0.50 && tp.trailLevel() < 1) {
+                // 50%+ to TP (1:1 R:R) → move to breakeven
+                newLevel = 1;
+                newStopPrice = entry;
+                log.info("TRAIL L1: {} at {}% to TP → SL to BE ${}",
+                        symbol, String.format("%.1f", progress * 100), String.format("%.2f", newStopPrice));
+            }
+
+            if (newLevel > tp.trailLevel() && newStopPrice > 0) {
+                // Find and update the stop order
+                boolean updated = updateStopOrder(symbol, newStopPrice, isLong);
+                if (updated) {
+                    trackedPositions.put(symbol, new TrackedPosition(
+                            tp.symbol(), tp.direction(), tp.entry(), tp.stopLoss(),
+                            tp.takeProfit(), tp.orderId(), tp.stopOrderId(), newLevel));
+                    log.info("TRAIL: {} SL moved to ${} (level {}→{})",
+                            symbol, String.format("%.2f", newStopPrice), tp.trailLevel(), newLevel);
+                }
+            }
+        }
+    }
+
+    /**
+     * Update the stop loss order for a position.
+     * Alpaca approach: find the open stop order for this symbol, cancel it, place new one.
+     */
+    private boolean updateStopOrder(String symbol, double newStopPrice, boolean isLong) {
+        try {
+            // 1. Find open stop orders for this symbol
+            Request listReq = new Request.Builder()
+                    .url(getBaseUrl() + "/v2/orders?status=open&symbols=" + symbol + "&limit=50")
+                    .addHeader("APCA-API-KEY-ID", config.getAlpacaApiKey())
+                    .addHeader("APCA-API-SECRET-KEY", config.getAlpacaSecretKey())
+                    .get().build();
+
+            String stopOrderId = null;
+            int stopQty = 0;
+            try (Response resp = http.newCall(listReq).execute()) {
+                String body = resp.body() != null ? resp.body().string() : "[]";
+                JsonNode arr = mapper.readTree(body);
+                for (JsonNode n : arr) {
+                    String type = n.path("type").asText();
+                    String side = n.path("side").asText();
+                    // Stop order is the opposite side: long position has a "sell" stop
+                    boolean isStopOrder = "stop".equals(type)
+                            && ((isLong && "sell".equals(side)) || (!isLong && "buy".equals(side)));
+                    if (isStopOrder) {
+                        stopOrderId = n.path("id").asText();
+                        stopQty = n.path("qty").asInt(1);
+                        break;
+                    }
+                }
+            }
+
+            if (stopOrderId == null) {
+                log.warn("TRAIL: No stop order found for {} — cannot update", symbol);
+                return false;
+            }
+
+            // 2. Replace the stop order with PATCH (Alpaca supports order replacement)
+            Map<String, Object> patch = new LinkedHashMap<>();
+            patch.put("stop_price", String.format("%.2f", newStopPrice));
+            patch.put("qty", String.valueOf(stopQty));
+            String patchJson = mapper.writeValueAsString(patch);
+
+            Request patchReq = new Request.Builder()
+                    .url(getBaseUrl() + "/v2/orders/" + stopOrderId)
+                    .addHeader("APCA-API-KEY-ID", config.getAlpacaApiKey())
+                    .addHeader("APCA-API-SECRET-KEY", config.getAlpacaSecretKey())
+                    .patch(RequestBody.create(patchJson, JSON))
+                    .build();
+
+            try (Response resp = http.newCall(patchReq).execute()) {
+                if (resp.isSuccessful()) {
+                    log.info("TRAIL: {} stop order updated to ${}", symbol, String.format("%.2f", newStopPrice));
+                    return true;
+                } else {
+                    String errBody = resp.body() != null ? resp.body().string() : "";
+                    log.error("TRAIL: Failed to update stop for {} ({}): {}", symbol, resp.code(), errBody);
+                    return false;
+                }
+            }
+        } catch (Exception e) {
+            log.error("TRAIL: Error updating stop for {}: {}", symbol, e.getMessage());
+            return false;
+        }
+    }
+
+    /** Get tracked positions (for dashboard display). */
+    public Map<String, TrackedPosition> getTrackedPositions() {
+        return Collections.unmodifiableMap(trackedPositions);
     }
 
     // ── Configuration helpers ────────────────────────────────────────────────

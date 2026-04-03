@@ -2,6 +2,7 @@ package com.smcscanner.scheduler;
 
 import com.smcscanner.alert.AlertDedup;
 import com.smcscanner.alert.DiscordAlertService;
+import com.smcscanner.broker.AlpacaOrderService;
 import com.smcscanner.config.ScannerConfig;
 import com.smcscanner.model.TickerStatus;
 import com.smcscanner.model.eod.TickerReport;
@@ -42,13 +43,14 @@ public class ScannerScheduler {
     private final SharedState        state;
     private final ReportCache        reportCache;
     private final LiveTradeLog       liveLog;
+    private final AlpacaOrderService alpaca;
 
     public ScannerScheduler(ScannerConfig config, ScannerService scanner, EodReportService eodReport,
                              DiscordAlertService discord, AlertDedup dedup, SharedState state,
-                             ReportCache reportCache, LiveTradeLog liveLog) {
+                             ReportCache reportCache, LiveTradeLog liveLog, AlpacaOrderService alpaca) {
         this.config=config; this.scanner=scanner; this.eodReport=eodReport;
         this.discord=discord; this.dedup=dedup; this.state=state; this.reportCache=reportCache;
-        this.liveLog=liveLog;
+        this.liveLog=liveLog; this.alpaca=alpaca;
     }
 
     @Scheduled(fixedRateString="${scanner.scan-interval:15}000")
@@ -109,5 +111,21 @@ public class ScannerScheduler {
                 log.info("No trades today — daily report skipped");
             }
         } catch (Exception e) { log.error("Daily trade report failed: {}", e.getMessage()); }
+    }
+
+    /** Trailing stop monitor — checks positions every 30s during market hours. */
+    @Scheduled(fixedRate=30_000)
+    public void checkTrailingStops() {
+        if (!alpaca.isEnabled()) return;
+        ZonedDateTime nowET = ZonedDateTime.now(ET);
+        LocalTime time = nowET.toLocalTime();
+        if (nowET.getDayOfWeek().getValue() >= 6) return;
+        // Only run during market hours (9:30 AM - 4:00 PM ET)
+        if (time.isBefore(NY_OPEN) || time.isAfter(NY_CLOSE)) return;
+        try {
+            alpaca.checkTrailingStops();
+        } catch (Exception e) {
+            log.error("Trailing stop check failed: {}", e.getMessage());
+        }
     }
 }

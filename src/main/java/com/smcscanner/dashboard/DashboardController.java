@@ -690,7 +690,7 @@ public class DashboardController {
         return ResponseEntity.ok(Map.of("cancelled", ok));
     }
 
-    /** GET /api/alpaca/status — is Alpaca enabled + paper/live mode. */
+    /** GET /api/alpaca/status — is Alpaca enabled + paper/live mode + trailing stops. */
     @GetMapping("/api/alpaca/status")
     @ResponseBody
     public ResponseEntity<Map<String,Object>> alpacaStatus() {
@@ -701,6 +701,29 @@ public class DashboardController {
         status.put("daily_loss_limit", config.getAlpacaDailyLossLimit());
         status.put("max_daily_orders", config.getAlpacaMaxDailyOrders());
         status.put("min_confidence", config.getAlpacaMinConfidence());
+
+        // Trailing stop tracked positions
+        var tracked = alpaca.getTrackedPositions();
+        List<Map<String,Object>> trails = new ArrayList<>();
+        for (var tp : tracked.values()) {
+            Map<String,Object> t = new LinkedHashMap<>();
+            t.put("symbol", tp.symbol());
+            t.put("direction", tp.direction());
+            t.put("entry", tp.entry());
+            t.put("stopLoss", tp.stopLoss());
+            t.put("takeProfit", tp.takeProfit());
+            t.put("trailLevel", tp.trailLevel());
+            String levelLabel = switch (tp.trailLevel()) {
+                case 0 -> "Original SL";
+                case 1 -> "Breakeven";
+                case 2 -> "50% profit locked";
+                case 3 -> "75% profit locked";
+                default -> "Unknown";
+            };
+            t.put("trailLabel", levelLabel);
+            trails.add(t);
+        }
+        status.put("trailing_stops", trails);
         return ResponseEntity.ok(status);
     }
 
