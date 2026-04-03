@@ -13,11 +13,11 @@
     },
     {
       "ticker": "ABNB",
-      "strategyType": "keylevel",
-      "minConfidence": 70,
+      "strategyType": "smc",
+      "minConfidence": 62,
       "slAtrMult": 1.0,
-      "tpRrRatio": 2.0,
-      "note": "180d optimizer: SMC→KeyLevel. KL mc=70 sl=1.0 tp=2:1 → 14t 44.4%WR +0.39% exp $275 opt. #2 KL mc=62 sl=0.4 tp=1:1 69.2%WR but lower exp +0.21%. Wider stop + 2:1 RR captures more reward."
+      "tpRrRatio": 1.5,
+      "note": "Apr 2026: KeyLevel→SMC. KL showed 0%WR 365d (0W/6L/6BE, 12 trades) — regime changed, key levels no longer respected. SMC mc=62 sl=1.0 tp=1.5 to get trade volume and find edge. Revisit after 180d backtest."
     },
     {
       "ticker": "AMD",
