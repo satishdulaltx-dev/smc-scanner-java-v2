@@ -95,10 +95,9 @@
     {
       "ticker": "JPM",
       "strategyType": "vwap",
-      "minConfidence": 70,
-      "maxConfidence": 84,
-      "tpRrRatio": 1.0,
-      "note": "365d optimizer: VWAP mc=70 tp=1.0 → 4t 67%WR +0.97% exp $493 opt P&L. KeyLevel had 0%WR. JPM mean-reverts to VWAP better than bouncing off levels."
+      "minConfidence": 62,
+      "tpRrRatio": 1.5,
+      "note": "Apr 2026: Loosened from mc=70/maxConf=84/tp=1.0 (20%WR 180d, only 7 exec trades from 33 signals). Removed maxConf cap + lowered mc to 62 + widened tp to 1.5 — JPM needs more trade volume to find edge. VWAP still best strategy (KeyLevel 0%WR, SMC/ORB poor fit for slow bank stock)."
     },
     {
       "ticker": "MARA",
