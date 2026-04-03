@@ -13,12 +13,10 @@
     },
     {
       "ticker": "ABNB",
-      "strategyType": "smc",
+      "strategyType": "vwap",
       "minConfidence": 62,
-      "maxConfidence": 84,
-      "slAtrMult": 1.0,
       "tpRrRatio": 1.5,
-      "note": "Apr 2026: SMC mc=62 maxConf=84 sl=1.0 tp=1.5. Reversed-confidence pattern: 75-84 bucket 100%WR (7/7 +2.07% exp) vs 85+ bucket 28.6%WR (8/28 -0.94% exp). All 15M_CONFLICT filtered trades were 100/100 conf — maxConf=84 caps those exhausted late entries."
+      "note": "Apr 2026: SMC->VWAP. SMC had 75-84 bucket 100%WR but only 7 trades/year — too few to be statistically reliable. ABNB is a seasonal consumer travel stock that mean-reverts intraday, similar to JPM. Testing VWAP for more consistent signal volume."
     },
     {
       "ticker": "AMD",
