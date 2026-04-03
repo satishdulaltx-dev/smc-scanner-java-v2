@@ -65,17 +65,17 @@ public record NewsSentiment(
     /**
      * Confidence delta with strategy-awareness.
      *
-     * For "breakout" (ORB) strategy, news sentiment is treated differently:
-     * A technical breakout AGAINST news sentiment is a high-conviction divergence —
-     * "smart money" is breaking price in one direction despite the news narrative.
-     * This is not a reason to penalise — it's a stronger signal.
+     * "Buy the rumor, sell the news" principle:
+     * Published/confirmed bullish news is already priced in — institutions sell into
+     * retail enthusiasm on news days. Aligned news is therefore neutral (0), not a boost.
      *
-     * Example: Bullish news + ORB SHORT → price breaking down DESPITE bullish news
-     *   = institutions distributing into retail buying = high-conviction short.
-     *   Instead of -15, apply a small penalty only, or even boost confidence.
+     * For "breakout" (ORB) strategy, divergence logic applies:
+     * - ORB breaking AGAINST news = smart money distributing/accumulating = high-conviction signal.
+     * - Small penalty only (not -15) for breakout-vs-news conflict.
      *
-     * For all other strategies (SMC, VWAP, KeyLevel), news conflicts are penalised
-     * normally because those strategies rely on order-flow alignment with sentiment.
+     * For all other strategies (SMC, VWAP, KeyLevel):
+     * - Conflicting news: full penalty (bearish news + long = bad setup).
+     * - Aligned news: 0 — published news is already in the price, don't chase it.
      */
     public int confidenceDelta(String tradeDirection, String strategyType) {
         if (!hasNews()) return 0;
@@ -85,16 +85,14 @@ public record NewsSentiment(
         if (isConflicting(tradeDirection)) {
             if (isBreakout) {
                 // ORB breaking AGAINST news = divergence = smart money signal.
-                // Apply a small penalty only (not -15) — the divergence itself is informative.
-                // Strong divergence (e.g. strong bullish news + SHORT breakdown): minimal penalty.
+                // Minimal penalty — the divergence itself is informative.
                 return netScore <= -0.6 || netScore >= 0.6 ? -3 : -5;
             }
             // Non-breakout: full conflict penalty
             return netScore <= -0.6 || netScore >= 0.6 ? -15 : -8;
         }
-        if (isAligned(tradeDirection)) {
-            return netScore >= 0.6 || netScore <= -0.6 ? +8 : +5;
-        }
+        // Aligned news: neutral (0) — "sell the news" effect means published positive
+        // news is already priced in. No confidence boost for chasing confirmed news.
         return 0;
     }
 }

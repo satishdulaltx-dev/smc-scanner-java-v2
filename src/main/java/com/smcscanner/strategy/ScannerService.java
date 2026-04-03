@@ -55,6 +55,7 @@ public class ScannerService {
     private final RangeDetector            rangeDetector;
     private final AlpacaOrderService       alpaca;
     private final TechnicalIndicators      techIndicators;
+    private final GapDetector              gapDetector;
 
     public ScannerService(ScannerConfig config, PolygonClient client, SetupDetector setupDetector,
                           CryptoStrategyService crypto, MultiTimeframeAnalyzer mtf,
@@ -66,13 +67,14 @@ public class ScannerService {
                           AdaptiveSuppressor adaptive, OptionsFlowAnalyzer optionsFlow,
                           EarningsCalendar earnings, SwingTradeDetector swingDetector,
                           RangeDetector rangeDetector, AlpacaOrderService alpaca,
-                          TechnicalIndicators techIndicators) {
+                          TechnicalIndicators techIndicators, GapDetector gapDetector) {
         this.config=config; this.client=client; this.setupDetector=setupDetector; this.crypto=crypto;
         this.mtf=mtf; this.discord=discord; this.dedup=dedup; this.tracker=tracker; this.liveLog=liveLog; this.state=state;
         this.atrCalc=atrCalc; this.vwap=vwap; this.breakout=breakout; this.keyLevel=keyLevel;
         this.news=news; this.marketCtx=marketCtx; this.qualityFilter=qualityFilter; this.adaptive=adaptive;
         this.optionsFlow=optionsFlow; this.earnings=earnings; this.swingDetector=swingDetector;
         this.rangeDetector=rangeDetector; this.alpaca=alpaca; this.techIndicators=techIndicators;
+        this.gapDetector=gapDetector;
     }
 
     public boolean isCrypto(String t) { return t.startsWith("X:"); }
@@ -666,6 +668,58 @@ public class ScannerService {
                         }
                     }
                 } catch (Exception e) { log.debug("{} range scan error: {}", ticker, e.getMessage()); }
+            }
+
+
+            // ── Gap detection (market open only: 9:30-9:40 ET → swing channel) ──────
+            if (!isC && dailyAtr > 0 && bars.size() >= 2) {
+                try {
+                    java.time.LocalTime etNowGap = java.time.ZonedDateTime.now(
+                            java.time.ZoneId.of("America/New_York")).toLocalTime();
+                    boolean isOpenWindow = !etNowGap.isBefore(java.time.LocalTime.of(9, 30))
+                            && etNowGap.isBefore(java.time.LocalTime.of(9, 40));
+                    if (isOpenWindow) {
+                        // Split bars into today vs previous session
+                        java.time.LocalDate today = java.time.ZonedDateTime.now(
+                                java.time.ZoneId.of("America/New_York")).toLocalDate();
+                        List<OHLCV> todayBars5m = bars.stream()
+                                .filter(b -> java.time.Instant.ofEpochMilli(b.getTimestamp())
+                                        .atZone(java.time.ZoneId.of("America/New_York")).toLocalDate().equals(today))
+                                .collect(java.util.stream.Collectors.toList());
+                        List<OHLCV> prevBars5m = bars.stream()
+                                .filter(b -> java.time.Instant.ofEpochMilli(b.getTimestamp())
+                                        .atZone(java.time.ZoneId.of("America/New_York")).toLocalDate().isBefore(today))
+                                .collect(java.util.stream.Collectors.toList());
+                        if (!todayBars5m.isEmpty() && !prevBars5m.isEmpty()) {
+                            GapDetector.GapSignal gap = gapDetector.detect(todayBars5m, prevBars5m, dailyAtr, ticker);
+                            if (gap != null) {
+                                String gapKey = "gap_" + ticker;
+                                if (!dedup.isDuplicate(gapKey, gap.direction(), gap.todayOpen(), 60)) {
+                                    log.info("GAP ALERT {} {} type={} gap={}% conf={}",
+                                            ticker, gap.direction().toUpperCase(), gap.type(),
+                                            String.format("%.2f", gap.gapPct()), gap.confidence());
+                                    TradeSetup gapSetup = TradeSetup.builder()
+                                            .ticker(ticker).direction(gap.direction())
+                                            .entry(gap.todayOpen())
+                                            .stopLoss(gap.type() == GapDetector.GapType.GAP_AND_GO
+                                                    ? (gap.direction().equals("long") ? gap.todayOpen() - dailyAtr * 0.5 : gap.todayOpen() + dailyAtr * 0.5)
+                                                    : (gap.direction().equals("long") ? gap.todayOpen() - dailyAtr * 0.3 : gap.todayOpen() + dailyAtr * 0.3))
+                                            .takeProfit(gap.type() == GapDetector.GapType.GAP_AND_GO
+                                                    ? (gap.direction().equals("long") ? gap.todayOpen() + dailyAtr * 1.5 : gap.todayOpen() - dailyAtr * 1.5)
+                                                    : (gap.direction().equals("long") ? gap.prevClose() : gap.prevClose()))
+                                            .confidence(gap.confidence())
+                                            .atr(dailyAtr)
+                                            .strategyType(gap.type() == GapDetector.GapType.GAP_AND_GO ? "gap_and_go" : "gap_fill")
+                                            .phaseMsg(gap.note())
+                                            .build();
+                                    discord.sendSwingAlert(gapSetup);
+                                    tracker.recordStrategySignal("gap_" + gap.type().name().toLowerCase(), gap.confidence());
+                                    dedup.markSent(gapKey, gap.direction(), gap.todayOpen());
+                                }
+                            }
+                        }
+                    }
+                } catch (Exception e) { log.debug("{} gap scan error: {}", ticker, e.getMessage()); }
             }
 
         } catch (Exception e) { log.error("Error scanning {}: {}",ticker,e.getMessage()); setTs(ticker,"idle",null,0,"Error: "+e.getMessage()); }

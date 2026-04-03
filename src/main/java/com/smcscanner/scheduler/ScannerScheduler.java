@@ -21,6 +21,7 @@ import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @Component
 @EnableScheduling
@@ -28,6 +29,36 @@ public class ScannerScheduler {
     private static final Logger log = LoggerFactory.getLogger(ScannerScheduler.class);
     private static final ZoneId ET = ZoneId.of("America/New_York");
     private static final LocalTime NY_OPEN=LocalTime.of(9,30), NY_CLOSE=LocalTime.of(16,0);
+
+    /** NYSE market holidays — market is fully closed on these dates. */
+    private static final Set<LocalDate> NYSE_HOLIDAYS = Set.of(
+        // 2025
+        LocalDate.of(2025, 1,  1),  // New Year's Day
+        LocalDate.of(2025, 1, 20),  // MLK Day
+        LocalDate.of(2025, 2, 17),  // Presidents Day
+        LocalDate.of(2025, 4, 18),  // Good Friday
+        LocalDate.of(2025, 5, 26),  // Memorial Day
+        LocalDate.of(2025, 6, 19),  // Juneteenth
+        LocalDate.of(2025, 7,  4),  // Independence Day
+        LocalDate.of(2025, 9,  1),  // Labor Day
+        LocalDate.of(2025,11, 27),  // Thanksgiving
+        LocalDate.of(2025,12, 25),  // Christmas
+        // 2026
+        LocalDate.of(2026, 1,  1),  // New Year's Day
+        LocalDate.of(2026, 1, 19),  // MLK Day
+        LocalDate.of(2026, 2, 16),  // Presidents Day
+        LocalDate.of(2026, 4,  3),  // Good Friday
+        LocalDate.of(2026, 5, 25),  // Memorial Day
+        LocalDate.of(2026, 6, 19),  // Juneteenth
+        LocalDate.of(2026, 7,  3),  // Independence Day (observed)
+        LocalDate.of(2026, 9,  7),  // Labor Day
+        LocalDate.of(2026,11, 26),  // Thanksgiving
+        LocalDate.of(2026,12, 25)   // Christmas
+    );
+
+    private static boolean isNyseHoliday(LocalDate date) {
+        return NYSE_HOLIDAYS.contains(date);
+    }
     private static final LocalTime EOD_TRIGGER=LocalTime.of(21,0), EOD_CUTOFF=LocalTime.of(22,0); // 9-10 PM ET (8-9 PM CST) — includes post-market data
     private static final LocalTime DAILY_REPORT_TRIGGER=LocalTime.of(16,30), DAILY_REPORT_CUTOFF=LocalTime.of(16,45);
 
@@ -57,7 +88,9 @@ public class ScannerScheduler {
     public void runScan() {
         List<String> tickers=config.loadWatchlist();
         if (tickers.isEmpty()) return;
-        LocalTime nowET=ZonedDateTime.now(ET).toLocalTime();
+        ZonedDateTime nowZdt=ZonedDateTime.now(ET);
+        if (isNyseHoliday(nowZdt.toLocalDate())) return; // NYSE holiday — skip all equity scanning
+        LocalTime nowET=nowZdt.toLocalTime();
         boolean inNy=!nowET.isBefore(NY_OPEN)&&!nowET.isAfter(NY_CLOSE);
         state.setStatus("running");
         state.setLastScan(ZonedDateTime.now(ET).format(DateTimeFormatter.ofPattern("h:mm:ss a")));
@@ -78,7 +111,7 @@ public class ScannerScheduler {
         ZonedDateTime nowET=ZonedDateTime.now(ET);
         LocalTime time=nowET.toLocalTime(); int day=nowET.getDayOfYear();
         if (day!=lastEodDay) { eodSentToday=false; dailyReportSentToday=false; lastEodDay=day; }
-        if (nowET.getDayOfWeek().getValue()>=6||eodSentToday) return;
+        if (nowET.getDayOfWeek().getValue()>=6||eodSentToday||isNyseHoliday(nowET.toLocalDate())) return;
         if (time.isBefore(EOD_TRIGGER)||time.isAfter(EOD_CUTOFF)) return;
         log.info("Generating overnight watchlist report (post-market + next morning prep)...");
         eodSentToday=true;
@@ -95,7 +128,7 @@ public class ScannerScheduler {
     public void checkDailyTradeReport() {
         ZonedDateTime nowET=ZonedDateTime.now(ET);
         LocalTime time=nowET.toLocalTime();
-        if (nowET.getDayOfWeek().getValue()>=6||dailyReportSentToday) return;
+        if (nowET.getDayOfWeek().getValue()>=6||dailyReportSentToday||isNyseHoliday(nowET.toLocalDate())) return;
         if (time.isBefore(DAILY_REPORT_TRIGGER)||time.isAfter(DAILY_REPORT_CUTOFF)) return;
         log.info("Generating daily trade report...");
         dailyReportSentToday=true;
@@ -119,7 +152,7 @@ public class ScannerScheduler {
         if (!alpaca.isEnabled()) return;
         ZonedDateTime nowET = ZonedDateTime.now(ET);
         LocalTime time = nowET.toLocalTime();
-        if (nowET.getDayOfWeek().getValue() >= 6) return;
+        if (nowET.getDayOfWeek().getValue() >= 6 || isNyseHoliday(nowET.toLocalDate())) return;
         // Only run during market hours (9:30 AM - 4:00 PM ET)
         if (time.isBefore(NY_OPEN) || time.isAfter(NY_CLOSE)) return;
         try {
