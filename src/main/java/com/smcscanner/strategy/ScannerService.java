@@ -13,6 +13,7 @@ import com.smcscanner.news.NewsService;
 import com.smcscanner.config.ScannerConfig;
 import com.smcscanner.data.PolygonClient;
 import com.smcscanner.indicator.AtrCalculator;
+import com.smcscanner.indicator.TechnicalIndicators;
 import com.smcscanner.model.*;
 import com.smcscanner.options.OptionsFlowAnalyzer;
 import com.smcscanner.options.OptionsFlowResult;
@@ -53,6 +54,7 @@ public class ScannerService {
     private final SwingTradeDetector       swingDetector;
     private final RangeDetector            rangeDetector;
     private final AlpacaOrderService       alpaca;
+    private final TechnicalIndicators      techIndicators;
 
     public ScannerService(ScannerConfig config, PolygonClient client, SetupDetector setupDetector,
                           CryptoStrategyService crypto, MultiTimeframeAnalyzer mtf,
@@ -63,13 +65,14 @@ public class ScannerService {
                           MarketContextService marketCtx, SignalQualityFilter qualityFilter,
                           AdaptiveSuppressor adaptive, OptionsFlowAnalyzer optionsFlow,
                           EarningsCalendar earnings, SwingTradeDetector swingDetector,
-                          RangeDetector rangeDetector, AlpacaOrderService alpaca) {
+                          RangeDetector rangeDetector, AlpacaOrderService alpaca,
+                          TechnicalIndicators techIndicators) {
         this.config=config; this.client=client; this.setupDetector=setupDetector; this.crypto=crypto;
         this.mtf=mtf; this.discord=discord; this.dedup=dedup; this.tracker=tracker; this.liveLog=liveLog; this.state=state;
         this.atrCalc=atrCalc; this.vwap=vwap; this.breakout=breakout; this.keyLevel=keyLevel;
         this.news=news; this.marketCtx=marketCtx; this.qualityFilter=qualityFilter; this.adaptive=adaptive;
         this.optionsFlow=optionsFlow; this.earnings=earnings; this.swingDetector=swingDetector;
-        this.rangeDetector=rangeDetector; this.alpaca=alpaca;
+        this.rangeDetector=rangeDetector; this.alpaca=alpaca; this.techIndicators=techIndicators;
     }
 
     public boolean isCrypto(String t) { return t.startsWith("X:"); }
@@ -138,7 +141,7 @@ public class ScannerService {
                 } catch (Exception e) { log.debug("{} correlation fetch error: {}", ticker, e.getMessage()); }
             }
             try {
-                dailyBars=client.getBars(ticker,"1d",100); // 100 bars: enough for swing detection + ATR
+                dailyBars=client.getBars(ticker,"1d",250); // 250 bars: enough for SMA 200 + swing detection + ATR
                 if (dailyBars!=null&&dailyBars.size()>=5) {
                     double[] da=atrCalc.computeAtr(dailyBars,Math.min(14,dailyBars.size()-1));
                     for (int i=da.length-1;i>=0;i--) { if (da[i]>0) { dailyAtr=da[i]; break; } }
@@ -273,6 +276,43 @@ public class ScannerService {
                     else if (agrees)    { corrAdj = corrAgreementBonus;  log.info("{} CORR_AGREE:    {} bias={} with {} setup → adj={}", ticker, corrAsset, corrBias, dir, corrAdj); }
                 }
 
+                // ── Technical indicator adjustments (SMA 200 + RSI + candle patterns + volume) ──
+                // These are the core improvements to filter bad entries across all tickers.
+                // Applied as soft confidence deltas, NOT hard gates.
+                int sma200Adj = 0, rsiAdj = 0, candleAdj = 0, volAdj = 0;
+                if (!isC) {
+                    double currentPrice = bars.get(bars.size() - 1).getClose();
+
+                    // SMA 200: directional filter from daily bars
+                    sma200Adj = techIndicators.sma200Delta(dailyBars, currentPrice, s.getDirection());
+                    if (sma200Adj != 0) {
+                        double sma200 = techIndicators.sma(dailyBars, 200);
+                        log.info("{} SMA200 adj={} price=${} sma200=${} dir={}",
+                                ticker, sma200Adj, String.format("%.2f", currentPrice),
+                                String.format("%.2f", sma200), s.getDirection());
+                    }
+
+                    // RSI 14: momentum filter from 5m bars
+                    rsiAdj = techIndicators.rsiDelta(bars, s.getDirection());
+                    if (rsiAdj != 0) {
+                        double rsiVal = techIndicators.rsi(bars, 14);
+                        log.info("{} RSI adj={} rsi={} dir={}", ticker, rsiAdj,
+                                String.format("%.1f", rsiVal), s.getDirection());
+                    }
+
+                    // Candle patterns: hammer/engulfing/pin bar at entry
+                    candleAdj = techIndicators.candlePatternDelta(bars, s.getDirection());
+                    if (candleAdj != 0) {
+                        log.info("{} CANDLE_PATTERN adj={} dir={}", ticker, candleAdj, s.getDirection());
+                    }
+
+                    // Volume confirmation: setup bar vs 20-bar avg
+                    volAdj = techIndicators.volumeDelta(bars);
+                    if (volAdj != 0) {
+                        log.info("{} VOLUME adj={}", ticker, volAdj);
+                    }
+                }
+
                 // ── Time-of-day soft penalty (was hard block) ─────────────────────
                 // 11:xx AM and 1:xx PM ET have lower WR. Now -15 instead of hard kill.
                 // Strong setups (VWAP rubber-band, high-conf SMC) can still fire at lunch.
@@ -337,12 +377,12 @@ public class ScannerService {
                 // Apply combined confidence adjustment (news + context + quality + flow + regime + correlation + RS)
                 // Penalty floor: secondary filters can reduce base confidence by at most 25%.
                 // e.g. base=80 → floor=60, base=70 → floor=52. Prevents "death by a thousand filters."
-                int rawAdj   = newsAdj + ctxAdj + qualityAdj + flowAdj + regimeAdj + corrAdj + intradayRsAdj + deadZoneAdj + bias15mAdj + alignmentAdj;
+                int rawAdj   = newsAdj + ctxAdj + qualityAdj + flowAdj + regimeAdj + corrAdj + intradayRsAdj + deadZoneAdj + bias15mAdj + alignmentAdj + sma200Adj + rsiAdj + candleAdj + volAdj;
                 int penaltyFloor = (int)(s.getConfidence() * 0.75);
                 int totalAdj = rawAdj; // no longer clamping at -40; floor handles it
                 if (rawAdj != totalAdj) {
-                    log.info("{} ADJ_CLAMPED: raw={} → clamped={} (breakdown: news{} ctx{} qual{} flow{} regime{} corr{} iRS{} 15m{} align{})",
-                            ticker, rawAdj, totalAdj, newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj, intradayRsAdj, bias15mAdj, alignmentAdj);
+                    log.info("{} ADJ_CLAMPED: raw={} → clamped={} (breakdown: news{} ctx{} qual{} flow{} regime{} corr{} iRS{} 15m{} align{} sma200{} rsi{} candle{} vol{})",
+                            ticker, rawAdj, totalAdj, newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj, intradayRsAdj, bias15mAdj, alignmentAdj, sma200Adj, rsiAdj, candleAdj, volAdj);
                 }
                 if (totalAdj != 0 || flow.hasData() || rec.hasData()) {
                     TradeSetup.Builder sb = TradeSetup.builder()
@@ -401,7 +441,8 @@ public class ScannerService {
                 // Every factor that moved conf > ±2 is shown.
                 String factorBreakdown = buildFactorBreakdown(
                         newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj,
-                        bias15mAdj, vixBoost, s.getConfidence());
+                        bias15mAdj, vixBoost, s.getConfidence(),
+                        sma200Adj, rsiAdj, candleAdj, volAdj);
 
                 // ── Conviction tier (suggested contract size) ─────────────────
                 // Based on final adjusted confidence — scales exposure to signal quality.
@@ -521,9 +562,9 @@ public class ScannerService {
                                 discord.sendSwingAlert(s);
                                 tracker.recordStrategySignal("swing_lateday", s.getConfidence());
                             } else {
-                                log.info("INTRADAY ALERT {} {} conf={} entry={} adj=news{}/ctx{}/qual{}/flow{}/regime{}/corr{}/align{} vixBoost={} dynamicMin={}",
+                                log.info("INTRADAY ALERT {} {} conf={} entry={} adj=news{}/ctx{}/qual{}/flow{}/regime{}/corr{}/align{}/sma200{}/rsi{}/candle{}/vol{} vixBoost={} dynamicMin={}",
                                         ticker, s.getDirection().toUpperCase(), s.getConfidence(), s.getEntry(),
-                                        newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj, alignmentAdj, vixBoost, dynamicMinConf);
+                                        newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj, alignmentAdj, sma200Adj, rsiAdj, candleAdj, volAdj, vixBoost, dynamicMinConf);
                                 discord.sendSetupAlert(s, sentiment, context, earningsCheck);
                             }
                             // ── Auto-trade via Alpaca (if enabled) ──────────
@@ -658,7 +699,8 @@ public class ScannerService {
      */
     private String buildFactorBreakdown(int newsAdj, int ctxAdj, int qualityAdj,
                                          int flowAdj, int regimeAdj, int corrAdj,
-                                         int bias15mAdj, int vixBoost, int finalConf) {
+                                         int bias15mAdj, int vixBoost, int finalConf,
+                                         int sma200Adj, int rsiAdj, int candleAdj, int volAdj) {
         java.util.List<String> parts = new java.util.ArrayList<>();
         if (Math.abs(newsAdj)    >= 2) parts.add("news "    + (newsAdj    > 0 ? "+" : "") + newsAdj);
         if (Math.abs(ctxAdj)     >= 2) parts.add("RS/VIX "  + (ctxAdj     > 0 ? "+" : "") + ctxAdj);
@@ -667,7 +709,11 @@ public class ScannerService {
         if (Math.abs(regimeAdj)  >= 2) parts.add("regime "  + (regimeAdj  > 0 ? "+" : "") + regimeAdj);
         if (Math.abs(corrAdj)    >= 2) parts.add("corr "    + (corrAdj    > 0 ? "+" : "") + corrAdj);
         if (Math.abs(bias15mAdj) >= 2) parts.add("15m "     + (bias15mAdj > 0 ? "+" : "") + bias15mAdj);
-        if (vixBoost             >= 5) parts.add("⚠️ VIX gate +" + vixBoost + " to min");
+        if (Math.abs(sma200Adj)  >= 2) parts.add("SMA200 "  + (sma200Adj  > 0 ? "+" : "") + sma200Adj);
+        if (Math.abs(rsiAdj)     >= 2) parts.add("RSI "     + (rsiAdj     > 0 ? "+" : "") + rsiAdj);
+        if (Math.abs(candleAdj)  >= 2) parts.add("candle "  + (candleAdj  > 0 ? "+" : "") + candleAdj);
+        if (Math.abs(volAdj)     >= 2) parts.add("vol "     + (volAdj     > 0 ? "+" : "") + volAdj);
+        if (vixBoost             >= 5) parts.add("VIX gate +" + vixBoost + " to min");
         if (parts.isEmpty()) return "Base score — no adjustments";
         return String.join(" | ", parts) + " → **" + finalConf + "**";
     }
