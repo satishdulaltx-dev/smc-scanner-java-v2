@@ -473,6 +473,47 @@ public class ScannerService {
                                         ticker, earningsCheck.label(), s.getDirection().toUpperCase(), s.getConfidence());
                             }
 
+                            // ── Intraday TP cap (2x daily ATR) ─────────────────
+                            // Prevents unrealistic TPs like TSLA $359→$386 (+5.76%)
+                            // on intraday trades. Daily ATR is the max realistic
+                            // single-day move; cap TP at 2x that from entry.
+                            if (!lateDay && dailyAtr > 0) {
+                                double maxTpDist = dailyAtr * 2.0;
+                                double tpDist = Math.abs(s.getTakeProfit() - s.getEntry());
+                                if (tpDist > maxTpDist) {
+                                    double cappedTp = "long".equals(s.getDirection())
+                                            ? s.getEntry() + maxTpDist
+                                            : s.getEntry() - maxTpDist;
+                                    log.info("{} TP_CAPPED: ${} → ${} (dist ${} > 2x dailyATR ${})",
+                                            ticker,
+                                            String.format("%.2f", s.getTakeProfit()),
+                                            String.format("%.2f", cappedTp),
+                                            String.format("%.2f", tpDist),
+                                            String.format("%.2f", maxTpDist));
+                                    s = TradeSetup.builder()
+                                            .ticker(s.getTicker()).direction(s.getDirection())
+                                            .entry(s.getEntry()).stopLoss(s.getStopLoss()).takeProfit(cappedTp)
+                                            .confidence(s.getConfidence()).session(s.getSession())
+                                            .volatility(s.getVolatility()).atr(s.getAtr())
+                                            .hasBos(s.isHasBos()).hasChoch(s.isHasChoch())
+                                            .fvgTop(s.getFvgTop()).fvgBottom(s.getFvgBottom())
+                                            .timestamp(s.getTimestamp())
+                                            .factorBreakdown(s.getFactorBreakdown())
+                                            .convictionTier(s.getConvictionTier()).riskTier(s.getRiskTier())
+                                            .optionsFlowLabel(s.getOptionsFlowLabel()).optionsFlowDir(s.getOptionsFlowDir())
+                                            .optionsMaxPain(s.getOptionsMaxPain())
+                                            .optionsContract(s.getOptionsContract()).optionsType(s.getOptionsType())
+                                            .optionsStrike(s.getOptionsStrike()).optionsExpiry(s.getOptionsExpiry())
+                                            .optionsPremium(s.getOptionsPremium()).optionsDelta(s.getOptionsDelta())
+                                            .optionsIV(s.getOptionsIV()).optionsIVPct(s.getOptionsIVPct())
+                                            .optionsBreakEven(s.getOptionsBreakEven())
+                                            .optionsProfitPer(s.getOptionsProfitPer()).optionsLossPer(s.getOptionsLossPer())
+                                            .optionsRR(s.getOptionsRR()).optionsSuggested(s.getOptionsSuggested())
+                                            .optionsGreeksWarning(s.getOptionsGreeksWarning())
+                                            .build();
+                                }
+                            }
+
                             if (lateDay) {
                                 // After 3:30 PM ET — not enough time for intraday trade, route to swing channel
                                 log.info("LATE_DAY SWING REROUTE {} {} conf={} entry={} (after 3:30 PM ET)",

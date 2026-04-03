@@ -3,6 +3,8 @@ package com.smcscanner.broker;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smcscanner.config.ScannerConfig;
+import com.smcscanner.data.PolygonClient;
+import com.smcscanner.model.OHLCV;
 import com.smcscanner.model.TradeSetup;
 import okhttp3.*;
 import org.slf4j.Logger;
@@ -32,6 +34,7 @@ public class AlpacaOrderService {
     private static final ZoneId ET = ZoneId.of("America/New_York");
 
     private final ScannerConfig config;
+    private final PolygonClient polygon;
     private final ObjectMapper mapper = new ObjectMapper();
     private final OkHttpClient http = new OkHttpClient.Builder()
             .connectTimeout(10, TimeUnit.SECONDS).readTimeout(15, TimeUnit.SECONDS).build();
@@ -43,10 +46,17 @@ public class AlpacaOrderService {
 
     // ── Trailing stop tracking ──────────────────────────────────────────────
     // Tracks each filled position: original entry, SL, TP, current trail level
+    // consecutiveCloses = number of consecutive 5m candle closes above the next trail threshold
     public record TrackedPosition(String symbol, String direction, double entry, double stopLoss,
                                    double takeProfit, String orderId, String stopOrderId,
-                                   int trailLevel) {} // trailLevel: 0=original, 1=BE, 2=50%, 3=75%
+                                   int trailLevel, int consecutiveCloses) {} // trailLevel: 0=original, 1=BE, 2=50%, 3=75%
     private final Map<String, TrackedPosition> trackedPositions = new ConcurrentHashMap<>();
+    // Track last processed candle timestamp to avoid re-processing same candle
+    private final Map<String, String> lastProcessedCandle = new ConcurrentHashMap<>();
+    // Required consecutive candle closes above threshold before trailing
+    private static final int REQUIRED_CONSECUTIVE_CLOSES = 2;
+    // ATR buffer: trail SL this fraction of ATR below the profit level (prevents wick stopouts)
+    private static final double ATR_BUFFER_MULT = 0.5;
 
     // Config defaults (overridden by env vars)
     private static final double DEFAULT_MAX_POSITION = 500.0;   // max $ per trade
@@ -54,8 +64,9 @@ public class AlpacaOrderService {
     private static final int    DEFAULT_MAX_DAILY_ORDERS = 10;
     private static final int    DEFAULT_MIN_CONFIDENCE = 75;     // only auto-trade 75+ confidence
 
-    public AlpacaOrderService(ScannerConfig config) {
+    public AlpacaOrderService(ScannerConfig config, PolygonClient polygon) {
         this.config = config;
+        this.polygon = polygon;
     }
 
     /** Check if Alpaca trading is enabled and configured. */
@@ -141,7 +152,7 @@ public class AlpacaOrderService {
                     // Track for trailing stop management
                     trackedPositions.put(s.getTicker(), new TrackedPosition(
                             s.getTicker(), s.getDirection(), s.getEntry(),
-                            s.getStopLoss(), s.getTakeProfit(), orderId, null, 0));
+                            s.getStopLoss(), s.getTakeProfit(), orderId, null, 0, 0));
 
                     dailyOrderCount.merge(s.getTicker(), 1, Integer::sum);
                     return orderId;
@@ -286,105 +297,206 @@ public class AlpacaOrderService {
         }
     }
 
-    // ── Trailing Stop Management ────────────────────────────────────────────
+    // ── Smart Trailing Stop Management ─────────────────────────────────────
+    //
+    // Uses CONFIRMED 5-minute candle closes instead of raw live price.
+    // This prevents getting stopped out by wicks.
+    //
+    // Approach:
+    //   1. Fetch last few 5m bars from Polygon (confirmed closes only)
+    //   2. Only process if we see a NEW candle close (skip duplicate checks)
+    //   3. Check if the candle close is above the next trail threshold
+    //   4. Require 2 CONSECUTIVE closes above threshold before moving SL
+    //   5. Apply 0.5 ATR buffer below the profit lock level
+    //
+    // Trail levels:
+    //   Level 0 → original SL (no change)
+    //   Level 1 → at 50% to TP (1:1 R:R): move SL to breakeven + ATR buffer
+    //   Level 2 → at 75% to TP: lock in 50% of profit - ATR buffer
+    //   Level 3 → at 90% to TP: lock in 75% of profit - ATR buffer
 
     /**
-     * Check all tracked positions and adjust stop losses based on profit level.
-     * Called every 30s by the scheduler during market hours.
-     *
-     * Trail levels:
-     *   Level 0 → original SL (no change)
-     *   Level 1 → at 1:1 R:R (50% to TP): move SL to breakeven (entry)
-     *   Level 2 → at 75% to TP: move SL to lock in 50% of profit
-     *   Level 3 → at 90% to TP: move SL to lock in 75% of profit
+     * Smart trailing stop check — called every 5 minutes by scheduler.
+     * Uses confirmed 5m candle closes + 2 consecutive confirmations + ATR buffer.
      */
     public void checkTrailingStops() {
         if (!isEnabled() || trackedPositions.isEmpty()) return;
 
-        // Fetch current positions from Alpaca
+        // Fetch current positions from Alpaca to confirm they're still open
         List<Map<String, Object>> positions = getPositions();
         if (positions.isEmpty()) {
-            // No open positions — clear tracking (positions were closed by SL/TP)
             if (!trackedPositions.isEmpty()) {
                 log.info("TRAIL: No open positions, clearing {} tracked entries", trackedPositions.size());
                 trackedPositions.clear();
+                lastProcessedCandle.clear();
             }
             return;
         }
 
-        // Build symbol→currentPrice map
-        Map<String, Double> currentPrices = new HashMap<>();
+        // Build set of currently held symbols
+        Set<String> heldSymbols = new HashSet<>();
         for (Map<String, Object> pos : positions) {
-            String symbol = (String) pos.get("symbol");
-            try {
-                double price = Double.parseDouble((String) pos.get("current_price"));
-                currentPrices.put(symbol, price);
-            } catch (Exception ignored) {}
+            heldSymbols.add((String) pos.get("symbol"));
         }
 
-        // Check each tracked position
-        for (Map.Entry<String, TrackedPosition> e : trackedPositions.entrySet()) {
+        // Check each tracked position using candle closes
+        for (Map.Entry<String, TrackedPosition> e : new ArrayList<>(trackedPositions.entrySet())) {
             String symbol = e.getKey();
             TrackedPosition tp = e.getValue();
-            Double currentPrice = currentPrices.get(symbol);
 
-            if (currentPrice == null) {
-                // Position closed (hit SL or TP) — remove from tracking
+            if (!heldSymbols.contains(symbol)) {
                 log.info("TRAIL: {} no longer held — removing from tracker", symbol);
                 trackedPositions.remove(symbol);
+                lastProcessedCandle.remove(symbol);
                 continue;
             }
 
-            boolean isLong = "long".equals(tp.direction());
-            double entry = tp.entry();
-            double origSL = tp.stopLoss();
-            double target = tp.takeProfit();
-            double risk = Math.abs(entry - origSL);
-            double totalMove = Math.abs(target - entry);
-
-            // Calculate how far price has moved toward TP (0.0 = at entry, 1.0 = at TP)
-            double progress = isLong
-                    ? (currentPrice - entry) / totalMove
-                    : (entry - currentPrice) / totalMove;
-
-            // Determine new trail level based on progress
-            int newLevel = tp.trailLevel();
-            double newStopPrice = 0;
-
-            if (progress >= 0.90 && tp.trailLevel() < 3) {
-                // 90%+ to TP → lock in 75% of profit
-                newLevel = 3;
-                double profit75 = totalMove * 0.75;
-                newStopPrice = isLong ? entry + profit75 : entry - profit75;
-                log.info("TRAIL L3: {} at {}% to TP → SL to ${} (lock 75% profit)",
-                        symbol, String.format("%.1f", progress * 100), String.format("%.2f", newStopPrice));
-            } else if (progress >= 0.75 && tp.trailLevel() < 2) {
-                // 75%+ to TP → lock in 50% of profit
-                newLevel = 2;
-                double profit50 = totalMove * 0.50;
-                newStopPrice = isLong ? entry + profit50 : entry - profit50;
-                log.info("TRAIL L2: {} at {}% to TP → SL to ${} (lock 50% profit)",
-                        symbol, String.format("%.1f", progress * 100), String.format("%.2f", newStopPrice));
-            } else if (progress >= 0.50 && tp.trailLevel() < 1) {
-                // 50%+ to TP (1:1 R:R) → move to breakeven
-                newLevel = 1;
-                newStopPrice = entry;
-                log.info("TRAIL L1: {} at {}% to TP → SL to BE ${}",
-                        symbol, String.format("%.1f", progress * 100), String.format("%.2f", newStopPrice));
-            }
-
-            if (newLevel > tp.trailLevel() && newStopPrice > 0) {
-                // Find and update the stop order
-                boolean updated = updateStopOrder(symbol, newStopPrice, isLong);
-                if (updated) {
-                    trackedPositions.put(symbol, new TrackedPosition(
-                            tp.symbol(), tp.direction(), tp.entry(), tp.stopLoss(),
-                            tp.takeProfit(), tp.orderId(), tp.stopOrderId(), newLevel));
-                    log.info("TRAIL: {} SL moved to ${} (level {}→{})",
-                            symbol, String.format("%.2f", newStopPrice), tp.trailLevel(), newLevel);
-                }
+            try {
+                processTrailingForSymbol(symbol, tp);
+            } catch (Exception ex) {
+                log.error("TRAIL: Error processing {} — {}", symbol, ex.getMessage());
             }
         }
+    }
+
+    /**
+     * Process trailing stop for a single symbol using 5m candle closes.
+     */
+    private void processTrailingForSymbol(String symbol, TrackedPosition tp) {
+        // Fetch last 20 confirmed 5m bars from Polygon
+        List<OHLCV> bars = polygon.getBars(symbol, "5m", 20);
+        if (bars.size() < 3) {
+            log.debug("TRAIL: {} — not enough 5m bars ({})", symbol, bars.size());
+            return;
+        }
+
+        // The LAST bar may still be forming (current candle). Use second-to-last as the latest CONFIRMED close.
+        // Polygon returns bars in chronological order. The last complete bar is bars[size-2]
+        // if we're mid-candle, or bars[size-1] if the candle just closed.
+        // To be safe, always use the second-to-last bar as the confirmed close.
+        OHLCV confirmedBar = bars.get(bars.size() - 2);
+        String candleTs = confirmedBar.getTimestamp();
+
+        // Skip if we already processed this candle
+        String lastTs = lastProcessedCandle.get(symbol);
+        if (candleTs.equals(lastTs)) {
+            return; // same candle, no new data
+        }
+        lastProcessedCandle.put(symbol, candleTs);
+
+        double candleClose = confirmedBar.getClose();
+        boolean isLong = "long".equals(tp.direction());
+        double entry = tp.entry();
+        double target = tp.takeProfit();
+        double totalMove = Math.abs(target - entry);
+
+        // Compute ATR from recent 5m bars (use last 14 bars for ATR)
+        double atr = computeAtr5m(bars);
+
+        // Calculate progress based on CANDLE CLOSE (not live price)
+        double progress = isLong
+                ? (candleClose - entry) / totalMove
+                : (entry - candleClose) / totalMove;
+
+        // Determine what the NEXT level would be
+        int candidateLevel = tp.trailLevel();
+        if (progress >= 0.90 && tp.trailLevel() < 3) {
+            candidateLevel = 3;
+        } else if (progress >= 0.75 && tp.trailLevel() < 2) {
+            candidateLevel = 2;
+        } else if (progress >= 0.50 && tp.trailLevel() < 1) {
+            candidateLevel = 1;
+        }
+
+        // If candle close qualifies for a higher level, increment consecutive count
+        if (candidateLevel > tp.trailLevel()) {
+            int newConsecutive = tp.consecutiveCloses() + 1;
+            log.info("TRAIL: {} candle close ${} — {}% to TP — L{} confirmation {}/{}",
+                    symbol, String.format("%.2f", candleClose),
+                    String.format("%.1f", progress * 100),
+                    candidateLevel, newConsecutive, REQUIRED_CONSECUTIVE_CLOSES);
+
+            if (newConsecutive >= REQUIRED_CONSECUTIVE_CLOSES) {
+                // ✅ Confirmed! Move the stop loss with ATR buffer
+                double atrBuffer = atr * ATR_BUFFER_MULT;
+                double rawStopPrice;
+
+                if (candidateLevel == 1) {
+                    // Breakeven: entry + small buffer (don't lose money on wicks)
+                    rawStopPrice = isLong ? entry + atrBuffer * 0.2 : entry - atrBuffer * 0.2;
+                } else if (candidateLevel == 2) {
+                    // Lock 50% profit
+                    double profit50 = totalMove * 0.50;
+                    rawStopPrice = isLong ? entry + profit50 : entry - profit50;
+                } else {
+                    // Lock 75% profit
+                    double profit75 = totalMove * 0.75;
+                    rawStopPrice = isLong ? entry + profit75 : entry - profit75;
+                }
+
+                // Apply ATR buffer: for longs, SL sits BELOW the raw level; for shorts, ABOVE
+                double bufferedStop = isLong
+                        ? rawStopPrice - atrBuffer
+                        : rawStopPrice + atrBuffer;
+
+                // Ensure we never move SL backwards (always tighter)
+                if (isLong && bufferedStop <= tp.stopLoss()) {
+                    log.info("TRAIL: {} buffered SL ${} <= current SL ${} — skipping",
+                            symbol, String.format("%.2f", bufferedStop), String.format("%.2f", tp.stopLoss()));
+                    return;
+                }
+                if (!isLong && bufferedStop >= tp.stopLoss()) {
+                    log.info("TRAIL: {} buffered SL ${} >= current SL ${} — skipping",
+                            symbol, String.format("%.2f", bufferedStop), String.format("%.2f", tp.stopLoss()));
+                    return;
+                }
+
+                boolean updated = updateStopOrder(symbol, bufferedStop, isLong);
+                if (updated) {
+                    trackedPositions.put(symbol, new TrackedPosition(
+                            tp.symbol(), tp.direction(), tp.entry(), bufferedStop,
+                            tp.takeProfit(), tp.orderId(), tp.stopOrderId(), candidateLevel, 0));
+                    log.info("TRAIL ✓ {} L{}→L{} | SL moved to ${} (raw=${}, ATR buffer=${}) | close=${}",
+                            symbol, tp.trailLevel(), candidateLevel,
+                            String.format("%.2f", bufferedStop),
+                            String.format("%.2f", rawStopPrice),
+                            String.format("%.2f", atrBuffer),
+                            String.format("%.2f", candleClose));
+                }
+            } else {
+                // Not enough confirmations yet — just update the counter
+                trackedPositions.put(symbol, new TrackedPosition(
+                        tp.symbol(), tp.direction(), tp.entry(), tp.stopLoss(),
+                        tp.takeProfit(), tp.orderId(), tp.stopOrderId(), tp.trailLevel(), newConsecutive));
+            }
+        } else {
+            // Candle close doesn't qualify — reset consecutive counter
+            if (tp.consecutiveCloses() > 0) {
+                log.debug("TRAIL: {} candle close ${} below L{} threshold — resetting consecutive count",
+                        symbol, String.format("%.2f", candleClose), tp.trailLevel() + 1);
+                trackedPositions.put(symbol, new TrackedPosition(
+                        tp.symbol(), tp.direction(), tp.entry(), tp.stopLoss(),
+                        tp.takeProfit(), tp.orderId(), tp.stopOrderId(), tp.trailLevel(), 0));
+            }
+        }
+    }
+
+    /**
+     * Compute ATR from 5-minute bars (14-period ATR).
+     */
+    private double computeAtr5m(List<OHLCV> bars) {
+        int period = Math.min(14, bars.size() - 1);
+        if (period < 1) return 0.0;
+        double sum = 0;
+        for (int i = bars.size() - period; i < bars.size(); i++) {
+            OHLCV curr = bars.get(i);
+            OHLCV prev = bars.get(i - 1);
+            double tr = Math.max(curr.getHigh() - curr.getLow(),
+                    Math.max(Math.abs(curr.getHigh() - prev.getClose()),
+                             Math.abs(curr.getLow() - prev.getClose())));
+            sum += tr;
+        }
+        return sum / period;
     }
 
     /**

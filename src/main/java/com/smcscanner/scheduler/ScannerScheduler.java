@@ -113,8 +113,8 @@ public class ScannerScheduler {
         } catch (Exception e) { log.error("Daily trade report failed: {}", e.getMessage()); }
     }
 
-    /** Trailing stop monitor — checks positions every 30s during market hours. */
-    @Scheduled(fixedRate=30_000)
+    /** Smart trailing stop monitor — checks confirmed 5m candle closes during market hours. */
+    @Scheduled(fixedRate=300_000)
     public void checkTrailingStops() {
         if (!alpaca.isEnabled()) return;
         ZonedDateTime nowET = ZonedDateTime.now(ET);

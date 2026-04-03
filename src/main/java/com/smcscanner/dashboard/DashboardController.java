@@ -713,14 +713,16 @@ public class DashboardController {
             t.put("stopLoss", tp.stopLoss());
             t.put("takeProfit", tp.takeProfit());
             t.put("trailLevel", tp.trailLevel());
+            t.put("consecutiveCloses", tp.consecutiveCloses());
             String levelLabel = switch (tp.trailLevel()) {
                 case 0 -> "Original SL";
-                case 1 -> "Breakeven";
+                case 1 -> "Breakeven (ATR buffered)";
                 case 2 -> "50% profit locked";
                 case 3 -> "75% profit locked";
                 default -> "Unknown";
             };
             t.put("trailLabel", levelLabel);
+            t.put("trailMethod", "5m candle close + 2 confirmations + ATR buffer");
             trails.add(t);
         }
         status.put("trailing_stops", trails);
