@@ -698,19 +698,20 @@ public class ScannerService {
                                     log.info("GAP ALERT {} {} type={} gap={}% conf={}",
                                             ticker, gap.direction().toUpperCase(), gap.type(),
                                             String.format("%.2f", gap.gapPct()), gap.confidence());
+                                    boolean isGapAndGo = gap.type() == GapDetector.GapType.GAP_AND_GO;
+                                    double gapSl = isGapAndGo
+                                            ? (gap.direction().equals("long") ? gap.todayOpen() - dailyAtr * 0.5 : gap.todayOpen() + dailyAtr * 0.5)
+                                            : (gap.direction().equals("long") ? gap.todayOpen() - dailyAtr * 0.3 : gap.todayOpen() + dailyAtr * 0.3);
+                                    double gapTp = isGapAndGo
+                                            ? (gap.direction().equals("long") ? gap.todayOpen() + dailyAtr * 1.5 : gap.todayOpen() - dailyAtr * 1.5)
+                                            : gap.prevClose();
                                     TradeSetup gapSetup = TradeSetup.builder()
                                             .ticker(ticker).direction(gap.direction())
                                             .entry(gap.todayOpen())
-                                            .stopLoss(gap.type() == GapDetector.GapType.GAP_AND_GO
-                                                    ? (gap.direction().equals("long") ? gap.todayOpen() - dailyAtr * 0.5 : gap.todayOpen() + dailyAtr * 0.5)
-                                                    : (gap.direction().equals("long") ? gap.todayOpen() - dailyAtr * 0.3 : gap.todayOpen() + dailyAtr * 0.3))
-                                            .takeProfit(gap.type() == GapDetector.GapType.GAP_AND_GO
-                                                    ? (gap.direction().equals("long") ? gap.todayOpen() + dailyAtr * 1.5 : gap.todayOpen() - dailyAtr * 1.5)
-                                                    : (gap.direction().equals("long") ? gap.prevClose() : gap.prevClose()))
+                                            .stopLoss(gapSl).takeProfit(gapTp)
                                             .confidence(gap.confidence())
                                             .atr(dailyAtr)
-                                            .strategyType(gap.type() == GapDetector.GapType.GAP_AND_GO ? "gap_and_go" : "gap_fill")
-                                            .phaseMsg(gap.note())
+                                            .factorBreakdown(gap.note())
                                             .build();
                                     discord.sendSwingAlert(gapSetup);
                                     tracker.recordStrategySignal("gap_" + gap.type().name().toLowerCase(), gap.confidence());
