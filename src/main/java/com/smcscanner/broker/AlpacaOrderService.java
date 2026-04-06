@@ -137,7 +137,9 @@ public class AlpacaOrderService {
      */
     private String placeOptionsOrder(TradeSetup s) {
         try {
-            String occSymbol = s.getOptionsContract(); // e.g. "AAPL250418C00200000"
+            // Polygon returns "O:AAPL250418C00200000" — strip the "O:" prefix for Alpaca
+            String rawSymbol = s.getOptionsContract();
+            String occSymbol = rawSymbol.startsWith("O:") ? rawSymbol.substring(2) : rawSymbol;
             double premium   = s.getOptionsPremium();  // per-share premium (×100 = contract cost)
             if (premium <= 0) {
                 log.warn("ALPACA OPTIONS SKIP {}: invalid premium={}", s.getTicker(), premium);
@@ -515,6 +517,9 @@ public class AlpacaOrderService {
      */
     private void closeOptionsPosition(String underlying, String occSymbol) {
         try {
+            // Strip "O:" prefix if present (Polygon format → Alpaca format)
+            if (occSymbol.startsWith("O:")) occSymbol = occSymbol.substring(2);
+
             // Find how many contracts we hold
             Request posReq = new Request.Builder()
                     .url(getBaseUrl() + "/v2/positions/" + occSymbol)
