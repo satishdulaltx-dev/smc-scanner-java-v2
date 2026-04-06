@@ -269,10 +269,12 @@ public class BacktestService {
                     }
                 }
 
-                // ── 15m alignment check — mirrors live ScannerService logic ──
+                // ── 15m alignment check — matches live ScannerService (soft -15 penalty) ──
                 // Compute 15m bias using bars strictly before entry timestamp.
-                // Block if 15m trend directly opposes the setup direction.
+                // SOFT penalty of -15 if 15m trend opposes setup — does NOT hard-block.
                 // BYPASS for VWAP/vwap3d: mean-reversion intentionally fights the 15m trend.
+                int bias15mAdj = 0;
+                String bias15mLabel = "neutral";
                 boolean is15mApplicable = !"vwap".equals(stratType) && !"vwap3d".equals(stratType);
                 if (is15mApplicable && !ticker.startsWith("X:") && !all15mBars.isEmpty()) {
                     List<OHLCV> slice15 = all15mBars.stream()
@@ -283,29 +285,17 @@ public class BacktestService {
                         double sma15 = slice15.subList(sz - 20, sz).stream()
                                 .mapToDouble(OHLCV::getClose).average().orElse(0);
                         double last15 = slice15.get(sz - 1).getClose();
-                        String bias15 = last15 > sma15 * 1.002 ? "bullish"
-                                      : last15 < sma15 * 0.998 ? "bearish" : "neutral";
-                        // 5-bar momentum tiebreaker (same as daily bias logic)
-                        if ("neutral".equals(bias15) && sz >= 5) {
+                        bias15mLabel = last15 > sma15 * 1.002 ? "bullish"
+                                     : last15 < sma15 * 0.998 ? "bearish" : "neutral";
+                        if ("neutral".equals(bias15mLabel) && sz >= 5) {
                             double prev5 = slice15.get(sz - 5).getClose();
                             double mom = (last15 - prev5) / prev5;
-                            if      (mom >  0.015) bias15 = "bullish";
-                            else if (mom < -0.015) bias15 = "bearish";
+                            if      (mom >  0.015) bias15mLabel = "bullish";
+                            else if (mom < -0.015) bias15mLabel = "bearish";
                         }
-                        boolean conflicts = ("bullish".equals(bias15) && "short".equals(setup.getDirection()))
-                                         || ("bearish".equals(bias15) && "long".equals(setup.getDirection()));
-                        if (conflicts) {
-                            trades.add(new TradeResult(ticker, setup.getDirection(),
-                                    setup.getEntry(), setup.getStopLoss(), setup.getTakeProfit(),
-                                    "15M_FILTERED", 0.0,
-                                    toDateTime(dayBars.get(end-1).getTimestamp()),
-                                    toDateTime(dayBars.get(end-1).getTimestamp()),
-                                    setup.getConfidence(), setup.getAtr(),
-                                    0, "15M_CONFLICT", 0, bias15, 0, bias15,
-                                    0, 0, 0, 0));
-                            tradePlacedToday = true;
-                            continue;
-                        }
+                        boolean conflicts = ("bullish".equals(bias15mLabel) && "short".equals(setup.getDirection()))
+                                         || ("bearish".equals(bias15mLabel) && "long".equals(setup.getDirection()));
+                        if (conflicts) bias15mAdj = -15; // soft penalty, mirrors live
                     }
                 }
 
@@ -379,7 +369,21 @@ public class BacktestService {
                     volAdj    = techIndicators.volumeDelta(window);
                 }
 
-                int totalAdj = newsAdj + ctxAdj + qualityAdj + intradayRsAdj + deadZoneAdj + sma200Adj + rsiAdj + candleAdj + volAdj;
+                // ── Triple alignment bonus/penalty — mirrors live ScannerService ──
+                // daily + 15m + setup all agree → +10; all three conflict → -10
+                int alignmentAdj = 0;
+                if (!ticker.startsWith("X:")) {
+                    String dir = setup.getDirection();
+                    boolean dailyAligned = ("bullish".equals(htfBias) && "long".equals(dir))
+                                       || ("bearish".equals(htfBias) && "short".equals(dir));
+                    boolean m15Aligned   = ("bullish".equals(bias15mLabel) && "long".equals(dir))
+                                       || ("bearish".equals(bias15mLabel) && "short".equals(dir));
+                    if (dailyAligned && m15Aligned) alignmentAdj = +10;
+                    else if (!dailyAligned && !m15Aligned
+                             && !"neutral".equals(htfBias) && !"neutral".equals(bias15mLabel)) alignmentAdj = -10;
+                }
+
+                int totalAdj = newsAdj + ctxAdj + qualityAdj + intradayRsAdj + deadZoneAdj + bias15mAdj + alignmentAdj + sma200Adj + rsiAdj + candleAdj + volAdj;
                 // Penalty floor: secondary filters can reduce base confidence by at most 25%.
                 // A strong base setup (80+) should never be killed by stacking RS + news + quality.
                 // Floor = 75% of base confidence. e.g. base=80 → floor=60, base=70 → floor=52.
@@ -391,7 +395,9 @@ public class BacktestService {
                 if (adjConf < effectiveMinConf) {
                     log.debug("{} CONF_FILTERED: base={} news={} ctx={} qual={} iRS={} dz={} → adj={} floor={} (min={})",
                             ticker, setup.getConfidence(), newsAdj, ctxAdj, qualityAdj, intradayRsAdj, deadZoneAdj, adjConf, penaltyFloor, effectiveMinConf);
-                    String filteredOutcome = (newsAdj < 0 && (ctxAdj < 0 || qualityAdj < 0)) ? "MULTI_FILTERED"
+                    String filteredOutcome = bias15mAdj < 0 && (newsAdj < 0 || ctxAdj < 0 || qualityAdj < 0) ? "MULTI_FILTERED"
+                                           : bias15mAdj < 0 ? "15M_FILTERED"
+                                           : (newsAdj < 0 && (ctxAdj < 0 || qualityAdj < 0)) ? "MULTI_FILTERED"
                                            : newsAdj < 0    ? "NEWS_FILTERED"
                                            : qualityAdj < 0 ? "QUALITY_FILTERED"
                                            :                   "CTX_FILTERED";
