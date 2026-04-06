@@ -603,6 +603,8 @@ public class ScannerService {
                                             ticker, s.getDirection().toUpperCase(), s.getConfidence(), s.getEntry(),
                                             newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj, alignmentAdj, sma200Adj, rsiAdj, candleAdj, volAdj, vixBoost, dynamicMinConf);
                                     discord.sendSetupAlert(s, sentiment, context, earningsCheck);
+                                    liveLog.recordTrade(s, stratType);
+                                    tracker.recordStrategySignal(stratType, s.getConfidence());
                                     // ── Auto-trade via Alpaca (if enabled) ──────────
                                     if (alpaca.isEnabled()) {
                                         String orderId = alpaca.placeOrder(s);
@@ -612,8 +614,6 @@ public class ScannerService {
                                     }
                                 }
                             }
-                            liveLog.recordTrade(s, stratType);
-                            tracker.recordStrategySignal(stratType, s.getConfidence());
                             dedup.markSent(ticker, s.getDirection(), s.getEntry());
                         }
                     } else if (s.getConfidence() < effectiveMinConf) {

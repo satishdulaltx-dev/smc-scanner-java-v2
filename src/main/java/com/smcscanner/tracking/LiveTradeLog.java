@@ -32,7 +32,11 @@ import java.util.stream.Collectors;
 @Service
 public class LiveTradeLog {
     private static final Logger log = LoggerFactory.getLogger(LiveTradeLog.class);
-    private static final String FILE_PATH = "data/live-trades.json";
+    // TRADE_LOG_DIR env var lets Railway volume be mounted at e.g. /data
+    // Set TRADE_LOG_DIR=/data in Railway + add a Volume mounted at /data
+    private static final String FILE_PATH = System.getenv("TRADE_LOG_DIR") != null
+            ? System.getenv("TRADE_LOG_DIR").replaceAll("/$", "") + "/live-trades.json"
+            : "data/live-trades.json";
     private static final ZoneId ET = ZoneId.of("America/New_York");
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm");
