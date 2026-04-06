@@ -111,31 +111,56 @@ public class AlpacaOrderService {
         }
 
         try {
-            // Calculate position size from available buying power
-            double buyingPower = getAvailableBuyingPower();
-            int qty = Math.max(1, (int)(buyingPower / s.getEntry()));
+            // Route to options order if the setup has an options contract, else stock
+            if (s.hasOptionsData() && s.getOptionsContract() != null && !s.getOptionsContract().isBlank()) {
+                return placeOptionsOrder(s);
+            } else {
+                return placeStockOrder(s);
+            }
+        } catch (Exception e) {
+            log.error("ALPACA ORDER ERROR {}: {}", s.getTicker(), e.getMessage());
+            return null;
+        }
+    }
 
-            // Build bracket order
-            boolean isLong = "long".equals(s.getDirection());
+    /**
+     * Place a limit buy order for an options contract.
+     *
+     * Alpaca options orders:
+     *  - Symbol: OCC format e.g. "AAPL250418C00200000"
+     *  - Side: always "buy" (we buy calls for longs, buy puts for shorts)
+     *  - Qty: number of contracts (sized from buying power / (premium * 100))
+     *  - Type: limit at the current ask (optionsPremium)
+     *  - No bracket legs — options have defined max loss (premium paid)
+     *  - time_in_force: "day"
+     */
+    private String placeOptionsOrder(TradeSetup s) {
+        try {
+            String occSymbol = s.getOptionsContract(); // e.g. "AAPL250418C00200000"
+            double premium   = s.getOptionsPremium();  // per-share premium (×100 = contract cost)
+            if (premium <= 0) {
+                log.warn("ALPACA OPTIONS SKIP {}: invalid premium={}", s.getTicker(), premium);
+                return null;
+            }
+
+            double buyingPower   = getAvailableBuyingPower();
+            double contractCost  = premium * 100.0;  // 1 contract = 100 shares
+            int contracts        = Math.max(1, (int)(buyingPower / contractCost));
+
+            // Options are always a "buy" — calls for LONG setups, puts for SHORT
             Map<String, Object> order = new LinkedHashMap<>();
-            order.put("symbol", s.getTicker());
-            order.put("qty", String.valueOf(qty));
-            order.put("side", isLong ? "buy" : "sell");
+            order.put("symbol", occSymbol);
+            order.put("qty", String.valueOf(contracts));
+            order.put("side", "buy");
             order.put("type", "limit");
-            order.put("limit_price", String.format("%.2f", s.getEntry()));
-            order.put("time_in_force", "day"); // cancel at EOD if not filled
-
-            // Bracket legs: take profit + stop loss
-            order.put("order_class", "bracket");
-            order.put("take_profit", Map.of("limit_price", String.format("%.2f", s.getTakeProfit())));
-            order.put("stop_loss", Map.of("stop_price", String.format("%.2f", s.getStopLoss())));
+            order.put("limit_price", String.format("%.2f", premium));
+            order.put("time_in_force", "day");
 
             String json = mapper.writeValueAsString(order);
-            log.info("ALPACA ORDER {} {} qty={} entry=${} sl=${} tp=${} | {}",
-                    isLong ? "BUY" : "SELL", s.getTicker(), qty, s.getEntry(),
-                    s.getStopLoss(), s.getTakeProfit(), isPaper() ? "PAPER" : "LIVE");
+            log.info("ALPACA OPTIONS BUY {} contracts={} premium=${} contract_cost=${} dir={} | {}",
+                    occSymbol, contracts, premium, String.format("%.2f", contractCost),
+                    s.getDirection(), isPaper() ? "PAPER" : "LIVE");
 
-            // POST to Alpaca
             Request req = new Request.Builder()
                     .url(getBaseUrl() + "/v2/orders")
                     .addHeader("APCA-API-KEY-ID", config.getAlpacaApiKey())
@@ -148,10 +173,10 @@ public class AlpacaOrderService {
                 if (resp.isSuccessful()) {
                     JsonNode node = mapper.readTree(body);
                     String orderId = node.path("id").asText();
-                    String status = node.path("status").asText();
-                    log.info("ALPACA ORDER PLACED: {} {} id={} status={}", s.getTicker(), s.getDirection(), orderId, status);
+                    String status  = node.path("status").asText();
+                    log.info("ALPACA OPTIONS ORDER PLACED: {} id={} status={}", occSymbol, orderId, status);
 
-                    // Track for trailing stop management (peakClose starts at entry)
+                    // Track position using underlying entry/sl/tp for trailing logic
                     trackedPositions.put(s.getTicker(), new TrackedPosition(
                             s.getTicker(), s.getDirection(), s.getEntry(),
                             s.getStopLoss(), s.getTakeProfit(), orderId, null, s.getEntry(), 0));
@@ -161,12 +186,74 @@ public class AlpacaOrderService {
                 } else {
                     JsonNode err = mapper.readTree(body);
                     String msg = err.path("message").asText(body);
-                    log.error("ALPACA ORDER FAILED {}: {} ({})", s.getTicker(), msg, resp.code());
+                    log.error("ALPACA OPTIONS ORDER FAILED {}: {} ({})", occSymbol, msg, resp.code());
                     return null;
                 }
             }
         } catch (Exception e) {
-            log.error("ALPACA ORDER ERROR {}: {}", s.getTicker(), e.getMessage());
+            log.error("ALPACA OPTIONS ORDER ERROR {}: {}", s.getTicker(), e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Place a bracket equity order (buy/sell stock shares).
+     * Used when the setup has no options data.
+     */
+    private String placeStockOrder(TradeSetup s) {
+        try {
+            double buyingPower = getAvailableBuyingPower();
+            int qty = Math.max(1, (int)(buyingPower / s.getEntry()));
+
+            boolean isLong = "long".equals(s.getDirection());
+            Map<String, Object> order = new LinkedHashMap<>();
+            order.put("symbol", s.getTicker());
+            order.put("qty", String.valueOf(qty));
+            order.put("side", isLong ? "buy" : "sell");
+            order.put("type", "limit");
+            order.put("limit_price", String.format("%.2f", s.getEntry()));
+            order.put("time_in_force", "day");
+
+            // Bracket legs: take profit + stop loss
+            order.put("order_class", "bracket");
+            order.put("take_profit", Map.of("limit_price", String.format("%.2f", s.getTakeProfit())));
+            order.put("stop_loss", Map.of("stop_price", String.format("%.2f", s.getStopLoss())));
+
+            String json = mapper.writeValueAsString(order);
+            log.info("ALPACA STOCK {} {} qty={} entry=${} sl=${} tp=${} | {}",
+                    isLong ? "BUY" : "SELL", s.getTicker(), qty, s.getEntry(),
+                    s.getStopLoss(), s.getTakeProfit(), isPaper() ? "PAPER" : "LIVE");
+
+            Request req = new Request.Builder()
+                    .url(getBaseUrl() + "/v2/orders")
+                    .addHeader("APCA-API-KEY-ID", config.getAlpacaApiKey())
+                    .addHeader("APCA-API-SECRET-KEY", config.getAlpacaSecretKey())
+                    .post(RequestBody.create(json, JSON))
+                    .build();
+
+            try (Response resp = http.newCall(req).execute()) {
+                String body = resp.body() != null ? resp.body().string() : "";
+                if (resp.isSuccessful()) {
+                    JsonNode node = mapper.readTree(body);
+                    String orderId = node.path("id").asText();
+                    String status  = node.path("status").asText();
+                    log.info("ALPACA STOCK ORDER PLACED: {} {} id={} status={}", s.getTicker(), s.getDirection(), orderId, status);
+
+                    trackedPositions.put(s.getTicker(), new TrackedPosition(
+                            s.getTicker(), s.getDirection(), s.getEntry(),
+                            s.getStopLoss(), s.getTakeProfit(), orderId, null, s.getEntry(), 0));
+
+                    dailyOrderCount.merge(s.getTicker(), 1, Integer::sum);
+                    return orderId;
+                } else {
+                    JsonNode err = mapper.readTree(body);
+                    String msg = err.path("message").asText(body);
+                    log.error("ALPACA STOCK ORDER FAILED {}: {} ({})", s.getTicker(), msg, resp.code());
+                    return null;
+                }
+            }
+        } catch (Exception e) {
+            log.error("ALPACA STOCK ORDER ERROR {}: {}", s.getTicker(), e.getMessage());
             return null;
         }
     }
