@@ -29,13 +29,13 @@ public record MarketContext(
     // ── Relative Strength ─────────────────────────────────────────────────────
 
     /**
-     * True when RS strongly opposes the trade direction.
-     * Threshold >3%: stock has meaningful momentum against our signal.
-     * e.g. stock outperforming SPY by >3% → risky to short it.
+     * True when RS opposes the trade direction.
+     * Threshold ±2%: tightened from ±3% after loss analysis showed AMZN/AAPL
+     * losses consistently at RS values of ±0.9–2.8% that slipped through the old ±3% gate.
      */
     public boolean isRsConflicting(String direction) {
-        if ("short".equals(direction) && rsScore >  0.03) return true;
-        if ("long".equals(direction)  && rsScore < -0.03) return true;
+        if ("short".equals(direction) && rsScore >  0.02) return true;
+        if ("long".equals(direction)  && rsScore < -0.02) return true;
         return false;
     }
 

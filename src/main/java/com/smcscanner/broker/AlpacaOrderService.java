@@ -575,19 +575,78 @@ public class AlpacaOrderService {
     }
 
     /**
-     * Force-close all open positions at EOD (3:55 PM ET).
+     * Smart EOD close at 3:55 PM ET — close losers, keep winners running.
+     *
+     * Logic per position:
+     *   unrealizedPlPct >= +0.5% → keep (already in profit, let it run overnight)
+     *   unrealizedPlPct <  +0.5% → close (flat or losing, avoid overnight risk)
+     *
+     * Returns count of positions closed.
+     */
+    public int closeLosingPositions() {
+        if (!isEnabled()) return 0;
+
+        List<Map<String, Object>> positions = getPositions();
+        if (positions.isEmpty()) return 0;
+
+        // Cancel pending entry orders so no new fills happen at EOD
+        cancelAllOrders();
+
+        int closed = 0;
+        List<String> kept = new ArrayList<>();
+
+        for (Map<String, Object> pos : positions) {
+            String symbol = (String) pos.get("symbol");
+            double unrealizedPlPct;
+            try {
+                unrealizedPlPct = Double.parseDouble((String) pos.get("unrealized_plpc")) * 100;
+            } catch (Exception e) {
+                unrealizedPlPct = 0.0;
+            }
+
+            if (unrealizedPlPct >= 0.5) {
+                kept.add(String.format("%s(+%.2f%%)", symbol, unrealizedPlPct));
+                log.info("EOD CLOSE: keeping {} — unrealized={:+.2f}% (in profit)", symbol, unrealizedPlPct);
+                continue;
+            }
+
+            // Close this position
+            try {
+                Request req = new Request.Builder()
+                        .url(getBaseUrl() + "/v2/positions/" + symbol)
+                        .addHeader("APCA-API-KEY-ID", config.getAlpacaApiKey())
+                        .addHeader("APCA-API-SECRET-KEY", config.getAlpacaSecretKey())
+                        .delete().build();
+                try (Response resp = http.newCall(req).execute()) {
+                    if (resp.isSuccessful()) {
+                        closed++;
+                        log.info("EOD CLOSE: closed {} — unrealized={:+.2f}%", symbol, unrealizedPlPct);
+                        trackedPositions.remove(symbol);
+                        lastProcessedCandle.remove(symbol);
+                    } else {
+                        log.warn("EOD CLOSE: failed to close {} ({})", symbol, resp.code());
+                    }
+                }
+            } catch (Exception e) {
+                log.error("EOD CLOSE: error closing {}: {}", symbol, e.getMessage());
+            }
+        }
+
+        if (!kept.isEmpty()) log.info("EOD CLOSE: kept open — {}", String.join(", ", kept));
+        return closed;
+    }
+
+    /**
+     * Force-close ALL open positions at EOD (fallback, used if closeLosingPositions not called).
      * Cancels all open orders first, then liquidates all positions.
-     * Used to avoid unintended overnight holds on intraday strategies.
      */
     public int closeAllPositions() {
         if (!isEnabled()) return 0;
         int closed = 0;
 
-        // 1. Cancel all open orders (pending entries / bracket legs)
         cancelAllOrders();
         log.info("EOD CLOSE: cancelled all open orders");
 
-        // 2. Liquidate all open positions via DELETE /v2/positions
         try {
             Request req = new Request.Builder()
                     .url(getBaseUrl() + "/v2/positions")
@@ -601,22 +660,15 @@ public class AlpacaOrderService {
                     JsonNode arr = mapper.readTree(body);
                     if (arr.isArray()) {
                         closed = arr.size();
-                        for (JsonNode n : arr) {
-                            String symbol = n.path("symbol").asText();
-                            String status = n.path("status").asText();
-                            log.info("EOD CLOSE: {} — {}", symbol, status);
-                        }
+                        for (JsonNode n : arr) log.info("EOD CLOSE: {} — {}", n.path("symbol").asText(), n.path("status").asText());
                     }
                     log.info("EOD CLOSE: liquidated {} position(s)", closed);
-                } else {
-                    log.warn("EOD CLOSE: liquidation call returned {} — {}", resp.code(), body);
                 }
             }
         } catch (Exception e) {
             log.error("EOD CLOSE: error liquidating positions — {}", e.getMessage());
         }
 
-        // 3. Clear internal trackers
         trackedPositions.clear();
         lastProcessedCandle.clear();
         return closed;

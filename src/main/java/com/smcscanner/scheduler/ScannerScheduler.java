@@ -159,9 +159,9 @@ public class ScannerScheduler {
         log.info("EOD FORCE-CLOSE: 3:55 PM ET — liquidating all open positions");
         forceCloseDoneToday = true;
         try {
-            int count = alpaca.closeAllPositions();
+            int count = alpaca.closeLosingPositions();
             if (count > 0) {
-                discord.sendAlert(":bell: **EOD Force-Close** — liquidated **" + count + " position(s)** at 3:55 PM ET to avoid overnight holds.");
+                discord.sendAlert(":bell: **EOD Smart-Close** — closed **" + count + " position(s)** at 3:55 PM ET (losers closed, winners kept running).");
             }
         } catch (Exception e) {
             log.error("EOD force-close failed: {}", e.getMessage());

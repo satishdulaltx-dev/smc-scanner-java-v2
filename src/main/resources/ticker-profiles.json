@@ -3,7 +3,7 @@
     {
       "ticker": "AAPL",
       "strategyType": "keylevel",
-      "minConfidence": 62,
+      "minConfidence": 75,
       "slAtrMult": 0.4,
       "tpRrRatio": 2.0,
       "intradayRsGate": false,
@@ -161,7 +161,7 @@
     {
       "ticker": "NVDA",
       "strategyType": "smc",
-      "minConfidence": 72,
+      "minConfidence": 80,
       "minFvgPct": 0.0005,
       "dispAtrMult": 1.3,
       "intradayRsGate": true,
