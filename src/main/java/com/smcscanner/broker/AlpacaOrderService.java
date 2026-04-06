@@ -111,12 +111,12 @@ public class AlpacaOrderService {
         }
 
         try {
-            // Route to options order if the setup has an options contract, else stock
-            if (s.hasOptionsData() && s.getOptionsContract() != null && !s.getOptionsContract().isBlank()) {
-                return placeOptionsOrder(s);
-            } else {
-                return placeStockOrder(s);
+            // Options-only: never buy shares — skip if no contract was resolved
+            if (!s.hasOptionsData() || s.getOptionsContract() == null || s.getOptionsContract().isBlank()) {
+                log.info("ALPACA SKIP {} — no options contract on setup (options-only mode)", s.getTicker());
+                return null;
             }
+            return placeOptionsOrder(s);
         } catch (Exception e) {
             log.error("ALPACA ORDER ERROR {}: {}", s.getTicker(), e.getMessage());
             return null;
@@ -196,67 +196,6 @@ public class AlpacaOrderService {
         }
     }
 
-    /**
-     * Place a bracket equity order (buy/sell stock shares).
-     * Used when the setup has no options data.
-     */
-    private String placeStockOrder(TradeSetup s) {
-        try {
-            double buyingPower = getAvailableBuyingPower();
-            int qty = Math.max(1, (int)(buyingPower / s.getEntry()));
-
-            boolean isLong = "long".equals(s.getDirection());
-            Map<String, Object> order = new LinkedHashMap<>();
-            order.put("symbol", s.getTicker());
-            order.put("qty", String.valueOf(qty));
-            order.put("side", isLong ? "buy" : "sell");
-            order.put("type", "limit");
-            order.put("limit_price", String.format("%.2f", s.getEntry()));
-            order.put("time_in_force", "day");
-
-            // Bracket legs: take profit + stop loss
-            order.put("order_class", "bracket");
-            order.put("take_profit", Map.of("limit_price", String.format("%.2f", s.getTakeProfit())));
-            order.put("stop_loss", Map.of("stop_price", String.format("%.2f", s.getStopLoss())));
-
-            String json = mapper.writeValueAsString(order);
-            log.info("ALPACA STOCK {} {} qty={} entry=${} sl=${} tp=${} | {}",
-                    isLong ? "BUY" : "SELL", s.getTicker(), qty, s.getEntry(),
-                    s.getStopLoss(), s.getTakeProfit(), isPaper() ? "PAPER" : "LIVE");
-
-            Request req = new Request.Builder()
-                    .url(getBaseUrl() + "/v2/orders")
-                    .addHeader("APCA-API-KEY-ID", config.getAlpacaApiKey())
-                    .addHeader("APCA-API-SECRET-KEY", config.getAlpacaSecretKey())
-                    .post(RequestBody.create(json, JSON))
-                    .build();
-
-            try (Response resp = http.newCall(req).execute()) {
-                String body = resp.body() != null ? resp.body().string() : "";
-                if (resp.isSuccessful()) {
-                    JsonNode node = mapper.readTree(body);
-                    String orderId = node.path("id").asText();
-                    String status  = node.path("status").asText();
-                    log.info("ALPACA STOCK ORDER PLACED: {} {} id={} status={}", s.getTicker(), s.getDirection(), orderId, status);
-
-                    trackedPositions.put(s.getTicker(), new TrackedPosition(
-                            s.getTicker(), s.getDirection(), s.getEntry(),
-                            s.getStopLoss(), s.getTakeProfit(), orderId, null, s.getEntry(), 0));
-
-                    dailyOrderCount.merge(s.getTicker(), 1, Integer::sum);
-                    return orderId;
-                } else {
-                    JsonNode err = mapper.readTree(body);
-                    String msg = err.path("message").asText(body);
-                    log.error("ALPACA STOCK ORDER FAILED {}: {} ({})", s.getTicker(), msg, resp.code());
-                    return null;
-                }
-            }
-        } catch (Exception e) {
-            log.error("ALPACA STOCK ORDER ERROR {}: {}", s.getTicker(), e.getMessage());
-            return null;
-        }
-    }
 
     /** Get current account info (buying power, equity, etc.). */
     public Map<String, Object> getAccount() {
