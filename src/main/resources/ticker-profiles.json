@@ -217,10 +217,9 @@
       "ticker": "SMCI",
       "strategyType": "smc",
       "minConfidence": 78,
-      "maxConfidence": 84,
       "slAtrMult": 1.0,
       "tpRrRatio": 1.5,
-      "note": "180d optimizer: SMC mc=78 sl=1.0 tp=1.5 → 21t 61.9%WR +1.01% exp $924. Added maxConf=84 Apr-2026: reversed confidence pattern suspected (85+ fires after move exhausted, like JPM/ABNB). Re-backtest to confirm."
+      "note": "180d optimizer: SMC mc=78 sl=1.0 tp=1.5 → 21t 61.9%WR +1.01% exp $924. No maxConf cap — SMCI fires mostly at 100/100 and those ARE valid signals (reversed confidence pattern does NOT apply here unlike JPM/ABNB)."
     },
     {
       "ticker": "SNAP",

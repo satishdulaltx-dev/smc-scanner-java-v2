@@ -358,7 +358,7 @@ public class BacktestService {
                 if (adjConf > effectiveMaxConf) {
                     trades.add(new TradeResult(ticker, setup.getDirection(),
                             setup.getEntry(), setup.getStopLoss(), setup.getTakeProfit(),
-                            "OVEREXTENDED_FILTERED", 0.0,
+                            "CONF_CAP_FILTERED", 0.0,
                             toDateTime(dayBars.get(end - 1).getTimestamp()), toDateTime(dayBars.get(end - 1).getTimestamp()),
                             adjConf, setup.getAtr(), newsAdj, sentiment.label(), ctxAdj, context.rsLabel(),
                             qualityAdj, "CONF_CAP",
