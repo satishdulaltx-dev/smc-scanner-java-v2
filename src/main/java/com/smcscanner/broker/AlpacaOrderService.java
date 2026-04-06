@@ -171,6 +171,11 @@ public class AlpacaOrderService {
                     String.format("%.2f", contractCost * contracts),
                     String.format("%.2f", buyingPower),
                     s.getDirection(), isPaper() ? "PAPER" : "LIVE");
+            log.info("ALPACA OPTIONS ORDER CONTEXT: ticker={} rawContract={} normalizedContract={} hasOptionsData={} stopLoss={} takeProfit={} entry={}",
+                    s.getTicker(), rawSymbol, occSymbol, s.hasOptionsData(),
+                    String.format("%.2f", s.getStopLoss()),
+                    String.format("%.2f", s.getTakeProfit()),
+                    String.format("%.2f", s.getEntry()));
             log.info("ALPACA OPTIONS ORDER BODY: {}", json);
 
             Request req = new Request.Builder()
@@ -186,7 +191,8 @@ public class AlpacaOrderService {
                     JsonNode node = mapper.readTree(body);
                     String orderId = node.path("id").asText();
                     String status  = node.path("status").asText();
-                    log.info("ALPACA OPTIONS ORDER PLACED: {} id={} status={}", occSymbol, orderId, status);
+                    log.info("ALPACA OPTIONS ORDER PLACED: {} id={} status={} response={}",
+                            occSymbol, orderId, status, shortenForLog(body));
 
                     // Track position: underlying entry/sl/tp for ATR trailing,
                     // optionsContract stored so we can sell-to-close when SL is hit
@@ -197,9 +203,9 @@ public class AlpacaOrderService {
                     dailyOrderCount.merge(s.getTicker(), 1, Integer::sum);
                     return orderId;
                 } else {
-                    JsonNode err = mapper.readTree(body);
-                    String msg = err.path("message").asText(body);
-                    log.error("ALPACA OPTIONS ORDER FAILED {}: {} ({})", occSymbol, msg, resp.code());
+                    String msg = extractAlpacaError(body);
+                    log.error("ALPACA OPTIONS ORDER FAILED {}: status={} message={} response={}",
+                            occSymbol, resp.code(), msg, shortenForLog(body));
                     return null;
                 }
             }
@@ -552,8 +558,11 @@ public class AlpacaOrderService {
             order.put("side", "sell");
             order.put("type", "market");
             order.put("time_in_force", "day");
+            order.put("asset_class", "us_option");
 
             String json = mapper.writeValueAsString(order);
+            log.info("TRAIL OPTIONS CLOSE ATTEMPT: underlying={} symbol={} qty={} mode={} body={}",
+                    underlying, occSymbol, qty, isPaper() ? "PAPER" : "LIVE", json);
             Request req = new Request.Builder()
                     .url(getBaseUrl() + "/v2/orders")
                     .addHeader("APCA-API-KEY-ID", config.getAlpacaApiKey())
@@ -562,11 +571,13 @@ public class AlpacaOrderService {
                     .build();
 
             try (Response resp = http.newCall(req).execute()) {
+                String body = resp.body() != null ? resp.body().string() : "";
                 if (resp.isSuccessful()) {
-                    log.info("TRAIL OPTIONS CLOSE ✓ {} ({}) qty={}", underlying, occSymbol, qty);
+                    log.info("TRAIL OPTIONS CLOSE ✓ {} ({}) qty={} response={}",
+                            underlying, occSymbol, qty, shortenForLog(body));
                 } else {
-                    String body = resp.body() != null ? resp.body().string() : "";
-                    log.error("TRAIL OPTIONS CLOSE FAILED {} ({}): {}", underlying, occSymbol, body);
+                    log.error("TRAIL OPTIONS CLOSE FAILED {} ({}): status={} message={} response={}",
+                            underlying, occSymbol, resp.code(), extractAlpacaError(body), shortenForLog(body));
                 }
             }
         } catch (Exception e) {
@@ -732,6 +743,24 @@ public class AlpacaOrderService {
     private int getMinAutoTradeConfidence() {
         int v = config.getAlpacaMinConfidence();
         return v > 0 ? v : DEFAULT_MIN_CONFIDENCE;
+    }
+
+    private String extractAlpacaError(String body) {
+        if (body == null || body.isBlank()) return "(empty response body)";
+        try {
+            JsonNode err = mapper.readTree(body);
+            String message = err.path("message").asText();
+            if (message != null && !message.isBlank()) return message;
+        } catch (Exception ignored) {
+            // Fall back to raw body below.
+        }
+        return shortenForLog(body);
+    }
+
+    private String shortenForLog(String text) {
+        if (text == null) return "";
+        String compact = text.replaceAll("\\s+", " ").trim();
+        return compact.length() <= 500 ? compact : compact.substring(0, 500) + "...";
     }
 
     private void resetDailyIfNeeded() {
