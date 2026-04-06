@@ -637,24 +637,7 @@ public class DashboardController {
     @ResponseBody
     public ResponseEntity<Map<String,Object>> testAlert() {
         try {
-            var s = com.smcscanner.model.TradeSetup.builder()
-                    .ticker("AAPL").direction("long")
-                    .entry(253.49).stopLoss(251.56).takeProfit(257.34)
-                    .confidence(80).session("NYSE").volatility("keylevel")
-                    .atr(1.06).hasBos(false).hasChoch(false).fvgTop(0).fvgBottom(0)
-                    .timestamp(java.time.LocalDateTime.now())
-                    .optionsContract("O:AAPL260417C00255000")
-                    .optionsType("call").optionsStrike(255).optionsExpiry("2026-04-17")
-                    .optionsPremium(4.11).optionsDelta(0.432).optionsIV(0.257)
-                    .optionsIVPct(26).optionsBreakEven(259.11)
-                    .optionsProfitPer(170).optionsLossPer(96).optionsRR(1.8)
-                    .optionsSuggested(1)
-                    .optionsFlowLabel("Neutral flow").optionsFlowDir("NEUTRAL")
-                    .optionsMaxPain(255.0)
-                    .convictionTier("STANDARD (1 contract)")
-                    .riskTier("STANDARD — 1-2% risk, 1x ATR stop, max 5d hold")
-                    .factorBreakdown("Base score — no adjustments")
-                    .build();
+            var s = buildTestTradeSetup();
             var newsSentiment = new com.smcscanner.news.NewsSentiment(
                     "AAPL", 2, 1, 3, 0.1,
                     "What Happens if the S&P 500 Joins the Nasdaq and Dow in Correction Territory?");
@@ -704,6 +687,40 @@ public class DashboardController {
         return ResponseEntity.ok(Map.of("closed_equity_positions", closed));
     }
 
+    /**
+     * POST /api/alpaca/test-order — place a single paper options order using the same path as live auto-trading.
+     * Uses a known test setup so we can verify app -> Alpaca order submission without waiting for a scanner trigger.
+     */
+    @PostMapping("/api/alpaca/test-order")
+    @ResponseBody
+    public ResponseEntity<Map<String,Object>> alpacaTestOrder() {
+        if (!alpaca.isEnabled()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Alpaca is not enabled"));
+        }
+        if (!config.isAlpacaPaper()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Test order endpoint is paper-only"));
+        }
+
+        var s = buildTestTradeSetup();
+        String orderId = alpaca.placeOrder(s);
+        if (orderId == null) {
+            return ResponseEntity.internalServerError().body(Map.of(
+                    "status", "failed",
+                    "ticker", s.getTicker(),
+                    "contract", s.getOptionsContract(),
+                    "message", "Order was skipped or rejected; check Railway logs for ALPACA OPTIONS ORDER lines"
+            ));
+        }
+
+        return ResponseEntity.ok(Map.of(
+                "status", "submitted",
+                "ticker", s.getTicker(),
+                "contract", s.getOptionsContract(),
+                "order_id", orderId,
+                "paper", true
+        ));
+    }
+
     /** GET /api/alpaca/status — is Alpaca enabled + paper/live mode + trailing stops. */
     @GetMapping("/api/alpaca/status")
     @ResponseBody
@@ -740,4 +757,25 @@ public class DashboardController {
     @GetMapping("/health")
     @ResponseBody
     public ResponseEntity<Map<String,String>> health() { return ResponseEntity.ok(Map.of("status","UP")); }
+
+    private com.smcscanner.model.TradeSetup buildTestTradeSetup() {
+        return com.smcscanner.model.TradeSetup.builder()
+                .ticker("AAPL").direction("long")
+                .entry(253.49).stopLoss(251.56).takeProfit(257.34)
+                .confidence(80).session("NYSE").volatility("keylevel")
+                .atr(1.06).hasBos(false).hasChoch(false).fvgTop(0).fvgBottom(0)
+                .timestamp(java.time.LocalDateTime.now())
+                .optionsContract("O:AAPL260417C00255000")
+                .optionsType("call").optionsStrike(255).optionsExpiry("2026-04-17")
+                .optionsPremium(4.11).optionsDelta(0.432).optionsIV(0.257)
+                .optionsIVPct(26).optionsBreakEven(259.11)
+                .optionsProfitPer(170).optionsLossPer(96).optionsRR(1.8)
+                .optionsSuggested(1)
+                .optionsFlowLabel("Neutral flow").optionsFlowDir("NEUTRAL")
+                .optionsMaxPain(255.0)
+                .convictionTier("STANDARD (1 contract)")
+                .riskTier("STANDARD — 1-2% risk, 1x ATR stop, max 5d hold")
+                .factorBreakdown("Base score — no adjustments")
+                .build();
+    }
 }

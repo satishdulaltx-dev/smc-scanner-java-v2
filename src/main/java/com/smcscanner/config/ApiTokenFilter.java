@@ -24,6 +24,7 @@ import java.util.Set;
  * Protected endpoints (all POST):
  *   /api/alpaca/cancel-all
  *   /api/alpaca/close-equity
+ *   /api/alpaca/test-order
  *   /api/test-alert
  *   /api/trades/resolve
  *   /api/adaptive/outcome
@@ -38,6 +39,7 @@ public class ApiTokenFilter implements Filter {
     private static final Set<String> PROTECTED_PATHS = Set.of(
             "/api/alpaca/cancel-all",
             "/api/alpaca/close-equity",
+            "/api/alpaca/test-order",
             "/api/test-alert",
             "/api/trades/resolve",
             "/api/adaptive/outcome",
