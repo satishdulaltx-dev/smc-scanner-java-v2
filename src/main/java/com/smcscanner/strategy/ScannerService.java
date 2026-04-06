@@ -533,11 +533,12 @@ public class ScannerService {
                             ticker, s.getConfidence(), effectiveMaxConf);
                 } else if (s.getConfidence() >= dynamicMinConf && !dedup.isDuplicate(ticker,s.getDirection(),s.getEntry())) {
                         if (dedup.isStartupQuiet()) {
-                            // Startup quiet window — seed dedup without firing Discord alert.
-                            // This prevents re-sending an alert that fired before the last restart/redeploy.
+                            // Startup quiet window — seed entry key only, not ticker cooldown.
+                            // Prevents exact replay of the same entry/direction,
+                            // but allows fresh signals to fire once the quiet window expires.
                             log.info("{} STARTUP_SEED: {} conf={} entry={} — seeded (no alert, startup quiet active)",
                                     ticker, s.getDirection().toUpperCase(), s.getConfidence(), s.getEntry());
-                            dedup.markSent(ticker, s.getDirection(), s.getEntry());
+                            dedup.markSeedOnly(ticker, s.getDirection(), s.getEntry());
                         } else {
                             // Earnings proximity check — warn but don't block
                             EarningsCalendar.EarningsCheck earningsCheck = earnings.check(ticker);

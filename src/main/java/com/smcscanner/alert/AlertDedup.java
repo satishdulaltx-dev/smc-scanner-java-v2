@@ -57,6 +57,16 @@ public class AlertDedup {
         tickerLast.put(ticker, Instant.now());
     }
 
+    /**
+     * Seed-only: marks the specific entry/direction as seen (prevents exact replay)
+     * but does NOT stamp the ticker-level cooldown.
+     * Used during startup quiet window so fresh signals can still fire after startup.
+     */
+    public void markSeedOnly(String ticker, String dir, double entry) {
+        last.put(key(ticker, dir, entry), Instant.now());
+        // intentionally NOT updating tickerLast — startup should not block fresh alerts
+    }
+
     public void cleanup() {
         Instant cut = Instant.now().minusSeconds(COOLDOWN_MIN * 60L);
         last.entrySet().removeIf(e -> e.getValue().isBefore(cut));
