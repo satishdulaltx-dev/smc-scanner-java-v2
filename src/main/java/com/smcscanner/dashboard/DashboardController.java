@@ -10,6 +10,7 @@ import com.smcscanner.model.OHLCV;
 import com.smcscanner.model.TickerStatus;
 import com.smcscanner.model.eod.Level;
 import com.smcscanner.model.eod.TickerReport;
+import com.smcscanner.research.ResearchService;
 import com.smcscanner.state.ReportCache;
 import com.smcscanner.state.SharedState;
 import com.smcscanner.strategy.EodReportService;
@@ -53,6 +54,7 @@ public class DashboardController {
     private final LiveTradeLog       liveLog;
     private final PolygonClient      polygon;
     private final ProfileOptimizer   optimizer;
+    private final ResearchService    researchService;
     private final com.smcscanner.broker.AlpacaOrderService alpaca;
 
     private static final Map<String,String> TV_MAP = Map.of(
@@ -73,12 +75,13 @@ public class DashboardController {
                                 BacktestService backtestService, AdaptiveSuppressor adaptive,
                                 AnalysisService analysisService, LiveTradeLog liveLog,
                                 PolygonClient polygon, ProfileOptimizer optimizer,
+                                ResearchService researchService,
                                 com.smcscanner.broker.AlpacaOrderService alpaca) {
         this.state=state; this.config=config; this.sessionFilter=sessionFilter;
         this.tracker=tracker; this.eodReport=eodReport; this.discord=discord;
         this.reportCache=reportCache; this.backtestService=backtestService; this.adaptive=adaptive;
         this.analysisService=analysisService; this.liveLog=liveLog; this.polygon=polygon;
-        this.optimizer=optimizer; this.alpaca=alpaca;
+        this.optimizer=optimizer; this.researchService=researchService; this.alpaca=alpaca;
     }
 
     @GetMapping("/")
@@ -424,6 +427,12 @@ public class DashboardController {
         return "analyze";
     }
 
+    /** GET /research - serve research page */
+    @GetMapping("/research")
+    public String researchPage() {
+        return "research";
+    }
+
     /** GET /api/analyze?ticker=JPM - deep analysis of a single ticker */
     @GetMapping("/api/analyze")
     @ResponseBody
@@ -506,6 +515,18 @@ public class DashboardController {
             return ResponseEntity.ok(resp);
         } catch (Exception e) {
             log.error("Backtest error: {}", e.getMessage());
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    /** GET /api/research - run watchlist research and summarize strategy/failure patterns. */
+    @GetMapping("/api/research")
+    @ResponseBody
+    public ResponseEntity<?> apiResearch() {
+        try {
+            return ResponseEntity.ok(researchService.runWatchlistResearch());
+        } catch (Exception e) {
+            log.error("Research error: {}", e.getMessage(), e);
             return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
         }
     }

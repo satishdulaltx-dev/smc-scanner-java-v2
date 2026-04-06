@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>SD Scanner — Research</title>
+    <style>
+        :root {
+            --bg:#0d1117; --surface:#161b22; --border:#30363d;
+            --text:#e6edf3; --muted:#8b949e; --green:#3fb950; --red:#f85149;
+            --blue:#58a6ff; --yellow:#d29922; --purple:#bc8cff; --orange:#f0883e;
+        }
+        * { box-sizing:border-box; margin:0; padding:0; }
+        body { background:var(--bg); color:var(--text); font-family:'Segoe UI',system-ui,sans-serif; font-size:13px; min-height:100vh; }
+        .header { background:var(--surface); border-bottom:1px solid var(--border); padding:14px 24px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+        .logo { display:flex; align-items:center; gap:10px; }
+        .logo-dot { width:10px; height:10px; border-radius:50%; background:var(--orange); box-shadow:0 0 6px var(--orange); }
+        .logo h1 { font-size:18px; font-weight:700; color:var(--blue); letter-spacing:1px; }
+        .logo p { font-size:11px; color:var(--muted); }
+        .actions { display:flex; gap:10px; flex-wrap:wrap; }
+        .btn { padding:8px 14px; border-radius:8px; font-size:12px; font-weight:700; text-decoration:none; border:1px solid; display:inline-flex; align-items:center; gap:6px; cursor:pointer; }
+        .btn-blue { background:rgba(88,166,255,.15); color:var(--blue); border-color:var(--blue); }
+        .btn-purple { background:rgba(188,140,255,.15); color:var(--purple); border-color:var(--purple); }
+        .btn-green { background:rgba(63,185,80,.15); color:var(--green); border-color:var(--green); }
+        .toolbar { background:var(--surface); border-bottom:1px solid var(--border); padding:16px 24px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+        .toolbar-copy { color:var(--muted); font-size:12px; max-width:760px; }
+        .run-btn { padding:10px 18px; border-radius:8px; border:none; background:var(--blue); color:#0d1117; font-weight:800; cursor:pointer; }
+        .run-btn:disabled { opacity:.45; cursor:not-allowed; }
+        .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; padding:20px 24px 0; }
+        .card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:16px; }
+        .stat-val { font-size:28px; font-weight:800; }
+        .stat-lbl { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.8px; margin-top:4px; }
+        .green { color:var(--green); } .red { color:var(--red); } .blue { color:var(--blue); } .yellow { color:var(--yellow); } .purple { color:var(--purple); }
+        .content { padding:18px 24px 24px; }
+        .section-title { font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin:8px 0 12px; display:flex; align-items:center; gap:8px; }
+        .loading, .empty { text-align:center; color:var(--muted); padding:48px 24px; }
+        .spinner { display:inline-block; width:22px; height:22px; border:2px solid var(--border); border-top-color:var(--blue); border-radius:50%; animation:spin .8s linear infinite; margin-right:8px; vertical-align:middle; }
+        @keyframes spin { to { transform:rotate(360deg); } }
+        .ticker-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:14px; }
+        .ticker-card { background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px; }
+        .ticker-head { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:10px; }
+        .ticker-name { font-size:18px; font-weight:800; }
+        .ticker-sub { font-size:11px; color:var(--muted); margin-top:4px; }
+        .pill { padding:4px 10px; border-radius:999px; font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:.8px; }
+        .pill-keep { background:rgba(63,185,80,.14); color:var(--green); border:1px solid rgba(63,185,80,.35); }
+        .pill-retune { background:rgba(210,153,34,.14); color:var(--yellow); border:1px solid rgba(210,153,34,.35); }
+        .pill-retest { background:rgba(88,166,255,.14); color:var(--blue); border:1px solid rgba(88,166,255,.35); }
+        .pill-disable { background:rgba(248,81,73,.14); color:var(--red); border:1px solid rgba(248,81,73,.35); }
+        .summary { color:var(--text); line-height:1.45; margin:8px 0 14px; }
+        .mini-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:8px; margin-bottom:14px; }
+        .mini { background:#11161d; border:1px solid var(--border); border-radius:8px; padding:10px; }
+        .mini .v { font-size:18px; font-weight:800; }
+        .mini .l { color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:.7px; margin-top:3px; }
+        .table-title { color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:.8px; margin:12px 0 8px; font-weight:700; }
+        table { width:100%; border-collapse:collapse; font-size:12px; }
+        th, td { padding:8px 6px; border-bottom:1px solid var(--border); text-align:left; }
+        th { color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:.8px; }
+        tr:last-child td { border-bottom:none; }
+        .muted { color:var(--muted); }
+        .footer { text-align:center; padding:16px; color:var(--muted); font-size:11px; border-top:1px solid var(--border); }
+    </style>
+</head>
+<body>
+<div class="header">
+    <div class="logo">
+        <div class="logo-dot"></div>
+        <div>
+            <h1>SD SCANNER — RESEARCH</h1>
+            <p>Batch watchlist studies, strategy rankings, and failure summaries</p>
+        </div>
+    </div>
+    <div class="actions">
+        <a href="/" class="btn btn-blue">← Dashboard</a>
+        <a href="/backtest" class="btn btn-purple">📈 Backtest</a>
+        <a href="/eod" class="btn btn-green">📊 EOD Report</a>
+    </div>
+</div>
+
+<div class="toolbar">
+    <div class="toolbar-copy">
+        This view batches your current watchlist through rolling backtests, compares the current profile strategy with core alternatives, and recommends which names to keep, retune, retest, or disable.
+    </div>
+    <button class="run-btn" id="run-btn" onclick="runResearch()">Run Research</button>
+</div>
+
+<div class="stats" id="stats" style="display:none"></div>
+
+<div class="content">
+    <div class="loading" id="loading">
+        <span class="spinner"></span> Running watchlist research. This can take a bit because it reuses the full backtest engine.
+    </div>
+    <div class="empty" id="empty">
+        Run research to rank the watchlist and surface which strategies and failure patterns deserve attention.
+    </div>
+    <div id="ticker-section" style="display:none">
+        <div class="section-title">Research Scorecards</div>
+        <div class="ticker-grid" id="ticker-grid"></div>
+    </div>
+</div>
+
+<div class="footer">
+    Research combines 90d, 180d, and 365d windows with a 180d strategy comparison across SMC, VWAP, breakout, and key level.
+</div>
+
+<script>
+function fmtSigned(n, suffix = '%') {
+    if (n === null || n === undefined) return '—';
+    const val = Number(n);
+    return `${val > 0 ? '+' : ''}${val.toFixed(2)}${suffix}`;
+}
+
+function pillClass(rec) {
+    return `pill-${rec || 'retest'}`;
+}
+
+function renderStats(data) {
+    const stats = document.getElementById('stats');
+    stats.style.display = 'grid';
+    stats.innerHTML = `
+        <div class="card"><div class="stat-val blue">${data.watchlistSize}</div><div class="stat-lbl">Watchlist</div></div>
+        <div class="card"><div class="stat-val green">${data.keepCount}</div><div class="stat-lbl">Keep</div></div>
+        <div class="card"><div class="stat-val yellow">${data.retuneCount}</div><div class="stat-lbl">Retune</div></div>
+        <div class="card"><div class="stat-val blue">${data.retestCount}</div><div class="stat-lbl">Retest</div></div>
+        <div class="card"><div class="stat-val red">${data.disableCount}</div><div class="stat-lbl">Disable</div></div>
+    `;
+}
+
+function renderTickerCard(row) {
+    const windows = row.windows.map(w => `
+        <tr>
+            <td>${w.days}d</td>
+            <td>${w.totalTrades}</td>
+            <td class="${w.winRate >= 50 ? 'green' : 'red'}">${w.winRate.toFixed(1)}%</td>
+            <td class="${w.expectancy >= 0 ? 'green' : 'red'}">${fmtSigned(w.expectancy)}</td>
+        </tr>
+    `).join('');
+
+    const strategies = row.strategies.map(s => `
+        <tr>
+            <td>${s.current ? '★ ' : ''}${s.strategy}</td>
+            <td>${s.totalTrades}</td>
+            <td class="${s.winRate >= 50 ? 'green' : 'red'}">${s.winRate.toFixed(1)}%</td>
+            <td class="${s.expectancy >= 0 ? 'green' : 'red'}">${fmtSigned(s.expectancy)}</td>
+        </tr>
+    `).join('');
+
+    const failures = (row.failures || []).map(f => `
+        <tr>
+            <td>${f.outcome}</td>
+            <td>${f.count}</td>
+        </tr>
+    `).join('') || '<tr><td class="muted" colspan="2">No failure data</td></tr>';
+
+    return `
+        <div class="ticker-card">
+            <div class="ticker-head">
+                <div>
+                    <div class="ticker-name">${row.ticker}</div>
+                    <div class="ticker-sub">Current ${row.currentStrategy} · Best ${row.bestStrategy} · Score ${row.score.toFixed(2)}</div>
+                </div>
+                <span class="pill ${pillClass(row.recommendation)}">${row.recommendation}</span>
+            </div>
+            <div class="summary">${row.summary}</div>
+            <div class="mini-grid">
+                <div class="mini"><div class="v">${row.totalTrades365}</div><div class="l">365d Trades</div></div>
+                <div class="mini"><div class="v ${row.winRate365 >= 50 ? 'green' : 'red'}">${row.winRate365.toFixed(1)}%</div><div class="l">365d WR</div></div>
+                <div class="mini"><div class="v ${row.expectancy365 >= 0 ? 'green' : 'red'}">${fmtSigned(row.expectancy365)}</div><div class="l">365d Exp</div></div>
+                <div class="mini"><div class="v ${row.optPnl365 >= 0 ? 'green' : 'red'}">${fmtSigned(row.optPnl365, '')}</div><div class="l">1-Contract Opt PnL</div></div>
+            </div>
+
+            <div class="table-title">Rolling Windows</div>
+            <table>
+                <thead><tr><th>Window</th><th>Trades</th><th>WR</th><th>Expectancy</th></tr></thead>
+                <tbody>${windows}</tbody>
+            </table>
+
+            <div class="table-title">Strategy Comparison (180d)</div>
+            <table>
+                <thead><tr><th>Strategy</th><th>Trades</th><th>WR</th><th>Expectancy</th></tr></thead>
+                <tbody>${strategies}</tbody>
+            </table>
+
+            <div class="table-title">Top Outcomes / Failure Patterns</div>
+            <table>
+                <thead><tr><th>Outcome</th><th>Count</th></tr></thead>
+                <tbody>${failures}</tbody>
+            </table>
+        </div>
+    `;
+}
+
+async function runResearch() {
+    const btn = document.getElementById('run-btn');
+    const loading = document.getElementById('loading');
+    const empty = document.getElementById('empty');
+    const section = document.getElementById('ticker-section');
+    const grid = document.getElementById('ticker-grid');
+
+    btn.disabled = true;
+    loading.style.display = 'block';
+    empty.style.display = 'none';
+    section.style.display = 'none';
+    grid.innerHTML = '';
+
+    try {
+        const res = await fetch('/api/research');
+        const data = await res.json();
+        if (!res.ok || data.error) throw new Error(data.error || 'Research failed');
+
+        renderStats(data);
+        grid.innerHTML = data.tickers.map(renderTickerCard).join('');
+        section.style.display = 'block';
+    } catch (err) {
+        empty.textContent = `Research failed: ${err.message}`;
+        empty.style.display = 'block';
+    } finally {
+        btn.disabled = false;
+        loading.style.display = 'none';
+    }
+}
+</script>
+</body>
+</html>
