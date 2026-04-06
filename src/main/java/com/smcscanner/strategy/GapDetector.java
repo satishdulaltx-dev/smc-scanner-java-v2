@@ -64,7 +64,7 @@ public class GapDetector {
         if (Math.abs(gapPct) < 0.3) return null;
 
         // Volume confirmation: compare first bar volume to average
-        double avgVol = prevBars.stream().mapToLong(OHLCV::getVolume).average().orElse(0);
+        double avgVol = prevBars.stream().mapToDouble(OHLCV::getVolume).average().orElse(0);
         double firstBarVol = todayBars.get(0).getVolume();
         double volRatio = avgVol > 0 ? firstBarVol / avgVol : 1.0;
 

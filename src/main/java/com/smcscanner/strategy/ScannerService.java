@@ -683,11 +683,11 @@ public class ScannerService {
                         java.time.LocalDate today = java.time.ZonedDateTime.now(
                                 java.time.ZoneId.of("America/New_York")).toLocalDate();
                         List<OHLCV> todayBars5m = bars.stream()
-                                .filter(b -> java.time.Instant.ofEpochMilli(b.getTimestamp())
+                                .filter(b -> java.time.Instant.ofEpochMilli(Long.parseLong(b.getTimestamp()))
                                         .atZone(java.time.ZoneId.of("America/New_York")).toLocalDate().equals(today))
                                 .collect(java.util.stream.Collectors.toList());
                         List<OHLCV> prevBars5m = bars.stream()
-                                .filter(b -> java.time.Instant.ofEpochMilli(b.getTimestamp())
+                                .filter(b -> java.time.Instant.ofEpochMilli(Long.parseLong(b.getTimestamp()))
                                         .atZone(java.time.ZoneId.of("America/New_York")).toLocalDate().isBefore(today))
                                 .collect(java.util.stream.Collectors.toList());
                         if (!todayBars5m.isEmpty() && !prevBars5m.isEmpty()) {
