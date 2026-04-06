@@ -594,16 +594,22 @@ public class ScannerService {
                                 discord.sendSwingAlert(s);
                                 tracker.recordStrategySignal("swing_lateday", s.getConfidence());
                             } else {
-                                log.info("INTRADAY ALERT {} {} conf={} entry={} adj=news{}/ctx{}/qual{}/flow{}/regime{}/corr{}/align{}/sma200{}/rsi{}/candle{}/vol{} vixBoost={} dynamicMin={}",
-                                        ticker, s.getDirection().toUpperCase(), s.getConfidence(), s.getEntry(),
-                                        newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj, alignmentAdj, sma200Adj, rsiAdj, candleAdj, volAdj, vixBoost, dynamicMinConf);
-                                discord.sendSetupAlert(s, sentiment, context, earningsCheck);
-                            }
-                            // ── Auto-trade via Alpaca (if enabled) ──────────
-                            if (alpaca.isEnabled()) {
-                                String orderId = alpaca.placeOrder(s);
-                                if (orderId != null) {
-                                    log.info("ALPACA ORDER {} {} orderId={}", ticker, s.getDirection(), orderId);
+                                // Options-only gate: suppress alert entirely if no contract found
+                                if (!s.hasOptionsData()) {
+                                    log.info("ALERT SUPPRESSED {} {} conf={} — no options contract available (options-only mode)",
+                                            ticker, s.getDirection().toUpperCase(), s.getConfidence());
+                                } else {
+                                    log.info("INTRADAY ALERT {} {} conf={} entry={} adj=news{}/ctx{}/qual{}/flow{}/regime{}/corr{}/align{}/sma200{}/rsi{}/candle{}/vol{} vixBoost={} dynamicMin={}",
+                                            ticker, s.getDirection().toUpperCase(), s.getConfidence(), s.getEntry(),
+                                            newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj, alignmentAdj, sma200Adj, rsiAdj, candleAdj, volAdj, vixBoost, dynamicMinConf);
+                                    discord.sendSetupAlert(s, sentiment, context, earningsCheck);
+                                    // ── Auto-trade via Alpaca (if enabled) ──────────
+                                    if (alpaca.isEnabled()) {
+                                        String orderId = alpaca.placeOrder(s);
+                                        if (orderId != null) {
+                                            log.info("ALPACA ORDER {} {} orderId={}", ticker, s.getDirection(), orderId);
+                                        }
+                                    }
                                 }
                             }
                             liveLog.recordTrade(s, stratType);
