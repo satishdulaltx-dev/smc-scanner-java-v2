@@ -215,11 +215,11 @@
     },
     {
       "ticker": "SMCI",
-      "strategyType": "vwap",
-      "minConfidence": 65,
-      "slAtrMult": 0.5,
-      "tpRrRatio": 1.5,
-      "note": "365d optimizer: VWAP mc=65 sl=0.5 tp=1.5 → 13t 55.6%WR +0.60% exp. Tighter SL fixes R:R vs old SMC sl=1.0. No maxConf cap — high-conf signals are valid for SMCI."
+      "strategyType": "smc",
+      "minConfidence": 78,
+      "slAtrMult": 0.4,
+      "tpRrRatio": 1.0,
+      "note": "180d optimizer rank#2: SMC mc=78 sl=0.4 tp=1.0 → 17t 64.7%WR +2.50%avgW -2.33%avgL +0.79%exp $391 optP&L. Tight sl=0.4 ATR fixes R:R. VWAP was rank#16 (+0.01%). No maxConf cap."
     },
     {
       "ticker": "SNAP",

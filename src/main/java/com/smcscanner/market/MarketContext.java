@@ -39,6 +39,18 @@ public record MarketContext(
         return false;
     }
 
+    /**
+     * VWAP-specific RS conflict check — tighter threshold (±1.5% vs ±3%).
+     * VWAP is mean-reversion: a slight RS headwind means the pullback may be a real trend,
+     * not a temporary dip. Learned from SMCI losses: RS=-2.1% and RS=+2.4% both produced
+     * losses that passed the standard ±3% filter.
+     */
+    public boolean isRsConflictingVwap(String direction) {
+        if ("short".equals(direction) && rsScore >  0.015) return true;
+        if ("long".equals(direction)  && rsScore < -0.015) return true;
+        return false;
+    }
+
     /** True when RS momentum supports the trade direction. */
     public boolean isRsAligned(String direction) {
         if ("long".equals(direction)  && rsScore >  0.02) return true;
@@ -69,11 +81,18 @@ public record MarketContext(
      *   RS strong alignment:                 +6    RS moderate alignment:       +3
      *   VIX regime mismatch:                 −8    (stacks with RS delta)
      *
+     * VWAP special: uses tighter ±1.5% RS conflict threshold and returns -999 (hard block)
+     * because VWAP is mean-reversion — even slight RS headwind = real trend, not a dip.
+     *
      * @param direction    "long" | "short"
      * @param strategyType "smc" | "vwap" | "breakout" | "keylevel"
      */
     public int confidenceDelta(String direction, String strategyType) {
         int delta = 0;
+
+        if ("vwap".equals(strategyType) && isRsConflictingVwap(direction)) {
+            return -999; // hard block — VWAP RS conflict is a disqualifier, not just a penalty
+        }
 
         if (isRsConflicting(direction)) {
             delta += Math.abs(rsScore) >= 0.06 ? -12 : -6;
