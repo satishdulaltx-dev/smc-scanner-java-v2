@@ -692,6 +692,14 @@ public class DashboardController {
         return ResponseEntity.ok(Map.of("cancelled", ok));
     }
 
+    /** POST /api/alpaca/close-equity — close all stock (equity) positions, leave options intact. */
+    @PostMapping("/api/alpaca/close-equity")
+    @ResponseBody
+    public ResponseEntity<Map<String,Object>> alpacaCloseEquity() {
+        int closed = alpaca.closeAllEquityPositions();
+        return ResponseEntity.ok(Map.of("closed_equity_positions", closed));
+    }
+
     /** GET /api/alpaca/status — is Alpaca enabled + paper/live mode + trailing stops. */
     @GetMapping("/api/alpaca/status")
     @ResponseBody

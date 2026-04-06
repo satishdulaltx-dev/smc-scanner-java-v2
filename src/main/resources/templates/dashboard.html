@@ -88,6 +88,8 @@
         .btn-backtest:hover  { background:rgba(88,166,255,.28); }
         .btn-adaptive  { background:rgba(227,98,9,.15);  color:#e36209;        border-color:#e36209; }
         .btn-adaptive:hover  { background:rgba(227,98,9,.28); }
+        .btn-red   { background:rgba(248,81,73,.15); color:var(--red);  border-color:var(--red); }
+        .btn-red:hover   { background:rgba(248,81,73,.28); }
 
         /* Adaptive suppressor section */
         #adaptive-panel { padding: 0 24px 24px; }
@@ -576,6 +578,109 @@ async function loadPerformance() {
 }
 loadPerformance();
 setInterval(loadPerformance, 30000);
+</script>
+
+<!-- Alpaca Positions Panel -->
+<div id="alpaca-panel" style="padding:0 24px 24px;">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
+        <h3 style="font-size:13px;font-weight:700;color:#bc8cff;display:flex;align-items:center;gap:8px;">
+            🏦 Alpaca Open Positions
+        </h3>
+        <button class="btn btn-red" id="close-equity-btn" onclick="closeAllEquity()" title="Liquidate stock positions only — options are left open">
+            ⚠️ Close All Stocks
+        </button>
+        <button class="btn btn-adaptive" onclick="loadAlpacaPositions()" style="padding:4px 10px;font-size:11px;">
+            🔄 Refresh
+        </button>
+        <span id="close-equity-msg" style="font-size:11px;color:var(--muted);"></span>
+    </div>
+    <div id="alpaca-positions-wrap">
+        <div style="color:var(--muted);font-size:12px;padding:8px 0;">Loading positions…</div>
+    </div>
+</div>
+
+<script>
+async function loadAlpacaPositions() {
+    try {
+        const positions = await fetch('/api/alpaca/positions').then(r => r.json());
+        const wrap = document.getElementById('alpaca-positions-wrap');
+        if (!positions || positions.length === 0) {
+            wrap.innerHTML = '<div style="color:var(--muted);font-size:12px;padding:8px 0;">No open positions.</div>';
+            return;
+        }
+        const rows = positions.map(p => {
+            const isOption = p.asset_class === 'us_option';
+            const typeLabel = isOption
+                ? '<span style="background:rgba(88,166,255,.15);color:var(--blue);padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;">OPTION</span>'
+                : '<span style="background:rgba(248,81,73,.15);color:var(--red);padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;">STOCK</span>';
+            const plRaw = parseFloat(p.unrealized_pl || 0);
+            const plColor = plRaw >= 0 ? 'var(--green)' : 'var(--red)';
+            const plStr = (plRaw >= 0 ? '+' : '') + plRaw.toFixed(2);
+            return `<tr>
+                <td style="font-weight:700;font-family:monospace;font-size:12px;">${p.symbol || '—'}</td>
+                <td>${typeLabel}</td>
+                <td>${p.qty || '—'}</td>
+                <td style="font-family:monospace">$${parseFloat(p.avg_entry || 0).toFixed(2)}</td>
+                <td style="font-family:monospace">$${parseFloat(p.current_price || 0).toFixed(2)}</td>
+                <td style="font-family:monospace;font-weight:600;color:${plColor}">${plStr}</td>
+                <td style="font-family:monospace">$${parseFloat(p.market_value || 0).toFixed(2)}</td>
+            </tr>`;
+        }).join('');
+        wrap.innerHTML = `
+        <table style="width:100%;border-collapse:collapse;background:var(--surface);border-radius:8px;overflow:hidden;border:1px solid var(--border);">
+            <thead>
+                <tr style="background:#1c2128;">
+                    <th style="color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.6px;padding:8px 12px;text-align:left;border-bottom:1px solid var(--border);">Symbol</th>
+                    <th style="color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.6px;padding:8px 12px;text-align:left;border-bottom:1px solid var(--border);">Type</th>
+                    <th style="color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.6px;padding:8px 12px;text-align:left;border-bottom:1px solid var(--border);">Qty</th>
+                    <th style="color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.6px;padding:8px 12px;text-align:left;border-bottom:1px solid var(--border);">Avg Entry</th>
+                    <th style="color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.6px;padding:8px 12px;text-align:left;border-bottom:1px solid var(--border);">Current</th>
+                    <th style="color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.6px;padding:8px 12px;text-align:left;border-bottom:1px solid var(--border);">Unrealized P&L</th>
+                    <th style="color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.6px;padding:8px 12px;text-align:left;border-bottom:1px solid var(--border);">Mkt Value</th>
+                </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+        </table>`;
+    } catch(e) {
+        document.getElementById('alpaca-positions-wrap').innerHTML =
+            '<div style="color:var(--red);font-size:12px;padding:8px 0;">Could not load Alpaca positions (check API keys).</div>';
+    }
+}
+
+async function closeAllEquity() {
+    const btn = document.getElementById('close-equity-btn');
+    const msg = document.getElementById('close-equity-msg');
+    if (!confirm('Close ALL stock (equity) positions on Alpaca? Options will be left untouched.')) return;
+    btn.disabled = true;
+    btn.textContent = '⏳ Closing…';
+    msg.style.color = 'var(--muted)';
+    msg.textContent = 'Sending close orders…';
+    try {
+        const r = await fetch('/api/alpaca/close-equity', { method: 'POST' });
+        const d = await r.json();
+        const n = d.closed_equity_positions || 0;
+        if (r.ok) {
+            msg.style.color = 'var(--green)';
+            msg.textContent = `✅ Closed ${n} equity position${n !== 1 ? 's' : ''}`;
+            setTimeout(() => loadAlpacaPositions(), 1500);
+        } else {
+            msg.style.color = 'var(--red)';
+            msg.textContent = '✗ ' + (d.error || 'Failed');
+        }
+    } catch(e) {
+        msg.style.color = 'var(--red)';
+        msg.textContent = '✗ Network error';
+    } finally {
+        btn.disabled = false;
+        btn.textContent = '⚠️ Close All Stocks';
+        setTimeout(() => { msg.textContent = ''; }, 10000);
+    }
+}
+
+// Load positions on page load
+loadAlpacaPositions();
+// Refresh every 60s
+setInterval(loadAlpacaPositions, 60000);
 </script>
 
 <!-- Footer -->

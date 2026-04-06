@@ -257,6 +257,7 @@ public class AlpacaOrderService {
                         pos.put("unrealized_pl", n.path("unrealized_pl").asText());
                         pos.put("unrealized_plpc", n.path("unrealized_plpc").asText());
                         pos.put("market_value", n.path("market_value").asText());
+                        pos.put("asset_class", n.path("asset_class").asText("us_equity"));
                         positions.add(pos);
                     }
                     return positions;
@@ -825,6 +826,57 @@ public class AlpacaOrderService {
 
         trackedPositions.clear();
         lastProcessedCandle.clear();
+        return closed;
+    }
+
+    /**
+     * Close only equity (stock) positions — leaves options positions untouched.
+     * Useful for liquidating leftover stock positions while keeping options open.
+     * Returns number of equity positions closed.
+     */
+    public int closeAllEquityPositions() {
+        if (!isEnabled()) return 0;
+
+        List<Map<String, Object>> positions = getPositions();
+        if (positions.isEmpty()) {
+            log.info("CLOSE EQUITY: no open positions found");
+            return 0;
+        }
+
+        int closed = 0;
+        int skipped = 0;
+        for (Map<String, Object> pos : positions) {
+            String symbol     = String.valueOf(pos.get("symbol"));
+            String assetClass = String.valueOf(pos.getOrDefault("asset_class", "us_equity"));
+
+            if ("us_option".equals(assetClass)) {
+                log.info("CLOSE EQUITY: skipping options position {}", symbol);
+                skipped++;
+                continue;
+            }
+
+            // It's equity — close it
+            try {
+                Request req = new Request.Builder()
+                        .url(getBaseUrl() + "/v2/positions/" + symbol)
+                        .addHeader("APCA-API-KEY-ID", config.getAlpacaApiKey())
+                        .addHeader("APCA-API-SECRET-KEY", config.getAlpacaSecretKey())
+                        .delete().build();
+                try (Response resp = http.newCall(req).execute()) {
+                    log.info("CLOSE EQUITY: {} → HTTP {}", symbol, resp.code());
+                    if (resp.isSuccessful()) {
+                        closed++;
+                        // Remove from trailing stop tracker if tracked
+                        trackedPositions.remove(symbol);
+                        lastProcessedCandle.remove(symbol);
+                    }
+                }
+            } catch (Exception e) {
+                log.error("CLOSE EQUITY: error closing {} — {}", symbol, e.getMessage());
+            }
+        }
+
+        log.info("CLOSE EQUITY: closed {} equity position(s), skipped {} options", closed, skipped);
         return closed;
     }
 
