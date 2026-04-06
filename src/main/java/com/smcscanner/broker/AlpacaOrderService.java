@@ -111,9 +111,9 @@ public class AlpacaOrderService {
         }
 
         try {
-            // Calculate position size
-            double maxPos = getMaxPositionSize();
-            int qty = Math.max(1, (int)(maxPos / s.getEntry()));
+            // Calculate position size from available buying power
+            double buyingPower = getAvailableBuyingPower();
+            int qty = Math.max(1, (int)(buyingPower / s.getEntry()));
 
             // Build bracket order
             boolean isLong = "long".equals(s.getDirection());
@@ -545,9 +545,32 @@ public class AlpacaOrderService {
         return config.isAlpacaPaper();
     }
 
-    private double getMaxPositionSize() {
-        double v = config.getAlpacaMaxPosition();
-        return v > 0 ? v : DEFAULT_MAX_POSITION;
+    /**
+     * Fetch available buying power from Alpaca account.
+     * Falls back to DEFAULT_MAX_POSITION if account cannot be reached.
+     */
+    private double getAvailableBuyingPower() {
+        try {
+            Request req = new Request.Builder()
+                    .url(getBaseUrl() + "/v2/account")
+                    .addHeader("APCA-API-KEY-ID", config.getAlpacaApiKey())
+                    .addHeader("APCA-API-SECRET-KEY", config.getAlpacaSecretKey())
+                    .get().build();
+            try (Response resp = http.newCall(req).execute()) {
+                String body = resp.body() != null ? resp.body().string() : "{}";
+                if (resp.isSuccessful()) {
+                    JsonNode node = mapper.readTree(body);
+                    double bp = node.path("buying_power").asDouble(0);
+                    if (bp > 0) {
+                        log.debug("ALPACA buying_power=${}", String.format("%.2f", bp));
+                        return bp;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("ALPACA: could not fetch buying_power — falling back to ${}", DEFAULT_MAX_POSITION);
+        }
+        return DEFAULT_MAX_POSITION;
     }
 
     private double getDailyLossLimit() {
