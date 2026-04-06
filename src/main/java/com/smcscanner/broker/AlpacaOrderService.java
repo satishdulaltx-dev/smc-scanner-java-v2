@@ -49,9 +49,10 @@ public class AlpacaOrderService {
     // tightens to peak_close - 0.3 ATR when 2 consecutive reversal closes detected.
     // peakClose = highest confirmed 5m close reached (for longs) / lowest (for shorts)
     // consecutiveReversal = number of consecutive closes moving against direction
+    // optionsContract = OCC symbol (e.g. "AAPL250418C00200000") for options trades, null for equity
     public record TrackedPosition(String symbol, String direction, double entry, double stopLoss,
                                    double takeProfit, String orderId, String stopOrderId,
-                                   double peakClose, int consecutiveReversal) {}
+                                   double peakClose, int consecutiveReversal, String optionsContract) {}
     private final Map<String, TrackedPosition> trackedPositions = new ConcurrentHashMap<>();
     // Track last processed candle timestamp to avoid re-processing same candle
     private final Map<String, String> lastProcessedCandle = new ConcurrentHashMap<>();
@@ -176,10 +177,11 @@ public class AlpacaOrderService {
                     String status  = node.path("status").asText();
                     log.info("ALPACA OPTIONS ORDER PLACED: {} id={} status={}", occSymbol, orderId, status);
 
-                    // Track position using underlying entry/sl/tp for trailing logic
+                    // Track position: underlying entry/sl/tp for ATR trailing,
+                    // optionsContract stored so we can sell-to-close when SL is hit
                     trackedPositions.put(s.getTicker(), new TrackedPosition(
                             s.getTicker(), s.getDirection(), s.getEntry(),
-                            s.getStopLoss(), s.getTakeProfit(), orderId, null, s.getEntry(), 0));
+                            s.getStopLoss(), s.getTakeProfit(), orderId, null, s.getEntry(), 0, occSymbol));
 
                     dailyOrderCount.merge(s.getTicker(), 1, Integer::sum);
                     return orderId;
@@ -372,7 +374,10 @@ public class AlpacaOrderService {
             String symbol = e.getKey();
             TrackedPosition tp = e.getValue();
 
-            if (!heldSymbols.contains(symbol)) {
+            // For options: position shows the OCC symbol, not the underlying ticker
+            String checkSymbol = (tp.optionsContract() != null && !tp.optionsContract().isBlank())
+                    ? tp.optionsContract() : symbol;
+            if (!heldSymbols.contains(checkSymbol)) {
                 log.info("TRAIL: {} no longer held — removing from tracker", symbol);
                 trackedPositions.remove(symbol);
                 lastProcessedCandle.remove(symbol);
@@ -436,11 +441,44 @@ public class AlpacaOrderService {
                 ? newPeak - atr * atrMult
                 : newPeak + atr * atrMult;
 
-        // ── 4. Only move SL if in profit and improving ─────────────────────────
+        // ── 4. Check if underlying has breached the current stop level ────────────
+        boolean slBreached = isLong
+                ? candleClose <= tp.stopLoss()
+                : candleClose >= tp.stopLoss();
+
+        boolean isOptionsPosition = tp.optionsContract() != null && !tp.optionsContract().isBlank();
+
+        if (slBreached) {
+            log.info("TRAIL SL HIT {} underlying=${} vs SL=${} — closing position",
+                    symbol, String.format("%.2f", candleClose), String.format("%.2f", tp.stopLoss()));
+            if (isOptionsPosition) {
+                closeOptionsPosition(symbol, tp.optionsContract());
+            } else {
+                closeEquityPosition(symbol);
+            }
+            trackedPositions.remove(symbol);
+            lastProcessedCandle.remove(symbol);
+            return;
+        }
+
+        // ── 5. Only move SL if in profit and improving ─────────────────────────
         boolean inProfit  = isLong ? targetStop > tp.entry() : targetStop < tp.entry();
         boolean improving = isLong ? targetStop > tp.stopLoss() : targetStop < tp.stopLoss();
 
         if (inProfit && improving) {
+            // Options: no stop order to patch — just update internal trail level
+            // The next candle check will close if underlying crosses this new level
+            if (isOptionsPosition) {
+                String mode = newReversalCount >= REVERSAL_CLOSES ? "REVERSAL-TIGHT" : "NORMAL-TRAIL";
+                log.info("TRAIL ✓ {} [OPTIONS/{}] peak=${} close=${} SL: ${} → ${} ({}x ATR)",
+                        symbol, mode,
+                        String.format("%.2f", newPeak), String.format("%.2f", candleClose),
+                        String.format("%.2f", tp.stopLoss()), String.format("%.2f", targetStop), atrMult);
+                trackedPositions.put(symbol, new TrackedPosition(
+                        tp.symbol(), tp.direction(), tp.entry(), targetStop,
+                        tp.takeProfit(), tp.orderId(), tp.stopOrderId(), newPeak, newReversalCount, tp.optionsContract()));
+                return;
+            }
             boolean updated = updateStopOrder(symbol, targetStop, isLong);
             if (updated) {
                 String mode = newReversalCount >= REVERSAL_CLOSES ? "REVERSAL-TIGHT" : "NORMAL-TRAIL";
@@ -453,7 +491,7 @@ public class AlpacaOrderService {
                         atrMult);
                 trackedPositions.put(symbol, new TrackedPosition(
                         tp.symbol(), tp.direction(), tp.entry(), targetStop,
-                        tp.takeProfit(), tp.orderId(), tp.stopOrderId(), newPeak, newReversalCount));
+                        tp.takeProfit(), tp.orderId(), tp.stopOrderId(), newPeak, newReversalCount, tp.optionsContract()));
                 return;
             }
         }
@@ -466,7 +504,74 @@ public class AlpacaOrderService {
             }
             trackedPositions.put(symbol, new TrackedPosition(
                     tp.symbol(), tp.direction(), tp.entry(), tp.stopLoss(),
-                    tp.takeProfit(), tp.orderId(), tp.stopOrderId(), newPeak, newReversalCount));
+                    tp.takeProfit(), tp.orderId(), tp.stopOrderId(), newPeak, newReversalCount, tp.optionsContract()));
+        }
+    }
+
+    /**
+     * Close an options position by placing a market sell-to-close order.
+     * Called when the underlying price hits the ATR trailing stop level.
+     */
+    private void closeOptionsPosition(String underlying, String occSymbol) {
+        try {
+            // Find how many contracts we hold
+            Request posReq = new Request.Builder()
+                    .url(getBaseUrl() + "/v2/positions/" + occSymbol)
+                    .addHeader("APCA-API-KEY-ID", config.getAlpacaApiKey())
+                    .addHeader("APCA-API-SECRET-KEY", config.getAlpacaSecretKey())
+                    .get().build();
+
+            int qty = 1;
+            try (Response resp = http.newCall(posReq).execute()) {
+                if (resp.isSuccessful()) {
+                    String body = resp.body() != null ? resp.body().string() : "{}";
+                    JsonNode node = mapper.readTree(body);
+                    qty = Math.abs(node.path("qty").asInt(1));
+                }
+            }
+
+            // Place market sell-to-close
+            Map<String, Object> order = new LinkedHashMap<>();
+            order.put("symbol", occSymbol);
+            order.put("qty", String.valueOf(qty));
+            order.put("side", "sell");
+            order.put("type", "market");
+            order.put("time_in_force", "day");
+
+            String json = mapper.writeValueAsString(order);
+            Request req = new Request.Builder()
+                    .url(getBaseUrl() + "/v2/orders")
+                    .addHeader("APCA-API-KEY-ID", config.getAlpacaApiKey())
+                    .addHeader("APCA-API-SECRET-KEY", config.getAlpacaSecretKey())
+                    .post(RequestBody.create(json, JSON))
+                    .build();
+
+            try (Response resp = http.newCall(req).execute()) {
+                if (resp.isSuccessful()) {
+                    log.info("TRAIL OPTIONS CLOSE ✓ {} ({}) qty={}", underlying, occSymbol, qty);
+                } else {
+                    String body = resp.body() != null ? resp.body().string() : "";
+                    log.error("TRAIL OPTIONS CLOSE FAILED {} ({}): {}", underlying, occSymbol, body);
+                }
+            }
+        } catch (Exception e) {
+            log.error("TRAIL OPTIONS CLOSE ERROR {} ({}): {}", underlying, occSymbol, e.getMessage());
+        }
+    }
+
+    /** Close an equity position at market (fallback for non-options). */
+    private void closeEquityPosition(String symbol) {
+        try {
+            Request req = new Request.Builder()
+                    .url(getBaseUrl() + "/v2/positions/" + symbol)
+                    .addHeader("APCA-API-KEY-ID", config.getAlpacaApiKey())
+                    .addHeader("APCA-API-SECRET-KEY", config.getAlpacaSecretKey())
+                    .delete().build();
+            try (Response resp = http.newCall(req).execute()) {
+                log.info("TRAIL EQUITY CLOSE {} ({})", symbol, resp.code());
+            }
+        } catch (Exception e) {
+            log.error("TRAIL EQUITY CLOSE ERROR {}: {}", symbol, e.getMessage());
         }
     }
 
