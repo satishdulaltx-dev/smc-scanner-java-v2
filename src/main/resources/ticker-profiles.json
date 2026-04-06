@@ -2,10 +2,10 @@
   "profiles": [
     {
       "ticker": "AAPL",
-      "strategyType": "keylevel",
+      "strategyType": "vwap",
       "minConfidence": 75,
       "slAtrMult": 0.4,
-      "tpRrRatio": 2.0,
+      "tpRrRatio": 1.5,
       "intradayRsGate": false,
       "skip": false,
       "skipReason": null,
@@ -161,7 +161,8 @@
     {
       "ticker": "NVDA",
       "strategyType": "smc",
-      "minConfidence": 80,
+      "minConfidence": 72,
+      "maxConfidence": 84,
       "minFvgPct": 0.0005,
       "dispAtrMult": 1.3,
       "intradayRsGate": true,
