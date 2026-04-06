@@ -66,6 +66,7 @@ public class AlpacaOrderService {
     private static final double DEFAULT_DAILY_LOSS_LIMIT = -200.0; // stop trading after $200 loss
     private static final int    DEFAULT_MAX_DAILY_ORDERS = 10;
     private static final int    DEFAULT_MIN_CONFIDENCE = 75;     // only auto-trade 75+ confidence
+    private record BuyingPowerSnapshot(double buyingPower, double optionsBuyingPower) {}
 
     public AlpacaOrderService(ScannerConfig config, PolygonClient polygon) {
         this.config = config;
@@ -166,11 +167,19 @@ public class AlpacaOrderService {
                 return null;
             }
 
-            double buyingPower   = getAvailableBuyingPower();
+            BuyingPowerSnapshot power = getBuyingPowerSnapshot();
+            double buyingPower   = power.buyingPower();
+            double optionsBuyingPower = power.optionsBuyingPower();
             double contractCost  = premium * 100.0;  // 1 contract = 100 shares
-            int contracts        = forcedContracts != null
+            double maxPositionBudget = getMaxPositionBudget();
+            double effectiveBudget = forcedContracts != null
+                    ? contractCost * Math.max(1, forcedContracts)
+                    : Math.min(maxPositionBudget, optionsBuyingPower > 0 ? optionsBuyingPower : buyingPower);
+            int affordableContracts = Math.max(1, (int)(effectiveBudget / contractCost));
+            int suggestedContracts = s.getOptionsSuggested() > 0 ? s.getOptionsSuggested() : affordableContracts;
+            int contracts = forcedContracts != null
                     ? Math.max(1, forcedContracts)
-                    : Math.max(1, (int)(buyingPower / contractCost));
+                    : Math.max(1, Math.min(affordableContracts, suggestedContracts));
 
             // Options are always a "buy" — calls for LONG setups, puts for SHORT
             // asset_class MUST be "us_option" or Alpaca treats it as a stock order
@@ -184,11 +193,14 @@ public class AlpacaOrderService {
             order.put("asset_class", "us_option");
 
             String json = mapper.writeValueAsString(order);
-            log.info("ALPACA OPTIONS ORDER ATTEMPT: symbol={} qty={} premium=${} totalCost=${} bp=${} dir={} mode={}",
+            log.info("ALPACA OPTIONS ORDER ATTEMPT: symbol={} qty={} premium=${} totalCost=${} bp=${} optionsBp=${} budget=${} suggestedQty={} dir={} mode={}",
                     occSymbol, contracts,
                     String.format("%.2f", premium),
                     String.format("%.2f", contractCost * contracts),
                     String.format("%.2f", buyingPower),
+                    String.format("%.2f", optionsBuyingPower),
+                    String.format("%.2f", effectiveBudget),
+                    suggestedContracts,
                     s.getDirection(), isPaper() ? "PAPER" : "LIVE");
             log.info("ALPACA OPTIONS ORDER CONTEXT: ticker={} rawContract={} normalizedContract={} hasOptionsData={} stopLoss={} takeProfit={} entry={}",
                     s.getTicker(), rawSymbol, occSymbol, s.hasOptionsData(),
@@ -725,7 +737,7 @@ public class AlpacaOrderService {
      * Fetch available buying power from Alpaca account.
      * Falls back to DEFAULT_MAX_POSITION if account cannot be reached.
      */
-    private double getAvailableBuyingPower() {
+    private BuyingPowerSnapshot getBuyingPowerSnapshot() {
         try {
             Request req = new Request.Builder()
                     .url(getBaseUrl() + "/v2/account")
@@ -737,16 +749,23 @@ public class AlpacaOrderService {
                 if (resp.isSuccessful()) {
                     JsonNode node = mapper.readTree(body);
                     double bp = node.path("buying_power").asDouble(0);
+                    double optionsBp = node.path("options_buying_power").asDouble(0);
                     if (bp > 0) {
-                        log.debug("ALPACA buying_power=${}", String.format("%.2f", bp));
-                        return bp;
+                        log.debug("ALPACA buying_power=${} options_buying_power=${}",
+                                String.format("%.2f", bp), String.format("%.2f", optionsBp));
+                        return new BuyingPowerSnapshot(bp, optionsBp);
                     }
                 }
             }
         } catch (Exception e) {
             log.warn("ALPACA: could not fetch buying_power — falling back to ${}", DEFAULT_MAX_POSITION);
         }
-        return DEFAULT_MAX_POSITION;
+        return new BuyingPowerSnapshot(DEFAULT_MAX_POSITION, DEFAULT_MAX_POSITION);
+    }
+
+    private double getMaxPositionBudget() {
+        double v = config.getAlpacaMaxPosition();
+        return v > 0 ? v : DEFAULT_MAX_POSITION;
     }
 
     private double getDailyLossLimit() {
