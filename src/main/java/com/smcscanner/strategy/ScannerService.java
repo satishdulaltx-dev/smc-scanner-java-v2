@@ -42,9 +42,13 @@ public class ScannerService {
     private final LiveTradeLog           liveLog;
     private final SharedState            state;
     private final AtrCalculator          atrCalc;
-    private final VwapStrategyDetector     vwap;
-    private final BreakoutStrategyDetector breakout;
-    private final KeyLevelStrategyDetector keyLevel;
+    private final VwapStrategyDetector      vwap;
+    private final BreakoutStrategyDetector  breakout;
+    private final KeyLevelStrategyDetector  keyLevel;
+    private final VolatilitySqueezeDetector vSqueeze;
+    private final ThreeDayVwapDetector      vwap3d;
+    private final IndexDivergenceDetector   indexDiv;
+    private final GammaPinDetector          gammaPin;
     private final NewsService              news;
     private final MarketContextService     marketCtx;
     private final SignalQualityFilter      qualityFilter;
@@ -62,7 +66,10 @@ public class ScannerService {
                           DiscordAlertService discord, AlertDedup dedup,
                           PerformanceTracker tracker, LiveTradeLog liveLog, SharedState state, AtrCalculator atrCalc,
                           VwapStrategyDetector vwap, BreakoutStrategyDetector breakout,
-                          KeyLevelStrategyDetector keyLevel, NewsService news,
+                          KeyLevelStrategyDetector keyLevel,
+                          VolatilitySqueezeDetector vSqueeze, ThreeDayVwapDetector vwap3d,
+                          IndexDivergenceDetector indexDiv, GammaPinDetector gammaPin,
+                          NewsService news,
                           MarketContextService marketCtx, SignalQualityFilter qualityFilter,
                           AdaptiveSuppressor adaptive, OptionsFlowAnalyzer optionsFlow,
                           EarningsCalendar earnings, SwingTradeDetector swingDetector,
@@ -71,6 +78,7 @@ public class ScannerService {
         this.config=config; this.client=client; this.setupDetector=setupDetector; this.crypto=crypto;
         this.mtf=mtf; this.discord=discord; this.dedup=dedup; this.tracker=tracker; this.liveLog=liveLog; this.state=state;
         this.atrCalc=atrCalc; this.vwap=vwap; this.breakout=breakout; this.keyLevel=keyLevel;
+        this.vSqueeze=vSqueeze; this.vwap3d=vwap3d; this.indexDiv=indexDiv; this.gammaPin=gammaPin;
         this.news=news; this.marketCtx=marketCtx; this.qualityFilter=qualityFilter; this.adaptive=adaptive;
         this.optionsFlow=optionsFlow; this.earnings=earnings; this.swingDetector=swingDetector;
         this.rangeDetector=rangeDetector; this.alpaca=alpaca; this.techIndicators=techIndicators;
@@ -164,6 +172,28 @@ public class ScannerService {
                 } else if ("keylevel".equals(strategyType)) {
                     setups = keyLevel.detect(bars, dailyBars, ticker, dailyAtr, profile);
                     phaseMsg = setups.isEmpty() ? "Waiting for key level rejection..." : "";
+                } else if ("vsqueeze".equals(strategyType)) {
+                    setups = vSqueeze.detect(bars, ticker, dailyAtr);
+                    phaseMsg = setups.isEmpty() ? "Watching for volatility squeeze release..." : "";
+                } else if ("vwap3d".equals(strategyType)) {
+                    List<OHLCV> multiDayBars = bars;
+                    try {
+                        List<OHLCV> wider = client.getBars(ticker, "5m", 300); // ~3 trading days
+                        if (wider != null && wider.size() >= 30) multiDayBars = wider;
+                    } catch (Exception e) { log.debug("{} 3dVWAP fetch error: {}", ticker, e.getMessage()); }
+                    setups = vwap3d.detect(multiDayBars, ticker, dailyAtr);
+                    phaseMsg = setups.isEmpty() ? "Watching for 3-day VWAP reversion..." : "";
+                } else if ("idiv".equals(strategyType)) {
+                    List<OHLCV> spyBars5m = List.of();
+                    try {
+                        List<OHLCV> sp = client.getBars("SPY", "5m", 100);
+                        if (sp != null) spyBars5m = sp;
+                    } catch (Exception e) { log.debug("{} SPY 5m fetch error: {}", ticker, e.getMessage()); }
+                    setups = indexDiv.detect(bars, spyBars5m, ticker, dailyAtr);
+                    phaseMsg = setups.isEmpty() ? "Watching for SPY/AAPL divergence..." : "";
+                } else if ("gammapin".equals(strategyType)) {
+                    setups = gammaPin.detect(bars, ticker, dailyAtr);
+                    phaseMsg = setups.isEmpty() ? "Watching for gamma pin convergence..." : "";
                 } else {
                     SetupDetector.DetectResult r=setupDetector.detectSetups(bars,htfBias,ticker,false,dailyAtr);
                     setups=r.setups(); phaseMsg=r.state().phaseMsg();
@@ -192,7 +222,7 @@ public class ScannerService {
                 // conviction from other signals (volume, key level, etc).
                 // BYPASS for VWAP: mean-reversion trades intentionally fight the trend.
                 String stratTypeForFilter = profile.getStrategyType();
-                boolean is15mApplicable = !"vwap".equals(stratTypeForFilter);
+                boolean is15mApplicable = !"vwap".equals(stratTypeForFilter) && !"vwap3d".equals(stratTypeForFilter);
                 int bias15mAdj = 0;
                 boolean is15mConflict = !isC && is15mApplicable && (
                         ("bullish".equals(bias15m) && "short".equals(s.getDirection())) ||

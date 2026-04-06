@@ -14,8 +14,12 @@ import com.smcscanner.news.NewsSentiment;
 import com.smcscanner.news.NewsService;
 import com.smcscanner.options.OptionsFlowAnalyzer;
 import com.smcscanner.strategy.BreakoutStrategyDetector;
+import com.smcscanner.strategy.GammaPinDetector;
+import com.smcscanner.strategy.IndexDivergenceDetector;
 import com.smcscanner.strategy.KeyLevelStrategyDetector;
 import com.smcscanner.strategy.SetupDetector;
+import com.smcscanner.strategy.ThreeDayVwapDetector;
+import com.smcscanner.strategy.VolatilitySqueezeDetector;
 import com.smcscanner.strategy.VwapStrategyDetector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,7 +46,11 @@ public class BacktestService {
     private final SetupDetector            setupDetector;
     private final VwapStrategyDetector     vwapDetector;
     private final BreakoutStrategyDetector breakoutDetector;
-    private final KeyLevelStrategyDetector keyLevelDetector;
+    private final KeyLevelStrategyDetector  keyLevelDetector;
+    private final VolatilitySqueezeDetector vSqueezeDetector;
+    private final ThreeDayVwapDetector      vwap3dDetector;
+    private final IndexDivergenceDetector   indexDivDetector;
+    private final GammaPinDetector          gammaPinDetector;
     private final NewsService              newsService;
     private final MarketContextService     marketCtxService;
     private final SignalQualityFilter      qualityFilter;
@@ -52,22 +60,33 @@ public class BacktestService {
 
     public BacktestService(PolygonClient client, AtrCalculator atrCalc, SetupDetector setupDetector,
                            VwapStrategyDetector vwapDetector, BreakoutStrategyDetector breakoutDetector,
-                           KeyLevelStrategyDetector keyLevelDetector, NewsService newsService,
+                           KeyLevelStrategyDetector keyLevelDetector,
+                           VolatilitySqueezeDetector vSqueezeDetector, ThreeDayVwapDetector vwap3dDetector,
+                           IndexDivergenceDetector indexDivDetector, GammaPinDetector gammaPinDetector,
+                           NewsService newsService,
                            MarketContextService marketCtxService, SignalQualityFilter qualityFilter,
                            ScannerConfig config, OptionsFlowAnalyzer optionsAnalyzer,
                            TechnicalIndicators techIndicators) {
         this.client = client; this.atrCalc = atrCalc; this.setupDetector = setupDetector;
         this.vwapDetector = vwapDetector; this.breakoutDetector = breakoutDetector;
-        this.keyLevelDetector = keyLevelDetector; this.newsService = newsService;
+        this.keyLevelDetector = keyLevelDetector;
+        this.vSqueezeDetector = vSqueezeDetector; this.vwap3dDetector = vwap3dDetector;
+        this.indexDivDetector = indexDivDetector; this.gammaPinDetector = gammaPinDetector;
+        this.newsService = newsService;
         this.marketCtxService = marketCtxService; this.qualityFilter = qualityFilter;
         this.config = config; this.optionsAnalyzer = optionsAnalyzer; this.techIndicators = techIndicators;
     }
 
     public BacktestResult run(String ticker, int lookbackDays) {
-        return run(ticker, lookbackDays, BacktestMode.ALL);
+        return run(ticker, lookbackDays, BacktestMode.ALL, null);
     }
 
     public BacktestResult run(String ticker, int lookbackDays, BacktestMode mode) {
+        return run(ticker, lookbackDays, mode, null);
+    }
+
+    /** Run backtest with an optional strategy override (ignores ticker-profiles.json strategyType). */
+    public BacktestResult run(String ticker, int lookbackDays, BacktestMode mode, String strategyOverride) {
         // Fetch 5m bars for the full lookback — one API call gets it all
         List<OHLCV> allBars = client.getBarsWithLookback(ticker, "5m", 50000, lookbackDays);
         if (allBars == null || allBars.size() < 30) {
@@ -99,7 +118,10 @@ public class BacktestService {
 
         // Pre-fetch SPY 5m bars for intraday RS gate (only if this ticker uses it)
         TickerProfile preProfile = config.getTickerProfile(ticker);
-        List<OHLCV> spy5mBars = preProfile.isIntradayRsGate()
+        boolean needsSpy5m = preProfile.isIntradayRsGate()
+                || "idiv".equals(preProfile.getStrategyType())
+                || "idiv".equals(strategyOverride);
+        List<OHLCV> spy5mBars = needsSpy5m
                 ? client.getBarsWithLookback("SPY", "5m", 50000, lookbackDays + 5)
                 : List.of();
         // Group SPY 5m bars by date for per-day slicing
@@ -164,16 +186,34 @@ public class BacktestService {
 
             // Slide through day's bars — detect first valid setup
             TickerProfile bp = config.getTickerProfile(ticker);
-            String stratType = bp.getStrategyType();
+            String stratType = (strategyOverride != null && !strategyOverride.isBlank())
+                    ? strategyOverride : bp.getStrategyType();
             // Session strategies skip pre-market windows in the loop below
             boolean isSessionStrat = "breakout".equals(stratType)
                                   || "vwap".equals(stratType)
-                                  || "keylevel".equals(stratType);
+                                  || "keylevel".equals(stratType)
+                                  || "vsqueeze".equals(stratType)
+                                  || "vwap3d".equals(stratType)
+                                  || "idiv".equals(stratType)
+                                  || "gammapin".equals(stratType);
             // Minimum bars before we start checking each strategy
-            int minBars = "breakout".equals(stratType) ? 8
-                        : "vwap".equals(stratType)     ? 12
-                        : "keylevel".equals(stratType) ? 20
+            int minBars = "breakout".equals(stratType)  ? 8
+                        : "vwap".equals(stratType)      ? 12
+                        : "keylevel".equals(stratType)  ? 20
+                        : "vsqueeze".equals(stratType)  ? 25
+                        : "vwap3d".equals(stratType)    ? 20
+                        : "idiv".equals(stratType)      ? 12
+                        : "gammapin".equals(stratType)  ? 15
                         : 20; // smc
+            // Build previous 2 days' bars for 3-day VWAP strategy (computed once per day)
+            final List<OHLCV> prevDaysBars;
+            if ("vwap3d".equals(stratType)) {
+                List<OHLCV> prev = new ArrayList<>();
+                for (int k = Math.max(0, di - 2); k < di; k++) prev.addAll(byDate.get(dates.get(k)));
+                prevDaysBars = prev;
+            } else {
+                prevDaysBars = List.of();
+            }
             boolean tradePlacedToday = false;
             for (int end = minBars; end <= dayBars.size() && !tradePlacedToday; end++) {
                 // ALL equity strategies: skip pre-market bars — options don't trade before 9:30 ET
@@ -191,6 +231,20 @@ public class BacktestService {
                 } else if ("keylevel".equals(stratType)) {
                     // Pass daily bars up to this date (htfSlice) as the level-detection source
                     bSetups = keyLevelDetector.detect(window, htfSlice, ticker, dailyAtr, bp);
+                } else if ("vsqueeze".equals(stratType)) {
+                    bSetups = vSqueezeDetector.detect(window, ticker, dailyAtr);
+                } else if ("vwap3d".equals(stratType)) {
+                    List<OHLCV> multiDay = new ArrayList<>(prevDaysBars);
+                    multiDay.addAll(window);
+                    bSetups = vwap3dDetector.detect(multiDay, ticker, dailyAtr);
+                } else if ("idiv".equals(stratType)) {
+                    long entryTs = Long.parseLong(window.get(window.size() - 1).getTimestamp());
+                    List<OHLCV> spySlice = spy5mByDate.getOrDefault(date, List.of()).stream()
+                            .filter(b -> Long.parseLong(b.getTimestamp()) <= entryTs)
+                            .collect(java.util.stream.Collectors.toList());
+                    bSetups = indexDivDetector.detect(window, spySlice, ticker, dailyAtr);
+                } else if ("gammapin".equals(stratType)) {
+                    bSetups = gammaPinDetector.detect(window, ticker, dailyAtr);
                 } else {
                     SetupDetector.DetectResult dr = setupDetector.detectSetups(
                             window, htfBias, ticker, false, dailyAtr, true); // backtestMode=true, real dailyAtr for TP/SL
@@ -218,8 +272,8 @@ public class BacktestService {
                 // ── 15m alignment check — mirrors live ScannerService logic ──
                 // Compute 15m bias using bars strictly before entry timestamp.
                 // Block if 15m trend directly opposes the setup direction.
-                // BYPASS for VWAP: mean-reversion intentionally fights the 15m trend.
-                boolean is15mApplicable = !"vwap".equals(stratType);
+                // BYPASS for VWAP/vwap3d: mean-reversion intentionally fights the 15m trend.
+                boolean is15mApplicable = !"vwap".equals(stratType) && !"vwap3d".equals(stratType);
                 if (is15mApplicable && !ticker.startsWith("X:") && !all15mBars.isEmpty()) {
                     List<OHLCV> slice15 = all15mBars.stream()
                             .filter(b -> Long.parseLong(b.getTimestamp()) < entryEpochMs)

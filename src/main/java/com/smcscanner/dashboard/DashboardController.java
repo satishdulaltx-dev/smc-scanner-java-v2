@@ -431,16 +431,18 @@ public class DashboardController {
         return analysisService.analyze(ticker);
     }
 
-    /** GET /api/backtest?ticker=AAPL&days=90&mode=INTRADAY */
+    /** GET /api/backtest?ticker=AAPL&days=90&mode=INTRADAY&strategy=vsqueeze */
     @GetMapping("/api/backtest")
     @ResponseBody
     public ResponseEntity<Map<String,Object>> apiBacktest(
             @org.springframework.web.bind.annotation.RequestParam(defaultValue="AAPL") String ticker,
             @org.springframework.web.bind.annotation.RequestParam(defaultValue="90")  int days,
-            @org.springframework.web.bind.annotation.RequestParam(defaultValue="ALL") String mode) {
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue="ALL") String mode,
+            @org.springframework.web.bind.annotation.RequestParam(required=false)      String strategy) {
         try {
             var btMode = com.smcscanner.backtest.BacktestMode.fromString(mode);
-            var result = backtestService.run(ticker.toUpperCase(), days, btMode);
+            var result = backtestService.run(ticker.toUpperCase(), days, btMode,
+                    (strategy != null && !strategy.isBlank()) ? strategy : null);
             Map<String,Object> resp = new LinkedHashMap<>();
             resp.put("ticker",        result.ticker);
             resp.put("lookback_days", result.lookbackDays);
