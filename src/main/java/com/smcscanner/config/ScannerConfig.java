@@ -35,6 +35,14 @@ public class ScannerConfig {
     private double minAtrPercentile   = 30.0;
     private double maxSpreadPct       = 0.15;
 
+    // ── Dashboard security token ────────────────────────────────────────────
+    // Set SCANNER_DASHBOARD_TOKEN env var in Railway to protect sensitive POST endpoints.
+    // If blank/unset, protection is disabled (backwards compatible for local dev).
+    private String dashboardToken = "";
+
+    public String getDashboardToken() { return dashboardToken; }
+    public void setDashboardToken(String v) { this.dashboardToken = v; }
+
     // ── Alpaca trading config ───────────────────────────────────────────────
     private String  alpacaApiKey        = "";
     private String  alpacaSecretKey     = "";

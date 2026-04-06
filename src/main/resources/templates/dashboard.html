@@ -141,6 +141,7 @@
     </style>
 </head>
 <body>
+<meta name="dashboard-token" th:content="${dashboardToken}" content=""/>
 
 <!-- Header -->
 <div class="header">
@@ -167,6 +168,15 @@
 </div>
 
 <script>
+// Read dashboard token from meta tag (injected by Thymeleaf)
+function getDashboardToken() {
+    return document.querySelector('meta[name="dashboard-token"]')?.content || '';
+}
+function postHeaders() {
+    const t = getDashboardToken();
+    return t ? { 'X-Dashboard-Token': t } : {};
+}
+
 function qlCopy(btn, path) {
     const base = window.location.origin;
     navigator.clipboard.writeText(base + path).then(() => {
@@ -182,7 +192,7 @@ function sendEodDiscord() {
     btn.classList.add('btn-disabled');
     btn.textContent = '⏳ Generating...';
     status.textContent = '';
-    fetch('/api/send-eod-discord', { method: 'POST' })
+    fetch('/api/send-eod-discord', { method: 'POST', headers: postHeaders() })
         .then(r => r.json())
         .then(d => {
             if (d.sent) {
@@ -494,7 +504,7 @@ function loadAdaptive() {
 }
 
 function recordOutcome(ticker, outcome) {
-    fetch(`/api/adaptive/outcome?ticker=${ticker}&outcome=${outcome}`, { method: 'POST' })
+    fetch(`/api/adaptive/outcome?ticker=${ticker}&outcome=${outcome}`, { method: 'POST', headers: postHeaders() })
         .then(r => r.json())
         .then(() => loadAdaptive())
         .catch(e => console.error(e));
@@ -502,7 +512,7 @@ function recordOutcome(ticker, outcome) {
 
 function resetTicker(ticker) {
     if (!confirm(`Reset adaptive history for ${ticker}?`)) return;
-    fetch(`/api/adaptive/reset?ticker=${ticker}`, { method: 'POST' })
+    fetch(`/api/adaptive/reset?ticker=${ticker}`, { method: 'POST', headers: postHeaders() })
         .then(() => loadAdaptive())
         .catch(e => console.error(e));
 }
@@ -511,7 +521,7 @@ function recordAdaptive(outcome) {
     const ticker = document.getElementById('adaptive-ticker-input').value.trim().toUpperCase();
     const msg    = document.getElementById('adaptive-msg');
     if (!ticker) { msg.textContent = 'Enter a ticker first'; return; }
-    fetch(`/api/adaptive/outcome?ticker=${ticker}&outcome=${outcome}`, { method: 'POST' })
+    fetch(`/api/adaptive/outcome?ticker=${ticker}&outcome=${outcome}`, { method: 'POST', headers: postHeaders() })
         .then(r => r.json())
         .then(d => {
             msg.style.color = outcome === 'win' ? '#3fb950' : '#f85149';
@@ -656,7 +666,7 @@ async function closeAllEquity() {
     msg.style.color = 'var(--muted)';
     msg.textContent = 'Sending close orders…';
     try {
-        const r = await fetch('/api/alpaca/close-equity', { method: 'POST' });
+        const r = await fetch('/api/alpaca/close-equity', { method: 'POST', headers: postHeaders() });
         const d = await r.json();
         const n = d.closed_equity_positions || 0;
         if (r.ok) {

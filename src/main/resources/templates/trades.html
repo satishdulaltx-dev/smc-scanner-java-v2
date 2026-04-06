@@ -1,8 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <meta name="dashboard-token" th:content="${dashboardToken}" content=""/>
     <title>SD Scanner — Live Trades</title>
     <style>
         :root {
@@ -110,6 +111,14 @@
 </div>
 
 <script>
+function getDashboardToken() {
+    return document.querySelector('meta[name="dashboard-token"]')?.content || '';
+}
+function postHeaders() {
+    const t = getDashboardToken();
+    return t ? { 'X-Dashboard-Token': t } : {};
+}
+
 async function loadData() {
     await Promise.all([loadCumulative(), loadToday(), loadHistory()]);
 }
@@ -206,7 +215,7 @@ async function resolveTrade() {
     const msg     = document.getElementById('resolve-msg');
     if (!ticker) { msg.textContent = 'Enter a ticker'; msg.style.color='var(--red)'; return; }
     try {
-        const r = await fetch(`/api/trades/resolve?ticker=${ticker}&outcome=${outcome}&pnl=${pnl}`, { method:'POST' });
+        const r = await fetch(`/api/trades/resolve?ticker=${ticker}&outcome=${outcome}&pnl=${pnl}`, { method:'POST', headers: postHeaders() });
         const d = await r.json();
         if (r.ok) {
             msg.textContent = `✅ ${ticker} resolved as ${outcome} (${pnl >= 0 ? '+' : ''}${pnl}%)`;

@@ -109,6 +109,7 @@ public class DashboardController {
         model.addAttribute("lastScan",      state.getLastScan()!=null ? state.getLastScan() : now);
         model.addAttribute("watchlist",     watchlist);
         model.addAttribute("setups",        setups);
+        model.addAttribute("dashboardToken", config.getDashboardToken());
         return "dashboard";
     }
 
@@ -626,7 +627,10 @@ public class DashboardController {
 
     /** GET /trades — Live trade log page. */
     @GetMapping("/trades")
-    public String tradesPage() { return "trades"; }
+    public String tradesPage(org.springframework.ui.Model model) {
+        model.addAttribute("dashboardToken", config.getDashboardToken());
+        return "trades";
+    }
 
     /** POST /api/test-alert — sends a fake AAPL alert to Discord to preview embed format. */
     @PostMapping("/api/test-alert")
