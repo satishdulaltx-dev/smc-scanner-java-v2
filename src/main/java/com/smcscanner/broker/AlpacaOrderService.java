@@ -114,9 +114,12 @@ public class AlpacaOrderService {
         try {
             // Options-only: never buy shares — skip if no contract was resolved
             if (!s.hasOptionsData() || s.getOptionsContract() == null || s.getOptionsContract().isBlank()) {
-                log.info("ALPACA SKIP {} — no options contract on setup (options-only mode)", s.getTicker());
+                log.warn("ALPACA SKIP {} — no options contract on setup (options-only mode) hasData={} contract={}",
+                        s.getTicker(), s.hasOptionsData(), s.getOptionsContract());
                 return null;
             }
+            log.info("ALPACA PLACING OPTIONS ORDER {} contract={} premium={} conf={}",
+                    s.getTicker(), s.getOptionsContract(), s.getOptionsPremium(), s.getConfidence());
             return placeOptionsOrder(s);
         } catch (Exception e) {
             log.error("ALPACA ORDER ERROR {}: {}", s.getTicker(), e.getMessage());
@@ -151,6 +154,7 @@ public class AlpacaOrderService {
             int contracts        = Math.max(1, (int)(buyingPower / contractCost));
 
             // Options are always a "buy" — calls for LONG setups, puts for SHORT
+            // asset_class MUST be "us_option" or Alpaca treats it as a stock order
             Map<String, Object> order = new LinkedHashMap<>();
             order.put("symbol", occSymbol);
             order.put("qty", String.valueOf(contracts));
@@ -158,11 +162,16 @@ public class AlpacaOrderService {
             order.put("type", "limit");
             order.put("limit_price", String.format("%.2f", premium));
             order.put("time_in_force", "day");
+            order.put("asset_class", "us_option");
 
             String json = mapper.writeValueAsString(order);
-            log.info("ALPACA OPTIONS BUY {} contracts={} premium=${} contract_cost=${} dir={} | {}",
-                    occSymbol, contracts, premium, String.format("%.2f", contractCost),
+            log.info("ALPACA OPTIONS ORDER ATTEMPT: symbol={} qty={} premium=${} totalCost=${} bp=${} dir={} mode={}",
+                    occSymbol, contracts,
+                    String.format("%.2f", premium),
+                    String.format("%.2f", contractCost * contracts),
+                    String.format("%.2f", buyingPower),
                     s.getDirection(), isPaper() ? "PAPER" : "LIVE");
+            log.info("ALPACA OPTIONS ORDER BODY: {}", json);
 
             Request req = new Request.Builder()
                     .url(getBaseUrl() + "/v2/orders")
