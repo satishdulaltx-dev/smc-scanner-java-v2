@@ -162,12 +162,30 @@
         </select>
     </div>
     <div class="ctrl-group">
-        <label>Strategy</label>
+        <label>Mode</label>
         <select id="strategy-mode" autocomplete="off">
             <option value="ALL" selected>All (default)</option>
             <option value="INTRADAY">Intraday (4h max hold)</option>
             <option value="SWING">Swing (multi-day)</option>
             <option value="OPTIONS">Options (4h + P&L focus)</option>
+        </select>
+    </div>
+    <div class="ctrl-group">
+        <label>Strategy Type</label>
+        <select id="strategy-type" autocomplete="off">
+            <option value="" selected>Profile default</option>
+            <optgroup label="── Standard ──">
+                <option value="smc">SMC (sweep+FVG)</option>
+                <option value="vwap">VWAP (1-day reversion)</option>
+                <option value="keylevel">Key Level rejection</option>
+                <option value="breakout">ORB breakout</option>
+            </optgroup>
+            <optgroup label="── AAPL Candidates ──">
+                <option value="vsqueeze">Volatility Squeeze (BB/KC)</option>
+                <option value="vwap3d">3-Day VWAP reversion</option>
+                <option value="idiv">Index Divergence (SPY lag)</option>
+                <option value="gammapin">Gamma Pin ($5 strike)</option>
+            </optgroup>
         </select>
     </div>
     <div class="ctrl-group">
@@ -313,8 +331,10 @@ function runBacktest() {
     const ticker = document.getElementById('ticker').value;
     const days   = document.getElementById('days').value;
     const stratMode = document.getElementById('strategy-mode').value;
+    const stratType = document.getElementById('strategy-type').value;
+    const stratParam = stratType ? `&strategy=${stratType}` : '';
     setLoading(true);
-    fetch(`/api/backtest?ticker=${ticker}&days=${days}&mode=${stratMode}`)
+    fetch(`/api/backtest?ticker=${ticker}&days=${days}&mode=${stratMode}${stratParam}`)
         .then(r => r.json())
         .then(d => { setLoading(false); renderSingle(d); })
         .catch(() => { setLoading(false); alert('Backtest failed'); });
@@ -379,6 +399,8 @@ async function runBatch() {
     if (tickers.length === 0) { alert('Could not load watchlist'); return; }
     const days  = document.getElementById('days').value;
     const stratMode = document.getElementById('strategy-mode').value;
+    const stratTypeBatch = document.getElementById('strategy-type').value;
+    const stratParamBatch = stratTypeBatch ? `&strategy=${stratTypeBatch}` : '';
     const BATCH = 4; // max concurrent Polygon API requests — prevents rate-limit errors on 90d runs
     setLoading(true);
     hide('single-results'); hide('empty-state');
@@ -390,7 +412,7 @@ async function runBatch() {
         const done = Math.min(i + BATCH, tickers.length);
         if (loadBtn) loadBtn.textContent = `⏳ ${done} / ${tickers.length}`;
         const chunk = await Promise.all(
-            group.map(t => fetch(`/api/backtest?ticker=${t}&days=${days}&mode=${stratMode}`).then(r => r.json()).catch(() => null))
+            group.map(t => fetch(`/api/backtest?ticker=${t}&days=${days}&mode=${stratMode}${stratParamBatch}`).then(r => r.json()).catch(() => null))
         );
         all.push(...chunk);
     }
