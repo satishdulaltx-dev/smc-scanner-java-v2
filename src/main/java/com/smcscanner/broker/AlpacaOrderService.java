@@ -45,18 +45,20 @@ public class AlpacaOrderService {
     private volatile String lastResetDate = "";
 
     // ── Trailing stop tracking ──────────────────────────────────────────────
-    // Tracks each filled position: original entry, SL, TP, current trail level
-    // consecutiveCloses = number of consecutive 5m candle closes above the next trail threshold
+    // Hybrid ATR trailing: trails at peak_close - 0.75 ATR while running,
+    // tightens to peak_close - 0.3 ATR when 2 consecutive reversal closes detected.
+    // peakClose = highest confirmed 5m close reached (for longs) / lowest (for shorts)
+    // consecutiveReversal = number of consecutive closes moving against direction
     public record TrackedPosition(String symbol, String direction, double entry, double stopLoss,
                                    double takeProfit, String orderId, String stopOrderId,
-                                   int trailLevel, int consecutiveCloses) {} // trailLevel: 0=original, 1=BE, 2=50%, 3=75%
+                                   double peakClose, int consecutiveReversal) {}
     private final Map<String, TrackedPosition> trackedPositions = new ConcurrentHashMap<>();
     // Track last processed candle timestamp to avoid re-processing same candle
     private final Map<String, String> lastProcessedCandle = new ConcurrentHashMap<>();
-    // Required consecutive candle closes above threshold before trailing
-    private static final int REQUIRED_CONSECUTIVE_CLOSES = 2;
-    // ATR buffer: trail SL this fraction of ATR below the profit level (prevents wick stopouts)
-    private static final double ATR_BUFFER_MULT = 0.5;
+    // ATR multipliers for normal trail and reversal-tightened trail
+    private static final double ATR_TRAIL_NORMAL   = 0.75; // trail at peak - 0.75 ATR while running
+    private static final double ATR_TRAIL_REVERSAL = 0.30; // tighten to peak - 0.3 ATR on confirmed reversal
+    private static final int    REVERSAL_CLOSES    = 2;    // consecutive closes against direction to confirm reversal
 
     // Config defaults (overridden by env vars)
     private static final double DEFAULT_MAX_POSITION = 500.0;   // max $ per trade
@@ -149,10 +151,10 @@ public class AlpacaOrderService {
                     String status = node.path("status").asText();
                     log.info("ALPACA ORDER PLACED: {} {} id={} status={}", s.getTicker(), s.getDirection(), orderId, status);
 
-                    // Track for trailing stop management
+                    // Track for trailing stop management (peakClose starts at entry)
                     trackedPositions.put(s.getTicker(), new TrackedPosition(
                             s.getTicker(), s.getDirection(), s.getEntry(),
-                            s.getStopLoss(), s.getTakeProfit(), orderId, null, 0, 0));
+                            s.getStopLoss(), s.getTakeProfit(), orderId, null, s.getEntry(), 0));
 
                     dailyOrderCount.merge(s.getTicker(), 1, Integer::sum);
                     return orderId;
@@ -361,6 +363,12 @@ public class AlpacaOrderService {
 
     /**
      * Process trailing stop for a single symbol using 5m candle closes.
+     *
+     * Hybrid ATR trailing logic:
+     * - While price runs: trail SL at peak_close - 0.75 ATR (gives room to breathe)
+     * - On reversal (2 consecutive closes against direction): tighten to peak_close - 0.3 ATR
+     * - Hard floor: original SL — never go backwards
+     * - Only activates when trade is in profit (trail > entry for longs)
      */
     private void processTrailingForSymbol(String symbol, TrackedPosition tp) {
         // Fetch last 20 confirmed 5m bars from Polygon
@@ -370,114 +378,69 @@ public class AlpacaOrderService {
             return;
         }
 
-        // The LAST bar may still be forming (current candle). Use second-to-last as the latest CONFIRMED close.
-        // Polygon returns bars in chronological order. The last complete bar is bars[size-2]
-        // if we're mid-candle, or bars[size-1] if the candle just closed.
-        // To be safe, always use the second-to-last bar as the confirmed close.
+        // Use second-to-last bar as confirmed close (last bar may still be forming)
         OHLCV confirmedBar = bars.get(bars.size() - 2);
-        String candleTs = confirmedBar.getTimestamp();
+        String candleTs = String.valueOf(confirmedBar.getTimestamp());
 
         // Skip if we already processed this candle
         String lastTs = lastProcessedCandle.get(symbol);
-        if (candleTs.equals(lastTs)) {
-            return; // same candle, no new data
-        }
+        if (candleTs.equals(lastTs)) return;
         lastProcessedCandle.put(symbol, candleTs);
 
         double candleClose = confirmedBar.getClose();
         boolean isLong = "long".equals(tp.direction());
-        double entry = tp.entry();
-        double target = tp.takeProfit();
-        double totalMove = Math.abs(target - entry);
-
-        // Compute ATR from recent 5m bars (use last 14 bars for ATR)
         double atr = computeAtr5m(bars);
+        if (atr <= 0) return;
 
-        // Calculate progress based on CANDLE CLOSE (not live price)
-        double progress = isLong
-                ? (candleClose - entry) / totalMove
-                : (entry - candleClose) / totalMove;
+        // ── 1. Update peak close ──────────────────────────────────────────────
+        double newPeak = tp.peakClose();
+        if (isLong  && candleClose > newPeak) newPeak = candleClose;
+        if (!isLong && candleClose < newPeak) newPeak = candleClose;
 
-        // Determine what the NEXT level would be
-        int candidateLevel = tp.trailLevel();
-        if (progress >= 0.90 && tp.trailLevel() < 3) {
-            candidateLevel = 3;
-        } else if (progress >= 0.75 && tp.trailLevel() < 2) {
-            candidateLevel = 2;
-        } else if (progress >= 0.50 && tp.trailLevel() < 1) {
-            candidateLevel = 1;
+        // ── 2. Detect reversal (close pulling back from peak) ─────────────────
+        // A reversal close = candle moves against direction by > 0.2 ATR from peak
+        boolean isReversalClose = isLong
+                ? candleClose < newPeak - atr * 0.20
+                : candleClose > newPeak + atr * 0.20;
+        int newReversalCount = isReversalClose ? tp.consecutiveReversal() + 1 : 0;
+
+        // ── 3. Calculate target stop ──────────────────────────────────────────
+        double atrMult = (newReversalCount >= REVERSAL_CLOSES) ? ATR_TRAIL_REVERSAL : ATR_TRAIL_NORMAL;
+        double targetStop = isLong
+                ? newPeak - atr * atrMult
+                : newPeak + atr * atrMult;
+
+        // ── 4. Only move SL if in profit and improving ─────────────────────────
+        boolean inProfit  = isLong ? targetStop > tp.entry() : targetStop < tp.entry();
+        boolean improving = isLong ? targetStop > tp.stopLoss() : targetStop < tp.stopLoss();
+
+        if (inProfit && improving) {
+            boolean updated = updateStopOrder(symbol, targetStop, isLong);
+            if (updated) {
+                String mode = newReversalCount >= REVERSAL_CLOSES ? "REVERSAL-TIGHT" : "NORMAL-TRAIL";
+                log.info("TRAIL ✓ {} [{}] peak=${} close=${} SL: ${} → ${} ({}x ATR)",
+                        symbol, mode,
+                        String.format("%.2f", newPeak),
+                        String.format("%.2f", candleClose),
+                        String.format("%.2f", tp.stopLoss()),
+                        String.format("%.2f", targetStop),
+                        atrMult);
+                trackedPositions.put(symbol, new TrackedPosition(
+                        tp.symbol(), tp.direction(), tp.entry(), targetStop,
+                        tp.takeProfit(), tp.orderId(), tp.stopOrderId(), newPeak, newReversalCount));
+                return;
+            }
         }
 
-        // If candle close qualifies for a higher level, increment consecutive count
-        if (candidateLevel > tp.trailLevel()) {
-            int newConsecutive = tp.consecutiveCloses() + 1;
-            log.info("TRAIL: {} candle close ${} — {}% to TP — L{} confirmation {}/{}",
-                    symbol, String.format("%.2f", candleClose),
-                    String.format("%.1f", progress * 100),
-                    candidateLevel, newConsecutive, REQUIRED_CONSECUTIVE_CLOSES);
-
-            if (newConsecutive >= REQUIRED_CONSECUTIVE_CLOSES) {
-                // ✅ Confirmed! Move the stop loss with ATR buffer
-                double atrBuffer = atr * ATR_BUFFER_MULT;
-                double rawStopPrice;
-
-                if (candidateLevel == 1) {
-                    // Breakeven: entry + small buffer (don't lose money on wicks)
-                    rawStopPrice = isLong ? entry + atrBuffer * 0.2 : entry - atrBuffer * 0.2;
-                } else if (candidateLevel == 2) {
-                    // Lock 50% profit
-                    double profit50 = totalMove * 0.50;
-                    rawStopPrice = isLong ? entry + profit50 : entry - profit50;
-                } else {
-                    // Lock 75% profit
-                    double profit75 = totalMove * 0.75;
-                    rawStopPrice = isLong ? entry + profit75 : entry - profit75;
-                }
-
-                // Apply ATR buffer: for longs, SL sits BELOW the raw level; for shorts, ABOVE
-                double bufferedStop = isLong
-                        ? rawStopPrice - atrBuffer
-                        : rawStopPrice + atrBuffer;
-
-                // Ensure we never move SL backwards (always tighter)
-                if (isLong && bufferedStop <= tp.stopLoss()) {
-                    log.info("TRAIL: {} buffered SL ${} <= current SL ${} — skipping",
-                            symbol, String.format("%.2f", bufferedStop), String.format("%.2f", tp.stopLoss()));
-                    return;
-                }
-                if (!isLong && bufferedStop >= tp.stopLoss()) {
-                    log.info("TRAIL: {} buffered SL ${} >= current SL ${} — skipping",
-                            symbol, String.format("%.2f", bufferedStop), String.format("%.2f", tp.stopLoss()));
-                    return;
-                }
-
-                boolean updated = updateStopOrder(symbol, bufferedStop, isLong);
-                if (updated) {
-                    trackedPositions.put(symbol, new TrackedPosition(
-                            tp.symbol(), tp.direction(), tp.entry(), bufferedStop,
-                            tp.takeProfit(), tp.orderId(), tp.stopOrderId(), candidateLevel, 0));
-                    log.info("TRAIL ✓ {} L{}→L{} | SL moved to ${} (raw=${}, ATR buffer=${}) | close=${}",
-                            symbol, tp.trailLevel(), candidateLevel,
-                            String.format("%.2f", bufferedStop),
-                            String.format("%.2f", rawStopPrice),
-                            String.format("%.2f", atrBuffer),
-                            String.format("%.2f", candleClose));
-                }
-            } else {
-                // Not enough confirmations yet — just update the counter
-                trackedPositions.put(symbol, new TrackedPosition(
-                        tp.symbol(), tp.direction(), tp.entry(), tp.stopLoss(),
-                        tp.takeProfit(), tp.orderId(), tp.stopOrderId(), tp.trailLevel(), newConsecutive));
+        // No SL move — just update peak and reversal counter
+        if (newPeak != tp.peakClose() || newReversalCount != tp.consecutiveReversal()) {
+            if (newReversalCount >= REVERSAL_CLOSES) {
+                log.info("TRAIL: {} reversal confirmed ({} closes) — waiting for profit zone to tighten SL",
+                        symbol, newReversalCount);
             }
-        } else {
-            // Candle close doesn't qualify — reset consecutive counter
-            if (tp.consecutiveCloses() > 0) {
-                log.debug("TRAIL: {} candle close ${} below L{} threshold — resetting consecutive count",
-                        symbol, String.format("%.2f", candleClose), tp.trailLevel() + 1);
-                trackedPositions.put(symbol, new TrackedPosition(
-                        tp.symbol(), tp.direction(), tp.entry(), tp.stopLoss(),
-                        tp.takeProfit(), tp.orderId(), tp.stopOrderId(), tp.trailLevel(), 0));
-            }
+            trackedPositions.put(symbol, new TrackedPosition(
+                    tp.symbol(), tp.direction(), tp.entry(), tp.stopLoss(),
+                    tp.takeProfit(), tp.orderId(), tp.stopOrderId(), newPeak, newReversalCount));
         }
     }
 
