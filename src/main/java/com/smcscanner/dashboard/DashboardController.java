@@ -702,7 +702,7 @@ public class DashboardController {
         }
 
         var s = buildTestTradeSetup();
-        String orderId = alpaca.placeOrder(s);
+        String orderId = alpaca.placeTestOrder(s);
         if (orderId == null) {
             return ResponseEntity.internalServerError().body(Map.of(
                     "status", "failed",

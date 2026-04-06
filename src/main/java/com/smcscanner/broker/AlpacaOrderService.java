@@ -120,9 +120,26 @@ public class AlpacaOrderService {
             }
             log.info("ALPACA PLACING OPTIONS ORDER {} contract={} premium={} conf={}",
                     s.getTicker(), s.getOptionsContract(), s.getOptionsPremium(), s.getConfidence());
-            return placeOptionsOrder(s);
+            return placeOptionsOrder(s, null);
         } catch (Exception e) {
             log.error("ALPACA ORDER ERROR {}: {}", s.getTicker(), e.getMessage());
+            return null;
+        }
+    }
+
+    /** Place a paper test order using exactly one options contract. */
+    public String placeTestOrder(TradeSetup s) {
+        if (!isEnabled()) return null;
+        try {
+            if (!s.hasOptionsData() || s.getOptionsContract() == null || s.getOptionsContract().isBlank()) {
+                log.warn("ALPACA TEST ORDER SKIP {} — no options contract on setup", s.getTicker());
+                return null;
+            }
+            log.info("ALPACA TEST ORDER {} contract={} premium={} conf={} qty=1",
+                    s.getTicker(), s.getOptionsContract(), s.getOptionsPremium(), s.getConfidence());
+            return placeOptionsOrder(s, 1);
+        } catch (Exception e) {
+            log.error("ALPACA TEST ORDER ERROR {}: {}", s.getTicker(), e.getMessage());
             return null;
         }
     }
@@ -138,7 +155,7 @@ public class AlpacaOrderService {
      *  - No bracket legs — options have defined max loss (premium paid)
      *  - time_in_force: "day"
      */
-    private String placeOptionsOrder(TradeSetup s) {
+    private String placeOptionsOrder(TradeSetup s, Integer forcedContracts) {
         try {
             // Polygon returns "O:AAPL250418C00200000" — strip the "O:" prefix for Alpaca
             String rawSymbol = s.getOptionsContract();
@@ -151,7 +168,9 @@ public class AlpacaOrderService {
 
             double buyingPower   = getAvailableBuyingPower();
             double contractCost  = premium * 100.0;  // 1 contract = 100 shares
-            int contracts        = Math.max(1, (int)(buyingPower / contractCost));
+            int contracts        = forcedContracts != null
+                    ? Math.max(1, forcedContracts)
+                    : Math.max(1, (int)(buyingPower / contractCost));
 
             // Options are always a "buy" — calls for LONG setups, puts for SHORT
             // asset_class MUST be "us_option" or Alpaca treats it as a stock order
