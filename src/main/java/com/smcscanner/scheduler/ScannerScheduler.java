@@ -61,9 +61,11 @@ public class ScannerScheduler {
     }
     private static final LocalTime EOD_TRIGGER=LocalTime.of(21,0), EOD_CUTOFF=LocalTime.of(22,0); // 9-10 PM ET (8-9 PM CST) — includes post-market data
     private static final LocalTime DAILY_REPORT_TRIGGER=LocalTime.of(16,30), DAILY_REPORT_CUTOFF=LocalTime.of(16,45);
+    private static final LocalTime FORCE_CLOSE_TRIGGER=LocalTime.of(15,55), FORCE_CLOSE_CUTOFF=LocalTime.of(16,0); // 3:55–4:00 PM ET
 
     private volatile boolean eodSentToday=false;
     private volatile boolean dailyReportSentToday=false;
+    private volatile boolean forceCloseDoneToday=false;
     private volatile int lastEodDay=-1;
 
     private final ScannerConfig      config;
@@ -110,7 +112,7 @@ public class ScannerScheduler {
     public void checkEodReport() {
         ZonedDateTime nowET=ZonedDateTime.now(ET);
         LocalTime time=nowET.toLocalTime(); int day=nowET.getDayOfYear();
-        if (day!=lastEodDay) { eodSentToday=false; dailyReportSentToday=false; lastEodDay=day; }
+        if (day!=lastEodDay) { eodSentToday=false; dailyReportSentToday=false; forceCloseDoneToday=false; lastEodDay=day; }
         if (nowET.getDayOfWeek().getValue()>=6||eodSentToday||isNyseHoliday(nowET.toLocalDate())) return;
         if (time.isBefore(EOD_TRIGGER)||time.isAfter(EOD_CUTOFF)) return;
         log.info("Generating overnight watchlist report (post-market + next morning prep)...");
@@ -144,6 +146,26 @@ public class ScannerScheduler {
                 log.info("No trades today — daily report skipped");
             }
         } catch (Exception e) { log.error("Daily trade report failed: {}", e.getMessage()); }
+    }
+
+    /** Force-close all open positions at 3:55 PM ET to prevent unintended overnight holds. */
+    @Scheduled(fixedRate=30_000)
+    public void forceEodClose() {
+        if (!alpaca.isEnabled()) return;
+        ZonedDateTime nowET = ZonedDateTime.now(ET);
+        LocalTime time = nowET.toLocalTime();
+        if (nowET.getDayOfWeek().getValue() >= 6 || forceCloseDoneToday || isNyseHoliday(nowET.toLocalDate())) return;
+        if (time.isBefore(FORCE_CLOSE_TRIGGER) || time.isAfter(FORCE_CLOSE_CUTOFF)) return;
+        log.info("EOD FORCE-CLOSE: 3:55 PM ET — liquidating all open positions");
+        forceCloseDoneToday = true;
+        try {
+            int count = alpaca.closeAllPositions();
+            if (count > 0) {
+                discord.sendAlert(":bell: **EOD Force-Close** — liquidated **" + count + " position(s)** at 3:55 PM ET to avoid overnight holds.");
+            }
+        } catch (Exception e) {
+            log.error("EOD force-close failed: {}", e.getMessage());
+        }
     }
 
     /** Smart trailing stop monitor — checks confirmed 5m candle closes during market hours. */

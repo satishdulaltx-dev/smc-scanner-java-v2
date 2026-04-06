@@ -285,6 +285,18 @@ public class DiscordAlertService {
         return postEmbeds(url, List.of(embed));
     }
 
+    /** Send a plain text alert to the main webhook channel. */
+    public boolean sendAlert(String message) {
+        String url = config.getDiscordWebhookUrl();
+        if (url == null || url.isBlank()) { log.warn("No webhook URL for plain alert"); return false; }
+        try {
+            String json = mapper.writeValueAsString(Map.of("username", "SD Scanner", "content", message));
+            try (Response r = http.newCall(new Request.Builder().url(url).post(RequestBody.create(json, JSON)).build()).execute()) {
+                return r.code() == 200 || r.code() == 204;
+            }
+        } catch (Exception e) { log.error("Discord sendAlert error: {}", e.getMessage()); return false; }
+    }
+
     private boolean postEmbeds(String url, List<Map<String,Object>> embeds) {
         try {
             String json=mapper.writeValueAsString(Map.of("username","SD Scanner","embeds",embeds));

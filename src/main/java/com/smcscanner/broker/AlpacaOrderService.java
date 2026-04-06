@@ -574,6 +574,54 @@ public class AlpacaOrderService {
         }
     }
 
+    /**
+     * Force-close all open positions at EOD (3:55 PM ET).
+     * Cancels all open orders first, then liquidates all positions.
+     * Used to avoid unintended overnight holds on intraday strategies.
+     */
+    public int closeAllPositions() {
+        if (!isEnabled()) return 0;
+        int closed = 0;
+
+        // 1. Cancel all open orders (pending entries / bracket legs)
+        cancelAllOrders();
+        log.info("EOD CLOSE: cancelled all open orders");
+
+        // 2. Liquidate all open positions via DELETE /v2/positions
+        try {
+            Request req = new Request.Builder()
+                    .url(getBaseUrl() + "/v2/positions")
+                    .addHeader("APCA-API-KEY-ID", config.getAlpacaApiKey())
+                    .addHeader("APCA-API-SECRET-KEY", config.getAlpacaSecretKey())
+                    .delete().build();
+
+            try (Response resp = http.newCall(req).execute()) {
+                String body = resp.body() != null ? resp.body().string() : "[]";
+                if (resp.isSuccessful()) {
+                    JsonNode arr = mapper.readTree(body);
+                    if (arr.isArray()) {
+                        closed = arr.size();
+                        for (JsonNode n : arr) {
+                            String symbol = n.path("symbol").asText();
+                            String status = n.path("status").asText();
+                            log.info("EOD CLOSE: {} — {}", symbol, status);
+                        }
+                    }
+                    log.info("EOD CLOSE: liquidated {} position(s)", closed);
+                } else {
+                    log.warn("EOD CLOSE: liquidation call returned {} — {}", resp.code(), body);
+                }
+            }
+        } catch (Exception e) {
+            log.error("EOD CLOSE: error liquidating positions — {}", e.getMessage());
+        }
+
+        // 3. Clear internal trackers
+        trackedPositions.clear();
+        lastProcessedCandle.clear();
+        return closed;
+    }
+
     /** Update daily P&L from position closes (called by resolver). */
     public void recordPnl(double pnl) {
         this.dailyPnl += pnl;
