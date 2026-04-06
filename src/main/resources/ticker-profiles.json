@@ -2,13 +2,13 @@
   "profiles": [
     {
       "ticker": "AAPL",
-      "strategyType": "vwap",
+      "strategyType": "keylevel",
       "minConfidence": 75,
       "slAtrMult": 0.4,
-      "tpRrRatio": 1.5,
+      "tpRrRatio": 2.0,
       "intradayRsGate": false,
-      "skip": true,
-      "skipReason": "No consistent intraday edge — tried KeyLevel (38.9%WR +0.13%), VWAP (0%WR -0.69%). Too efficiently priced. MSFT covers large-cap tech at 66.7%WR.",
+      "skip": false,
+      "skipReason": null,
       "note": "Optimizer Mar 2026: VWAP→KeyLevel. VWAP produced 0 viable trades. KeyLevel 62/0.4/2:1 = 17 trades, 40% WR, +0.05% exp, $266 opt P&L. SMC 1:1 also viable (50% WR, $402 opt). DO NOT SKIP."
     },
     {
