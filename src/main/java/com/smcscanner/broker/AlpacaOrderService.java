@@ -295,9 +295,18 @@ public class AlpacaOrderService {
                 if (resp.isSuccessful()) {
                     JsonNode arr = mapper.readTree(body);
                     List<Map<String, Object>> positions = new ArrayList<>();
+                    Map<String, TrackedPosition> trackedByOption = new HashMap<>();
+                    Map<String, TrackedPosition> trackedByUnderlying = new HashMap<>();
+                    for (TrackedPosition tp : trackedPositions.values()) {
+                        trackedByUnderlying.put(tp.symbol(), tp);
+                        if (tp.optionsContract() != null && !tp.optionsContract().isBlank()) {
+                            trackedByOption.put(tp.optionsContract(), tp);
+                        }
+                    }
                     for (JsonNode n : arr) {
                         Map<String, Object> pos = new LinkedHashMap<>();
-                        pos.put("symbol", n.path("symbol").asText());
+                        String symbol = n.path("symbol").asText();
+                        pos.put("symbol", symbol);
                         pos.put("qty", n.path("qty").asText());
                         pos.put("side", n.path("side").asText());
                         pos.put("avg_entry", n.path("avg_entry_price").asText());
@@ -305,7 +314,30 @@ public class AlpacaOrderService {
                         pos.put("unrealized_pl", n.path("unrealized_pl").asText());
                         pos.put("unrealized_plpc", n.path("unrealized_plpc").asText());
                         pos.put("market_value", n.path("market_value").asText());
-                        pos.put("asset_class", n.path("asset_class").asText("us_equity"));
+                        String assetClass = n.path("asset_class").asText("us_equity");
+                        pos.put("asset_class", assetClass);
+
+                        TrackedPosition tracked = "us_option".equals(assetClass)
+                                ? trackedByOption.get(symbol)
+                                : trackedByUnderlying.get(symbol);
+                        if (tracked != null) {
+                            pos.put("tracked", true);
+                            pos.put("tracked_underlying", tracked.symbol());
+                            pos.put("tracked_direction", tracked.direction());
+                            pos.put("tracked_entry", tracked.entry());
+                            pos.put("tracked_stop_loss", tracked.stopLoss());
+                            pos.put("tracked_take_profit", tracked.takeProfit());
+                            pos.put("tracked_peak_close", tracked.peakClose());
+                            pos.put("tracked_reversal_count", tracked.consecutiveReversal());
+                            pos.put("tracked_options_contract", tracked.optionsContract());
+                            String trailLabel = tracked.consecutiveReversal() >= REVERSAL_CLOSES
+                                    ? "REVERSAL-TIGHT (0.3 ATR)"
+                                    : "NORMAL-TRAIL (0.75 ATR)";
+                            pos.put("tracked_trail_label", trailLabel);
+                            pos.put("tracked_trail_method", "App-managed ATR trailing on underlying price");
+                        } else {
+                            pos.put("tracked", false);
+                        }
                         positions.add(pos);
                     }
                     return positions;

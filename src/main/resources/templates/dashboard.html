@@ -627,6 +627,24 @@ async function loadAlpacaPositions() {
             const plRaw = parseFloat(p.unrealized_pl || 0);
             const plColor = plRaw >= 0 ? 'var(--green)' : 'var(--red)';
             const plStr = (plRaw >= 0 ? '+' : '') + plRaw.toFixed(2);
+            const tracked = !!p.tracked;
+            const management = tracked
+                ? `<div style="display:flex;flex-direction:column;gap:3px;">
+                        <span style="background:rgba(63,185,80,.15);color:var(--green);padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700;display:inline-block;width:max-content;">APP-MANAGED</span>
+                        <span style="font-size:11px;color:var(--muted);">${p.tracked_trail_label || 'Tracked'}</span>
+                   </div>`
+                : `<span style="color:var(--muted);font-size:11px;">—</span>`;
+            const plan = tracked
+                ? `<div style="display:flex;flex-direction:column;gap:2px;font-size:11px;line-height:1.35;">
+                        <span><span style="color:var(--muted);">Underlying:</span> <span style="font-family:monospace;">${p.tracked_underlying || '—'}</span></span>
+                        <span><span style="color:var(--muted);">Dir:</span> ${String(p.tracked_direction || '—').toUpperCase()}</span>
+                        <span><span style="color:var(--muted);">Entry:</span> <span style="font-family:monospace;">$${parseFloat(p.tracked_entry || 0).toFixed(2)}</span></span>
+                        <span><span style="color:var(--muted);">SL:</span> <span style="font-family:monospace;color:var(--red);">$${parseFloat(p.tracked_stop_loss || 0).toFixed(2)}</span></span>
+                        <span><span style="color:var(--muted);">TP:</span> <span style="font-family:monospace;color:var(--green);">$${parseFloat(p.tracked_take_profit || 0).toFixed(2)}</span></span>
+                        <span><span style="color:var(--muted);">Peak:</span> <span style="font-family:monospace;">$${parseFloat(p.tracked_peak_close || 0).toFixed(2)}</span></span>
+                        <span><span style="color:var(--muted);">Reversals:</span> ${p.tracked_reversal_count ?? 0}</span>
+                   </div>`
+                : `<span style="color:var(--muted);font-size:11px;">No app-managed TP/SL tracked.</span>`;
             return `<tr>
                 <td style="font-weight:700;font-family:monospace;font-size:12px;">${p.symbol || '—'}</td>
                 <td>${typeLabel}</td>
@@ -635,6 +653,8 @@ async function loadAlpacaPositions() {
                 <td style="font-family:monospace">$${parseFloat(p.current_price || 0).toFixed(2)}</td>
                 <td style="font-family:monospace;font-weight:600;color:${plColor}">${plStr}</td>
                 <td style="font-family:monospace">$${parseFloat(p.market_value || 0).toFixed(2)}</td>
+                <td>${management}</td>
+                <td>${plan}</td>
             </tr>`;
         }).join('');
         wrap.innerHTML = `
@@ -648,6 +668,8 @@ async function loadAlpacaPositions() {
                     <th style="color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.6px;padding:8px 12px;text-align:left;border-bottom:1px solid var(--border);">Current</th>
                     <th style="color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.6px;padding:8px 12px;text-align:left;border-bottom:1px solid var(--border);">Unrealized P&L</th>
                     <th style="color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.6px;padding:8px 12px;text-align:left;border-bottom:1px solid var(--border);">Mkt Value</th>
+                    <th style="color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.6px;padding:8px 12px;text-align:left;border-bottom:1px solid var(--border);">Management</th>
+                    <th style="color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.6px;padding:8px 12px;text-align:left;border-bottom:1px solid var(--border);">Tracked TP / SL</th>
                 </tr>
             </thead>
             <tbody>${rows}</tbody>
