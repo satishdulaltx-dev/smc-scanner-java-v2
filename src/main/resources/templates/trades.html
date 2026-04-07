@@ -75,6 +75,7 @@
     <div class="stats-row" id="cum-stats">
         <div class="spinner">Loading...</div>
     </div>
+    <div id="storage-status" style="font-size:11px;color:var(--muted);margin:-10px 0 18px 2px;"></div>
 
     <!-- Resolve open trade -->
     <div class="section-title">✏️ Resolve Open Trade</div>
@@ -135,6 +136,11 @@ async function loadCumulative() {
         <div class="stat-card"><div class="stat-label">Realized P&amp;L</div><div class="stat-val" style="color:${pnlAmount>=0?'var(--green)':'var(--red)'}">${pnlAmount>=0?'+':''}$${Math.abs(pnlAmount).toFixed(2)}</div><div class="stat-sub">${pnlPct>=0?'+':''}${pnlPct}% on resolved trades</div></div>
         <div class="stat-card"><div class="stat-label">Open / Unresolved</div><div class="stat-val" style="color:var(--yellow)">${c.open||0}</div><div class="stat-sub">awaiting outcome</div></div>
     `;
+    const storage = d.storage || {};
+    const tracked = d.trackedStorage || {};
+    document.getElementById('storage-status').textContent =
+        `Trade log: ${storage.path || '—'} (${storage.exists ? 'exists' : 'missing'}, ${storage.records || 0} records) · ` +
+        `Tracked positions: ${tracked.path || '—'} (${tracked.exists ? 'exists' : 'missing'}, ${tracked.trackedCount || 0} tracked)`;
 }
 
 async function loadToday() {

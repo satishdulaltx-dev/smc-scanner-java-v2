@@ -64,6 +64,18 @@ public class LiveTradeLog {
         }
     }
 
+    public Map<String, Object> getStorageInfo() {
+        File f = new File(FILE_PATH);
+        Map<String, Object> info = new LinkedHashMap<>();
+        info.put("path", f.getAbsolutePath());
+        info.put("exists", f.exists());
+        info.put("sizeBytes", f.exists() ? f.length() : 0L);
+        synchronized (trades) {
+            info.put("records", trades.size());
+        }
+        return info;
+    }
+
     /** Record a new live trade alert. Called from ScannerService after Discord alert sent. */
     public void recordTrade(TradeSetup s, String strategyType) {
         ZonedDateTime now = ZonedDateTime.now(ET);
@@ -621,14 +633,50 @@ public class LiveTradeLog {
     }
 
     private static String resolveStoragePath(String fileName) {
+        List<File> existingFiles = new ArrayList<>();
+        List<File> writableTargets = new ArrayList<>();
+
         String envDir = System.getenv("TRADE_LOG_DIR");
         if (envDir != null && !envDir.isBlank()) {
-            return envDir.replaceAll("/$", "") + "/" + fileName;
+            File envFile = new File(envDir.replaceAll("/$", ""), fileName);
+            if (envFile.exists() && envFile.isFile() && envFile.length() > 0) {
+                existingFiles.add(envFile);
+            }
+            File envParent = envFile.getParentFile();
+            if (envParent != null && (envParent.exists() || envParent.mkdirs()) && envParent.canWrite()) {
+                writableTargets.add(envFile);
+            }
+        }
+
+        File railwayFile = new File("/data", fileName);
+        if (railwayFile.exists() && railwayFile.isFile() && railwayFile.length() > 0) {
+            existingFiles.add(railwayFile);
         }
         File railwayVolume = new File("/data");
         if (railwayVolume.exists() && railwayVolume.isDirectory() && railwayVolume.canWrite()) {
-            return "/data/" + fileName;
+            writableTargets.add(railwayFile);
         }
-        return "data/" + fileName;
+
+        File localFile = new File("data", fileName);
+        if (localFile.exists() && localFile.isFile() && localFile.length() > 0) {
+            existingFiles.add(localFile);
+        }
+        File localParent = localFile.getParentFile();
+        if (localParent != null && (localParent.exists() || localParent.mkdirs()) && localParent.canWrite()) {
+            writableTargets.add(localFile);
+        }
+
+        if (!existingFiles.isEmpty()) {
+            for (File candidate : existingFiles) {
+                if (candidate.getAbsolutePath().startsWith("/data/")) return candidate.getPath();
+            }
+            return existingFiles.get(0).getPath();
+        }
+
+        for (File candidate : writableTargets) {
+            if (candidate.getAbsolutePath().startsWith("/data/")) return candidate.getPath();
+        }
+        if (!writableTargets.isEmpty()) return writableTargets.get(0).getPath();
+        return localFile.getPath();
     }
 }
