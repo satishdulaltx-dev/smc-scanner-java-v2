@@ -17,6 +17,7 @@ import java.util.Map;
 public class ResearchService {
     private static final int[] WINDOWS = {90, 180, 365};
     private static final String[] STRATEGIES = {"smc", "vwap", "breakout", "keylevel"};
+    private static final int MIN_BEST_STRATEGY_TRADES = 8;
 
     private final BacktestService backtestService;
     private final ScannerConfig config;
@@ -27,7 +28,9 @@ public class ResearchService {
     }
 
     public ResearchReport runWatchlistResearch() {
-        List<String> tickers = config.loadWatchlist();
+        List<String> tickers = config.loadWatchlist().stream()
+                .filter(t -> !t.startsWith("X:"))
+                .toList();
         List<TickerResearch> rows = new ArrayList<>();
 
         for (String ticker : tickers) {
@@ -74,11 +77,11 @@ public class ResearchService {
         }
 
         BacktestService.BacktestResult currentYear = backtestService.run(ticker, 365, BacktestMode.ALL, null);
-        List<FailureStat> failures = summarizeFailures(currentYear);
+        OutcomeSummary outcomeSummary = summarizeOutcomes(currentYear);
         List<StrategyScore> strategyScores = compareStrategies(ticker, currentStrategy);
         StrategyScore bestStrategy = strategyScores.stream()
                 .findFirst()
-                .orElse(new StrategyScore(currentStrategy, 0, 0, 0, 0, false));
+                .orElse(new StrategyScore(currentStrategy, 0, 0, 0, 0, false, false));
 
         String recommendation = recommend(currentStrategy, bestStrategy, windows, currentYear);
         String summary = buildSummary(currentStrategy, bestStrategy, windows, currentYear, recommendation);
@@ -95,12 +98,15 @@ public class ResearchService {
                 round2(currentYear.winRate),
                 round2(currentYear.expectancy),
                 round2(currentYear.totalOptPnl),
+                outcomeSummary.timeoutRate(),
+                outcomeSummary.confCapReliance(),
                 currentYear.newsFiltered,
                 currentYear.ctxFiltered,
                 currentYear.qualityFiltered,
                 windows,
                 strategyScores,
-                failures
+                outcomeSummary.executed(),
+                outcomeSummary.filtered()
         );
     }
 
@@ -115,25 +121,63 @@ public class ResearchService {
                     round2(bt.winRate),
                     round2(bt.expectancy),
                     round2(bt.totalOptPnl),
-                    strategy.equalsIgnoreCase(currentStrategy)
+                    strategy.equalsIgnoreCase(currentStrategy),
+                    bt.total >= MIN_BEST_STRATEGY_TRADES
             ));
         }
 
         results.sort(Comparator
-                .comparing(StrategyScore::expectancy, Comparator.reverseOrder())
+                .comparing(StrategyScore::eligible, Comparator.<Boolean>reverseOrder())
+                .thenComparing(StrategyScore::expectancy, Comparator.reverseOrder())
                 .thenComparing(StrategyScore::totalTrades, Comparator.reverseOrder()));
         return results;
     }
 
-    private List<FailureStat> summarizeFailures(BacktestService.BacktestResult bt) {
-        Map<String, Integer> counts = new LinkedHashMap<>();
-        bt.trades.forEach(trade -> counts.merge(normalizeOutcome(trade.outcome()), 1, Integer::sum));
+    private OutcomeSummary summarizeOutcomes(BacktestService.BacktestResult bt) {
+        Map<String, Integer> executed = new LinkedHashMap<>();
+        Map<String, Integer> filtered = new LinkedHashMap<>();
+        int confCapFiltered = 0;
+        int timeoutCount = 0;
 
+        for (BacktestService.TradeResult trade : bt.trades) {
+            String normalized = normalizeOutcome(trade.outcome());
+            if (isFilteredOutcome(trade.outcome())) {
+                filtered.merge(normalized, 1, Integer::sum);
+            } else {
+                executed.merge(normalized, 1, Integer::sum);
+            }
+            if (trade.outcome() != null && trade.outcome().toUpperCase(Locale.ROOT).contains("TIMEOUT")) {
+                timeoutCount++;
+            }
+            if (trade.outcome() != null && trade.outcome().toUpperCase(Locale.ROOT).contains("CONF_CAP")) {
+                confCapFiltered++;
+            }
+        }
+
+        double timeoutRate = bt.total > 0 ? round2(timeoutCount * 100.0 / bt.total) : 0;
+        int allFiltered = bt.newsFiltered + bt.ctxFiltered + bt.qualityFiltered + confCapFiltered;
+        double confCapReliance = allFiltered > 0 ? round2(confCapFiltered * 100.0 / allFiltered) : 0;
+
+        return new OutcomeSummary(
+                topStats(executed),
+                topStats(filtered),
+                timeoutRate,
+                confCapReliance
+        );
+    }
+
+    private List<FailureStat> topStats(Map<String, Integer> counts) {
         return counts.entrySet().stream()
                 .sorted(Map.Entry.<String, Integer>comparingByValue().reversed())
                 .limit(5)
                 .map(e -> new FailureStat(e.getKey(), e.getValue()))
                 .toList();
+    }
+
+    private boolean isFilteredOutcome(String outcome) {
+        if (outcome == null) return false;
+        String normalized = outcome.toUpperCase(Locale.ROOT);
+        return normalized.contains("FILTERED") || normalized.contains("CONF_CAP");
     }
 
     private String normalizeOutcome(String outcome) {
@@ -172,7 +216,7 @@ public class ResearchService {
         if ("disable".equals(recommendation)) {
             return "Negative across rolling windows. Current " + currentStrategy + " profile is not carrying its weight.";
         }
-        if ("retest".equals(recommendation) && !bestStrategy.strategy().equalsIgnoreCase(currentStrategy)) {
+        if ("retest".equals(recommendation) && bestStrategy.eligible() && !bestStrategy.strategy().equalsIgnoreCase(currentStrategy)) {
             return "Current " + currentStrategy + " is weak while " + bestStrategy.strategy()
                     + " looks stronger over 180d. Revalidate before changing live.";
         }
@@ -233,12 +277,15 @@ public class ResearchService {
             double winRate365,
             double expectancy365,
             double optPnl365,
+            double timeoutRate365,
+            double confCapReliance365,
             int newsFiltered365,
             int ctxFiltered365,
             int qualityFiltered365,
             List<WindowStat> windows,
             List<StrategyScore> strategies,
-            List<FailureStat> failures
+            List<FailureStat> executedOutcomes,
+            List<FailureStat> filteredOutcomes
     ) {}
 
     public record WindowStat(
@@ -258,8 +305,16 @@ public class ResearchService {
             double winRate,
             double expectancy,
             double optPnl,
-            boolean current
+            boolean current,
+            boolean eligible
     ) {}
 
     public record FailureStat(String outcome, int count) {}
+
+    public record OutcomeSummary(
+            List<FailureStat> executed,
+            List<FailureStat> filtered,
+            double timeoutRate,
+            double confCapReliance
+    ) {}
 }

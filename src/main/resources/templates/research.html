@@ -78,7 +78,7 @@
 
 <div class="toolbar">
     <div class="toolbar-copy">
-        This view batches your current watchlist through rolling backtests, compares the current profile strategy with core alternatives, and recommends which names to keep, retune, retest, or disable.
+        This view batches your equity watchlist through rolling backtests, compares the current profile strategy with core alternatives, and recommends which names to keep, retune, retest, or disable.
     </div>
     <button class="run-btn" id="run-btn" onclick="runResearch()">Run Research</button>
 </div>
@@ -99,7 +99,7 @@
 </div>
 
 <div class="footer">
-    Research combines 90d, 180d, and 365d windows with a 180d strategy comparison across SMC, VWAP, breakout, and key level.
+    Research combines 90d, 180d, and 365d windows with a 180d strategy comparison across SMC, VWAP, breakout, and key level. "Best strategy" now requires a minimum sample.
 </div>
 
 <script>
@@ -137,19 +137,26 @@ function renderTickerCard(row) {
 
     const strategies = row.strategies.map(s => `
         <tr>
-            <td>${s.current ? '★ ' : ''}${s.strategy}</td>
+            <td>${s.current ? '★ ' : ''}${s.strategy}${s.eligible ? '' : ' <span class="muted">(small)</span>'}</td>
             <td>${s.totalTrades}</td>
             <td class="${s.winRate >= 50 ? 'green' : 'red'}">${s.winRate.toFixed(1)}%</td>
             <td class="${s.expectancy >= 0 ? 'green' : 'red'}">${fmtSigned(s.expectancy)}</td>
         </tr>
     `).join('');
 
-    const failures = (row.failures || []).map(f => `
+    const executed = (row.executedOutcomes || []).map(f => `
         <tr>
             <td>${f.outcome}</td>
             <td>${f.count}</td>
         </tr>
     `).join('') || '<tr><td class="muted" colspan="2">No failure data</td></tr>';
+
+    const filtered = (row.filteredOutcomes || []).map(f => `
+        <tr>
+            <td>${f.outcome}</td>
+            <td>${f.count}</td>
+        </tr>
+    `).join('') || '<tr><td class="muted" colspan="2">No filtered data</td></tr>';
 
     return `
         <div class="ticker-card">
@@ -167,6 +174,12 @@ function renderTickerCard(row) {
                 <div class="mini"><div class="v ${row.expectancy365 >= 0 ? 'green' : 'red'}">${fmtSigned(row.expectancy365)}</div><div class="l">365d Exp</div></div>
                 <div class="mini"><div class="v ${row.optPnl365 >= 0 ? 'green' : 'red'}">${fmtSigned(row.optPnl365, '')}</div><div class="l">1-Contract Opt PnL</div></div>
             </div>
+            <div class="mini-grid">
+                <div class="mini"><div class="v ${row.timeoutRate365 >= 30 ? 'yellow' : 'green'}">${row.timeoutRate365.toFixed(1)}%</div><div class="l">Timeout Rate</div></div>
+                <div class="mini"><div class="v ${row.confCapReliance365 >= 35 ? 'yellow' : 'blue'}">${row.confCapReliance365.toFixed(1)}%</div><div class="l">Conf-Cap Reliance</div></div>
+                <div class="mini"><div class="v">${row.newsFiltered365}</div><div class="l">News Filtered</div></div>
+                <div class="mini"><div class="v">${row.qualityFiltered365 + row.ctxFiltered365}</div><div class="l">Other Filters</div></div>
+            </div>
 
             <div class="table-title">Rolling Windows</div>
             <table>
@@ -180,10 +193,16 @@ function renderTickerCard(row) {
                 <tbody>${strategies}</tbody>
             </table>
 
-            <div class="table-title">Top Outcomes / Failure Patterns</div>
+            <div class="table-title">Executed Outcomes</div>
             <table>
                 <thead><tr><th>Outcome</th><th>Count</th></tr></thead>
-                <tbody>${failures}</tbody>
+                <tbody>${executed}</tbody>
+            </table>
+
+            <div class="table-title">Filtered Outcomes</div>
+            <table>
+                <thead><tr><th>Outcome</th><th>Count</th></tr></thead>
+                <tbody>${filtered}</tbody>
             </table>
         </div>
     `;
