@@ -43,6 +43,7 @@ public class BacktestService {
     private static final double ATR_TRAIL_NORMAL = 0.75;
     private static final double ATR_TRAIL_REVERSAL = 0.30;
     private static final int REVERSAL_CLOSES = 2;
+    private static final double TRAIL_EXIT_SLIPPAGE_BPS = 5.0; // 0.05% adverse slippage on trail exits
 
     private final PolygonClient            client;
     private final AtrCalculator            atrCalc;
@@ -552,9 +553,24 @@ public class BacktestService {
             atrWindow.add(fb);
             if (atrWindow.size() > 20) atrWindow.remove(0);
 
+            double hi = fb.getHigh();
+            double lo = fb.getLow();
             double close = fb.getClose();
             double atr = computeAtr5m(atrWindow);
             if (atr <= 0) atr = Math.abs(entry - sl);
+
+            // In live trading, the current stop level exists before this bar completes.
+            // If the bar breaches it intrabar, assume we are out before granting any
+            // benefit from the bar close or a newly tightened stop.
+            boolean stopBreached = isLong ? lo <= activeSl : hi >= activeSl;
+            if (stopBreached) {
+                double slippedStop = applyTrailSlippage(activeSl, isLong);
+                double pnlPct = isLong
+                        ? round2((slippedStop - entry) / entry * 100)
+                        : round2((entry - slippedStop) / entry * 100);
+                String outcome = Math.abs(pnlPct) < 0.05 ? "BE_STOP" : (pnlPct > 0 ? "TRAIL_WIN" : "TRAIL_LOSS");
+                return new ExitResult(outcome, toDateTime(fb.getTimestamp()), pnlPct);
+            }
 
             if (isLong && close > peakClose) peakClose = close;
             if (!isLong && close < peakClose) peakClose = close;
@@ -569,23 +585,6 @@ public class BacktestService {
             boolean inProfit = isLong ? targetStop > entry : targetStop < entry;
             boolean improving = isLong ? targetStop > activeSl : targetStop < activeSl;
             if (inProfit && improving) activeSl = targetStop;
-
-            boolean stopBreached = isLong ? close <= activeSl : close >= activeSl;
-            if (stopBreached) {
-                double pnlPct = isLong
-                        ? round2((activeSl - entry) / entry * 100)
-                        : round2((entry - activeSl) / entry * 100);
-                String outcome = Math.abs(pnlPct) < 0.05 ? "BE_STOP" : (pnlPct > 0 ? "WIN" : "LOSS");
-                return new ExitResult(outcome, toDateTime(fb.getTimestamp()), pnlPct);
-            }
-
-            boolean tpReached = isLong ? close >= tp : close <= tp;
-            if (tpReached) {
-                double pnlPct = isLong
-                        ? round2((close - entry) / entry * 100)
-                        : round2((entry - close) / entry * 100);
-                return new ExitResult("WIN", toDateTime(fb.getTimestamp()), pnlPct);
-            }
         }
 
         OHLCV lastFwd = fwdBars.get(fwdBars.size() - 1);
@@ -594,6 +593,11 @@ public class BacktestService {
                 ? round2((exitPrice - entry) / entry * 100)
                 : round2((entry - exitPrice) / entry * 100);
         return new ExitResult("TIMEOUT", toDateTime(lastFwd.getTimestamp()), pnlPct);
+    }
+
+    private double applyTrailSlippage(double stopPrice, boolean isLong) {
+        double slip = stopPrice * (TRAIL_EXIT_SLIPPAGE_BPS / 10_000.0);
+        return isLong ? stopPrice - slip : stopPrice + slip;
     }
 
     private double computeAtr5m(List<OHLCV> bars) {

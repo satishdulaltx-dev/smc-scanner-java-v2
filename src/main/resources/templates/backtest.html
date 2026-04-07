@@ -725,7 +725,12 @@ function drillIn(ticker, days) {
     document.getElementById('days').value = days;
     toggleMode();
     setLoading(true);
-    fetch(`/api/backtest?ticker=${ticker}&days=${days}`)
+    const stratMode = document.getElementById('strategy-mode').value;
+    const stratType = document.getElementById('strategy-type').value;
+    const exitStyle = document.getElementById('exit-style').value;
+    const stratParam = stratType ? `&strategy=${stratType}` : '';
+    const exitParam = `&exitStyle=${exitStyle}`;
+    fetch(`/api/backtest?ticker=${ticker}&days=${days}&mode=${stratMode}${exitParam}${stratParam}`)
         .then(r => r.json())
         .then(d => { setLoading(false); renderSingle(d); })
         .catch(() => { setLoading(false); });
