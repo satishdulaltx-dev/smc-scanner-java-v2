@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smcscanner.data.PolygonClient;
 import com.smcscanner.model.OHLCV;
 import com.smcscanner.model.TradeSetup;
+import com.smcscanner.broker.AlpacaOrderService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -43,10 +44,12 @@ public class LiveTradeLog {
 
     private final ObjectMapper mapper = new ObjectMapper();
     private final PolygonClient client;
+    private final AlpacaOrderService alpaca;
     private final List<Map<String, Object>> trades = Collections.synchronizedList(new ArrayList<>());
 
-    public LiveTradeLog(PolygonClient client) {
+    public LiveTradeLog(PolygonClient client, AlpacaOrderService alpaca) {
         this.client = client;
+        this.alpaca = alpaca;
     }
 
     @EventListener(ContextRefreshedEvent.class)
@@ -219,6 +222,7 @@ public class LiveTradeLog {
         // Group by ticker to minimize API calls
         Map<String, List<Map<String, Object>>> byTicker = openTrades.stream()
                 .collect(Collectors.groupingBy(t -> (String) t.get("ticker")));
+        Set<String> brokerOpenTickers = getBrokerOpenTickers();
 
         int resolved = 0;
         for (Map.Entry<String, List<Map<String, Object>>> e : byTicker.entrySet()) {
@@ -267,11 +271,28 @@ public class LiveTradeLog {
                         }
                     }
 
+                    boolean brokerStillOpen = brokerOpenTickers.contains(ticker);
+                    if (outcome == null && !brokerStillOpen) {
+                        if (Math.abs(pnlPct) < 0.10) {
+                            outcome = "BE_STOP";
+                            pnlPct = 0.0;
+                        } else if (pnlPct > 0) {
+                            outcome = "WIN";
+                        } else {
+                            outcome = "LOSS";
+                        }
+                        t.put("resolutionSource", "ALPACA_FLAT");
+                    }
+
                     if (outcome != null) {
                         t.put("outcome", outcome);
                         t.put("pnlPct", Math.round(pnlPct * 100.0) / 100.0);
                         t.put("resolvedAt", ZonedDateTime.now(ET).toInstant().toEpochMilli());
-                        t.put("exitPrice", outcome.equals("WIN") ? tp : sl);
+                        if (t.containsKey("resolutionSource")) {
+                            t.put("exitPrice", lastPrice);
+                        } else {
+                            t.put("exitPrice", outcome.equals("WIN") ? tp : sl);
+                        }
                         resolved++;
                         log.info("Auto-resolved {} {} → {} (pnl={}%)", ticker, dir, outcome,
                                 Math.round(pnlPct * 100.0) / 100.0);
@@ -292,6 +313,36 @@ public class LiveTradeLog {
             persist();
             log.info("Auto-resolved {} open trades via price check", resolved);
         }
+    }
+
+    private Set<String> getBrokerOpenTickers() {
+        if (alpaca == null || !alpaca.isEnabled()) return Set.of();
+        try {
+            return alpaca.getPositions().stream()
+                    .map(pos -> {
+                        String assetClass = String.valueOf(pos.getOrDefault("asset_class", "us_equity"));
+                        String trackedUnderlying = String.valueOf(pos.getOrDefault("tracked_underlying", ""));
+                        String symbol = String.valueOf(pos.getOrDefault("symbol", ""));
+                        if ("us_option".equals(assetClass)) {
+                            if (!trackedUnderlying.isBlank()) return trackedUnderlying;
+                            return underlyingFromOcc(symbol);
+                        }
+                        return symbol;
+                    })
+                    .filter(s -> s != null && !s.isBlank())
+                    .collect(Collectors.toSet());
+        } catch (Exception e) {
+            log.warn("Could not fetch Alpaca open tickers for trade reconciliation: {}", e.getMessage());
+            return Set.of();
+        }
+    }
+
+    private String underlyingFromOcc(String symbol) {
+        if (symbol == null || symbol.isBlank()) return "";
+        String normalized = symbol.startsWith("O:") ? symbol.substring(2) : symbol;
+        int idx = 0;
+        while (idx < normalized.length() && !Character.isDigit(normalized.charAt(idx))) idx++;
+        return idx > 0 ? normalized.substring(0, idx) : normalized;
     }
 
     /** Build Discord embed for daily summary report. */

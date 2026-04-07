@@ -629,6 +629,7 @@ public class DashboardController {
     @GetMapping("/api/trades/today")
     @ResponseBody
     public ResponseEntity<Map<String,Object>> todayTrades() {
+        liveLog.resolveOpenTrades();
         String today = ZonedDateTime.now(ET).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
         return ResponseEntity.ok(liveLog.getDailySummary(today));
     }
@@ -637,6 +638,7 @@ public class DashboardController {
     @GetMapping("/api/trades/history")
     @ResponseBody
     public ResponseEntity<Map<String,Object>> tradeHistory() {
+        liveLog.resolveOpenTrades();
         Map<String,Object> resp = new LinkedHashMap<>();
         resp.put("cumulative", liveLog.getCumulativeStats());
         resp.put("trades", liveLog.getAllTrades());
@@ -648,6 +650,7 @@ public class DashboardController {
     @ResponseBody
     public ResponseEntity<Map<String,Object>> dailySummary(
             @org.springframework.web.bind.annotation.RequestParam(required=false) String date) {
+        liveLog.resolveOpenTrades();
         if (date == null || date.isBlank()) {
             date = ZonedDateTime.now(ET).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
         }
