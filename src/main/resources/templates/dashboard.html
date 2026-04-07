@@ -634,16 +634,27 @@ async function loadAlpacaPositions() {
                         <span style="font-size:11px;color:var(--muted);">${p.tracked_trail_label || 'Tracked'}</span>
                    </div>`
                 : `<span style="color:var(--muted);font-size:11px;">—</span>`;
+            const hasExactPlan = p.tracked_entry !== null && p.tracked_entry !== undefined &&
+                                 p.tracked_stop_loss !== null && p.tracked_stop_loss !== undefined &&
+                                 p.tracked_take_profit !== null && p.tracked_take_profit !== undefined;
             const plan = tracked
-                ? `<div style="display:flex;flex-direction:column;gap:2px;font-size:11px;line-height:1.35;">
-                        <span><span style="color:var(--muted);">Underlying:</span> <span style="font-family:monospace;">${p.tracked_underlying || '—'}</span></span>
-                        <span><span style="color:var(--muted);">Dir:</span> ${String(p.tracked_direction || '—').toUpperCase()}</span>
-                        <span><span style="color:var(--muted);">Entry:</span> <span style="font-family:monospace;">$${parseFloat(p.tracked_entry || 0).toFixed(2)}</span></span>
-                        <span><span style="color:var(--muted);">SL:</span> <span style="font-family:monospace;color:var(--red);">$${parseFloat(p.tracked_stop_loss || 0).toFixed(2)}</span></span>
-                        <span><span style="color:var(--muted);">TP:</span> <span style="font-family:monospace;color:var(--green);">$${parseFloat(p.tracked_take_profit || 0).toFixed(2)}</span></span>
-                        <span><span style="color:var(--muted);">Peak:</span> <span style="font-family:monospace;">$${parseFloat(p.tracked_peak_close || 0).toFixed(2)}</span></span>
-                        <span><span style="color:var(--muted);">Reversals:</span> ${p.tracked_reversal_count ?? 0}</span>
-                   </div>`
+                ? (hasExactPlan
+                    ? `<div style="display:flex;flex-direction:column;gap:2px;font-size:11px;line-height:1.35;">
+                            <span><span style="color:var(--muted);">Underlying:</span> <span style="font-family:monospace;">${p.tracked_underlying || '—'}</span></span>
+                            <span><span style="color:var(--muted);">Dir:</span> ${String(p.tracked_direction || '—').toUpperCase()}</span></span>
+                            <span><span style="color:var(--muted);">Entry:</span> <span style="font-family:monospace;">$${parseFloat(p.tracked_entry).toFixed(2)}</span></span>
+                            <span><span style="color:var(--muted);">SL:</span> <span style="font-family:monospace;color:var(--red);">$${parseFloat(p.tracked_stop_loss).toFixed(2)}</span></span>
+                            <span><span style="color:var(--muted);">TP:</span> <span style="font-family:monospace;color:var(--green);">$${parseFloat(p.tracked_take_profit).toFixed(2)}</span></span>
+                            <span><span style="color:var(--muted);">Peak:</span> <span style="font-family:monospace;">$${parseFloat(p.tracked_peak_close || p.tracked_entry).toFixed(2)}</span></span>
+                            <span><span style="color:var(--muted);">Reversals:</span> ${p.tracked_reversal_count ?? 0}</span>
+                       </div>`
+                    : `<div style="display:flex;flex-direction:column;gap:2px;font-size:11px;line-height:1.35;">
+                            <span><span style="color:var(--muted);">Underlying:</span> <span style="font-family:monospace;">${p.tracked_underlying || '—'}</span></span>
+                            <span><span style="color:var(--muted);">Dir:</span> ${String(p.tracked_direction || '—').toUpperCase()}</span></span>
+                            <span><span style="color:var(--muted);">Opt Fill:</span> <span style="font-family:monospace;">$${parseFloat(p.tracked_entry_fill_price || 0).toFixed(2)}</span></span>
+                            <span><span style="color:var(--muted);">Opened:</span> <span style="font-family:monospace;">${p.tracked_order_time || '—'}</span></span>
+                            <span style="color:var(--yellow);">Exact scanner TP/SL unavailable</span>
+                       </div>`)
                 : `<span style="color:var(--muted);font-size:11px;">No app-managed TP/SL tracked.</span>`;
             return `<tr>
                 <td style="font-weight:700;font-family:monospace;font-size:12px;">${p.symbol || '—'}</td>

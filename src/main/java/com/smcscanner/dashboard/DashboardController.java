@@ -738,6 +738,7 @@ public class DashboardController {
     @ResponseBody
     public ResponseEntity<List<Map<String,Object>>> alpacaPositions() {
         List<Map<String,Object>> positions = new ArrayList<>(alpaca.getPositions());
+        List<Map<String, Object>> brokerOrders = alpaca.getOrders();
         for (Map<String, Object> pos : positions) {
             Object tracked = pos.get("tracked");
             boolean alreadyTracked = tracked instanceof Boolean b && b;
@@ -749,19 +750,37 @@ public class DashboardController {
             String symbol = String.valueOf(pos.getOrDefault("symbol", ""));
             String underlying = underlyingFromOcc(symbol);
             Map<String, Object> openTrade = liveLog.findOpenTradeForPosition(symbol, underlying);
-            if (openTrade == null) continue;
+            if (openTrade != null) {
+                pos.put("tracked", true);
+                pos.put("tracked_underlying", underlying);
+                pos.put("tracked_direction", openTrade.get("direction"));
+                pos.put("tracked_entry", openTrade.get("entry"));
+                pos.put("tracked_stop_loss", openTrade.get("stopLoss"));
+                pos.put("tracked_take_profit", openTrade.get("takeProfit"));
+                pos.put("tracked_peak_close", openTrade.get("entry"));
+                pos.put("tracked_reversal_count", 0);
+                pos.put("tracked_options_contract", openTrade.get("optionsContract"));
+                pos.put("tracked_trail_label", "Recovered from trade log");
+                pos.put("tracked_trail_method", "Recovered from live trade log (app tracker missing)");
+                continue;
+            }
+
+            Map<String, Object> buyOrder = recoverFilledBuyOrderForOption(brokerOrders, symbol);
+            if (buyOrder == null) continue;
 
             pos.put("tracked", true);
             pos.put("tracked_underlying", underlying);
-            pos.put("tracked_direction", openTrade.get("direction"));
-            pos.put("tracked_entry", openTrade.get("entry"));
-            pos.put("tracked_stop_loss", openTrade.get("stopLoss"));
-            pos.put("tracked_take_profit", openTrade.get("takeProfit"));
-            pos.put("tracked_peak_close", openTrade.get("entry"));
-            pos.put("tracked_reversal_count", 0);
-            pos.put("tracked_options_contract", openTrade.get("optionsContract"));
-            pos.put("tracked_trail_label", "Recovered from trade log");
-            pos.put("tracked_trail_method", "Recovered from live trade log (app tracker missing)");
+            pos.put("tracked_direction", inferDirectionFromOcc(symbol));
+            pos.put("tracked_options_contract", symbol);
+            pos.put("tracked_entry", null);
+            pos.put("tracked_stop_loss", null);
+            pos.put("tracked_take_profit", null);
+            pos.put("tracked_peak_close", null);
+            pos.put("tracked_reversal_count", null);
+            pos.put("tracked_entry_fill_price", buyOrder.get("filled_avg_price"));
+            pos.put("tracked_order_time", buyOrder.get("created_at"));
+            pos.put("tracked_trail_label", "Recovered from Alpaca");
+            pos.put("tracked_trail_method", "Broker fill found, but original scanner TP/SL was not recoverable");
         }
         return ResponseEntity.ok(positions);
     }
@@ -795,6 +814,26 @@ public class DashboardController {
         int idx = 0;
         while (idx < normalized.length() && !Character.isDigit(normalized.charAt(idx))) idx++;
         return idx > 0 ? normalized.substring(0, idx) : normalized;
+    }
+
+    private String inferDirectionFromOcc(String symbol) {
+        String normalized = symbol == null ? "" : (symbol.startsWith("O:") ? symbol.substring(2) : symbol);
+        int idx = 0;
+        while (idx < normalized.length() && !Character.isDigit(normalized.charAt(idx))) idx++;
+        if (idx + 6 >= normalized.length()) return "unknown";
+        char cp = normalized.charAt(idx + 6);
+        return cp == 'P' ? "short" : cp == 'C' ? "long" : "unknown";
+    }
+
+    private Map<String, Object> recoverFilledBuyOrderForOption(List<Map<String, Object>> orders, String symbol) {
+        String normalized = symbol == null ? "" : (symbol.startsWith("O:") ? symbol.substring(2) : symbol);
+        return orders.stream()
+                .filter(o -> "filled".equalsIgnoreCase(String.valueOf(o.getOrDefault("status", ""))))
+                .filter(o -> "buy".equalsIgnoreCase(String.valueOf(o.getOrDefault("side", ""))))
+                .filter(o -> normalized.equalsIgnoreCase(String.valueOf(o.getOrDefault("symbol", ""))))
+                .max(Comparator.comparing(o -> String.valueOf(o.getOrDefault("created_at", ""))))
+                .map(LinkedHashMap::new)
+                .orElse(null);
     }
 
     /**
