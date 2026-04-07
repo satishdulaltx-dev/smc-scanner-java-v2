@@ -36,9 +36,7 @@ public class AlpacaOrderService {
     private static final Logger log = LoggerFactory.getLogger(AlpacaOrderService.class);
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
     private static final ZoneId ET = ZoneId.of("America/New_York");
-    private static final String TRACKED_FILE_PATH = System.getenv("TRADE_LOG_DIR") != null
-            ? System.getenv("TRADE_LOG_DIR").replaceAll("/$", "") + "/tracked-positions.json"
-            : "data/tracked-positions.json";
+    private static final String TRACKED_FILE_PATH = resolveStoragePath("tracked-positions.json");
 
     private final ScannerConfig config;
     private final PolygonClient polygon;
@@ -1060,6 +1058,18 @@ public class AlpacaOrderService {
         } catch (Exception e) {
             log.warn("Could not persist tracked positions: {}", e.getMessage());
         }
+    }
+
+    private static String resolveStoragePath(String fileName) {
+        String envDir = System.getenv("TRADE_LOG_DIR");
+        if (envDir != null && !envDir.isBlank()) {
+            return envDir.replaceAll("/$", "") + "/" + fileName;
+        }
+        File railwayVolume = new File("/data");
+        if (railwayVolume.exists() && railwayVolume.isDirectory() && railwayVolume.canWrite()) {
+            return "/data/" + fileName;
+        }
+        return "data/" + fileName;
     }
 
     private PositionCheck findExistingPositionForTicker(String ticker) {

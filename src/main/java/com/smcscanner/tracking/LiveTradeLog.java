@@ -33,11 +33,7 @@ import java.util.stream.Collectors;
 @Service
 public class LiveTradeLog {
     private static final Logger log = LoggerFactory.getLogger(LiveTradeLog.class);
-    // TRADE_LOG_DIR env var lets Railway volume be mounted at e.g. /data
-    // Set TRADE_LOG_DIR=/data in Railway + add a Volume mounted at /data
-    private static final String FILE_PATH = System.getenv("TRADE_LOG_DIR") != null
-            ? System.getenv("TRADE_LOG_DIR").replaceAll("/$", "") + "/live-trades.json"
-            : "data/live-trades.json";
+    private static final String FILE_PATH = resolveStoragePath("live-trades.json");
     private static final ZoneId ET = ZoneId.of("America/New_York");
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm");
@@ -63,6 +59,8 @@ public class LiveTradeLog {
             } catch (Exception e) {
                 log.warn("Could not load live trades: {}", e.getMessage());
             }
+        } else {
+            log.warn("Live trade log file not found at {} — starting with empty history", FILE_PATH);
         }
     }
 
@@ -613,11 +611,24 @@ public class LiveTradeLog {
 
     private void persist() {
         try {
-            File dir = new File("data");
-            if (!dir.exists()) dir.mkdirs();
-            mapper.writerWithDefaultPrettyPrinter().writeValue(new File(FILE_PATH), trades);
+            File f = new File(FILE_PATH);
+            File dir = f.getParentFile();
+            if (dir != null && !dir.exists()) dir.mkdirs();
+            mapper.writerWithDefaultPrettyPrinter().writeValue(f, trades);
         } catch (IOException e) {
             log.error("Failed to persist live trades: {}", e.getMessage());
         }
+    }
+
+    private static String resolveStoragePath(String fileName) {
+        String envDir = System.getenv("TRADE_LOG_DIR");
+        if (envDir != null && !envDir.isBlank()) {
+            return envDir.replaceAll("/$", "") + "/" + fileName;
+        }
+        File railwayVolume = new File("/data");
+        if (railwayVolume.exists() && railwayVolume.isDirectory() && railwayVolume.canWrite()) {
+            return "/data/" + fileName;
+        }
+        return "data/" + fileName;
     }
 }
