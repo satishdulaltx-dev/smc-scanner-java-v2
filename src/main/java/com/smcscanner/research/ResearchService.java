@@ -7,25 +7,37 @@ import com.smcscanner.config.ScannerConfig;
 import com.smcscanner.model.TickerProfile;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 @Service
 public class ResearchService {
     private static final int[] WINDOWS = {90, 180, 365};
     private static final String[] STRATEGIES = {"smc", "vwap", "breakout", "keylevel"};
     private static final int MIN_BEST_STRATEGY_TRADES = 8;
+    private static final ZoneId ET = ZoneId.of("America/New_York");
 
     private final BacktestService backtestService;
     private final ScannerConfig config;
+    private final Map<BacktestExitStyle, ResearchRunState> runStates = new ConcurrentHashMap<>();
+    private final ExecutorService executor = Executors.newSingleThreadExecutor();
 
     public ResearchService(BacktestService backtestService, ScannerConfig config) {
         this.backtestService = backtestService;
         this.config = config;
+        for (BacktestExitStyle style : BacktestExitStyle.values()) {
+            runStates.put(style, new ResearchRunState());
+        }
     }
 
     public ResearchReport runWatchlistResearch() {
@@ -62,6 +74,64 @@ public class ResearchService {
                 exitStyle.label(),
                 rows
         );
+    }
+
+    public ResearchStatus getStatus(BacktestExitStyle exitStyle) {
+        ResearchRunState state = runStates.get(exitStyle);
+        if (state == null) state = new ResearchRunState();
+        ResearchReport cached = state.lastReport;
+        return new ResearchStatus(
+                exitStyle.name(),
+                exitStyle.label(),
+                state.running,
+                state.lastStartedAt,
+                state.lastCompletedAt,
+                state.lastError,
+                cached != null,
+                cached,
+                elapsedSeconds(state)
+        );
+    }
+
+    public ResearchStatus startRefresh(BacktestExitStyle exitStyle) {
+        ResearchRunState state = runStates.computeIfAbsent(exitStyle, ignored -> new ResearchRunState());
+        synchronized (state) {
+            if (state.running) {
+                return getStatus(exitStyle);
+            }
+            state.running = true;
+            state.lastStartedAt = ZonedDateTime.now(ET);
+            state.lastError = null;
+        }
+
+        executor.submit(() -> {
+            try {
+                ResearchReport report = runWatchlistResearch(exitStyle);
+                synchronized (state) {
+                    state.lastReport = report;
+                    state.lastCompletedAt = ZonedDateTime.now(ET);
+                    state.lastError = null;
+                }
+            } catch (Exception e) {
+                synchronized (state) {
+                    state.lastError = e.getMessage();
+                    state.lastCompletedAt = ZonedDateTime.now(ET);
+                }
+            } finally {
+                synchronized (state) {
+                    state.running = false;
+                }
+            }
+        });
+
+        return getStatus(exitStyle);
+    }
+
+    private long elapsedSeconds(ResearchRunState state) {
+        if (state.lastStartedAt == null) return 0;
+        ZonedDateTime end = state.running ? ZonedDateTime.now(ET)
+                : (state.lastCompletedAt != null ? state.lastCompletedAt : ZonedDateTime.now(ET));
+        return Math.max(0, Duration.between(state.lastStartedAt, end).getSeconds());
     }
 
     private TickerResearch analyzeTicker(String ticker, BacktestExitStyle exitStyle) {
@@ -276,6 +346,18 @@ public class ResearchService {
             List<TickerResearch> tickers
     ) {}
 
+    public record ResearchStatus(
+            String exitStyle,
+            String exitStyleLabel,
+            boolean running,
+            ZonedDateTime lastStartedAt,
+            ZonedDateTime lastCompletedAt,
+            String lastError,
+            boolean hasCachedReport,
+            ResearchReport report,
+            long elapsedSeconds
+    ) {}
+
     public record TickerResearch(
             String ticker,
             String currentStrategy,
@@ -328,4 +410,12 @@ public class ResearchService {
             double timeoutRate,
             double confCapReliance
     ) {}
+
+    private static class ResearchRunState {
+        private volatile boolean running;
+        private volatile ZonedDateTime lastStartedAt;
+        private volatile ZonedDateTime lastCompletedAt;
+        private volatile String lastError;
+        private volatile ResearchReport lastReport;
+    }
 }

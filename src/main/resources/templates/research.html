@@ -29,6 +29,7 @@
             background:#11161d; color:var(--text); border:1px solid var(--border);
             border-radius:8px; padding:10px 12px; font-size:12px; font-weight:700;
         }
+        .status-note { color:var(--muted); font-size:12px; padding:12px 24px 0; min-height:20px; }
         .run-btn { padding:10px 18px; border-radius:8px; border:none; background:var(--blue); color:#0d1117; font-weight:800; cursor:pointer; }
         .run-btn:disabled { opacity:.45; cursor:not-allowed; }
         .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; padding:20px 24px 0; }
@@ -94,6 +95,8 @@
     </div>
 </div>
 
+<div class="status-note" id="status-note">Cached research will appear here once a run completes.</div>
+
 <div class="stats" id="stats" style="display:none"></div>
 
 <div class="content">
@@ -114,6 +117,8 @@
 </div>
 
 <script>
+let pollHandle = null;
+
 function fmtSigned(n, suffix = '%') {
     if (n === null || n === undefined) return '—';
     const val = Number(n);
@@ -136,6 +141,10 @@ function renderStats(data) {
     `;
     document.getElementById('footer-copy').textContent =
         `Research is currently using ${data.exitStyleLabel}. It combines 90d, 180d, and 365d windows with a 180d strategy comparison across SMC, VWAP, breakout, and key level. "Best strategy" requires a minimum sample.`;
+}
+
+function setStatusNote(text) {
+    document.getElementById('status-note').textContent = text;
 }
 
 function renderTickerCard(row) {
@@ -226,31 +235,112 @@ async function runResearch() {
     const exitStyle = document.getElementById('exit-style').value;
     const loading = document.getElementById('loading');
     const empty = document.getElementById('empty');
-    const section = document.getElementById('ticker-section');
-    const grid = document.getElementById('ticker-grid');
 
     btn.disabled = true;
     loading.style.display = 'block';
     empty.style.display = 'none';
-    section.style.display = 'none';
-    grid.innerHTML = '';
+    setStatusNote(`Starting ${exitStyle === 'LIVE_PARITY' ? 'Live Parity Trail' : 'Classic TP / SL'} research run...`);
 
     try {
-        const res = await fetch(`/api/research?exitStyle=${encodeURIComponent(exitStyle)}`);
+        const res = await fetch(`/api/research/run?exitStyle=${encodeURIComponent(exitStyle)}`, {
+            method: 'POST'
+        });
         const data = await res.json();
         if (!res.ok || data.error) throw new Error(data.error || 'Research failed');
-
-        renderStats(data);
-        grid.innerHTML = data.tickers.map(renderTickerCard).join('');
-        section.style.display = 'block';
+        startPolling(exitStyle);
     } catch (err) {
         empty.textContent = `Research failed: ${err.message}`;
         empty.style.display = 'block';
-    } finally {
-        btn.disabled = false;
         loading.style.display = 'none';
+        btn.disabled = false;
+        setStatusNote(`Research failed to start: ${err.message}`);
     }
 }
+
+async function fetchCachedResearch(exitStyle) {
+    const res = await fetch(`/api/research?exitStyle=${encodeURIComponent(exitStyle)}`);
+    const data = await res.json();
+    if (res.status === 202) return null;
+    if (!res.ok || data.error) throw new Error(data.error || 'Research failed');
+    return data;
+}
+
+async function refreshStatus(exitStyle) {
+    const btn = document.getElementById('run-btn');
+    const loading = document.getElementById('loading');
+    const empty = document.getElementById('empty');
+    const section = document.getElementById('ticker-section');
+    const grid = document.getElementById('ticker-grid');
+
+    const res = await fetch(`/api/research/status?exitStyle=${encodeURIComponent(exitStyle)}`);
+    const status = await res.json();
+    if (!res.ok || status.error) throw new Error(status.error || 'Status failed');
+
+    if (status.running) {
+        btn.disabled = true;
+        loading.style.display = 'block';
+        empty.style.display = 'none';
+        setStatusNote(`Research is running in ${status.exitStyleLabel}. Elapsed: ${Number(status.elapsedSeconds || 0)}s.`);
+        return;
+    }
+
+    btn.disabled = false;
+    loading.style.display = 'none';
+
+    if (status.lastError) {
+        empty.textContent = `Research failed: ${status.lastError}`;
+        empty.style.display = 'block';
+        setStatusNote(`Last ${status.exitStyleLabel} run failed.`);
+        stopPolling();
+        return;
+    }
+
+    if (status.hasCachedReport) {
+        const data = status.report || await fetchCachedResearch(exitStyle);
+        if (data) {
+            renderStats(data);
+            grid.innerHTML = data.tickers.map(renderTickerCard).join('');
+            section.style.display = 'block';
+            empty.style.display = 'none';
+            const completed = status.lastCompletedAt ? new Date(status.lastCompletedAt).toLocaleString() : 'just now';
+            setStatusNote(`Showing cached ${status.exitStyleLabel} research. Last completed: ${completed}.`);
+            stopPolling();
+            return;
+        }
+    }
+
+    section.style.display = 'none';
+    empty.style.display = 'block';
+    empty.textContent = 'No cached research yet. Start a run to build the first result.';
+    setStatusNote(`No cached ${status.exitStyleLabel} research yet.`);
+    stopPolling();
+}
+
+function stopPolling() {
+    if (pollHandle) {
+        clearInterval(pollHandle);
+        pollHandle = null;
+    }
+}
+
+function startPolling(exitStyle) {
+    stopPolling();
+    refreshStatus(exitStyle).catch(err => setStatusNote(`Status check failed: ${err.message}`));
+    pollHandle = setInterval(() => {
+        refreshStatus(exitStyle).catch(err => {
+            stopPolling();
+            setStatusNote(`Status check failed: ${err.message}`);
+        });
+    }, 5000);
+}
+
+document.getElementById('exit-style').addEventListener('change', (e) => {
+    startPolling(e.target.value);
+});
+
+window.addEventListener('load', () => {
+    startPolling(document.getElementById('exit-style').value);
+});
 </script>
 </body>
 </html>

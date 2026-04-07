@@ -530,9 +530,42 @@ public class DashboardController {
             @org.springframework.web.bind.annotation.RequestParam(defaultValue="CLASSIC") String exitStyle) {
         try {
             var btExit = BacktestExitStyle.fromString(exitStyle);
-            return ResponseEntity.ok(researchService.runWatchlistResearch(btExit));
+            var status = researchService.getStatus(btExit);
+            if (status.hasCachedReport()) return ResponseEntity.ok(status.report());
+            return ResponseEntity.status(202).body(Map.of(
+                    "status", "warming",
+                    "message", "No cached research yet for " + btExit.label() + ". Start a run first.",
+                    "exitStyle", btExit.name(),
+                    "exitStyleLabel", btExit.label()
+            ));
         } catch (Exception e) {
             log.error("Research error: {}", e.getMessage(), e);
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/api/research/status")
+    @ResponseBody
+    public ResponseEntity<?> apiResearchStatus(
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue="CLASSIC") String exitStyle) {
+        try {
+            var btExit = BacktestExitStyle.fromString(exitStyle);
+            return ResponseEntity.ok(researchService.getStatus(btExit));
+        } catch (Exception e) {
+            log.error("Research status error: {}", e.getMessage(), e);
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/api/research/run")
+    @ResponseBody
+    public ResponseEntity<?> apiResearchRun(
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue="CLASSIC") String exitStyle) {
+        try {
+            var btExit = BacktestExitStyle.fromString(exitStyle);
+            return ResponseEntity.accepted().body(researchService.startRefresh(btExit));
+        } catch (Exception e) {
+            log.error("Research start error: {}", e.getMessage(), e);
             return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
         }
     }
