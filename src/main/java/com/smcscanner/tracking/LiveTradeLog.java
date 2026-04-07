@@ -79,6 +79,8 @@ public class LiveTradeLog {
         record.put("confidence", s.getConfidence());
         record.put("strategy", strategyType);
         record.put("atr", s.getAtr());
+        record.put("optionsContract", s.getOptionsContract());
+        record.put("optionsPremium", s.getOptionsPremium());
         record.put("date", now.format(DATE_FMT));
         record.put("time", now.format(TIME_FMT));
         record.put("timestamp", now.toInstant().toEpochMilli());
@@ -223,6 +225,7 @@ public class LiveTradeLog {
         Map<String, List<Map<String, Object>>> byTicker = openTrades.stream()
                 .collect(Collectors.groupingBy(t -> (String) t.get("ticker")));
         Set<String> brokerOpenTickers = getBrokerOpenTickers();
+        Map<String, List<Map<String, Object>>> recentFilledOrders = getRecentFilledOrdersBySymbol();
 
         int resolved = 0;
         for (Map.Entry<String, List<Map<String, Object>>> e : byTicker.entrySet()) {
@@ -273,15 +276,21 @@ public class LiveTradeLog {
 
                     boolean brokerStillOpen = brokerOpenTickers.contains(ticker);
                     if (outcome == null && !brokerStillOpen) {
-                        if (Math.abs(pnlPct) < 0.10) {
-                            outcome = "BE_STOP";
-                            pnlPct = 0.0;
-                        } else if (pnlPct > 0) {
-                            outcome = "WIN";
+                        boolean resolvedFromOrders = applyBrokerRealizedPnl(t, recentFilledOrders);
+                        if (resolvedFromOrders) {
+                            outcome = (String) t.get("outcome");
+                            pnlPct = ((Number) t.getOrDefault("pnlPct", 0.0)).doubleValue();
                         } else {
-                            outcome = "LOSS";
+                            if (Math.abs(pnlPct) < 0.10) {
+                                outcome = "BE_STOP";
+                                pnlPct = 0.0;
+                            } else if (pnlPct > 0) {
+                                outcome = "WIN";
+                            } else {
+                                outcome = "LOSS";
+                            }
+                            t.put("resolutionSource", "ALPACA_FLAT");
                         }
-                        t.put("resolutionSource", "ALPACA_FLAT");
                     }
 
                     if (outcome != null) {
@@ -312,6 +321,85 @@ public class LiveTradeLog {
         if (resolved > 0) {
             persist();
             log.info("Auto-resolved {} open trades via price check", resolved);
+        }
+    }
+
+    private boolean applyBrokerRealizedPnl(Map<String, Object> trade, Map<String, List<Map<String, Object>>> filledOrdersBySymbol) {
+        String optionsContract = String.valueOf(trade.getOrDefault("optionsContract", ""));
+        if (optionsContract.isBlank()) return false;
+        String symbol = normalizeOptionSymbol(optionsContract);
+        List<Map<String, Object>> orders = filledOrdersBySymbol.getOrDefault(symbol, List.of());
+        if (orders.isEmpty()) return false;
+
+        long tradeTs = ((Number) trade.getOrDefault("timestamp", 0L)).longValue();
+        Map<String, Object> buyOrder = null;
+        Map<String, Object> sellOrder = null;
+        for (Map<String, Object> order : orders) {
+            String side = String.valueOf(order.getOrDefault("side", ""));
+            long ts = ((Number) order.getOrDefault("created_at_epoch", 0L)).longValue();
+            if ("buy".equalsIgnoreCase(side) && ts >= tradeTs - 3_600_000L) {
+                if (buyOrder == null || ts < ((Number) buyOrder.getOrDefault("created_at_epoch", 0L)).longValue()) {
+                    buyOrder = order;
+                }
+            }
+            if ("sell".equalsIgnoreCase(side) && ts >= tradeTs) {
+                if (sellOrder == null || ts > ((Number) sellOrder.getOrDefault("created_at_epoch", 0L)).longValue()) {
+                    sellOrder = order;
+                }
+            }
+        }
+        if (buyOrder == null || sellOrder == null) return false;
+
+        double entryFill = toDouble(buyOrder.get("filled_avg_price"));
+        double exitFill = toDouble(sellOrder.get("filled_avg_price"));
+        if (entryFill <= 0 || exitFill <= 0) return false;
+
+        double pnlPct = (exitFill - entryFill) / entryFill * 100.0;
+        String outcome = Math.abs(pnlPct) < 0.10 ? "BE_STOP" : (pnlPct > 0 ? "WIN" : "LOSS");
+        trade.put("outcome", outcome);
+        trade.put("pnlPct", Math.round(pnlPct * 100.0) / 100.0);
+        trade.put("exitPrice", exitFill);
+        trade.put("entryFillPrice", entryFill);
+        trade.put("resolutionSource", "ALPACA_ORDERS");
+        trade.put("brokerSymbol", symbol);
+        trade.put("brokerExitAt", sellOrder.get("created_at"));
+        return true;
+    }
+
+    private Map<String, List<Map<String, Object>>> getRecentFilledOrdersBySymbol() {
+        if (alpaca == null || !alpaca.isEnabled()) return Map.of();
+        try {
+            return alpaca.getOrders().stream()
+                    .filter(o -> "filled".equalsIgnoreCase(String.valueOf(o.getOrDefault("status", ""))))
+                    .peek(o -> o.put("created_at_epoch", parseEpoch(String.valueOf(o.getOrDefault("created_at", "")))))
+                    .collect(Collectors.groupingBy(o -> normalizeOptionSymbol(String.valueOf(o.getOrDefault("symbol", "")))));
+        } catch (Exception e) {
+            log.warn("Could not fetch Alpaca filled orders for realized P&L: {}", e.getMessage());
+            return Map.of();
+        }
+    }
+
+    private long parseEpoch(String isoTs) {
+        if (isoTs == null || isoTs.isBlank()) return 0L;
+        try {
+            return Instant.parse(isoTs).toEpochMilli();
+        } catch (Exception ignored) {
+            return 0L;
+        }
+    }
+
+    private String normalizeOptionSymbol(String symbol) {
+        if (symbol == null) return "";
+        return symbol.startsWith("O:") ? symbol.substring(2) : symbol;
+    }
+
+    private double toDouble(Object value) {
+        if (value == null) return 0.0;
+        if (value instanceof Number n) return n.doubleValue();
+        try {
+            return Double.parseDouble(String.valueOf(value));
+        } catch (Exception ignored) {
+            return 0.0;
         }
     }
 
