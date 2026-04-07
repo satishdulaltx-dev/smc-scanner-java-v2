@@ -3,22 +3,23 @@
     {
       "ticker": "AAPL",
       "strategyType": "keylevel",
-      "minConfidence": 75,
+      "minConfidence": 78,
       "slAtrMult": 0.4,
-      "tpRrRatio": 2.0,
-      "intradayRsGate": false,
+      "tpRrRatio": 1.25,
+      "intradayRsGate": true,
       "skip": false,
       "skipReason": null,
-      "note": "Optimizer Mar 2026: VWAP→KeyLevel. VWAP produced 0 viable trades. KeyLevel 62/0.4/2:1 = 17 trades, 40% WR, +0.05% exp, $266 opt P&L. SMC 1:1 also viable (50% WR, $402 opt). DO NOT SKIP."
+      "note": "Apr 2026 live-parity retune: keep KeyLevel but tighten it. Raised minConf to 78, enabled intraday RS gate, and trimmed TP ratio to 1.25 so AAPL aims for the nearer prior-high objective instead of a stretch target. Goal is fewer wall-buy entries and cleaner level reactions."
     },
     {
       "ticker": "ABNB",
       "strategyType": "smc",
-      "minConfidence": 75,
+      "minConfidence": 78,
       "maxConfidence": 84,
       "slAtrMult": 1.0,
-      "tpRrRatio": 1.5,
-      "note": "Apr 2026: Targeting SMC 75-84 sweet spot only. Tested KeyLevel (0%WR), VWAP (20%WR), SMC mc=62 (44%WR). Only SMC 75-84 bucket showed edge: 7/7 100%WR. Low frequency (~7 trades/year) but zero losses. minConf=75 + maxConf=84 isolates that band."
+      "tpRrRatio": 1.25,
+      "intradayRsGate": true,
+      "note": "Apr 2026 live-parity retune: keep ABNB on SMC but make it more selective. Raised minConf to 78, enabled RS gating, and trimmed TP ratio to 1.25. Live-parity exits were positive, but the edge was still not clean enough to trust loose entries."
     },
     {
       "ticker": "AMD",
@@ -31,13 +32,15 @@
     {
       "ticker": "AMZN",
       "strategyType": "smc",
-      "minConfidence": 62,
+      "minConfidence": 72,
+      "maxConfidence": 84,
       "minFvgPct": 0.0005,
       "dispAtrMult": 1.3,
+      "tpRrRatio": 1.25,
       "intradayRsGate": true,
       "skip": false,
       "skipReason": null,
-      "note": "Switched VWAP→SMC Mar 2026: VWAP 0%WR (5 trades), ORB 0%WR (0 trades). AMZN has strong FVG mechanics when trending. SMC with relaxed thresholds + RS gate (trend-following needs RS). DO NOT SKIP."
+      "note": "Apr 2026 live-parity retune: SMC remains the best fit, but defaults were too loose. Raised minConf to 72, added maxConf=84 to avoid late/exhausted entries, and trimmed TP ratio to 1.25. AMZN improved under trailing exits but still needs tighter selection."
     },
     {
       "ticker": "BA",
@@ -96,11 +99,12 @@
     },
     {
       "ticker": "JPM",
-      "strategyType": "vwap",
-      "minConfidence": 62,
+      "strategyType": "keylevel",
+      "minConfidence": 72,
       "maxConfidence": 84,
-      "tpRrRatio": 1.5,
-      "note": "Apr 2026: VWAP mc=62 tp=1.5 maxConf=84 → 365d 21t 53%WR +0.31% exp +$1186 opt P&L. Reversed-confidence pattern: 85+ bucket 0%WR (0/12) vs <75 bucket 38.5%WR (5/13). maxConf=84 caps late/exhausted entries."
+      "slAtrMult": 0.5,
+      "tpRrRatio": 1.25,
+      "note": "Apr 2026 live-parity retune: move JPM from VWAP to KeyLevel. Live-parity research showed the level-based lens was more stable than the old VWAP assignment. Use a tighter 0.5 ATR stop and 1.25R target to focus on cleaner bank-stock rejection setups."
     },
     {
       "ticker": "MARA",
@@ -162,12 +166,13 @@
     {
       "ticker": "NVDA",
       "strategyType": "smc",
-      "minConfidence": 72,
+      "minConfidence": 75,
       "maxConfidence": 84,
       "minFvgPct": 0.0005,
       "dispAtrMult": 1.3,
+      "tpRrRatio": 1.25,
       "intradayRsGate": true,
-      "note": "Loosened Mar 2026: 80-89 window was too narrow (3 trades/17 filtered). 72 + no maxConf cap lets more setups through. With 1.5:1 R:R (no more 0.8 compression), 35% WR is profitable."
+      "note": "Apr 2026 live-parity retune: keep NVDA on SMC but tighten the entry bar slightly. minConf=75 + maxConf=84 retains the earlier-entry band, with tpRrRatio=1.25 to avoid stretching targets too far on names where trailing is doing most of the winner management."
     },
     {
       "ticker": "PLTR",
@@ -192,11 +197,13 @@
     },
     {
       "ticker": "RIVN",
+      "strategyType": "smc",
       "minConfidence": 78,
       "minFvgPct": 0.001,
       "dispAtrMult": 1.5,
       "minVolMult": 1.8,
-      "note": "RESTORED Mar 2026: 90d backtest shows 58.3% WR +0.88% expectancy — one of the best performers. Skip was based on stale 30d data from Polygon sort bug era. maxConf=84 Mar 2026: applying reversed-pattern cap as a precaution given its high-beta nature.",
+      "tpRrRatio": 1.25,
+      "note": "Apr 2026 live-parity retune: RIVN stays on SMC for now, but sample quality is still shaky. Keep the higher confidence bar, retain maxConf=84, and use a closer 1.25R target while waiting for a cleaner sample before making a strategy switch.",
       "maxConfidence": 84
     },
     {
@@ -232,18 +239,21 @@
     },
     {
       "ticker": "SOFI",
+      "strategyType": "smc",
       "minConfidence": 78,
       "slAtrMult": 1.0,
-      "note": "365d optimizer: SMC mc=78 sl=1.0 → 9t 78%WR +3.28% exp $296 opt P&L. Higher confidence bar + wider stop eliminates noise trades. maxConf=84 retained.",
+      "tpRrRatio": 1.0,
+      "note": "Apr 2026 live-parity review: keep SOFI active, but treat it as exit-model-sensitive. SMC with higher confidence and maxConf=84 stays in place; tpRrRatio=1.0 keeps the first target close and lets the trail do the rest.",
       "maxConfidence": 84
     },
     {
       "ticker": "SPY",
       "strategyType": "smc",
-      "note": "365d optimizer: SMC mc=70 sl=1.0 tp=2.0 → 11t 56%WR +0.36% exp $1709 opt P&L. VWAP had negative expectancy. SMC with wider stop/TP better captures index momentum.",
+      "note": "Apr 2026 live-parity keep: SPY improved materially under trailing exits. Keep SMC, but cap late entries and use a nearer primary objective so the trail can manage the rest.",
       "minConfidence": 70,
+      "maxConfidence": 84,
       "slAtrMult": 1.0,
-      "tpRrRatio": 2.0,
+      "tpRrRatio": 1.25,
       "skip": false,
       "skipReason": null
     },
@@ -258,10 +268,12 @@
       "ticker": "TSLA",
       "strategyType": "smc",
       "minConfidence": 72,
+      "maxConfidence": 84,
       "minFvgPct": 0.001,
       "dispAtrMult": 1.6,
       "slAtrMult": 1.0,
-      "note": "365d optimizer: SMC mc=62-78 sl=1.0 tp=1.5 → 6t 67%WR +1.08% exp $2155 opt P&L. Tighter stop (1.0 vs 1.5 ATR) reduces loss per trade while maintaining 67% WR. DO NOT SKIP."
+      "tpRrRatio": 1.25,
+      "note": "Apr 2026 live-parity retune: TSLA remains an SMC name, but its edge is still noisy. Add maxConf=84 to avoid late/exhausted entries and trim TP ratio to 1.25 so the trail can lock trend continuation instead of waiting for a distant fixed target."
     },
     {
       "ticker": "UBER",
