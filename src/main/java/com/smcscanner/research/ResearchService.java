@@ -16,6 +16,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -125,6 +126,49 @@ public class ResearchService {
         });
 
         return getStatus(exitStyle);
+    }
+
+    public ResearchComparison getComparison() {
+        ResearchReport classic = getStatus(BacktestExitStyle.CLASSIC).report();
+        ResearchReport live = getStatus(BacktestExitStyle.LIVE_PARITY).report();
+        if (classic == null || live == null) {
+            return new ResearchComparison(false, false, false, 0, 0, 0, List.of());
+        }
+
+        Map<String, TickerResearch> classicMap = classic.tickers().stream()
+                .collect(java.util.stream.Collectors.toMap(TickerResearch::ticker, Function.identity()));
+        Map<String, TickerResearch> liveMap = live.tickers().stream()
+                .collect(java.util.stream.Collectors.toMap(TickerResearch::ticker, Function.identity()));
+
+        List<TickerComparison> rows = new ArrayList<>();
+        for (String ticker : classicMap.keySet()) {
+            TickerResearch c = classicMap.get(ticker);
+            TickerResearch l = liveMap.get(ticker);
+            if (c == null || l == null) continue;
+            rows.add(new TickerComparison(
+                    ticker,
+                    c.recommendation(),
+                    l.recommendation(),
+                    c.winRate365(),
+                    l.winRate365(),
+                    round2(l.winRate365() - c.winRate365()),
+                    c.expectancy365(),
+                    l.expectancy365(),
+                    round2(l.expectancy365() - c.expectancy365()),
+                    c.timeoutRate365(),
+                    l.timeoutRate365(),
+                    round2(l.timeoutRate365() - c.timeoutRate365())
+            ));
+        }
+
+        rows.sort(Comparator
+                .comparing(TickerComparison::expectancyDelta, Comparator.reverseOrder())
+                .thenComparing(TickerComparison::winRateDelta, Comparator.reverseOrder()));
+
+        int improved = (int) rows.stream().filter(r -> r.expectancyDelta() > 0.05).count();
+        int declined = (int) rows.stream().filter(r -> r.expectancyDelta() < -0.05).count();
+
+        return new ResearchComparison(true, true, true, rows.size(), improved, declined, rows);
     }
 
     private long elapsedSeconds(ResearchRunState state) {
@@ -356,6 +400,31 @@ public class ResearchService {
             boolean hasCachedReport,
             ResearchReport report,
             long elapsedSeconds
+    ) {}
+
+    public record ResearchComparison(
+            boolean classicReady,
+            boolean liveParityReady,
+            boolean comparisonReady,
+            int tickerCount,
+            int improvedCount,
+            int declinedCount,
+            List<TickerComparison> tickers
+    ) {}
+
+    public record TickerComparison(
+            String ticker,
+            String classicRecommendation,
+            String liveRecommendation,
+            double classicWinRate,
+            double liveWinRate,
+            double winRateDelta,
+            double classicExpectancy,
+            double liveExpectancy,
+            double expectancyDelta,
+            double classicTimeoutRate,
+            double liveTimeoutRate,
+            double timeoutDelta
     ) {}
 
     public record TickerResearch(

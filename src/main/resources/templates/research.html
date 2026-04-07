@@ -34,6 +34,7 @@
         .run-btn:disabled { opacity:.45; cursor:not-allowed; }
         .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; padding:20px 24px 0; }
         .card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:16px; }
+        .compare-card { margin:18px 24px 0; }
         .stat-val { font-size:28px; font-weight:800; }
         .stat-lbl { color:var(--muted); font-size:11px; text-transform:uppercase; letter-spacing:.8px; margin-top:4px; }
         .green { color:var(--green); } .red { color:var(--red); } .blue { color:var(--blue); } .yellow { color:var(--yellow); } .purple { color:var(--purple); }
@@ -99,6 +100,26 @@
 
 <div class="stats" id="stats" style="display:none"></div>
 
+<div class="card compare-card" id="compare-card" style="display:none">
+    <div class="section-title" style="margin-top:0">Classic Vs Live Parity</div>
+    <div class="mini-grid" id="compare-stats"></div>
+    <table id="compare-table">
+        <thead>
+        <tr>
+            <th>Ticker</th>
+            <th>Classic WR</th>
+            <th>Live WR</th>
+            <th>WR Δ</th>
+            <th>Classic Exp</th>
+            <th>Live Exp</th>
+            <th>Exp Δ</th>
+            <th>Timeout Δ</th>
+        </tr>
+        </thead>
+        <tbody id="compare-body"></tbody>
+    </table>
+</div>
+
 <div class="content">
     <div class="loading" id="loading">
         <span class="spinner"></span> Running watchlist research. This can take a bit because it reuses the full backtest engine.
@@ -145,6 +166,35 @@ function renderStats(data) {
 
 function setStatusNote(text) {
     document.getElementById('status-note').textContent = text;
+}
+
+function renderComparison(data) {
+    const card = document.getElementById('compare-card');
+    const stats = document.getElementById('compare-stats');
+    const body = document.getElementById('compare-body');
+    if (!data || !data.comparisonReady) {
+        card.style.display = 'none';
+        return;
+    }
+    card.style.display = 'block';
+    stats.innerHTML = `
+        <div class="mini"><div class="v blue">${data.tickerCount}</div><div class="l">Compared</div></div>
+        <div class="mini"><div class="v green">${data.improvedCount}</div><div class="l">Exp Improved</div></div>
+        <div class="mini"><div class="v red">${data.declinedCount}</div><div class="l">Exp Declined</div></div>
+        <div class="mini"><div class="v yellow">${Math.max(0, data.tickerCount - data.improvedCount - data.declinedCount)}</div><div class="l">Mostly Flat</div></div>
+    `;
+    body.innerHTML = data.tickers.slice(0, 12).map(row => `
+        <tr>
+            <td>${row.ticker}</td>
+            <td class="${row.classicWinRate >= 50 ? 'green' : 'red'}">${row.classicWinRate.toFixed(1)}%</td>
+            <td class="${row.liveWinRate >= 50 ? 'green' : 'red'}">${row.liveWinRate.toFixed(1)}%</td>
+            <td class="${row.winRateDelta >= 0 ? 'green' : 'red'}">${fmtSigned(row.winRateDelta)}</td>
+            <td class="${row.classicExpectancy >= 0 ? 'green' : 'red'}">${fmtSigned(row.classicExpectancy)}</td>
+            <td class="${row.liveExpectancy >= 0 ? 'green' : 'red'}">${fmtSigned(row.liveExpectancy)}</td>
+            <td class="${row.expectancyDelta >= 0 ? 'green' : 'red'}">${fmtSigned(row.expectancyDelta)}</td>
+            <td class="${row.timeoutDelta <= 0 ? 'green' : 'red'}">${fmtSigned(row.timeoutDelta)}</td>
+        </tr>
+    `).join('');
 }
 
 function renderTickerCard(row) {
@@ -265,6 +315,13 @@ async function fetchCachedResearch(exitStyle) {
     return data;
 }
 
+async function refreshComparison() {
+    const res = await fetch('/api/research/compare');
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || 'Comparison failed');
+    renderComparison(data);
+}
+
 async function refreshStatus(exitStyle) {
     const btn = document.getElementById('run-btn');
     const loading = document.getElementById('loading');
@@ -299,6 +356,7 @@ async function refreshStatus(exitStyle) {
         const data = status.report || await fetchCachedResearch(exitStyle);
         if (data) {
             renderStats(data);
+            await refreshComparison();
             grid.innerHTML = data.tickers.map(renderTickerCard).join('');
             section.style.display = 'block';
             empty.style.display = 'none';

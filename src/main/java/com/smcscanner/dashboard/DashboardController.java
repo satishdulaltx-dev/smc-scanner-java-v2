@@ -570,6 +570,17 @@ public class DashboardController {
         }
     }
 
+    @GetMapping("/api/research/compare")
+    @ResponseBody
+    public ResponseEntity<?> apiResearchCompare() {
+        try {
+            return ResponseEntity.ok(researchService.getComparison());
+        } catch (Exception e) {
+            log.error("Research compare error: {}", e.getMessage(), e);
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
+    }
+
     // ── Adaptive suppressor endpoints ──────────────────────────────────────────
 
     /** GET /api/adaptive — current streak state for all tickers. */
