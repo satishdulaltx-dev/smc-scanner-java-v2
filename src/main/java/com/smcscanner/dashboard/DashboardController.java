@@ -735,7 +735,33 @@ public class DashboardController {
     @GetMapping("/api/alpaca/positions")
     @ResponseBody
     public ResponseEntity<List<Map<String,Object>>> alpacaPositions() {
-        return ResponseEntity.ok(alpaca.getPositions());
+        List<Map<String,Object>> positions = new ArrayList<>(alpaca.getPositions());
+        for (Map<String, Object> pos : positions) {
+            Object tracked = pos.get("tracked");
+            boolean alreadyTracked = tracked instanceof Boolean b && b;
+            if (alreadyTracked) continue;
+
+            String assetClass = String.valueOf(pos.getOrDefault("asset_class", "us_equity"));
+            if (!"us_option".equals(assetClass)) continue;
+
+            String symbol = String.valueOf(pos.getOrDefault("symbol", ""));
+            String underlying = underlyingFromOcc(symbol);
+            Map<String, Object> openTrade = liveLog.findOpenTradeForPosition(symbol, underlying);
+            if (openTrade == null) continue;
+
+            pos.put("tracked", true);
+            pos.put("tracked_underlying", underlying);
+            pos.put("tracked_direction", openTrade.get("direction"));
+            pos.put("tracked_entry", openTrade.get("entry"));
+            pos.put("tracked_stop_loss", openTrade.get("stopLoss"));
+            pos.put("tracked_take_profit", openTrade.get("takeProfit"));
+            pos.put("tracked_peak_close", openTrade.get("entry"));
+            pos.put("tracked_reversal_count", 0);
+            pos.put("tracked_options_contract", openTrade.get("optionsContract"));
+            pos.put("tracked_trail_label", "Recovered from trade log");
+            pos.put("tracked_trail_method", "Recovered from live trade log (app tracker missing)");
+        }
+        return ResponseEntity.ok(positions);
     }
 
     /** GET /api/alpaca/orders — today's orders. */
@@ -759,6 +785,14 @@ public class DashboardController {
     public ResponseEntity<Map<String,Object>> alpacaCloseEquity() {
         int closed = alpaca.closeAllEquityPositions();
         return ResponseEntity.ok(Map.of("closed_equity_positions", closed));
+    }
+
+    private String underlyingFromOcc(String symbol) {
+        if (symbol == null || symbol.isBlank()) return "";
+        String normalized = symbol.startsWith("O:") ? symbol.substring(2) : symbol;
+        int idx = 0;
+        while (idx < normalized.length() && !Character.isDigit(normalized.charAt(idx))) idx++;
+        return idx > 0 ? normalized.substring(0, idx) : normalized;
     }
 
     /**

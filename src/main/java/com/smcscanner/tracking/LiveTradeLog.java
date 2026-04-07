@@ -135,6 +135,24 @@ public class LiveTradeLog {
         }
     }
 
+    /** Best-effort lookup for the most recent OPEN trade matching a broker position. */
+    public Map<String, Object> findOpenTradeForPosition(String positionSymbol, String underlyingTicker) {
+        String normalizedSymbol = normalizeOptionSymbol(positionSymbol);
+        synchronized (trades) {
+            return trades.stream()
+                    .filter(t -> "OPEN".equals(t.get("outcome")))
+                    .filter(t -> {
+                        String contract = normalizeOptionSymbol(String.valueOf(t.getOrDefault("optionsContract", "")));
+                        String ticker = String.valueOf(t.getOrDefault("ticker", ""));
+                        if (!normalizedSymbol.isBlank() && normalizedSymbol.equalsIgnoreCase(contract)) return true;
+                        return underlyingTicker != null && !underlyingTicker.isBlank() && underlyingTicker.equalsIgnoreCase(ticker);
+                    })
+                    .max(Comparator.comparingLong(t -> ((Number) t.getOrDefault("timestamp", 0L)).longValue()))
+                    .map(LinkedHashMap::new)
+                    .orElse(null);
+        }
+    }
+
     /** Generate a daily summary for a given date. */
     public Map<String, Object> getDailySummary(String date) {
         List<Map<String, Object>> dayTrades = getTradesForDate(date);
