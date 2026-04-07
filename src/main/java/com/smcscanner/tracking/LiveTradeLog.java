@@ -123,11 +123,13 @@ public class LiveTradeLog {
 
     /** Get today's trades. */
     public List<Map<String, Object>> getTodayTrades() {
+        backfillBrokerResolvedPnL();
         return getTradesForDate(ZonedDateTime.now(ET).format(DATE_FMT));
     }
 
     /** Get all trades (for full history report). */
     public List<Map<String, Object>> getAllTrades() {
+        backfillBrokerResolvedPnL();
         synchronized (trades) {
             return new ArrayList<>(trades);
         }
@@ -238,6 +240,8 @@ public class LiveTradeLog {
                 .collect(Collectors.groupingBy(t -> (String) t.get("ticker")));
         Set<String> brokerOpenTickers = getBrokerOpenTickers();
         Map<String, List<Map<String, Object>>> recentFilledOrders = getRecentFilledOrdersBySymbol();
+        Map<String, List<Map<String, Object>>> recentFilledOrdersByUnderlying = getRecentFilledOrdersByUnderlying(recentFilledOrders);
+        Set<String> usedOrderIds = new HashSet<>();
 
         int resolved = 0;
         for (Map.Entry<String, List<Map<String, Object>>> e : byTicker.entrySet()) {
@@ -288,7 +292,7 @@ public class LiveTradeLog {
 
                     boolean brokerStillOpen = brokerOpenTickers.contains(ticker);
                     if (outcome == null && !brokerStillOpen) {
-                        boolean resolvedFromOrders = applyBrokerRealizedPnl(t, recentFilledOrders);
+                        boolean resolvedFromOrders = applyBrokerRealizedPnl(t, recentFilledOrders, recentFilledOrdersByUnderlying, usedOrderIds);
                         if (resolvedFromOrders) {
                             outcome = (String) t.get("outcome");
                             pnlPct = ((Number) t.getOrDefault("pnlPct", 0.0)).doubleValue();
@@ -335,22 +339,59 @@ public class LiveTradeLog {
             persist();
             log.info("Auto-resolved {} open trades via price check", resolved);
         }
+        backfillBrokerResolvedPnL();
     }
 
-    private boolean applyBrokerRealizedPnl(Map<String, Object> trade, Map<String, List<Map<String, Object>>> filledOrdersBySymbol) {
+    private void backfillBrokerResolvedPnL() {
+        Map<String, List<Map<String, Object>>> filledOrdersBySymbol = getRecentFilledOrdersBySymbol();
+        Map<String, List<Map<String, Object>>> filledOrdersByUnderlying = getRecentFilledOrdersByUnderlying(filledOrdersBySymbol);
+        Set<String> usedOrderIds = new HashSet<>();
+        boolean changed = false;
+
+        synchronized (trades) {
+            List<Map<String, Object>> sortedTrades = trades.stream()
+                    .sorted(Comparator.comparingLong(t -> ((Number) t.getOrDefault("timestamp", 0L)).longValue()))
+                    .collect(Collectors.toList());
+            for (Map<String, Object> trade : sortedTrades) {
+                if ("OPEN".equals(trade.get("outcome"))) continue;
+                Object amount = trade.get("pnlAmount");
+                if (amount != null && !String.valueOf(amount).isBlank()) continue;
+                if (applyBrokerRealizedPnl(trade, filledOrdersBySymbol, filledOrdersByUnderlying, usedOrderIds)) {
+                    changed = true;
+                }
+            }
+        }
+
+        if (changed) {
+            persist();
+            log.info("Backfilled broker dollar P&L for closed trades");
+        }
+    }
+
+    private boolean applyBrokerRealizedPnl(Map<String, Object> trade,
+                                           Map<String, List<Map<String, Object>>> filledOrdersBySymbol,
+                                           Map<String, List<Map<String, Object>>> filledOrdersByUnderlying,
+                                           Set<String> usedOrderIds) {
         String optionsContract = String.valueOf(trade.getOrDefault("optionsContract", ""));
-        if (optionsContract.isBlank()) return false;
         String symbol = normalizeOptionSymbol(optionsContract);
-        List<Map<String, Object>> orders = filledOrdersBySymbol.getOrDefault(symbol, List.of());
+        List<Map<String, Object>> orders = optionsContract.isBlank()
+                ? List.of()
+                : filledOrdersBySymbol.getOrDefault(symbol, List.of());
+        if (orders.isEmpty()) {
+            String ticker = String.valueOf(trade.getOrDefault("ticker", ""));
+            orders = filledOrdersByUnderlying.getOrDefault(ticker, List.of());
+        }
         if (orders.isEmpty()) return false;
 
         long tradeTs = ((Number) trade.getOrDefault("timestamp", 0L)).longValue();
         Map<String, Object> buyOrder = null;
         Map<String, Object> sellOrder = null;
         for (Map<String, Object> order : orders) {
+            String orderId = String.valueOf(order.getOrDefault("id", ""));
+            if (usedOrderIds.contains(orderId)) continue;
             String side = String.valueOf(order.getOrDefault("side", ""));
             long ts = ((Number) order.getOrDefault("created_at_epoch", 0L)).longValue();
-            if ("buy".equalsIgnoreCase(side) && ts >= tradeTs - 3_600_000L) {
+            if ("buy".equalsIgnoreCase(side) && ts >= tradeTs - 7_200_000L) {
                 if (buyOrder == null || ts < ((Number) buyOrder.getOrDefault("created_at_epoch", 0L)).longValue()) {
                     buyOrder = order;
                 }
@@ -377,8 +418,10 @@ public class LiveTradeLog {
         trade.put("exitPrice", exitFill);
         trade.put("entryFillPrice", entryFill);
         trade.put("resolutionSource", "ALPACA_ORDERS");
-        trade.put("brokerSymbol", symbol);
+        trade.put("brokerSymbol", String.valueOf(sellOrder.getOrDefault("symbol", symbol)));
         trade.put("brokerExitAt", sellOrder.get("created_at"));
+        usedOrderIds.add(String.valueOf(buyOrder.getOrDefault("id", "")));
+        usedOrderIds.add(String.valueOf(sellOrder.getOrDefault("id", "")));
         return true;
     }
 
@@ -395,6 +438,12 @@ public class LiveTradeLog {
         }
     }
 
+    private Map<String, List<Map<String, Object>>> getRecentFilledOrdersByUnderlying(Map<String, List<Map<String, Object>>> bySymbol) {
+        return bySymbol.values().stream()
+                .flatMap(Collection::stream)
+                .collect(Collectors.groupingBy(o -> underlyingFromOcc(String.valueOf(o.getOrDefault("symbol", "")))));
+    }
+
     private long parseEpoch(String isoTs) {
         if (isoTs == null || isoTs.isBlank()) return 0L;
         try {
@@ -407,6 +456,14 @@ public class LiveTradeLog {
     private String normalizeOptionSymbol(String symbol) {
         if (symbol == null) return "";
         return symbol.startsWith("O:") ? symbol.substring(2) : symbol;
+    }
+
+    private String underlyingFromOcc(String symbol) {
+        String normalized = normalizeOptionSymbol(symbol);
+        if (normalized.isBlank()) return "";
+        int idx = 0;
+        while (idx < normalized.length() && !Character.isDigit(normalized.charAt(idx))) idx++;
+        return idx > 0 ? normalized.substring(0, idx) : normalized;
     }
 
     private double toDouble(Object value) {
@@ -439,14 +496,6 @@ public class LiveTradeLog {
             log.warn("Could not fetch Alpaca open tickers for trade reconciliation: {}", e.getMessage());
             return Set.of();
         }
-    }
-
-    private String underlyingFromOcc(String symbol) {
-        if (symbol == null || symbol.isBlank()) return "";
-        String normalized = symbol.startsWith("O:") ? symbol.substring(2) : symbol;
-        int idx = 0;
-        while (idx < normalized.length() && !Character.isDigit(normalized.charAt(idx))) idx++;
-        return idx > 0 ? normalized.substring(0, idx) : normalized;
     }
 
     /** Build Discord embed for daily summary report. */

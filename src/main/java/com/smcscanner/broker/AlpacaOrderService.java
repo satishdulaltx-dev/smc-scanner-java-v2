@@ -384,7 +384,7 @@ public class AlpacaOrderService {
         try {
             String today = ZonedDateTime.now(ET).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
             Request req = new Request.Builder()
-                    .url(getBaseUrl() + "/v2/orders?status=all&after=" + today + "T00:00:00Z&limit=50")
+                    .url(getBaseUrl() + "/v2/orders?status=all&after=" + today + "T00:00:00Z&limit=200&direction=desc")
                     .addHeader("APCA-API-KEY-ID", config.getAlpacaApiKey())
                     .addHeader("APCA-API-SECRET-KEY", config.getAlpacaSecretKey())
                     .get().build();
