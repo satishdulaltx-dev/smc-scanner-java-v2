@@ -40,6 +40,9 @@ public class BacktestService {
     private static final Logger log = LoggerFactory.getLogger(BacktestService.class);
     private static final ZoneId ET = ZoneId.of("America/New_York");
     private static final DateTimeFormatter DT_FMT = DateTimeFormatter.ofPattern("MM/dd HH:mm");
+    private static final double ATR_TRAIL_NORMAL = 0.75;
+    private static final double ATR_TRAIL_REVERSAL = 0.30;
+    private static final int REVERSAL_CLOSES = 2;
 
     private final PolygonClient            client;
     private final AtrCalculator            atrCalc;
@@ -78,15 +81,20 @@ public class BacktestService {
     }
 
     public BacktestResult run(String ticker, int lookbackDays) {
-        return run(ticker, lookbackDays, BacktestMode.ALL, null);
+        return run(ticker, lookbackDays, BacktestMode.ALL, null, BacktestExitStyle.CLASSIC);
     }
 
     public BacktestResult run(String ticker, int lookbackDays, BacktestMode mode) {
-        return run(ticker, lookbackDays, mode, null);
+        return run(ticker, lookbackDays, mode, null, BacktestExitStyle.CLASSIC);
     }
 
     /** Run backtest with an optional strategy override (ignores ticker-profiles.json strategyType). */
     public BacktestResult run(String ticker, int lookbackDays, BacktestMode mode, String strategyOverride) {
+        return run(ticker, lookbackDays, mode, strategyOverride, BacktestExitStyle.CLASSIC);
+    }
+
+    /** Run backtest with explicit exit style so classic and live-parity exits can be compared side by side. */
+    public BacktestResult run(String ticker, int lookbackDays, BacktestMode mode, String strategyOverride, BacktestExitStyle exitStyle) {
         // Fetch 5m bars for the full lookback — one API call gets it all
         List<OHLCV> allBars = client.getBarsWithLookback(ticker, "5m", 50000, lookbackDays);
         if (allBars == null || allBars.size() < 30) {
@@ -453,51 +461,13 @@ public class BacktestService {
                     fwdBars = fwdBars.subList(0, mode.maxForwardBars());
                 }
 
-                String outcome = "EXPIRED";
-                String exitTime = null;
-                double pnlPct = 0.0;
-
-                // Breakeven stop: once price reaches 1:1 (reward = risk), SL moves to entry.
-                // Trades that go in our direction then reverse exit at 0% instead of -1x.
-                // This fixes avg-loss > avg-win imbalance without changing the strategy signal.
-                double risk       = Math.abs(entry - sl);
-                double beLevel    = "long".equals(dir) ? entry + risk : entry - risk; // 1:1 price
-                boolean beActive  = false;
-
-                for (OHLCV fb : fwdBars) {
-                    double hi = fb.getHigh(), lo = fb.getLow();
-
-                    // Activate breakeven stop the moment 1:1 is touched
-                    if (!beActive) {
-                        if ("long".equals(dir)  && hi >= beLevel) beActive = true;
-                        if ("short".equals(dir) && lo <= beLevel) beActive = true;
-                    }
-
-                    double activeSl = beActive ? entry : sl;
-
-                    if ("long".equals(dir)) {
-                        if (lo <= activeSl) { outcome = beActive ? "BE_STOP" : "LOSS"; exitTime=toDateTime(fb.getTimestamp()); pnlPct=round2((activeSl-entry)/entry*100); break; }
-                        if (hi >= tp)       { outcome = "WIN";     exitTime=toDateTime(fb.getTimestamp()); pnlPct=round2((tp-entry)/entry*100);       break; }
-                    } else {
-                        if (hi >= activeSl) { outcome = beActive ? "BE_STOP" : "LOSS"; exitTime=toDateTime(fb.getTimestamp()); pnlPct=round2((entry-activeSl)/entry*100); break; }
-                        if (lo <= tp)       { outcome = "WIN";     exitTime=toDateTime(fb.getTimestamp()); pnlPct=round2((entry-tp)/entry*100);       break; }
-                    }
-                }
-
-                // Time-based stop: if neither TP nor SL was hit within 2 trading days,
-                // exit at the close of the last available forward bar (market-close exit).
-                // Previously these were silently skipped as "EXPIRED", which overstated
-                // win rates by hiding neutral-to-losing open positions.
-                if ("EXPIRED".equals(outcome)) {
-                    if (fwdBars.isEmpty()) continue; // truly no forward data — skip
-                    OHLCV lastFwd = fwdBars.get(fwdBars.size() - 1);
-                    double exitPrice = lastFwd.getClose();
-                    exitTime = toDateTime(lastFwd.getTimestamp());
-                    pnlPct   = "long".equals(dir)
-                            ? round2((exitPrice - entry) / entry * 100)
-                            : round2((entry - exitPrice) / entry * 100);
-                    outcome  = "TIMEOUT"; // distinguishable from TP/SL exits in the trade list
-                }
+                ExitResult exit = exitStyle == BacktestExitStyle.LIVE_PARITY
+                        ? simulateLiveParityExit(window, fwdBars, entry, sl, tp, dir)
+                        : simulateClassicExit(fwdBars, entry, sl, tp, dir);
+                if (exit == null) continue;
+                String outcome = exit.outcome();
+                String exitTime = exit.exitTime();
+                double pnlPct = exit.pnlPct();
 
                 // Update bounded outcome history (max 6 entries — same as live AdaptiveSuppressor)
                 boolean tradeWon = "WIN".equals(outcome) || ("TIMEOUT".equals(outcome) && pnlPct > 0);
@@ -527,6 +497,121 @@ public class BacktestService {
                 ticker, lookbackDays, mode, trades.size(), byDate.size());
         return BacktestResult.of(ticker, trades, lookbackDays, mode);
     }
+
+    private ExitResult simulateClassicExit(List<OHLCV> fwdBars, double entry, double sl, double tp, String dir) {
+        String outcome = "EXPIRED";
+        String exitTime = null;
+        double pnlPct = 0.0;
+        double risk = Math.abs(entry - sl);
+        double beLevel = "long".equals(dir) ? entry + risk : entry - risk;
+        boolean beActive = false;
+
+        for (OHLCV fb : fwdBars) {
+            double hi = fb.getHigh(), lo = fb.getLow();
+
+            if (!beActive) {
+                if ("long".equals(dir) && hi >= beLevel) beActive = true;
+                if ("short".equals(dir) && lo <= beLevel) beActive = true;
+            }
+
+            double activeSl = beActive ? entry : sl;
+
+            if ("long".equals(dir)) {
+                if (lo <= activeSl) { outcome = beActive ? "BE_STOP" : "LOSS"; exitTime = toDateTime(fb.getTimestamp()); pnlPct = round2((activeSl - entry) / entry * 100); break; }
+                if (hi >= tp)       { outcome = "WIN"; exitTime = toDateTime(fb.getTimestamp()); pnlPct = round2((tp - entry) / entry * 100); break; }
+            } else {
+                if (hi >= activeSl) { outcome = beActive ? "BE_STOP" : "LOSS"; exitTime = toDateTime(fb.getTimestamp()); pnlPct = round2((entry - activeSl) / entry * 100); break; }
+                if (lo <= tp)       { outcome = "WIN"; exitTime = toDateTime(fb.getTimestamp()); pnlPct = round2((entry - tp) / entry * 100); break; }
+            }
+        }
+
+        if ("EXPIRED".equals(outcome)) {
+            if (fwdBars.isEmpty()) return null;
+            OHLCV lastFwd = fwdBars.get(fwdBars.size() - 1);
+            double exitPrice = lastFwd.getClose();
+            exitTime = toDateTime(lastFwd.getTimestamp());
+            pnlPct = "long".equals(dir)
+                    ? round2((exitPrice - entry) / entry * 100)
+                    : round2((entry - exitPrice) / entry * 100);
+            outcome = "TIMEOUT";
+        }
+
+        return new ExitResult(outcome, exitTime, pnlPct);
+    }
+
+    private ExitResult simulateLiveParityExit(List<OHLCV> entryWindow, List<OHLCV> fwdBars,
+                                              double entry, double sl, double tp, String dir) {
+        if (fwdBars.isEmpty()) return null;
+        boolean isLong = "long".equals(dir);
+        double activeSl = sl;
+        double peakClose = entry;
+        int reversalCount = 0;
+        List<OHLCV> atrWindow = new ArrayList<>(entryWindow);
+
+        for (OHLCV fb : fwdBars) {
+            atrWindow.add(fb);
+            if (atrWindow.size() > 20) atrWindow.remove(0);
+
+            double close = fb.getClose();
+            double atr = computeAtr5m(atrWindow);
+            if (atr <= 0) atr = Math.abs(entry - sl);
+
+            if (isLong && close > peakClose) peakClose = close;
+            if (!isLong && close < peakClose) peakClose = close;
+
+            boolean reversalClose = isLong
+                    ? close < peakClose - atr * 0.20
+                    : close > peakClose + atr * 0.20;
+            reversalCount = reversalClose ? reversalCount + 1 : 0;
+
+            double atrMult = reversalCount >= REVERSAL_CLOSES ? ATR_TRAIL_REVERSAL : ATR_TRAIL_NORMAL;
+            double targetStop = isLong ? peakClose - atr * atrMult : peakClose + atr * atrMult;
+            boolean inProfit = isLong ? targetStop > entry : targetStop < entry;
+            boolean improving = isLong ? targetStop > activeSl : targetStop < activeSl;
+            if (inProfit && improving) activeSl = targetStop;
+
+            boolean stopBreached = isLong ? close <= activeSl : close >= activeSl;
+            if (stopBreached) {
+                double pnlPct = isLong
+                        ? round2((activeSl - entry) / entry * 100)
+                        : round2((entry - activeSl) / entry * 100);
+                String outcome = Math.abs(pnlPct) < 0.05 ? "BE_STOP" : (pnlPct > 0 ? "WIN" : "LOSS");
+                return new ExitResult(outcome, toDateTime(fb.getTimestamp()), pnlPct);
+            }
+
+            boolean tpReached = isLong ? close >= tp : close <= tp;
+            if (tpReached) {
+                double pnlPct = isLong
+                        ? round2((close - entry) / entry * 100)
+                        : round2((entry - close) / entry * 100);
+                return new ExitResult("WIN", toDateTime(fb.getTimestamp()), pnlPct);
+            }
+        }
+
+        OHLCV lastFwd = fwdBars.get(fwdBars.size() - 1);
+        double exitPrice = lastFwd.getClose();
+        double pnlPct = isLong
+                ? round2((exitPrice - entry) / entry * 100)
+                : round2((entry - exitPrice) / entry * 100);
+        return new ExitResult("TIMEOUT", toDateTime(lastFwd.getTimestamp()), pnlPct);
+    }
+
+    private double computeAtr5m(List<OHLCV> bars) {
+        int period = Math.min(14, bars.size() - 1);
+        if (period < 1) return 0.0;
+        double sum = 0.0;
+        for (int i = bars.size() - period; i < bars.size(); i++) {
+            OHLCV curr = bars.get(i);
+            OHLCV prev = bars.get(i - 1);
+            double tr = Math.max(curr.getHigh() - curr.getLow(),
+                    Math.max(Math.abs(curr.getHigh() - prev.getClose()),
+                             Math.abs(curr.getLow() - prev.getClose())));
+            sum += tr;
+        }
+        return sum / period;
+    }
+
+    private record ExitResult(String outcome, String exitTime, double pnlPct) {}
 
     private String toDateTime(String rawTs) {
         try { return Instant.ofEpochMilli(Long.parseLong(rawTs)).atZone(ET).format(DT_FMT) + " ET"; }

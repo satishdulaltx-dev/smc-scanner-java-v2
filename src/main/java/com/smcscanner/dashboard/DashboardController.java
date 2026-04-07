@@ -1,6 +1,7 @@
 package com.smcscanner.dashboard;
 
 import com.smcscanner.analysis.AnalysisService;
+import com.smcscanner.backtest.BacktestExitStyle;
 import com.smcscanner.backtest.BacktestService;
 import com.smcscanner.backtest.ProfileOptimizer;
 import com.smcscanner.config.ScannerConfig;
@@ -448,15 +449,18 @@ public class DashboardController {
             @org.springframework.web.bind.annotation.RequestParam(defaultValue="AAPL") String ticker,
             @org.springframework.web.bind.annotation.RequestParam(defaultValue="90")  int days,
             @org.springframework.web.bind.annotation.RequestParam(defaultValue="ALL") String mode,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue="CLASSIC") String exitStyle,
             @org.springframework.web.bind.annotation.RequestParam(required=false)      String strategy) {
         try {
             var btMode = com.smcscanner.backtest.BacktestMode.fromString(mode);
+            var btExit = BacktestExitStyle.fromString(exitStyle);
             var result = backtestService.run(ticker.toUpperCase(), days, btMode,
-                    (strategy != null && !strategy.isBlank()) ? strategy : null);
+                    (strategy != null && !strategy.isBlank()) ? strategy : null, btExit);
             Map<String,Object> resp = new LinkedHashMap<>();
             resp.put("ticker",        result.ticker);
             resp.put("lookback_days", result.lookbackDays);
             resp.put("mode",          result.mode.name());
+            resp.put("exit_style",    btExit.name());
             resp.put("total_trades",  result.total);
             resp.put("wins",          result.wins);
             resp.put("losses",        result.losses);

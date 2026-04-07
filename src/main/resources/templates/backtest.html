@@ -190,6 +190,13 @@
         </select>
     </div>
     <div class="ctrl-group">
+        <label>Exit Model</label>
+        <select id="exit-style" autocomplete="off">
+            <option value="CLASSIC" selected>Classic TP / SL</option>
+            <option value="LIVE_PARITY">Live Parity Trail</option>
+        </select>
+    </div>
+    <div class="ctrl-group">
         <label>Lookback</label>
         <select id="days" onchange="checkDaysWarning()">
             <option value="30">30 days</option>
@@ -333,9 +340,11 @@ function runBacktest() {
     const days   = document.getElementById('days').value;
     const stratMode = document.getElementById('strategy-mode').value;
     const stratType = document.getElementById('strategy-type').value;
+    const exitStyle = document.getElementById('exit-style').value;
     const stratParam = stratType ? `&strategy=${stratType}` : '';
+    const exitParam = `&exitStyle=${exitStyle}`;
     setLoading(true);
-    fetch(`/api/backtest?ticker=${ticker}&days=${days}&mode=${stratMode}${stratParam}`)
+    fetch(`/api/backtest?ticker=${ticker}&days=${days}&mode=${stratMode}${exitParam}${stratParam}`)
         .then(r => r.json())
         .then(d => { setLoading(false); renderSingle(d); })
         .catch(() => { setLoading(false); alert('Backtest failed'); });
@@ -401,7 +410,9 @@ async function runBatch() {
     const days  = document.getElementById('days').value;
     const stratMode = document.getElementById('strategy-mode').value;
     const stratTypeBatch = document.getElementById('strategy-type').value;
+    const exitStyle = document.getElementById('exit-style').value;
     const stratParamBatch = stratTypeBatch ? `&strategy=${stratTypeBatch}` : '';
+    const exitParamBatch = `&exitStyle=${exitStyle}`;
     const BATCH = 4; // max concurrent Polygon API requests — prevents rate-limit errors on 90d runs
     setLoading(true);
     hide('single-results'); hide('empty-state');
@@ -413,7 +424,7 @@ async function runBatch() {
         const done = Math.min(i + BATCH, tickers.length);
         if (loadBtn) loadBtn.textContent = `⏳ ${done} / ${tickers.length}`;
         const chunk = await Promise.all(
-            group.map(t => fetch(`/api/backtest?ticker=${t}&days=${days}&mode=${stratMode}${stratParamBatch}`).then(r => r.json()).catch(() => null))
+            group.map(t => fetch(`/api/backtest?ticker=${t}&days=${days}&mode=${stratMode}${exitParamBatch}${stratParamBatch}`).then(r => r.json()).catch(() => null))
         );
         all.push(...chunk);
     }
@@ -453,6 +464,7 @@ function renderSingle(d) {
         ${d.ctx_filtered     > 0 ? `<div class="stat-card"><div class="val" style="color:#9b6dff">${d.ctx_filtered}</div><div class="lbl">RS/VIX Filtered</div></div>` : ''}
         ${d.quality_filtered > 0 ? `<div class="stat-card"><div class="val" style="color:#e36209">${d.quality_filtered}</div><div class="lbl">Quality Filtered</div></div>` : ''}
         <div class="stat-card"><div class="val c-purple">${d.lookback_days}d</div><div class="lbl">Lookback</div></div>
+        <div class="stat-card"><div class="val c-blue" style="font-size:18px">${(d.exit_style || 'CLASSIC').replace('_',' ')}</div><div class="lbl">Exit Model</div></div>
     `;
 
     // Options aggregate stats (if available)
