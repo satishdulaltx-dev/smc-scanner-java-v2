@@ -333,8 +333,7 @@ public class BacktestService {
 
                 // News-aligned TP extension: widen TP to 3:1 R:R (but respect ticker tpRrRatio)
                 // If profile sets tpRrRatio (e.g. JPM=1.0), don't override — the low ratio is intentional
-                double profileTpRatio = bp.resolveTpRrRatio();
-                boolean hasTpOverride = profileTpRatio < 1.5; // ticker explicitly requested tighter TP
+                boolean hasTpOverride = bp.getTpRrRatio() != null;
                 if (sentiment.isAligned(setup.getDirection()) && !ticker.startsWith("X:") && !hasTpOverride) {
                     double risk  = Math.abs(setup.getEntry() - setup.getStopLoss());
                     double tp3x  = "long".equals(setup.getDirection())

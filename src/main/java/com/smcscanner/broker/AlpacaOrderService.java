@@ -2,6 +2,7 @@ package com.smcscanner.broker;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.smcscanner.config.ScannerConfig;
 import com.smcscanner.data.PolygonClient;
 import com.smcscanner.model.OHLCV;
@@ -9,8 +10,11 @@ import com.smcscanner.model.TradeSetup;
 import okhttp3.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.event.ContextRefreshedEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
+import java.io.File;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -32,6 +36,9 @@ public class AlpacaOrderService {
     private static final Logger log = LoggerFactory.getLogger(AlpacaOrderService.class);
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
     private static final ZoneId ET = ZoneId.of("America/New_York");
+    private static final String TRACKED_FILE_PATH = System.getenv("TRADE_LOG_DIR") != null
+            ? System.getenv("TRADE_LOG_DIR").replaceAll("/$", "") + "/tracked-positions.json"
+            : "data/tracked-positions.json";
 
     private final ScannerConfig config;
     private final PolygonClient polygon;
@@ -67,10 +74,18 @@ public class AlpacaOrderService {
     private static final int    DEFAULT_MAX_DAILY_ORDERS = 10;
     private static final int    DEFAULT_MIN_CONFIDENCE = 75;     // only auto-trade 75+ confidence
     private record BuyingPowerSnapshot(double buyingPower, double optionsBuyingPower) {}
+    private record PositionCheck(String symbol, TrackedPosition tracked) {
+        boolean hasPosition() { return symbol != null && !symbol.isBlank(); }
+    }
 
     public AlpacaOrderService(ScannerConfig config, PolygonClient polygon) {
         this.config = config;
         this.polygon = polygon;
+    }
+
+    @EventListener(ContextRefreshedEvent.class)
+    public void init() {
+        loadTrackedPositions();
     }
 
     /** Check if Alpaca trading is enabled and configured. */
@@ -113,6 +128,19 @@ public class AlpacaOrderService {
         }
 
         try {
+            PositionCheck existing = findExistingPositionForTicker(s.getTicker());
+            if (existing.hasPosition()) {
+                if (existing.tracked() != null && !existing.tracked().direction().equalsIgnoreCase(s.getDirection())) {
+                    log.warn("ALPACA OPPOSITE SIGNAL {} new={} existing={} — closing current position {} and blocking re-entry this cycle",
+                            s.getTicker(), s.getDirection(), existing.tracked().direction(), existing.symbol());
+                    closeOptionsPosition(s.getTicker(), existing.symbol());
+                } else {
+                    log.warn("ALPACA SKIP {} {} — existing open position already held ({})",
+                            s.getTicker(), s.getDirection(), existing.symbol());
+                }
+                return null;
+            }
+
             // Options-only: never buy shares — skip if no contract was resolved
             if (!s.hasOptionsData() || s.getOptionsContract() == null || s.getOptionsContract().isBlank()) {
                 log.warn("ALPACA SKIP {} — no options contract on setup (options-only mode) hasData={} contract={}",
@@ -227,7 +255,7 @@ public class AlpacaOrderService {
 
                     // Track position: underlying entry/sl/tp for ATR trailing,
                     // optionsContract stored so we can sell-to-close when SL is hit
-                    trackedPositions.put(s.getTicker(), new TrackedPosition(
+                    putTrackedPosition(s.getTicker(), new TrackedPosition(
                             s.getTicker(), s.getDirection(), s.getEntry(),
                             s.getStopLoss(), s.getTakeProfit(), orderId, null, s.getEntry(), 0, occSymbol));
 
@@ -440,6 +468,7 @@ public class AlpacaOrderService {
                 log.info("TRAIL: No open positions, clearing {} tracked entries", trackedPositions.size());
                 trackedPositions.clear();
                 lastProcessedCandle.clear();
+                persistTrackedPositions();
             }
             return;
         }
@@ -460,7 +489,7 @@ public class AlpacaOrderService {
                     ? tp.optionsContract() : symbol;
             if (!heldSymbols.contains(checkSymbol)) {
                 log.info("TRAIL: {} no longer held — removing from tracker", symbol);
-                trackedPositions.remove(symbol);
+                removeTrackedPosition(symbol);
                 lastProcessedCandle.remove(symbol);
                 continue;
             }
@@ -537,7 +566,7 @@ public class AlpacaOrderService {
             } else {
                 closeEquityPosition(symbol);
             }
-            trackedPositions.remove(symbol);
+            removeTrackedPosition(symbol);
             lastProcessedCandle.remove(symbol);
             return;
         }
@@ -555,7 +584,7 @@ public class AlpacaOrderService {
                         symbol, mode,
                         String.format("%.2f", newPeak), String.format("%.2f", candleClose),
                         String.format("%.2f", tp.stopLoss()), String.format("%.2f", targetStop), atrMult);
-                trackedPositions.put(symbol, new TrackedPosition(
+                putTrackedPosition(symbol, new TrackedPosition(
                         tp.symbol(), tp.direction(), tp.entry(), targetStop,
                         tp.takeProfit(), tp.orderId(), tp.stopOrderId(), newPeak, newReversalCount, tp.optionsContract()));
                 return;
@@ -570,7 +599,7 @@ public class AlpacaOrderService {
                         String.format("%.2f", tp.stopLoss()),
                         String.format("%.2f", targetStop),
                         atrMult);
-                trackedPositions.put(symbol, new TrackedPosition(
+                putTrackedPosition(symbol, new TrackedPosition(
                         tp.symbol(), tp.direction(), tp.entry(), targetStop,
                         tp.takeProfit(), tp.orderId(), tp.stopOrderId(), newPeak, newReversalCount, tp.optionsContract()));
                 return;
@@ -583,7 +612,7 @@ public class AlpacaOrderService {
                 log.info("TRAIL: {} reversal confirmed ({} closes) — waiting for profit zone to tighten SL",
                         symbol, newReversalCount);
             }
-            trackedPositions.put(symbol, new TrackedPosition(
+            putTrackedPosition(symbol, new TrackedPosition(
                     tp.symbol(), tp.direction(), tp.entry(), tp.stopLoss(),
                     tp.takeProfit(), tp.orderId(), tp.stopOrderId(), newPeak, newReversalCount, tp.optionsContract()));
         }
@@ -889,7 +918,7 @@ public class AlpacaOrderService {
                     if (resp.isSuccessful()) {
                         closed++;
                         log.info("EOD CLOSE: closed {} — unrealized={:+.2f}%", symbol, unrealizedPlPct);
-                        trackedPositions.remove(symbol);
+                        removeTrackedPosition(symbol);
                         lastProcessedCandle.remove(symbol);
                     } else {
                         log.warn("EOD CLOSE: failed to close {} ({})", symbol, resp.code());
@@ -939,6 +968,7 @@ public class AlpacaOrderService {
 
         trackedPositions.clear();
         lastProcessedCandle.clear();
+        persistTrackedPositions();
         return closed;
     }
 
@@ -980,7 +1010,7 @@ public class AlpacaOrderService {
                     if (resp.isSuccessful()) {
                         closed++;
                         // Remove from trailing stop tracker if tracked
-                        trackedPositions.remove(symbol);
+                        removeTrackedPosition(symbol);
                         lastProcessedCandle.remove(symbol);
                     }
                 }
@@ -996,5 +1026,64 @@ public class AlpacaOrderService {
     /** Update daily P&L from position closes (called by resolver). */
     public void recordPnl(double pnl) {
         this.dailyPnl += pnl;
+    }
+
+    private void putTrackedPosition(String symbol, TrackedPosition tracked) {
+        trackedPositions.put(symbol, tracked);
+        persistTrackedPositions();
+    }
+
+    private void removeTrackedPosition(String symbol) {
+        trackedPositions.remove(symbol);
+        persistTrackedPositions();
+    }
+
+    private void loadTrackedPositions() {
+        File f = new File(TRACKED_FILE_PATH);
+        if (!f.exists()) return;
+        try {
+            Map<String, TrackedPosition> loaded = mapper.readValue(f, new TypeReference<>() {});
+            trackedPositions.clear();
+            trackedPositions.putAll(loaded);
+            log.info("Loaded {} tracked option/equity positions from {}", trackedPositions.size(), TRACKED_FILE_PATH);
+        } catch (Exception e) {
+            log.warn("Could not load tracked positions: {}", e.getMessage());
+        }
+    }
+
+    private void persistTrackedPositions() {
+        try {
+            File f = new File(TRACKED_FILE_PATH);
+            File parent = f.getParentFile();
+            if (parent != null && !parent.exists()) parent.mkdirs();
+            mapper.writerWithDefaultPrettyPrinter().writeValue(f, trackedPositions);
+        } catch (Exception e) {
+            log.warn("Could not persist tracked positions: {}", e.getMessage());
+        }
+    }
+
+    private PositionCheck findExistingPositionForTicker(String ticker) {
+        for (Map<String, Object> pos : getPositions()) {
+            String symbol = String.valueOf(pos.getOrDefault("symbol", ""));
+            String assetClass = String.valueOf(pos.getOrDefault("asset_class", "us_equity"));
+            String positionTicker = "us_option".equals(assetClass) ? underlyingFromOcc(symbol) : symbol;
+            if (!ticker.equalsIgnoreCase(positionTicker)) continue;
+
+            TrackedPosition tracked = null;
+            Object trackedFlag = pos.get("tracked");
+            if (trackedFlag instanceof Boolean b && b) {
+                tracked = trackedPositions.get(String.valueOf(pos.getOrDefault("tracked_underlying", ticker)));
+            }
+            return new PositionCheck(symbol, tracked);
+        }
+        return new PositionCheck("", null);
+    }
+
+    private String underlyingFromOcc(String symbol) {
+        if (symbol == null || symbol.isBlank()) return "";
+        String normalized = symbol.startsWith("O:") ? symbol.substring(2) : symbol;
+        int idx = 0;
+        while (idx < normalized.length() && !Character.isDigit(normalized.charAt(idx))) idx++;
+        return idx > 0 ? normalized.substring(0, idx) : normalized;
     }
 }

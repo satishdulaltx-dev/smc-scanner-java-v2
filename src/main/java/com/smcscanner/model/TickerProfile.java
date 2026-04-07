@@ -42,6 +42,7 @@ public class TickerProfile {
     public Double  getMinFvgPct()     { return minFvgPct; }
     public Double  getDispAtrMult()   { return dispAtrMult; }
     public Double  getMinVolMult()    { return minVolMult; }
+    public Double  getTpRrRatio()     { return tpRrRatio; }
 
     /** Resolve effective minConfidence: use override if set, else fall back to globalDefault. */
     public int resolveMinConfidence(int globalDefault) {

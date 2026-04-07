@@ -63,7 +63,8 @@
       "strategyType": "smc",
       "minConfidence": 62,
       "maxConfidence": 84,
-      "note": "Added Mar 2026: 365d backtest 31 exec trades 57%WR +0.33 exp. Clear reversed-confidence pattern: b85:22@27%WR vs b75-84:9@78%WR. Apply maxConf=84 — high-confidence signals fire after move is exhausted. CrowdStrike has strong SMC sweep + FVG mechanics on 5m. minConf=62 to capture early setups."
+      "tpRrRatio": 1.25,
+      "note": "Added Mar 2026: 365d backtest 31 exec trades 57%WR +0.33 exp. Clear reversed-confidence pattern: b85:22@27%WR vs b75-84:9@78%WR. Apply maxConf=84 — high-confidence signals fire after move is exhausted. CrowdStrike has strong SMC sweep + FVG mechanics on 5m. minConf=62 to capture early setups. Apr 2026: explicit tpRrRatio=1.25 keeps primary target closer to nearby prior highs instead of auto-extending to a stretch target."
     },
     {
       "ticker": "DIS",

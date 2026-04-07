@@ -242,8 +242,7 @@ public class ScannerService {
 
                 // ── News-aligned TP extension: widen TP to 3:1 ──────────────────
                 // Skip extension if ticker has explicit tpRrRatio override (e.g. JPM=1.0)
-                double profileTpRatio = profile.resolveTpRrRatio();
-                boolean hasTpOverride = profileTpRatio < 1.5;
+                boolean hasTpOverride = profile.getTpRrRatio() != null;
                 if (!isC && sentiment.isAligned(s.getDirection()) && !hasTpOverride) {
                     double risk = Math.abs(s.getEntry() - s.getStopLoss());
                     double tp3x = "long".equals(s.getDirection())
