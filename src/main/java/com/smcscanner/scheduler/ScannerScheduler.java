@@ -168,8 +168,8 @@ public class ScannerScheduler {
         }
     }
 
-    /** Smart trailing stop monitor — checks confirmed 5m candle closes during market hours. */
-    @Scheduled(fixedRate=300_000)
+    /** Smart trailing stop monitor — checks confirmed candles during market hours. */
+    @Scheduled(fixedRate=60_000)
     public void checkTrailingStops() {
         if (!alpaca.isEnabled()) return;
         ZonedDateTime nowET = ZonedDateTime.now(ET);
