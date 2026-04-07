@@ -526,9 +526,11 @@ public class DashboardController {
     /** GET /api/research - run watchlist research and summarize strategy/failure patterns. */
     @GetMapping("/api/research")
     @ResponseBody
-    public ResponseEntity<?> apiResearch() {
+    public ResponseEntity<?> apiResearch(
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue="CLASSIC") String exitStyle) {
         try {
-            return ResponseEntity.ok(researchService.runWatchlistResearch());
+            var btExit = BacktestExitStyle.fromString(exitStyle);
+            return ResponseEntity.ok(researchService.runWatchlistResearch(btExit));
         } catch (Exception e) {
             log.error("Research error: {}", e.getMessage(), e);
             return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));

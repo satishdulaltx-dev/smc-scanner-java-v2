@@ -1,5 +1,6 @@
 package com.smcscanner.research;
 
+import com.smcscanner.backtest.BacktestExitStyle;
 import com.smcscanner.backtest.BacktestMode;
 import com.smcscanner.backtest.BacktestService;
 import com.smcscanner.config.ScannerConfig;
@@ -28,13 +29,17 @@ public class ResearchService {
     }
 
     public ResearchReport runWatchlistResearch() {
+        return runWatchlistResearch(BacktestExitStyle.CLASSIC);
+    }
+
+    public ResearchReport runWatchlistResearch(BacktestExitStyle exitStyle) {
         List<String> tickers = config.loadWatchlist().stream()
                 .filter(t -> !t.startsWith("X:"))
                 .toList();
         List<TickerResearch> rows = new ArrayList<>();
 
         for (String ticker : tickers) {
-            rows.add(analyzeTicker(ticker));
+            rows.add(analyzeTicker(ticker, exitStyle));
         }
 
         rows.sort(Comparator
@@ -53,17 +58,19 @@ public class ResearchService {
                 (int) retuneCount,
                 (int) retestCount,
                 (int) disableCount,
+                exitStyle.name(),
+                exitStyle.label(),
                 rows
         );
     }
 
-    private TickerResearch analyzeTicker(String ticker) {
+    private TickerResearch analyzeTicker(String ticker, BacktestExitStyle exitStyle) {
         TickerProfile profile = config.getTickerProfile(ticker);
         String currentStrategy = profile.getStrategyType();
 
         List<WindowStat> windows = new ArrayList<>();
         for (int days : WINDOWS) {
-            BacktestService.BacktestResult bt = backtestService.run(ticker, days, BacktestMode.ALL, null);
+            BacktestService.BacktestResult bt = backtestService.run(ticker, days, BacktestMode.ALL, null, exitStyle);
             windows.add(new WindowStat(
                     days,
                     bt.total,
@@ -76,9 +83,9 @@ public class ResearchService {
             ));
         }
 
-        BacktestService.BacktestResult currentYear = backtestService.run(ticker, 365, BacktestMode.ALL, null);
+        BacktestService.BacktestResult currentYear = backtestService.run(ticker, 365, BacktestMode.ALL, null, exitStyle);
         OutcomeSummary outcomeSummary = summarizeOutcomes(currentYear);
-        List<StrategyScore> strategyScores = compareStrategies(ticker, currentStrategy);
+        List<StrategyScore> strategyScores = compareStrategies(ticker, currentStrategy, exitStyle);
         StrategyScore bestStrategy = strategyScores.stream()
                 .findFirst()
                 .orElse(new StrategyScore(currentStrategy, 0, 0, 0, 0, false, false));
@@ -94,6 +101,7 @@ public class ResearchService {
                 recommendation,
                 round2(score),
                 summary,
+                exitStyle.name(),
                 currentYear.total,
                 round2(currentYear.winRate),
                 round2(currentYear.expectancy),
@@ -110,11 +118,11 @@ public class ResearchService {
         );
     }
 
-    private List<StrategyScore> compareStrategies(String ticker, String currentStrategy) {
+    private List<StrategyScore> compareStrategies(String ticker, String currentStrategy, BacktestExitStyle exitStyle) {
         List<StrategyScore> results = new ArrayList<>();
 
         for (String strategy : STRATEGIES) {
-            BacktestService.BacktestResult bt = backtestService.run(ticker, 180, BacktestMode.ALL, strategy);
+            BacktestService.BacktestResult bt = backtestService.run(ticker, 180, BacktestMode.ALL, strategy, exitStyle);
             results.add(new StrategyScore(
                     strategy,
                     bt.total,
@@ -263,6 +271,8 @@ public class ResearchService {
             int retuneCount,
             int retestCount,
             int disableCount,
+            String exitStyle,
+            String exitStyleLabel,
             List<TickerResearch> tickers
     ) {}
 
@@ -273,6 +283,7 @@ public class ResearchService {
             String recommendation,
             double score,
             String summary,
+            String exitStyle,
             int totalTrades365,
             double winRate365,
             double expectancy365,

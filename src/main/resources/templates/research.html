@@ -24,6 +24,11 @@
         .btn-green { background:rgba(63,185,80,.15); color:var(--green); border-color:var(--green); }
         .toolbar { background:var(--surface); border-bottom:1px solid var(--border); padding:16px 24px; display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; }
         .toolbar-copy { color:var(--muted); font-size:12px; max-width:760px; }
+        .toolbar-controls { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+        .select {
+            background:#11161d; color:var(--text); border:1px solid var(--border);
+            border-radius:8px; padding:10px 12px; font-size:12px; font-weight:700;
+        }
         .run-btn { padding:10px 18px; border-radius:8px; border:none; background:var(--blue); color:#0d1117; font-weight:800; cursor:pointer; }
         .run-btn:disabled { opacity:.45; cursor:not-allowed; }
         .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px; padding:20px 24px 0; }
@@ -80,7 +85,13 @@
     <div class="toolbar-copy">
         This view batches your equity watchlist through rolling backtests, compares the current profile strategy with core alternatives, and recommends which names to keep, retune, retest, or disable.
     </div>
-    <button class="run-btn" id="run-btn" onclick="runResearch()">Run Research</button>
+    <div class="toolbar-controls">
+        <select id="exit-style" class="select">
+            <option value="CLASSIC">Classic TP / SL</option>
+            <option value="LIVE_PARITY">Live Parity Trail</option>
+        </select>
+        <button class="run-btn" id="run-btn" onclick="runResearch()">Run Research</button>
+    </div>
 </div>
 
 <div class="stats" id="stats" style="display:none"></div>
@@ -98,7 +109,7 @@
     </div>
 </div>
 
-<div class="footer">
+<div class="footer" id="footer-copy">
     Research combines 90d, 180d, and 365d windows with a 180d strategy comparison across SMC, VWAP, breakout, and key level. "Best strategy" now requires a minimum sample.
 </div>
 
@@ -123,6 +134,8 @@ function renderStats(data) {
         <div class="card"><div class="stat-val blue">${data.retestCount}</div><div class="stat-lbl">Retest</div></div>
         <div class="card"><div class="stat-val red">${data.disableCount}</div><div class="stat-lbl">Disable</div></div>
     `;
+    document.getElementById('footer-copy').textContent =
+        `Research is currently using ${data.exitStyleLabel}. It combines 90d, 180d, and 365d windows with a 180d strategy comparison across SMC, VWAP, breakout, and key level. "Best strategy" requires a minimum sample.`;
 }
 
 function renderTickerCard(row) {
@@ -163,7 +176,7 @@ function renderTickerCard(row) {
             <div class="ticker-head">
                 <div>
                     <div class="ticker-name">${row.ticker}</div>
-                    <div class="ticker-sub">Current ${row.currentStrategy} · Best ${row.bestStrategy} · Score ${row.score.toFixed(2)}</div>
+                    <div class="ticker-sub">Current ${row.currentStrategy} · Best ${row.bestStrategy} · ${row.exitStyle} · Score ${row.score.toFixed(2)}</div>
                 </div>
                 <span class="pill ${pillClass(row.recommendation)}">${row.recommendation}</span>
             </div>
@@ -210,6 +223,7 @@ function renderTickerCard(row) {
 
 async function runResearch() {
     const btn = document.getElementById('run-btn');
+    const exitStyle = document.getElementById('exit-style').value;
     const loading = document.getElementById('loading');
     const empty = document.getElementById('empty');
     const section = document.getElementById('ticker-section');
@@ -222,7 +236,7 @@ async function runResearch() {
     grid.innerHTML = '';
 
     try {
-        const res = await fetch('/api/research');
+        const res = await fetch(`/api/research?exitStyle=${encodeURIComponent(exitStyle)}`);
         const data = await res.json();
         if (!res.ok || data.error) throw new Error(data.error || 'Research failed');
 
