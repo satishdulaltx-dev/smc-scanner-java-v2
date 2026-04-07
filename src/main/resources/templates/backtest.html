@@ -300,6 +300,10 @@
 
 <script>
 let equityChart = null, distChart = null;
+const FILTERED_OUTCOMES = new Set(['NEWS_FILTERED','CTX_FILTERED','QUALITY_FILTERED','MULTI_FILTERED','15M_FILTERED','CORR_FILTERED','REGIME_FILTERED','OVEREXTENDED_FILTERED']);
+function isWinOutcome(t) { return t.outcome === 'WIN' || t.outcome === 'TRAIL_WIN' || (t.outcome === 'TIMEOUT' && t.pnl_pct > 0); }
+function isLossOutcome(t) { return t.outcome === 'LOSS' || t.outcome === 'TRAIL_LOSS' || (t.outcome === 'TIMEOUT' && t.pnl_pct <= 0); }
+function isBeOutcome(t) { return t.outcome === 'BE_STOP'; }
 
 // Load ticker list dynamically from watchlist API (keeps in sync with watchlist.json)
 // Shows all tickers including skipped ones so you can backtest any ticker
@@ -509,7 +513,6 @@ function renderSingle(d) {
     }
 
     // Equity curve — exclude all filtered outcomes (trades were never entered)
-    const FILTERED_OUTCOMES = new Set(['NEWS_FILTERED','CTX_FILTERED','QUALITY_FILTERED','MULTI_FILTERED','15M_FILTERED','CORR_FILTERED','REGIME_FILTERED','OVEREXTENDED_FILTERED']);
     let cum = 0;
     const labels = [], cumData = [];
     labels.push('Start'); cumData.push(0);
@@ -524,8 +527,8 @@ function renderSingle(d) {
     drawEquity(labels, cumData);
 
     // Distribution chart (include TIMEOUT pnl; exclude all filtered outcomes)
-    const wins   = d.trades.filter(t => t.outcome === 'WIN'  || (t.outcome === 'TIMEOUT' && t.pnl_pct > 0)).map(t => t.pnl_pct);
-    const losses = d.trades.filter(t => t.outcome === 'LOSS' || (t.outcome === 'TIMEOUT' && t.pnl_pct <= 0)).map(t => t.pnl_pct);
+    const wins   = d.trades.filter(isWinOutcome).map(t => t.pnl_pct);
+    const losses = d.trades.filter(isLossOutcome).map(t => t.pnl_pct);
     drawDist(wins, losses);
 
     // Trades table — sorted by date with date separator headers
@@ -553,18 +556,18 @@ function renderSingle(d) {
                         : isQualityFiltered ? 'quality-filtered-row'
                         : isCtxFiltered     ? 'ctx-filtered-row'
                         : isNewsFiltered    ? 'news-filtered-row'
-                        : t.outcome === 'WIN'     ? 'win-row'
+                        : isWinOutcome(t)         ? 'win-row'
                         : t.outcome === 'TIMEOUT' ? 'timeout-row'
-                        : t.outcome === 'BE_STOP' ? 'be-stop-row'
+                        : isBeOutcome(t)          ? 'be-stop-row'
                         : FILTERED_SET.has(t.outcome) ? 'quality-filtered-row'
                         : 'loss-row';
         const badgeClass = isMultiFiltered   ? 'multi-filtered-badge'
                          : isQualityFiltered ? 'quality-filtered-badge'
                          : isCtxFiltered     ? 'ctx-filtered-badge'
                          : isNewsFiltered    ? 'news-filtered-badge'
-                         : t.outcome === 'WIN'     ? 'win-badge'
+                         : isWinOutcome(t)         ? 'win-badge'
                          : t.outcome === 'TIMEOUT' ? 'timeout-badge'
-                         : t.outcome === 'BE_STOP' ? 'be-stop-badge'
+                         : isBeOutcome(t)          ? 'be-stop-badge'
                          : FILTERED_SET.has(t.outcome) ? 'quality-filtered-badge'
                          : 'loss-badge';
         // Adjustment tags on confidence cell
@@ -584,8 +587,8 @@ function renderSingle(d) {
             // Count trades on this date
             const dayTrades = d.trades.filter(x => x.entry_time && x.entry_time.startsWith(curDate));
             const dayExec = dayTrades.filter(x => !FILTERED_SET.has(x.outcome));
-            const dayWins = dayTrades.filter(x => x.outcome === 'WIN' || (x.outcome === 'TIMEOUT' && x.pnl_pct > 0));
-            const dayLosses = dayTrades.filter(x => x.outcome === 'LOSS' || (x.outcome === 'TIMEOUT' && x.pnl_pct <= 0));
+            const dayWins = dayTrades.filter(isWinOutcome);
+            const dayLosses = dayTrades.filter(isLossOutcome);
             const dayFiltered = dayTrades.length - dayExec.length;
             const dayWr = (dayWins.length + dayLosses.length) > 0
                 ? Math.round(dayWins.length * 100 / (dayWins.length + dayLosses.length)) : 0;

@@ -617,6 +617,18 @@ public class BacktestService {
 
     private record ExitResult(String outcome, String exitTime, double pnlPct) {}
 
+    private static boolean isWinOutcome(TradeResult t) {
+        return "WIN".equals(t.outcome())
+                || "TRAIL_WIN".equals(t.outcome())
+                || ("TIMEOUT".equals(t.outcome()) && t.pnlPct() > 0);
+    }
+
+    private static boolean isLossOutcome(TradeResult t) {
+        return "LOSS".equals(t.outcome())
+                || "TRAIL_LOSS".equals(t.outcome())
+                || ("TIMEOUT".equals(t.outcome()) && t.pnlPct() <= 0);
+    }
+
     private String toDateTime(String rawTs) {
         try { return Instant.ofEpochMilli(Long.parseLong(rawTs)).atZone(ET).format(DT_FMT) + " ET"; }
         catch (Exception e) { return rawTs; }
@@ -701,20 +713,16 @@ public class BacktestService {
 
             // TIMEOUT trades are counted as wins or losses based on their PnL sign.
             // BE_STOP trades exit at breakeven (0% PnL) — counted separately, not wins or losses.
-            this.wins     = (int) trades.stream().filter(t ->
-                    "WIN".equals(t.outcome()) || ("TIMEOUT".equals(t.outcome()) && t.pnlPct() > 0)).count();
-            this.losses   = (int) trades.stream().filter(t ->
-                    "LOSS".equals(t.outcome()) || ("TIMEOUT".equals(t.outcome()) && t.pnlPct() <= 0)).count();
+            this.wins     = (int) trades.stream().filter(BacktestService::isWinOutcome).count();
+            this.losses   = (int) trades.stream().filter(BacktestService::isLossOutcome).count();
             this.beStops  = (int) trades.stream().filter(t -> "BE_STOP".equals(t.outcome())).count();
             this.timeouts = (int) trades.stream().filter(t -> "TIMEOUT".equals(t.outcome())).count();
             this.total    = wins + losses + beStops;
             int decidedTrades = wins + losses; // BE_STOP excluded from win rate (0% P&L, not a win or loss)
             this.winRate  = decidedTrades > 0 ? Math.round(wins * 100.0 / decidedTrades * 10) / 10.0 : 0;
-            this.avgWinPct  = trades.stream().filter(t ->
-                    "WIN".equals(t.outcome()) || ("TIMEOUT".equals(t.outcome()) && t.pnlPct() > 0))
+            this.avgWinPct  = trades.stream().filter(BacktestService::isWinOutcome)
                     .mapToDouble(TradeResult::pnlPct).average().orElse(0);
-            this.avgLossPct = trades.stream().filter(t ->
-                    "LOSS".equals(t.outcome()) || ("TIMEOUT".equals(t.outcome()) && t.pnlPct() <= 0))
+            this.avgLossPct = trades.stream().filter(BacktestService::isLossOutcome)
                     .mapToDouble(t -> Math.abs(t.pnlPct())).average().orElse(0);
             this.expectancy = total > 0
                     ? (winRate / 100 * avgWinPct) - ((1 - winRate / 100) * avgLossPct) : 0;
@@ -747,8 +755,7 @@ public class BacktestService {
             // ── Confidence bucket analysis ────────────────────────────────────
             // Excludes filtered trades — only look at actually-executed setups.
             // Counts wins per bucket using the same WIN/TIMEOUT>0 logic as global WR.
-            java.util.function.Predicate<TradeResult> isWin = t ->
-                    "WIN".equals(t.outcome()) || ("TIMEOUT".equals(t.outcome()) && t.pnlPct() > 0);
+            java.util.function.Predicate<TradeResult> isWin = BacktestService::isWinOutcome;
             java.util.function.Predicate<TradeResult> isExecuted = t ->
                     !"NEWS_FILTERED".equals(t.outcome()) && !"CTX_FILTERED".equals(t.outcome())
                     && !"QUALITY_FILTERED".equals(t.outcome()) && !"MULTI_FILTERED".equals(t.outcome())
