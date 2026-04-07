@@ -127,13 +127,12 @@ async function loadCumulative() {
     const d = await fetch('/api/trades/history').then(r=>r.json()).catch(()=>null);
     if (!d) return;
     const c = d.cumulative || {};
-    const wr = c.winRate || 0;
-    const wrColor = wr >= 50 ? 'var(--green)' : wr >= 35 ? 'var(--yellow)' : 'var(--red)';
-    const pnl = c.totalPnlPct || 0;
+    const pnlAmount = c.totalPnlAmount || 0;
+    const pnlPct = c.totalPnlPct || 0;
     document.getElementById('cum-stats').innerHTML = `
         <div class="stat-card"><div class="stat-label">Total Alerts</div><div class="stat-val">${c.totalAlerts||0}</div><div class="stat-sub">${c.tradingDays||0} trading days · ${c.avgTradesPerDay||0}/day avg</div></div>
-        <div class="stat-card"><div class="stat-label">Win Rate</div><div class="stat-val" style="color:${wrColor}">${wr}%</div><div class="stat-sub">${c.wins||0}W / ${c.losses||0}L / ${c.beStops||0}BE</div></div>
-        <div class="stat-card"><div class="stat-label">Cumulative P&amp;L</div><div class="stat-val" style="color:${pnl>=0?'var(--green)':'var(--red)'}">${pnl>=0?'+':''}${pnl}%</div><div class="stat-sub">resolved trades only</div></div>
+        <div class="stat-card"><div class="stat-label">Resolved Trades</div><div class="stat-val">${(c.wins||0) + (c.losses||0) + (c.beStops||0)}</div><div class="stat-sub">${c.wins||0}W / ${c.losses||0}L / ${c.beStops||0}BE</div></div>
+        <div class="stat-card"><div class="stat-label">Realized P&amp;L</div><div class="stat-val" style="color:${pnlAmount>=0?'var(--green)':'var(--red)'}">${pnlAmount>=0?'+':''}$${Math.abs(pnlAmount).toFixed(2)}</div><div class="stat-sub">${pnlPct>=0?'+':''}${pnlPct}% on resolved trades</div></div>
         <div class="stat-card"><div class="stat-label">Open / Unresolved</div><div class="stat-val" style="color:var(--yellow)">${c.open||0}</div><div class="stat-sub">awaiting outcome</div></div>
     `;
 }
@@ -158,6 +157,33 @@ async function loadHistory() {
     document.getElementById('history-section').innerHTML = buildTable(sorted, null, true);
 }
 
+function formatEtFromTrade(t, kind) {
+    let raw = null;
+    if (kind === 'entry') {
+        return `${t.date||''} ${t.time||''}`.trim() || '—';
+    }
+    raw = t.brokerExitAt || t.resolvedAt;
+    if (!raw) return '—';
+    let date;
+    if (typeof raw === 'number') {
+        date = new Date(raw);
+    } else if (/^\d+$/.test(String(raw))) {
+        date = new Date(parseInt(raw, 10));
+    } else {
+        date = new Date(raw);
+    }
+    if (Number.isNaN(date.getTime())) return '—';
+    return date.toLocaleString('en-US', {
+        timeZone: 'America/New_York',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    }).replace(',', '');
+}
+
 function buildTable(trades, summary, groupByDate) {
     const badgeHtml = (outcome) => {
         const cls = outcome==='WIN'?'badge-win':outcome==='LOSS'?'badge-loss':outcome==='OPEN'?'badge-open':'badge-be';
@@ -165,9 +191,14 @@ function buildTable(trades, summary, groupByDate) {
     };
     const pnlHtml = (t) => {
         if (t.outcome === 'OPEN') return `<span class="open">—</span>`;
-        const v = t.pnlPct || 0;
-        const cls = v > 0 ? 'win' : v < 0 ? 'loss' : 'be';
-        return `<span class="${cls}">${v>=0?'+':''}${parseFloat(v).toFixed(2)}%</span>`;
+        const amount = t.pnlAmount;
+        const pct = t.pnlPct || 0;
+        const cls = pct > 0 ? 'win' : pct < 0 ? 'loss' : 'be';
+        if (amount !== null && amount !== undefined && amount !== '') {
+            const num = parseFloat(amount || 0);
+            return `<span class="${cls}">${num>=0?'+':''}$${Math.abs(num).toFixed(2)}</span>`;
+        }
+        return `<span class="${cls}">${pct>=0?'+':''}${parseFloat(pct).toFixed(2)}% <span style="color:var(--muted);font-size:10px;">est</span></span>`;
     };
 
     let lastDate = '';
@@ -178,13 +209,11 @@ function buildTable(trades, summary, groupByDate) {
         const date = t.date || '';
         if (groupByDate && date && date !== lastDate) {
             const dayTrades = trades.filter(x => x.date === date);
-            const dayWins = dayTrades.filter(x => x.outcome === 'WIN').length;
-            const dayLosses = dayTrades.filter(x => x.outcome === 'LOSS').length;
-            const dayWr = (dayWins+dayLosses) > 0 ? Math.round(dayWins*100/(dayWins+dayLosses)) : null;
-            const wrColor = dayWr>=50?'var(--green)':dayWr>=35?'var(--yellow)':'var(--red)';
+            const dayPnl = dayTrades.reduce((sum, x) => sum + parseFloat(x.pnlAmount || 0), 0);
+            const pnlColor = dayPnl >= 0 ? 'var(--green)' : 'var(--red)';
             rows += `<tr class="date-sep"><td colspan="8">📅 ${date}
                 <span style="font-weight:400;color:var(--muted);margin-left:10px">${dayTrades.length} alerts</span>
-                ${dayWr!==null?`<span style="margin-left:10px;color:${wrColor};font-weight:600">${dayWr}% WR</span>`:''}
+                <span style="margin-left:10px;color:${pnlColor};font-weight:600">${dayPnl>=0?'+':''}$${Math.abs(dayPnl).toFixed(2)}</span>
             </td></tr>`;
             lastDate = date;
         }
@@ -194,7 +223,8 @@ function buildTable(trades, summary, groupByDate) {
             <td style="color:var(--muted)">${tradeNum}</td>
             <td style="font-weight:600">${t.ticker||'—'}</td>
             <td>${dir}</td>
-            <td style="font-family:monospace">${t.date||''} ${t.time||''}</td>
+            <td style="font-family:monospace">${formatEtFromTrade(t, 'entry')}</td>
+            <td style="font-family:monospace">${formatEtFromTrade(t, 'exit')}</td>
             <td style="font-family:monospace;font-size:11px;color:var(--muted)">${t.strategy||'smc'} · conf ${t.confidence||0}</td>
             <td>$${parseFloat(t.entry||0).toFixed(2)}</td>
             <td>${badgeHtml(t.outcome||'OPEN')}</td>
@@ -203,7 +233,7 @@ function buildTable(trades, summary, groupByDate) {
     }
 
     return `<table>
-        <thead><tr><th>#</th><th>TICKER</th><th>DIR</th><th>TIME (ET)</th><th>STRATEGY</th><th>ENTRY</th><th>OUTCOME</th><th>P&amp;L %</th></tr></thead>
+        <thead><tr><th>#</th><th>TICKER</th><th>DIR</th><th>ENTRY TIME (ET)</th><th>EXIT TIME (ET)</th><th>STRATEGY</th><th>ENTRY</th><th>OUTCOME</th><th>P&amp;L</th></tr></thead>
         <tbody>${rows}</tbody>
     </table>`;
 }

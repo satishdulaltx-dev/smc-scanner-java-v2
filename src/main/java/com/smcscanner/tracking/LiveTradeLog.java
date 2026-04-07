@@ -86,6 +86,7 @@ public class LiveTradeLog {
         record.put("timestamp", now.toInstant().toEpochMilli());
         record.put("outcome", "OPEN");
         record.put("pnlPct", 0.0);
+        record.put("pnlAmount", null);
         trades.add(record);
         persist();
         log.info("Live trade logged: {} {} {} conf={}", s.getTicker(), s.getDirection(), strategyType, s.getConfidence());
@@ -100,6 +101,7 @@ public class LiveTradeLog {
                 if (ticker.equals(t.get("ticker")) && "OPEN".equals(t.get("outcome"))) {
                     t.put("outcome", outcome);
                     t.put("pnlPct", pnlPct);
+                    if (!t.containsKey("pnlAmount")) t.put("pnlAmount", null);
                     t.put("resolvedAt", ZonedDateTime.now(ET).toInstant().toEpochMilli());
                     persist();
                     log.info("Trade resolved: {} {} pnl={}%", ticker, outcome, pnlPct);
@@ -157,6 +159,11 @@ public class LiveTradeLog {
                 .mapToDouble(t -> ((Number) t.getOrDefault("pnlPct", 0.0)).doubleValue())
                 .sum();
         summary.put("totalPnlPct", Math.round(totalPnl * 100) / 100.0);
+        double totalPnlAmount = dayTrades.stream()
+                .filter(t -> !"OPEN".equals(t.get("outcome")))
+                .mapToDouble(t -> ((Number) t.getOrDefault("pnlAmount", 0.0)).doubleValue())
+                .sum();
+        summary.put("totalPnlAmount", Math.round(totalPnlAmount * 100) / 100.0);
 
         // By ticker
         Map<String, Long> byTicker = dayTrades.stream()
@@ -195,6 +202,11 @@ public class LiveTradeLog {
                     .mapToDouble(t -> ((Number) t.getOrDefault("pnlPct", 0.0)).doubleValue())
                     .sum();
             stats.put("totalPnlPct", Math.round(totalPnl * 100) / 100.0);
+            double totalPnlAmount = trades.stream()
+                    .filter(t -> !"OPEN".equals(t.get("outcome")))
+                    .mapToDouble(t -> ((Number) t.getOrDefault("pnlAmount", 0.0)).doubleValue())
+                    .sum();
+            stats.put("totalPnlAmount", Math.round(totalPnlAmount * 100) / 100.0);
 
             // Unique trading days
             long tradingDays = trades.stream()
@@ -296,6 +308,7 @@ public class LiveTradeLog {
                     if (outcome != null) {
                         t.put("outcome", outcome);
                         t.put("pnlPct", Math.round(pnlPct * 100.0) / 100.0);
+                        if (!t.containsKey("pnlAmount")) t.put("pnlAmount", null);
                         t.put("resolvedAt", ZonedDateTime.now(ET).toInstant().toEpochMilli());
                         if (t.containsKey("resolutionSource")) {
                             t.put("exitPrice", lastPrice);
@@ -354,10 +367,13 @@ public class LiveTradeLog {
         double exitFill = toDouble(sellOrder.get("filled_avg_price"));
         if (entryFill <= 0 || exitFill <= 0) return false;
 
+        double qty = Math.max(1.0, Math.abs(toDouble(sellOrder.get("qty"))));
+        double pnlAmount = (exitFill - entryFill) * 100.0 * qty;
         double pnlPct = (exitFill - entryFill) / entryFill * 100.0;
         String outcome = Math.abs(pnlPct) < 0.10 ? "BE_STOP" : (pnlPct > 0 ? "WIN" : "LOSS");
         trade.put("outcome", outcome);
         trade.put("pnlPct", Math.round(pnlPct * 100.0) / 100.0);
+        trade.put("pnlAmount", Math.round(pnlAmount * 100.0) / 100.0);
         trade.put("exitPrice", exitFill);
         trade.put("entryFillPrice", entryFill);
         trade.put("resolutionSource", "ALPACA_ORDERS");
