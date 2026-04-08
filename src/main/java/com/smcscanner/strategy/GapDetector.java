@@ -32,6 +32,8 @@ public class GapDetector {
             double gapAtrRatio,    // gap size relative to daily ATR
             double prevClose,
             double todayOpen,
+            double entryPrice,
+            double invalidationPrice,
             double dailyAtr,
             int confidence,
             String note
@@ -65,27 +67,42 @@ public class GapDetector {
 
         // Volume confirmation: compare first bar volume to average
         double avgVol = prevBars.stream().mapToDouble(OHLCV::getVolume).average().orElse(0);
-        double firstBarVol = todayBars.get(0).getVolume();
+        OHLCV firstBar = todayBars.get(0);
+        double firstBarVol = firstBar.getVolume();
         double volRatio = avgVol > 0 ? firstBarVol / avgVol : 1.0;
+        double firstOpen = firstBar.getOpen();
+        double firstClose = firstBar.getClose();
+        double firstHigh = firstBar.getHigh();
+        double firstLow = firstBar.getLow();
+        double firstRange = Math.max(0.01, firstHigh - firstLow);
+        double closePos = (firstClose - firstLow) / firstRange; // 0 near low, 1 near high
 
         String direction = gapPct > 0 ? "long" : "short";
 
         // ── Gap & Go: large gap with volume ─────────────────────────────────
         // Strong gap (>1x ATR) + volume surge → trade in gap direction
         if (gapAtrRatio >= 1.0 && volRatio >= 1.5) {
+            boolean bullishHold = gapPct > 0 && firstClose >= firstOpen && closePos >= 0.60;
+            boolean bearishHold = gapPct < 0 && firstClose <= firstOpen && closePos <= 0.40;
+            if (!bullishHold && !bearishHold) {
+                return null;
+            }
             int conf = 65;
             if (gapAtrRatio >= 2.0) conf += 10;   // very large gap
             if (volRatio >= 2.5)    conf += 8;     // strong volume
             if (gapAtrRatio >= 1.5 && volRatio >= 2.0) conf += 5; // both strong
+            if ((gapPct > 0 && closePos >= 0.8) || (gapPct < 0 && closePos <= 0.2)) conf += 5;
             conf = Math.min(conf, 90);
+            double entry = firstClose;
+            double invalidation = gapPct > 0 ? firstLow : firstHigh;
 
-            String note = String.format("Gap %s %.1f%% (%.1fx ATR), vol %.1fx avg — momentum likely continues",
+            String note = String.format("Gap %s %.1f%% (%.1fx ATR), vol %.1fx avg — opening bar held the gap; scalp continuation",
                     gapPct > 0 ? "UP" : "DOWN", Math.abs(gapPct), gapAtrRatio, volRatio);
             log.info("GAP_AND_GO {} {} gap={}% atrRatio={} vol={}x conf={}",
                     ticker, direction.toUpperCase(), String.format("%.2f", gapPct),
                     String.format("%.2f", gapAtrRatio), String.format("%.1f", volRatio), conf);
             return new GapSignal(ticker, GapType.GAP_AND_GO, direction, gapPct,
-                    gapAtrRatio, prevClose, todayOpen, dailyAtr, conf, note);
+                    gapAtrRatio, prevClose, todayOpen, entry, invalidation, dailyAtr, conf, note);
         }
 
         // ── Gap Fill: small gap with weak volume ─────────────────────────────
@@ -93,15 +110,23 @@ public class GapDetector {
         if (gapAtrRatio < 0.5 && volRatio < 1.3) {
             // Fade: trade AGAINST the gap direction (short a gap up, long a gap down)
             String fadeDir = gapPct > 0 ? "short" : "long";
+            boolean gapUpRejected = gapPct > 0 && firstClose < firstOpen && closePos <= 0.45;
+            boolean gapDownRejected = gapPct < 0 && firstClose > firstOpen && closePos >= 0.55;
+            if (!gapUpRejected && !gapDownRejected) {
+                return null;
+            }
             int conf = 62;
             if (volRatio < 0.8) conf += 5;  // very low volume = weak gap, likely to fill
-            String note = String.format("Gap %s %.1f%% (%.1fx ATR), vol %.1fx avg — likely to fill back to $%.2f",
+            if ((gapPct > 0 && closePos <= 0.25) || (gapPct < 0 && closePos >= 0.75)) conf += 5;
+            double entry = firstClose;
+            double invalidation = gapPct > 0 ? firstHigh : firstLow;
+            String note = String.format("Gap %s %.1f%% (%.1fx ATR), vol %.1fx avg — opening rejection favors fill toward $%.2f",
                     gapPct > 0 ? "UP" : "DOWN", Math.abs(gapPct), gapAtrRatio, volRatio, prevClose);
             log.info("GAP_FILL {} {} (fade) gap={}% atrRatio={} vol={}x conf={}",
                     ticker, fadeDir.toUpperCase(), String.format("%.2f", gapPct),
                     String.format("%.2f", gapAtrRatio), String.format("%.1f", volRatio), conf);
             return new GapSignal(ticker, GapType.GAP_FILL, fadeDir, gapPct,
-                    gapAtrRatio, prevClose, todayOpen, dailyAtr, conf, note);
+                    gapAtrRatio, prevClose, todayOpen, entry, invalidation, dailyAtr, conf, note);
         }
 
         return null;
