@@ -44,6 +44,8 @@ public class BacktestService {
     private static final double ATR_TRAIL_REVERSAL = 0.30;
     private static final int REVERSAL_CLOSES = 2;
     private static final double TRAIL_EXIT_SLIPPAGE_BPS = 5.0; // 0.05% adverse slippage on trail exits
+    private static final double HYBRID_BE_R = 1.0;
+    private static final double HYBRID_TRAIL_R = 1.5;
 
     private final PolygonClient            client;
     private final AtrCalculator            atrCalc;
@@ -461,19 +463,25 @@ public class BacktestService {
                     fwdBars = fwdBars.subList(0, mode.maxForwardBars());
                 }
 
-                ExitResult exit = exitStyle == BacktestExitStyle.LIVE_PARITY
-                        ? simulateLiveParityExit(window, fwdBars, entry, sl, tp, dir)
-                        : simulateClassicExit(fwdBars, entry, sl, tp, dir);
+                ExitResult exit = switch (exitStyle) {
+                    case LIVE_PARITY -> simulateLiveParityExit(window, fwdBars, entry, sl, tp, dir);
+                    case HYBRID -> simulateHybridExit(window, fwdBars, entry, sl, tp, dir);
+                    case CLASSIC -> simulateClassicExit(fwdBars, entry, sl, tp, dir);
+                };
                 if (exit == null) continue;
                 String outcome = exit.outcome();
                 String exitTime = exit.exitTime();
                 double pnlPct = exit.pnlPct();
 
                 // Update bounded outcome history (max 6 entries — same as live AdaptiveSuppressor)
-                boolean tradeWon = "WIN".equals(outcome) || ("TIMEOUT".equals(outcome) && pnlPct > 0);
-                java.util.ArrayDeque<Boolean> h = btOutcomes.computeIfAbsent(ticker, k -> new java.util.ArrayDeque<>());
-                h.addLast(tradeWon);
-                if (h.size() > 6) h.pollFirst();
+                if (!"BE_STOP".equals(outcome)) {
+                    boolean tradeWon = "WIN".equals(outcome)
+                            || "TRAIL_WIN".equals(outcome)
+                            || ("TIMEOUT".equals(outcome) && pnlPct > 0);
+                    java.util.ArrayDeque<Boolean> h = btOutcomes.computeIfAbsent(ticker, k -> new java.util.ArrayDeque<>());
+                    h.addLast(tradeWon);
+                    if (h.size() > 6) h.pollFirst();
+                }
 
                 // Estimate options P&L using delta model (no historical options data available)
                 double exitPrice = "long".equals(dir)
@@ -584,6 +592,97 @@ public class BacktestService {
             boolean inProfit = isLong ? targetStop > entry : targetStop < entry;
             boolean improving = isLong ? targetStop > activeSl : targetStop < activeSl;
             if (inProfit && improving) activeSl = targetStop;
+        }
+
+        OHLCV lastFwd = fwdBars.get(fwdBars.size() - 1);
+        double exitPrice = lastFwd.getClose();
+        double pnlPct = isLong
+                ? round2((exitPrice - entry) / entry * 100)
+                : round2((entry - exitPrice) / entry * 100);
+        return new ExitResult("TIMEOUT", toDateTime(lastFwd.getTimestamp()), pnlPct);
+    }
+
+    private ExitResult simulateHybridExit(List<OHLCV> entryWindow, List<OHLCV> fwdBars,
+                                          double entry, double sl, double tp, String dir) {
+        if (fwdBars.isEmpty()) return null;
+        boolean isLong = "long".equals(dir);
+        double risk = Math.abs(entry - sl);
+        double beLevel = isLong ? entry + risk * HYBRID_BE_R : entry - risk * HYBRID_BE_R;
+        double trailArmLevel = isLong ? entry + risk * HYBRID_TRAIL_R : entry - risk * HYBRID_TRAIL_R;
+
+        boolean beActive = false;
+        boolean trailActive = false;
+        double activeSl = sl;
+        double peakClose = entry;
+        int reversalCount = 0;
+        List<OHLCV> atrWindow = new ArrayList<>(entryWindow);
+
+        for (OHLCV fb : fwdBars) {
+            atrWindow.add(fb);
+            if (atrWindow.size() > 20) atrWindow.remove(0);
+
+            double hi = fb.getHigh();
+            double lo = fb.getLow();
+            double close = fb.getClose();
+
+            double currentStop = trailActive ? activeSl : (beActive ? entry : sl);
+            boolean stopBreached = isLong ? lo <= currentStop : hi >= currentStop;
+            if (stopBreached) {
+                double exitPrice = trailActive ? applyTrailSlippage(currentStop, isLong) : currentStop;
+                double pnlPct = isLong
+                        ? round2((exitPrice - entry) / entry * 100)
+                        : round2((entry - exitPrice) / entry * 100);
+                String outcome;
+                if (trailActive) outcome = pnlPct > 0 ? "TRAIL_WIN" : "TRAIL_LOSS";
+                else outcome = beActive ? "BE_STOP" : "LOSS";
+                return new ExitResult(outcome, toDateTime(fb.getTimestamp()), pnlPct);
+            }
+
+            if (!beActive) {
+                if (isLong && hi >= beLevel) beActive = true;
+                if (!isLong && lo <= beLevel) beActive = true;
+            }
+
+            // Keep the classic large-target payout alive until the trade has moved
+            // far enough to justify active trailing.
+            if (!trailActive) {
+                if (isLong && hi >= tp) {
+                    double pnlPct = round2((tp - entry) / entry * 100);
+                    return new ExitResult("WIN", toDateTime(fb.getTimestamp()), pnlPct);
+                }
+                if (!isLong && lo <= tp) {
+                    double pnlPct = round2((entry - tp) / entry * 100);
+                    return new ExitResult("WIN", toDateTime(fb.getTimestamp()), pnlPct);
+                }
+            }
+
+            if (!trailActive) {
+                if (isLong && hi >= trailArmLevel) trailActive = true;
+                if (!isLong && lo <= trailArmLevel) trailActive = true;
+                if (trailActive) {
+                    peakClose = close;
+                    activeSl = beActive ? entry : sl;
+                }
+            }
+
+            if (trailActive) {
+                if (isLong && close > peakClose) peakClose = close;
+                if (!isLong && close < peakClose) peakClose = close;
+
+                double atr = computeAtr5m(atrWindow);
+                if (atr <= 0) atr = risk;
+
+                boolean reversalClose = isLong
+                        ? close < peakClose - atr * 0.20
+                        : close > peakClose + atr * 0.20;
+                reversalCount = reversalClose ? reversalCount + 1 : 0;
+
+                double atrMult = reversalCount >= REVERSAL_CLOSES ? ATR_TRAIL_REVERSAL : ATR_TRAIL_NORMAL;
+                double targetStop = isLong ? peakClose - atr * atrMult : peakClose + atr * atrMult;
+                boolean improving = isLong ? targetStop > activeSl : targetStop < activeSl;
+                boolean protectsAtLeastBe = isLong ? targetStop >= entry : targetStop <= entry;
+                if (improving && protectsAtLeastBe) activeSl = targetStop;
+            }
         }
 
         OHLCV lastFwd = fwdBars.get(fwdBars.size() - 1);
