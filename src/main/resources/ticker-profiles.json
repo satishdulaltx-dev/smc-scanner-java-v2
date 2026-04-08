@@ -2,14 +2,14 @@
   "profiles": [
     {
       "ticker": "AAPL",
-      "strategyType": "smc",
+      "strategyType": "keylevel",
       "minConfidence": 78,
       "slAtrMult": 0.4,
       "tpRrRatio": 1.25,
       "intradayRsGate": true,
       "skip": false,
       "skipReason": null,
-      "note": "Apr 2026 research: switched keylevel→smc. Research API confirmed SMC beats keylevel on 180d (50%WR +0.11%exp vs keylevel 20%WR -0.3%exp). Retained tight sl=0.4 ATR, tpRrRatio=1.25 and intradayRsGate."
+      "note": "Apr 2026: reverted smc→keylevel. Research API 180d favored SMC but 365d backtest showed opposite (keylevel 43.8%WR +0.06% vs SMC 40.9%WR -0.09%). 180d research window too short for AAPL — keylevel is the correct strategy here."
     },
     {
       "ticker": "ABNB",
@@ -19,6 +19,8 @@
       "slAtrMult": 1.0,
       "tpRrRatio": 1.25,
       "intradayRsGate": true,
+      "skip": true,
+      "skipReason": "Apr 2026: removed. Consistently 2 trades/year, -0.5% expectancy. Research said retest but sample never grows — ABNB has too little intraday activity for 5m SMC strategy.",
       "note": "Apr 2026 live-parity retune: keep ABNB on SMC but make it more selective. Raised minConf to 78, enabled RS gating, and trimmed TP ratio to 1.25. Live-parity exits were positive, but the edge was still not clean enough to trust loose entries."
     },
     {
@@ -71,14 +73,12 @@
     },
     {
       "ticker": "DDOG",
-      "strategyType": "smc",
-      "minConfidence": 72,
+      "strategyType": "vwap",
+      "minConfidence": 68,
       "maxConfidence": 84,
-      "minFvgPct": 0.0006,
-      "dispAtrMult": 1.3,
       "slAtrMult": 1.0,
       "tpRrRatio": 1.25,
-      "note": "Apr 2026 research retune: raised minConf 65→72. Research showed SMC 180d 54.5%WR exp=0.0% — right at breakeven, needs tighter entry bar. maxConf=84 retained. VWAP showed 66.7%WR (7t, just under eligibility threshold) — revisit if SMC doesn't improve after tightening."
+      "note": "Apr 2026: switched smc→vwap. SMC stayed at -0.15% exp after tightening (minConf 65→72, no improvement). Research showed VWAP 66.7%WR (7t, just under 8-trade eligibility threshold) — testing at 365d scale to validate. MinConf=68 to generate enough signal volume."
     },
     {
       "ticker": "DIS",
