@@ -14,6 +14,9 @@ import org.springframework.context.event.ContextRefreshedEvent;
 import org.springframework.context.event.EventListener;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -34,6 +37,7 @@ import java.util.stream.Collectors;
 public class LiveTradeLog {
     private static final Logger log = LoggerFactory.getLogger(LiveTradeLog.class);
     private static final String FILE_PATH = resolveStoragePath("live-trades.json");
+    private static final String BACKUP_FILE_PATH = FILE_PATH + ".bak";
     private static final int BROKER_REBUILD_LOOKBACK_DAYS = 30;
     private static final ZoneId ET = ZoneId.of("America/New_York");
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
@@ -51,15 +55,10 @@ public class LiveTradeLog {
 
     @EventListener(ContextRefreshedEvent.class)
     public void init() {
-        File f = new File(FILE_PATH);
-        if (f.exists()) {
-            try {
-                List<Map<String, Object>> loaded = mapper.readValue(f, new TypeReference<>() {});
-                trades.addAll(loaded);
-                log.info("Loaded {} live trade records from {}", trades.size(), FILE_PATH);
-            } catch (Exception e) {
-                log.warn("Could not load live trades: {}", e.getMessage());
-            }
+        List<Map<String, Object>> loaded = loadPersistedTrades();
+        if (!loaded.isEmpty()) {
+            trades.addAll(loaded);
+            log.info("Loaded {} live trade records from {}", trades.size(), FILE_PATH);
         } else {
             log.warn("Live trade log file not found at {} — starting with empty history", FILE_PATH);
         }
@@ -696,9 +695,36 @@ public class LiveTradeLog {
             File f = new File(FILE_PATH);
             File dir = f.getParentFile();
             if (dir != null && !dir.exists()) dir.mkdirs();
-            mapper.writerWithDefaultPrettyPrinter().writeValue(f, trades);
+            Path target = f.toPath();
+            Path tmp = target.resolveSibling(target.getFileName() + ".tmp");
+            Path backup = Path.of(BACKUP_FILE_PATH);
+            mapper.writerWithDefaultPrettyPrinter().writeValue(tmp.toFile(), trades);
+            if (Files.exists(target)) {
+                Files.copy(target, backup, StandardCopyOption.REPLACE_EXISTING);
+            }
+            try {
+                Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (IOException atomicMoveFailed) {
+                Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING);
+            }
         } catch (IOException e) {
             log.error("Failed to persist live trades: {}", e.getMessage());
+        }
+    }
+
+    private List<Map<String, Object>> loadPersistedTrades() {
+        List<Map<String, Object>> loaded = readTradesFile(new File(FILE_PATH), "primary");
+        if (!loaded.isEmpty()) return loaded;
+        return readTradesFile(new File(BACKUP_FILE_PATH), "backup");
+    }
+
+    private List<Map<String, Object>> readTradesFile(File file, String label) {
+        if (!file.exists() || !file.isFile() || file.length() <= 0) return List.of();
+        try {
+            return mapper.readValue(file, new TypeReference<>() {});
+        } catch (Exception e) {
+            log.warn("Could not load {} live trade file {}: {}", label, file.getAbsolutePath(), e.getMessage());
+            return List.of();
         }
     }
 

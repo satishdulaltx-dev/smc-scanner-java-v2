@@ -21,6 +21,9 @@ import java.util.stream.Collectors;
 @Service
 public class OptionsFlowAnalyzer {
     private static final Logger log = LoggerFactory.getLogger(OptionsFlowAnalyzer.class);
+    private static final double BACKTEST_ENTRY_SLIPPAGE_BPS = 35.0;
+    private static final double BACKTEST_EXIT_SLIPPAGE_BPS = 45.0;
+    private static final double BACKTEST_MIN_FILL_HAIRCUT = 0.03;
 
     private final OptionsDataService dataService;
     private final PolygonClient      polygonClient;
@@ -373,14 +376,19 @@ public class OptionsFlowAnalyzer {
         double exitPremium = OptionsRecommendation.estimatePremium(
                 estimatedPremium, delta, gamma, -thetaDaily, underlyingMove, holdDays);
 
-        double pnlPerContract = (exitPremium - estimatedPremium) * 100;
-        double pnlPct = estimatedPremium > 0
-                ? (exitPremium - estimatedPremium) / estimatedPremium * 100
+        // Backtests should pay a realistic spread/slippage cost on option entry/exit.
+        double entryFill = estimatedPremium * (1.0 + BACKTEST_ENTRY_SLIPPAGE_BPS / 10_000.0) + BACKTEST_MIN_FILL_HAIRCUT;
+        double exitFill = Math.max(0.01,
+                exitPremium * (1.0 - BACKTEST_EXIT_SLIPPAGE_BPS / 10_000.0) - BACKTEST_MIN_FILL_HAIRCUT);
+
+        double pnlPerContract = (exitFill - entryFill) * 100;
+        double pnlPct = entryFill > 0
+                ? (exitFill - entryFill) / entryFill * 100
                 : 0;
 
         return new BacktestOptionsEstimate(
-                Math.round(estimatedPremium * 100.0) / 100.0,
-                Math.round(exitPremium * 100.0) / 100.0,
+                Math.round(entryFill * 100.0) / 100.0,
+                Math.round(exitFill * 100.0) / 100.0,
                 Math.round(pnlPerContract * 100.0) / 100.0,
                 Math.round(pnlPct * 10.0) / 10.0
         );

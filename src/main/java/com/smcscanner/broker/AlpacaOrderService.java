@@ -15,6 +15,10 @@ import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -37,6 +41,7 @@ public class AlpacaOrderService {
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
     private static final ZoneId ET = ZoneId.of("America/New_York");
     private static final String TRACKED_FILE_PATH = resolveStoragePath("tracked-positions.json");
+    private static final String TRACKED_BACKUP_FILE_PATH = TRACKED_FILE_PATH + ".bak";
 
     private final ScannerConfig config;
     private final PolygonClient polygon;
@@ -1239,15 +1244,14 @@ public class AlpacaOrderService {
     }
 
     private void loadTrackedPositions() {
-        File f = new File(TRACKED_FILE_PATH);
-        if (!f.exists()) return;
-        try {
-            Map<String, TrackedPosition> loaded = mapper.readValue(f, new TypeReference<>() {});
+        Map<String, TrackedPosition> loaded = readTrackedPositionsFile(new File(TRACKED_FILE_PATH), "primary");
+        if (loaded.isEmpty()) {
+            loaded = readTrackedPositionsFile(new File(TRACKED_BACKUP_FILE_PATH), "backup");
+        }
+        if (!loaded.isEmpty()) {
             trackedPositions.clear();
             trackedPositions.putAll(loaded);
             log.info("Loaded {} tracked option/equity positions from {}", trackedPositions.size(), TRACKED_FILE_PATH);
-        } catch (Exception e) {
-            log.warn("Could not load tracked positions: {}", e.getMessage());
         }
     }
 
@@ -1256,9 +1260,30 @@ public class AlpacaOrderService {
             File f = new File(TRACKED_FILE_PATH);
             File parent = f.getParentFile();
             if (parent != null && !parent.exists()) parent.mkdirs();
-            mapper.writerWithDefaultPrettyPrinter().writeValue(f, trackedPositions);
+            Path target = f.toPath();
+            Path tmp = target.resolveSibling(target.getFileName() + ".tmp");
+            Path backup = Path.of(TRACKED_BACKUP_FILE_PATH);
+            mapper.writerWithDefaultPrettyPrinter().writeValue(tmp.toFile(), trackedPositions);
+            if (Files.exists(target)) {
+                Files.copy(target, backup, StandardCopyOption.REPLACE_EXISTING);
+            }
+            try {
+                Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            } catch (IOException atomicMoveFailed) {
+                Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING);
+            }
         } catch (Exception e) {
             log.warn("Could not persist tracked positions: {}", e.getMessage());
+        }
+    }
+
+    private Map<String, TrackedPosition> readTrackedPositionsFile(File file, String label) {
+        if (!file.exists() || !file.isFile() || file.length() <= 0) return Map.of();
+        try {
+            return mapper.readValue(file, new TypeReference<>() {});
+        } catch (Exception e) {
+            log.warn("Could not load {} tracked positions file {}: {}", label, file.getAbsolutePath(), e.getMessage());
+            return Map.of();
         }
     }
 
