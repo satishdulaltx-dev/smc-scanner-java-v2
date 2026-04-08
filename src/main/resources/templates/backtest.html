@@ -479,7 +479,7 @@ function renderSingle(d) {
         const optExpColor = d.opt_expectancy >= 0 ? 'var(--green)' : 'var(--red)';
         document.getElementById('stats-grid').innerHTML += `
             <div style="grid-column:1/-1;height:1px;background:var(--border);margin:4px 0"></div>
-            <div style="grid-column:1/-1;font-size:10px;color:var(--purple);text-transform:uppercase;letter-spacing:.8px;font-weight:600">📋 Options P&L (estimated · 1 contract per trade)</div>
+            <div style="grid-column:1/-1;font-size:10px;color:var(--purple);text-transform:uppercase;letter-spacing:.8px;font-weight:600">📋 Options P&L (estimated · ${d.avg_contracts ? d.avg_contracts.toFixed(1) + ' avg contracts' : '1 contract per trade'})</div>
             <div class="stat-card"><div class="val" style="color:${optRetColor}">${d.opt_total_pnl >= 0 ? '+' : ''}$${d.opt_total_pnl.toFixed(0)}</div><div class="lbl">Options Total P&L</div></div>
             <div class="stat-card"><div class="val" style="color:${optRetColor}">${d.opt_total_return >= 0 ? '+' : ''}${d.opt_total_return}%</div><div class="lbl">Options Return</div></div>
             <div class="stat-card"><div class="val" style="color:${optExpColor}">${d.opt_expectancy >= 0 ? '+' : ''}$${d.opt_expectancy.toFixed(0)}</div><div class="lbl">Opt Expectancy/Trade</div></div>
@@ -637,13 +637,14 @@ function renderBatch(results, days) {
     let totalTrades = 0, totalWins = 0, totalLosses = 0, totalFiltered = 0;
     let sumWinPnl = 0, sumLossPnl = 0, sumExpectancy = 0, tickersWithTrades = 0;
     let bestTicker = null, worstTicker = null;
-    let totalOptPnl = 0;
+    let totalOptPnl = 0, sumAvgContracts = 0, tickersWithContracts = 0;
     results.forEach(d => {
         totalTrades  += (d.total_trades || 0);
         totalWins    += (d.wins   || 0);
         totalLosses  += (d.losses || 0);
         totalFiltered += (d.news_filtered||0) + (d.ctx_filtered||0) + (d.quality_filtered||0);
         totalOptPnl  += (d.opt_total_pnl || 0);
+        if (d.avg_contracts && d.avg_contracts > 0) { sumAvgContracts += d.avg_contracts; tickersWithContracts++; }
         if ((d.wins   || 0) > 0) sumWinPnl  += (d.avg_win_pct  || 0) * d.wins;
         if ((d.losses || 0) > 0) sumLossPnl += (d.avg_loss_pct || 0) * d.losses;
         if (d.total_trades > 0) {
@@ -657,6 +658,7 @@ function renderBatch(results, days) {
     const overallExp  = totalTrades > 0 ? (sumExpectancy / totalTrades).toFixed(2) : '0.00';
     const avgWinPnl   = totalWins   > 0 ? (sumWinPnl  / totalWins).toFixed(2)   : '0.00';
     const avgLossPnl  = totalLosses > 0 ? (sumLossPnl / totalLosses).toFixed(2) : '0.00';
+    const avgContracts = tickersWithContracts > 0 ? (sumAvgContracts / tickersWithContracts).toFixed(1) : '1.0';
     const wrColor     = overallWR >= 55 ? 'var(--green)' : overallWR >= 40 ? 'var(--yellow)' : 'var(--red)';
     const expColor    = overallExp >= 0 ? 'var(--green)' : 'var(--red)';
 
@@ -695,7 +697,7 @@ function renderBatch(results, days) {
         <div class="bs-sep"></div>
         <div class="bs-stat">
             <div class="bs-val" style="color:${totalOptPnl >= 0 ? 'var(--green)' : 'var(--red)'}">${totalOptPnl >= 0 ? '+' : ''}$${totalOptPnl.toFixed(0)}</div>
-            <div class="bs-lbl">Options P&L (1 contract)</div>
+            <div class="bs-lbl">Options P&L (${avgContracts} avg contracts)</div>
         </div>
         ${totalFiltered > 0 ? `<div class="bs-stat"><div class="bs-val" style="color:var(--muted)">${totalFiltered}</div><div class="bs-lbl">Filtered</div></div>` : ''}
         ${bestTicker  ? `<div class="bs-stat"><div class="bs-val" style="color:var(--green);font-size:15px">${bestTicker.ticker}</div><div class="bs-lbl">Best (+${bestTicker.expectancy}%)</div></div>` : ''}
