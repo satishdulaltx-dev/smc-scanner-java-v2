@@ -65,6 +65,31 @@
         tr:last-child td { border-bottom:none; }
         .muted { color:var(--muted); }
         .footer { text-align:center; padding:16px; color:var(--muted); font-size:11px; border-top:1px solid var(--border); }
+
+        /* ── Consistency Heatmap ─────────────────────────────────── */
+        .heatmap-wrap { padding:18px 24px 4px; }
+        .heatmap-title { font-size:13px; font-weight:800; color:var(--text); margin-bottom:4px; }
+        .heatmap-sub { font-size:11px; color:var(--muted); margin-bottom:14px; }
+        .heatmap-table { width:100%; border-collapse:collapse; font-size:12px; }
+        .heatmap-table th { color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:.8px; padding:6px 10px; border-bottom:2px solid var(--border); white-space:nowrap; }
+        .heatmap-table td { padding:7px 10px; border-bottom:1px solid var(--border); vertical-align:middle; }
+        .heatmap-table tr:last-child td { border-bottom:none; }
+        .hm-ticker { font-size:14px; font-weight:800; min-width:58px; }
+        .hm-strat { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.5px; }
+        .hm-cell { border-radius:7px; padding:6px 10px; text-align:center; min-width:90px; }
+        .hm-strong { background:rgba(63,185,80,.18); border:1px solid rgba(63,185,80,.4); }
+        .hm-ok     { background:rgba(210,153,34,.16); border:1px solid rgba(210,153,34,.4); }
+        .hm-weak   { background:rgba(248,81,73,.14);  border:1px solid rgba(248,81,73,.35); }
+        .hm-na     { background:transparent; border:1px solid var(--border); color:var(--muted); }
+        .hm-wr   { font-size:13px; font-weight:800; }
+        .hm-exp  { font-size:10px; margin-top:2px; }
+        .hm-badge { padding:4px 10px; border-radius:999px; font-size:10px; font-weight:800; letter-spacing:.6px; text-transform:uppercase; white-space:nowrap; }
+        .hm-all   { background:rgba(63,185,80,.18); color:var(--green); border:1px solid rgba(63,185,80,.4); }
+        .hm-mixed { background:rgba(210,153,34,.16); color:var(--yellow); border:1px solid rgba(210,153,34,.4); }
+        .hm-regime{ background:rgba(248,81,73,.14);  color:var(--red);   border:1px solid rgba(248,81,73,.35); }
+        .hm-legend { display:flex; gap:14px; flex-wrap:wrap; margin-bottom:14px; }
+        .hm-leg-item { display:flex; align-items:center; gap:6px; font-size:11px; color:var(--muted); }
+        .hm-leg-swatch { width:12px; height:12px; border-radius:3px; }
     </style>
 </head>
 <body>
@@ -119,6 +144,32 @@
         </thead>
         <tbody id="compare-body"></tbody>
     </table>
+</div>
+
+<div id="heatmap-section" style="display:none">
+    <div class="heatmap-wrap">
+        <div class="heatmap-title">📊 Consistency Heatmap — All-Weather vs Regime-Only</div>
+        <div class="heatmap-sub">Each cell = win rate + expectancy for that window. Green = positive across the window. Sort by reliability: tickers consistent across all 3 windows are your backbone.</div>
+        <div class="hm-legend">
+            <div class="hm-leg-item"><div class="hm-leg-swatch" style="background:rgba(63,185,80,.3)"></div> Strong (WR ≥50% + exp ≥+0.20%)</div>
+            <div class="hm-leg-item"><div class="hm-leg-swatch" style="background:rgba(210,153,34,.3)"></div> OK (exp ≥0% + WR ≥45%)</div>
+            <div class="hm-leg-item"><div class="hm-leg-swatch" style="background:rgba(248,81,73,.25)"></div> Weak (negative exp or WR &lt;45%)</div>
+        </div>
+        <table class="heatmap-table">
+            <thead>
+                <tr>
+                    <th>Ticker</th>
+                    <th>Strategy</th>
+                    <th>Recommendation</th>
+                    <th style="text-align:center">90d</th>
+                    <th style="text-align:center">180d</th>
+                    <th style="text-align:center">365d</th>
+                    <th style="text-align:center">Consistency</th>
+                </tr>
+            </thead>
+            <tbody id="heatmap-body"></tbody>
+        </table>
+    </div>
 </div>
 
 <div class="content">
@@ -281,6 +332,68 @@ function renderTickerCard(row) {
     `;
 }
 
+function hmCellClass(wr, exp) {
+    if (exp >= 0.20 && wr >= 50) return 'hm-strong';
+    if (exp >= 0    && wr >= 45) return 'hm-ok';
+    return 'hm-weak';
+}
+
+function hmCell(w) {
+    if (!w) return `<td><div class="hm-cell hm-na" style="text-align:center;font-size:11px">—</div></td>`;
+    const cls = hmCellClass(w.winRate, w.expectancy);
+    const wrColor = w.winRate >= 50 ? 'var(--green)' : w.winRate >= 45 ? 'var(--yellow)' : 'var(--red)';
+    const expColor = w.expectancy >= 0.20 ? 'var(--green)' : w.expectancy >= 0 ? 'var(--yellow)' : 'var(--red)';
+    return `<td><div class="hm-cell ${cls}">
+        <div class="hm-wr" style="color:${wrColor}">${w.winRate.toFixed(0)}%</div>
+        <div class="hm-exp" style="color:${expColor}">${w.expectancy >= 0 ? '+' : ''}${w.expectancy.toFixed(2)}%</div>
+        <div style="font-size:9px;color:var(--muted);margin-top:2px">${w.totalTrades}t</div>
+    </div></td>`;
+}
+
+function renderHeatmap(tickers) {
+    const section = document.getElementById('heatmap-section');
+    const body = document.getElementById('heatmap-body');
+
+    // Score each ticker: count windows that are "ok or better"
+    const scored = tickers.map(t => {
+        const wins = (t.windows || []);
+        const w90  = wins.find(w => w.days === 90);
+        const w180 = wins.find(w => w.days === 180);
+        const w365 = wins.find(w => w.days === 365);
+        const score = [w90, w180, w365].filter(w => w && w.expectancy >= 0 && w.winRate >= 45).length;
+        const strongScore = [w90, w180, w365].filter(w => w && w.expectancy >= 0.20 && w.winRate >= 50).length;
+        return { t, w90, w180, w365, score, strongScore };
+    });
+
+    // Sort: all-weather first, then by score desc, then by 365d expectancy desc
+    scored.sort((a, b) => {
+        if (b.score !== a.score) return b.score - a.score;
+        if (b.strongScore !== a.strongScore) return b.strongScore - a.strongScore;
+        return (b.t.expectancy365 || 0) - (a.t.expectancy365 || 0);
+    });
+
+    body.innerHTML = scored.map(({ t, w90, w180, w365, score }) => {
+        const badge = score === 3
+            ? `<span class="hm-badge hm-all">● All-Weather</span>`
+            : score === 2
+            ? `<span class="hm-badge hm-mixed">◑ Mixed</span>`
+            : `<span class="hm-badge hm-regime">○ Regime-Only</span>`;
+
+        const recClass = pillClass(t.recommendation);
+        return `<tr>
+            <td><div class="hm-ticker">${t.ticker}</div></td>
+            <td><div class="hm-strat">${t.currentStrategy}</div></td>
+            <td><span class="pill ${recClass}" style="font-size:9px">${t.recommendation}</span></td>
+            ${hmCell(w90)}
+            ${hmCell(w180)}
+            ${hmCell(w365)}
+            <td>${badge}</td>
+        </tr>`;
+    }).join('');
+
+    section.style.display = 'block';
+}
+
 function exitStyleLabel(exitStyle) {
     if (exitStyle === 'HYBRID') return 'Hybrid Trail After 1.5R';
     if (exitStyle === 'LIVE_PARITY') return 'Live Parity Trail';
@@ -363,6 +476,7 @@ async function refreshStatus(exitStyle) {
         const data = status.report || await fetchCachedResearch(exitStyle);
         if (data) {
             renderStats(data);
+            renderHeatmap(data.tickers);
             await refreshComparison();
             grid.innerHTML = data.tickers.map(renderTickerCard).join('');
             section.style.display = 'block';
