@@ -38,14 +38,14 @@ public class VwapStrategyDetector {
         // Filter to regular NYSE session only: same date AND 9:30 AM–4:00 PM ET
         // This excludes pre-market and after-hours bars which skew VWAP calculations
         OHLCV lastRaw = bars.get(bars.size() - 1);
-        LocalDate today = Instant.ofEpochMilli(Long.parseLong(lastRaw.getTimestamp()))
+        LocalDate today = Instant.ofEpochMilli(lastRaw.getTimestamp())
                 .atZone(ET).toLocalDate();
         LocalTime mktOpen  = LocalTime.of(9, 30);
         LocalTime mktClose = LocalTime.of(16, 0);
 
         List<OHLCV> sessionBars = new ArrayList<>();
         for (OHLCV bar : bars) {
-            ZonedDateTime zdt = Instant.ofEpochMilli(Long.parseLong(bar.getTimestamp())).atZone(ET);
+            ZonedDateTime zdt = Instant.ofEpochMilli(bar.getTimestamp()).atZone(ET);
             if (zdt.toLocalDate().equals(today)
                     && !zdt.toLocalTime().isBefore(mktOpen)
                     && zdt.toLocalTime().isBefore(mktClose)) {

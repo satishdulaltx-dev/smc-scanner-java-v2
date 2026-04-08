@@ -29,7 +29,7 @@ public class OrderBlockAnalyzer {
                 for (int j=i-1; j>=Math.max(0,i-MAX_AGE); j--) {
                     OHLCV c=bars.get(j);
                     if (c.getClose()<c.getOpen()) {
-                        OrderBlock ob=OrderBlock.builder().index(j).high(c.getHigh()).low(c.getLow()).openBarIdx(j).direction("bullish").mitigated(false).touchCount(0).timestamp(c.getTimestamp()).build();
+                        OrderBlock ob=OrderBlock.builder().index(j).high(c.getHigh()).low(c.getLow()).openBarIdx(j).direction("bullish").mitigated(false).touchCount(0).timestamp(String.valueOf(c.getTimestamp())).build();
                         checkMitigation(ob,bars,i+1); obs.add(ob); break;
                     }
                 }
@@ -38,7 +38,7 @@ public class OrderBlockAnalyzer {
                 for (int j=i-1; j>=Math.max(0,i-MAX_AGE); j--) {
                     OHLCV c=bars.get(j);
                     if (c.getClose()>c.getOpen()) {
-                        OrderBlock ob=OrderBlock.builder().index(j).high(c.getHigh()).low(c.getLow()).openBarIdx(j).direction("bearish").mitigated(false).touchCount(0).timestamp(c.getTimestamp()).build();
+                        OrderBlock ob=OrderBlock.builder().index(j).high(c.getHigh()).low(c.getLow()).openBarIdx(j).direction("bearish").mitigated(false).touchCount(0).timestamp(String.valueOf(c.getTimestamp())).build();
                         checkMitigation(ob,bars,i+1); obs.add(ob); break;
                     }
                 }

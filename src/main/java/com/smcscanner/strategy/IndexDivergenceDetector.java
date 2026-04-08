@@ -40,13 +40,13 @@ public class IndexDivergenceDetector {
 
         LocalTime mktOpen  = LocalTime.of(9, 30);
         LocalTime mktClose = LocalTime.of(16, 0);
-        LocalDate today    = Instant.ofEpochMilli(Long.parseLong(
-                aaplBars.get(aaplBars.size() - 1).getTimestamp())).atZone(ET).toLocalDate();
+        LocalDate today    = Instant.ofEpochMilli(
+                aaplBars.get(aaplBars.size() - 1).getTimestamp()).atZone(ET).toLocalDate();
 
         // Filter AAPL to today's session
         List<OHLCV> aaplSess = new ArrayList<>();
         for (OHLCV bar : aaplBars) {
-            ZonedDateTime zdt = Instant.ofEpochMilli(Long.parseLong(bar.getTimestamp())).atZone(ET);
+            ZonedDateTime zdt = Instant.ofEpochMilli(bar.getTimestamp()).atZone(ET);
             if (zdt.toLocalDate().equals(today)
                     && !zdt.toLocalTime().isBefore(mktOpen)
                     && zdt.toLocalTime().isBefore(mktClose)) {
@@ -58,7 +58,7 @@ public class IndexDivergenceDetector {
         // Filter SPY to today's session
         List<OHLCV> spySess = new ArrayList<>();
         for (OHLCV bar : spyBars) {
-            ZonedDateTime zdt = Instant.ofEpochMilli(Long.parseLong(bar.getTimestamp())).atZone(ET);
+            ZonedDateTime zdt = Instant.ofEpochMilli(bar.getTimestamp()).atZone(ET);
             if (zdt.toLocalDate().equals(today)
                     && !zdt.toLocalTime().isBefore(mktOpen)
                     && zdt.toLocalTime().isBefore(mktClose)) {

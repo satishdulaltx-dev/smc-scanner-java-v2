@@ -38,7 +38,7 @@ public class ThreeDayVwapDetector {
         LocalTime mktClose = LocalTime.of(16, 0);
         List<OHLCV> sessionBars = new ArrayList<>();
         for (OHLCV bar : multiDayBars) {
-            ZonedDateTime zdt = Instant.ofEpochMilli(Long.parseLong(bar.getTimestamp())).atZone(ET);
+            ZonedDateTime zdt = Instant.ofEpochMilli(bar.getTimestamp()).atZone(ET);
             if (!zdt.toLocalTime().isBefore(mktOpen) && zdt.toLocalTime().isBefore(mktClose)) {
                 sessionBars.add(bar);
             }
@@ -67,9 +67,9 @@ public class ThreeDayVwapDetector {
         double atr   = Math.max(atr5m, close * 0.001);
 
         // Average volume from today's bars only
-        LocalDate today = Instant.ofEpochMilli(Long.parseLong(last.getTimestamp())).atZone(ET).toLocalDate();
+        LocalDate today = Instant.ofEpochMilli(last.getTimestamp()).atZone(ET).toLocalDate();
         double avgVol = sessionBars.stream()
-                .filter(b -> Instant.ofEpochMilli(Long.parseLong(b.getTimestamp())).atZone(ET).toLocalDate().equals(today))
+                .filter(b -> Instant.ofEpochMilli(b.getTimestamp()).atZone(ET).toLocalDate().equals(today))
                 .mapToDouble(OHLCV::getVolume).average()
                 .orElse(sessionBars.stream().mapToDouble(OHLCV::getVolume).average().orElse(1.0));
 

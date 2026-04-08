@@ -21,8 +21,8 @@ public class StructureAnalyzer {
                 if (bars.get(j).getHigh() >= curH) isH = false;
                 if (bars.get(j).getLow()  <= curL) isL = false;
             }
-            if (isH) swings.add(SwingPoint.builder().index(i).price(curH).swingType(SwingType.HIGH).timestamp(bars.get(i).getTimestamp()).build());
-            if (isL) swings.add(SwingPoint.builder().index(i).price(curL).swingType(SwingType.LOW).timestamp(bars.get(i).getTimestamp()).build());
+            if (isH) swings.add(SwingPoint.builder().index(i).price(curH).swingType(SwingType.HIGH).timestamp(String.valueOf(bars.get(i).getTimestamp())).build());
+            if (isL) swings.add(SwingPoint.builder().index(i).price(curL).swingType(SwingType.LOW).timestamp(String.valueOf(bars.get(i).getTimestamp())).build());
         }
         return swings;
     }
@@ -41,10 +41,10 @@ public class StructureAnalyzer {
                 StructureBreak brk = null;
                 if (swing.getSwingType()==SwingType.HIGH && bar.getClose()>swing.getPrice()) {
                     StructureType t = "bullish".equals(trend) ? StructureType.BOS : StructureType.CHOCH;
-                    brk = StructureBreak.builder().index(bi).breakType(t).price(swing.getPrice()).priorSwingIdx(swing.getIndex()).confirmed(true).timestamp(bar.getTimestamp()).build();
+                    brk = StructureBreak.builder().index(bi).breakType(t).price(swing.getPrice()).priorSwingIdx(swing.getIndex()).confirmed(true).timestamp(String.valueOf(bar.getTimestamp())).build();
                 } else if (swing.getSwingType()==SwingType.LOW && bar.getClose()<swing.getPrice()) {
                     StructureType t = "bearish".equals(trend) ? StructureType.BOS : StructureType.CHOCH;
-                    brk = StructureBreak.builder().index(bi).breakType(t).price(swing.getPrice()).priorSwingIdx(swing.getIndex()).confirmed(true).timestamp(bar.getTimestamp()).build();
+                    brk = StructureBreak.builder().index(bi).breakType(t).price(swing.getPrice()).priorSwingIdx(swing.getIndex()).confirmed(true).timestamp(String.valueOf(bar.getTimestamp())).build();
                 }
                 if (brk != null) {
                     final StructureBreak fb = brk;

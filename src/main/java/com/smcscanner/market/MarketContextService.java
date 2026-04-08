@@ -296,7 +296,7 @@ public class MarketContextService {
     private List<OHLCV> sliceTo(List<OHLCV> bars, long cutoffEpochMs) {
         if (bars == null || bars.isEmpty()) return List.of();
         return bars.stream()
-                .filter(b -> Long.parseLong(b.getTimestamp()) < cutoffEpochMs)
+                .filter(b -> b.getTimestamp() < cutoffEpochMs)
                 .collect(Collectors.toList());
     }
 

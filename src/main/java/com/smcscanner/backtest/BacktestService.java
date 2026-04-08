@@ -113,7 +113,7 @@ public class BacktestService {
         // VWAP and ORB strategies filter to regular session internally
         TreeMap<LocalDate, List<OHLCV>> byDate = new TreeMap<>();
         for (OHLCV bar : allBars) {
-            LocalDate d = Instant.ofEpochMilli(Long.parseLong(bar.getTimestamp())).atZone(ET).toLocalDate();
+            LocalDate d = Instant.ofEpochMilli(bar.getTimestamp()).atZone(ET).toLocalDate();
             byDate.computeIfAbsent(d, k -> new ArrayList<>()).add(bar);
         }
 
@@ -142,7 +142,7 @@ public class BacktestService {
         // Group SPY 5m bars by date for per-day slicing
         TreeMap<LocalDate, List<OHLCV>> spy5mByDate = new TreeMap<>();
         for (OHLCV bar : spy5mBars) {
-            LocalDate d = Instant.ofEpochMilli(Long.parseLong(bar.getTimestamp())).atZone(ET).toLocalDate();
+            LocalDate d = Instant.ofEpochMilli(bar.getTimestamp()).atZone(ET).toLocalDate();
             spy5mByDate.computeIfAbsent(d, k -> new ArrayList<>()).add(bar);
         }
 
@@ -168,7 +168,7 @@ public class BacktestService {
             if (dailyBars != null && !dailyBars.isEmpty()) {
                 long cutoff = date.atStartOfDay(ET).toInstant().toEpochMilli();
                 htfSlice = dailyBars.stream()
-                        .filter(b -> Long.parseLong(b.getTimestamp()) < cutoff)
+                        .filter(b -> b.getTimestamp() < cutoff)
                         .collect(Collectors.toList());
                 if (htfSlice.size() >= 5) {
                     // Daily ATR — used for proper TP/SL sizing in SetupDetector
@@ -236,7 +236,7 @@ public class BacktestService {
                 // ALL equity strategies: skip pre-market bars — options don't trade before 9:30 ET
                 if (!ticker.startsWith("X:")) {
                     ZonedDateTime lastZdt = Instant.ofEpochMilli(
-                        Long.parseLong(dayBars.get(end-1).getTimestamp())).atZone(ET);
+                        dayBars.get(end-1).getTimestamp()).atZone(ET);
                     if (lastZdt.toLocalTime().isBefore(LocalTime.of(9, 30))) continue;
                 }
                 List<OHLCV> window = dayBars.subList(0, end);
@@ -268,9 +268,9 @@ public class BacktestService {
                     multiDay.addAll(window);
                     bSetups = vwap3dDetector.detect(multiDay, ticker, dailyAtr);
                 } else if ("idiv".equals(stratType)) {
-                    long entryTs = Long.parseLong(window.get(window.size() - 1).getTimestamp());
+                    long entryTs = window.get(window.size() - 1).getTimestamp();
                     List<OHLCV> spySlice = spy5mByDate.getOrDefault(date, List.of()).stream()
-                            .filter(b -> Long.parseLong(b.getTimestamp()) <= entryTs)
+                            .filter(b -> b.getTimestamp() <= entryTs)
                             .collect(java.util.stream.Collectors.toList());
                     bSetups = indexDivDetector.detect(window, spySlice, ticker, dailyAtr);
                 } else if ("gammapin".equals(stratType)) {
@@ -285,19 +285,7 @@ public class BacktestService {
                 TradeSetup setup = bSetups.get(0);
 
                 // ── Historical context checks (news + market) ────────────────
-                long entryEpochMs = Long.parseLong(dayBars.get(end - 1).getTimestamp());
-
-                // ── Time-of-day soft penalty (was hard block) ──────────────────
-                // 11:xx AM and 1:xx PM ET have lower WR historically. Now a -15 penalty
-                // instead of -100 kill switch. Strong setups can still fire during lunch.
-                int deadZoneAdj = 0;
-                {
-                    ZonedDateTime entryZdt = Instant.ofEpochMilli(entryEpochMs).atZone(ET);
-                    int entryHour = entryZdt.toLocalTime().getHour();
-                    if (!ticker.startsWith("X:") && (entryHour == 11 || entryHour == 13)) {
-                        deadZoneAdj = -15;
-                    }
-                }
+                long entryEpochMs = dayBars.get(end - 1).getTimestamp();
 
                 // ── 15m alignment check — matches live ScannerService (soft -15 penalty) ──
                 // Compute 15m bias using bars strictly before entry timestamp.
@@ -308,7 +296,7 @@ public class BacktestService {
                 boolean is15mApplicable = !"vwap".equals(stratType) && !"vwap3d".equals(stratType);
                 if (is15mApplicable && !ticker.startsWith("X:") && !all15mBars.isEmpty()) {
                     List<OHLCV> slice15 = all15mBars.stream()
-                            .filter(b -> Long.parseLong(b.getTimestamp()) < entryEpochMs)
+                            .filter(b -> b.getTimestamp() < entryEpochMs)
                             .collect(java.util.stream.Collectors.toList());
                     if (slice15.size() >= 20) {
                         int sz = slice15.size();
@@ -337,7 +325,7 @@ public class BacktestService {
                 if (bp.isIntradayRsGate() && !ticker.startsWith("X:")) {
                     List<OHLCV> spyDay = spy5mByDate.getOrDefault(date, List.of());
                     List<OHLCV> spyWindow = spyDay.stream()
-                            .filter(b -> Long.parseLong(b.getTimestamp()) <= entryEpochMs)
+                            .filter(b -> b.getTimestamp() <= entryEpochMs)
                             .collect(Collectors.toList());
                     double intradayRs = marketCtxService.computeIntradayRsFromBars(window, spyWindow);
                     intradayRsAdj = marketCtxService.computeIntradayRsDelta(intradayRs, window, setup.getDirection());
@@ -412,7 +400,7 @@ public class BacktestService {
                              && !"neutral".equals(htfBias) && !"neutral".equals(bias15mLabel)) alignmentAdj = -10;
                 }
 
-                int totalAdj = newsAdj + ctxAdj + qualityAdj + intradayRsAdj + deadZoneAdj + bias15mAdj + alignmentAdj + sma200Adj + rsiAdj + candleAdj + volAdj;
+                int totalAdj = newsAdj + ctxAdj + qualityAdj + intradayRsAdj + bias15mAdj + alignmentAdj + sma200Adj + rsiAdj + candleAdj + volAdj;
                 // Penalty floor: secondary filters can reduce base confidence by at most 25%.
                 // A strong base setup (80+) should never be killed by stacking RS + news + quality.
                 // Floor = 75% of base confidence. e.g. base=80 → floor=60, base=70 → floor=52.
@@ -422,8 +410,8 @@ public class BacktestService {
 
                 // Skip trade if combined filters knocked confidence below threshold
                 if (adjConf < effectiveMinConf) {
-                    log.debug("{} CONF_FILTERED: base={} news={} ctx={} qual={} iRS={} dz={} → adj={} floor={} (min={})",
-                            ticker, setup.getConfidence(), newsAdj, ctxAdj, qualityAdj, intradayRsAdj, deadZoneAdj, adjConf, penaltyFloor, effectiveMinConf);
+                    log.debug("{} CONF_FILTERED: base={} news={} ctx={} qual={} iRS={} → adj={} floor={} (min={})",
+                            ticker, setup.getConfidence(), newsAdj, ctxAdj, qualityAdj, intradayRsAdj, adjConf, penaltyFloor, effectiveMinConf);
                     String filteredOutcome = bias15mAdj < 0 && (newsAdj < 0 || ctxAdj < 0 || qualityAdj < 0) ? "MULTI_FILTERED"
                                            : bias15mAdj < 0 ? "15M_FILTERED"
                                            : (newsAdj < 0 && (ctxAdj < 0 || qualityAdj < 0)) ? "MULTI_FILTERED"
@@ -471,7 +459,7 @@ public class BacktestService {
                 if (di + 1 < dates.size()) fwdBarsRaw.addAll(byDate.get(dates.get(di + 1)));
                 List<OHLCV> fwdBars = new ArrayList<>();
                 for (OHLCV fb : fwdBarsRaw) {
-                    ZonedDateTime fbZdt = Instant.ofEpochMilli(Long.parseLong(fb.getTimestamp())).atZone(ET);
+                    ZonedDateTime fbZdt = Instant.ofEpochMilli(fb.getTimestamp()).atZone(ET);
                     LocalTime fbTime = fbZdt.toLocalTime();
                     if (!fbTime.isBefore(LocalTime.of(9, 30)) && fbTime.isBefore(LocalTime.of(16, 0))) {
                         fwdBars.add(fb);
@@ -753,12 +741,12 @@ public class BacktestService {
                 .volatility("gap")
                 .atr(gap.dailyAtr())
                 .factorBreakdown(gap.note())
-                .timestamp(Instant.ofEpochMilli(Long.parseLong(firstSessionBar.getTimestamp())).atZone(ET).toLocalDateTime())
+                .timestamp(Instant.ofEpochMilli(firstSessionBar.getTimestamp()).atZone(ET).toLocalDateTime())
                 .build();
     }
 
     private boolean isRegularSessionBar(OHLCV bar) {
-        ZonedDateTime zdt = Instant.ofEpochMilli(Long.parseLong(bar.getTimestamp())).atZone(ET);
+        ZonedDateTime zdt = Instant.ofEpochMilli(bar.getTimestamp()).atZone(ET);
         LocalTime time = zdt.toLocalTime();
         return !time.isBefore(LocalTime.of(9, 30)) && time.isBefore(LocalTime.of(16, 0));
     }
@@ -777,9 +765,8 @@ public class BacktestService {
                 || ("TIMEOUT".equals(t.outcome()) && t.pnlPct() <= 0);
     }
 
-    private String toDateTime(String rawTs) {
-        try { return Instant.ofEpochMilli(Long.parseLong(rawTs)).atZone(ET).format(DT_FMT) + " ET"; }
-        catch (Exception e) { return rawTs; }
+    private String toDateTime(long epochMs) {
+        return Instant.ofEpochMilli(epochMs).atZone(ET).format(DT_FMT) + " ET";
     }
     private double round2(double v) { return Math.round(v * 100.0) / 100.0; }
 

@@ -27,11 +27,11 @@ public class FvgAnalyzer {
             double atrVal = atrV[i+1]>0 ? atrV[i+1] : atrV[i];
             double minSize = atrVal * minSizeAtr;
             if (b3.getLow() > b1.getHigh() && (b3.getLow()-b1.getHigh()) >= minSize) {
-                FairValueGap fvg = FairValueGap.builder().index(i+1).high(b3.getLow()).low(b1.getHigh()).direction("bullish").filled(false).timestamp(bars.get(i+1).getTimestamp()).build();
+                FairValueGap fvg = FairValueGap.builder().index(i+1).high(b3.getLow()).low(b1.getHigh()).direction("bullish").filled(false).timestamp(String.valueOf(bars.get(i+1).getTimestamp())).build();
                 checkFill(fvg, bars, i+2); fvgs.add(fvg);
             }
             if (b1.getLow() > b3.getHigh() && (b1.getLow()-b3.getHigh()) >= minSize) {
-                FairValueGap fvg = FairValueGap.builder().index(i+1).high(b1.getLow()).low(b3.getHigh()).direction("bearish").filled(false).timestamp(bars.get(i+1).getTimestamp()).build();
+                FairValueGap fvg = FairValueGap.builder().index(i+1).high(b1.getLow()).low(b3.getHigh()).direction("bearish").filled(false).timestamp(String.valueOf(bars.get(i+1).getTimestamp())).build();
                 checkFill(fvg, bars, i+2); fvgs.add(fvg);
             }
         }

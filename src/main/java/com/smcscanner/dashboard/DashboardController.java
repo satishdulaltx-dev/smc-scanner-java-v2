@@ -176,7 +176,7 @@ public class DashboardController {
         for (OHLCV b : bars) {
             Map<String,Object> c = new LinkedHashMap<>();
             // Lightweight Charts expects time in seconds (Unix epoch)
-            long ts = Long.parseLong(b.getTimestamp());
+            long ts = b.getTimestamp();
             c.put("time", ts > 9999999999L ? ts / 1000 : ts); // ms→sec if needed
             c.put("open",   b.getOpen());
             c.put("high",   b.getHigh());

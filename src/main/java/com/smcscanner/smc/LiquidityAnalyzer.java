@@ -21,13 +21,13 @@ public class LiquidityAnalyzer {
                 if (sh.getIndex()>=i) continue;
                 double lvl=sh.getPrice();
                 if (bar.getHigh()>lvl*(1+SWEEP_BUF)&&bar.getClose()<lvl)
-                    sweeps.add(LiquiditySweep.builder().index(i).levelType(isEq(lvl,eqH)?"equal":"single").direction("buy_side").price(lvl).sweptSwings(List.of(sh)).timestamp(bar.getTimestamp()).build());
+                    sweeps.add(LiquiditySweep.builder().index(i).levelType(isEq(lvl,eqH)?"equal":"single").direction("buy_side").price(lvl).sweptSwings(List.of(sh)).timestamp(String.valueOf(bar.getTimestamp())).build());
             }
             for (SwingPoint sl:lows) {
                 if (sl.getIndex()>=i) continue;
                 double lvl=sl.getPrice();
                 if (bar.getLow()<lvl*(1-SWEEP_BUF)&&bar.getClose()>lvl)
-                    sweeps.add(LiquiditySweep.builder().index(i).levelType(isEq(lvl,eqL)?"equal":"single").direction("sell_side").price(lvl).sweptSwings(List.of(sl)).timestamp(bar.getTimestamp()).build());
+                    sweeps.add(LiquiditySweep.builder().index(i).levelType(isEq(lvl,eqL)?"equal":"single").direction("sell_side").price(lvl).sweptSwings(List.of(sl)).timestamp(String.valueOf(bar.getTimestamp())).build());
             }
         }
         return sweeps;

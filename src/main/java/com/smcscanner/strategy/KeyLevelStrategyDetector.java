@@ -63,14 +63,14 @@ public class KeyLevelStrategyDetector {
         // ── Filter 5m bars to regular NYSE session (9:30–16:00 ET) ────────────
         // This avoids: (a) pre-market volume distorting avgVol, (b) firing on the
         // noisy first opening bar, (c) after-hours false signals.
-        LocalDate today     = Instant.ofEpochMilli(Long.parseLong(
-                fiveMinBars.get(fiveMinBars.size() - 1).getTimestamp())).atZone(ET).toLocalDate();
+        LocalDate today     = Instant.ofEpochMilli(
+                fiveMinBars.get(fiveMinBars.size() - 1).getTimestamp()).atZone(ET).toLocalDate();
         LocalTime mktOpen   = LocalTime.of(9, 30);
         LocalTime mktClose  = LocalTime.of(16, 0);
 
         List<OHLCV> sessionBars = new ArrayList<>();
         for (OHLCV bar : fiveMinBars) {
-            ZonedDateTime zdt = Instant.ofEpochMilli(Long.parseLong(bar.getTimestamp())).atZone(ET);
+            ZonedDateTime zdt = Instant.ofEpochMilli(bar.getTimestamp()).atZone(ET);
             if (zdt.toLocalDate().equals(today)
                     && !zdt.toLocalTime().isBefore(mktOpen)
                     && zdt.toLocalTime().isBefore(mktClose)) {

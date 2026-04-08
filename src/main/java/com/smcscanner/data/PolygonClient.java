@@ -69,7 +69,7 @@ public class PolygonClient {
             List<OHLCV> bars = new ArrayList<>();
             for (JsonNode row : data) {
                 if (row.size() < 7) continue;
-                bars.add(OHLCV.builder().timestamp(row.get(0).asText())
+                bars.add(OHLCV.builder().timestamp(row.get(0).asLong() * 1000L)
                         .open(row.get(1).asDouble()).high(row.get(2).asDouble())
                         .low(row.get(3).asDouble()).close(row.get(4).asDouble())
                         .volume(row.get(6).asDouble()).build());
@@ -115,7 +115,7 @@ public class PolygonClient {
                     JsonNode results = root.get("results");
                     if (results == null || !results.isArray() || results.size() == 0) break;
                     for (JsonNode bar : results) {
-                        bars.add(OHLCV.builder().timestamp(String.valueOf(bar.get("t").asLong()))
+                        bars.add(OHLCV.builder().timestamp(bar.get("t").asLong())
                                 .open(bar.get("o").asDouble()).high(bar.get("h").asDouble())
                                 .low(bar.get("l").asDouble()).close(bar.get("c").asDouble())
                                 .volume(bar.get("v").asDouble()).build());
