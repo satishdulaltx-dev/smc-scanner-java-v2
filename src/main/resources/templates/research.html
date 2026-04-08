@@ -102,17 +102,17 @@
 <div class="stats" id="stats" style="display:none"></div>
 
 <div class="card compare-card" id="compare-card" style="display:none">
-    <div class="section-title" style="margin-top:0">Classic Vs Live Parity</div>
+    <div class="section-title" style="margin-top:0">Classic Vs Hybrid</div>
     <div class="mini-grid" id="compare-stats"></div>
     <table id="compare-table">
         <thead>
         <tr>
             <th>Ticker</th>
             <th>Classic WR</th>
-            <th>Live WR</th>
+            <th>Hybrid WR</th>
             <th>WR Δ</th>
             <th>Classic Exp</th>
-            <th>Live Exp</th>
+            <th>Hybrid Exp</th>
             <th>Exp Δ</th>
             <th>Timeout Δ</th>
         </tr>
@@ -188,10 +188,10 @@ function renderComparison(data) {
         <tr>
             <td>${row.ticker}</td>
             <td class="${row.classicWinRate >= 50 ? 'green' : 'red'}">${row.classicWinRate.toFixed(1)}%</td>
-            <td class="${row.liveWinRate >= 50 ? 'green' : 'red'}">${row.liveWinRate.toFixed(1)}%</td>
+            <td class="${row.hybridWinRate >= 50 ? 'green' : 'red'}">${row.hybridWinRate.toFixed(1)}%</td>
             <td class="${row.winRateDelta >= 0 ? 'green' : 'red'}">${fmtSigned(row.winRateDelta)}</td>
             <td class="${row.classicExpectancy >= 0 ? 'green' : 'red'}">${fmtSigned(row.classicExpectancy)}</td>
-            <td class="${row.liveExpectancy >= 0 ? 'green' : 'red'}">${fmtSigned(row.liveExpectancy)}</td>
+            <td class="${row.hybridExpectancy >= 0 ? 'green' : 'red'}">${fmtSigned(row.hybridExpectancy)}</td>
             <td class="${row.expectancyDelta >= 0 ? 'green' : 'red'}">${fmtSigned(row.expectancyDelta)}</td>
             <td class="${row.timeoutDelta <= 0 ? 'green' : 'red'}">${fmtSigned(row.timeoutDelta)}</td>
         </tr>
@@ -281,6 +281,12 @@ function renderTickerCard(row) {
     `;
 }
 
+function exitStyleLabel(exitStyle) {
+    if (exitStyle === 'HYBRID') return 'Hybrid Trail After 1.5R';
+    if (exitStyle === 'LIVE_PARITY') return 'Live Parity Trail';
+    return 'Classic TP / SL';
+}
+
 async function runResearch() {
     const btn = document.getElementById('run-btn');
     const exitStyle = document.getElementById('exit-style').value;
@@ -290,7 +296,7 @@ async function runResearch() {
     btn.disabled = true;
     loading.style.display = 'block';
     empty.style.display = 'none';
-    setStatusNote(`Starting ${exitStyle === 'LIVE_PARITY' ? 'Live Parity Trail' : 'Classic TP / SL'} research run...`);
+    setStatusNote(`Starting ${exitStyleLabel(exitStyle)} research run...`);
 
     try {
         const res = await fetch(`/api/research/run?exitStyle=${encodeURIComponent(exitStyle)}`, {

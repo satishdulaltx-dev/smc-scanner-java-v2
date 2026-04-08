@@ -129,34 +129,34 @@ public class ResearchService {
 
     public ResearchComparison getComparison() {
         ResearchReport classic = getStatus(BacktestExitStyle.CLASSIC).report();
-        ResearchReport live = getStatus(BacktestExitStyle.LIVE_PARITY).report();
-        if (classic == null || live == null) {
+        ResearchReport hybrid = getStatus(BacktestExitStyle.HYBRID).report();
+        if (classic == null || hybrid == null) {
             return new ResearchComparison(false, false, false, 0, 0, 0, List.of());
         }
 
         Map<String, TickerResearch> classicMap = classic.tickers().stream()
                 .collect(java.util.stream.Collectors.toMap(TickerResearch::ticker, Function.identity()));
-        Map<String, TickerResearch> liveMap = live.tickers().stream()
+        Map<String, TickerResearch> hybridMap = hybrid.tickers().stream()
                 .collect(java.util.stream.Collectors.toMap(TickerResearch::ticker, Function.identity()));
 
         List<TickerComparison> rows = new ArrayList<>();
         for (String ticker : classicMap.keySet()) {
             TickerResearch c = classicMap.get(ticker);
-            TickerResearch l = liveMap.get(ticker);
-            if (c == null || l == null) continue;
+            TickerResearch h = hybridMap.get(ticker);
+            if (c == null || h == null) continue;
             rows.add(new TickerComparison(
                     ticker,
                     c.recommendation(),
-                    l.recommendation(),
+                    h.recommendation(),
                     c.winRate365(),
-                    l.winRate365(),
-                    round2(l.winRate365() - c.winRate365()),
+                    h.winRate365(),
+                    round2(h.winRate365() - c.winRate365()),
                     c.expectancy365(),
-                    l.expectancy365(),
-                    round2(l.expectancy365() - c.expectancy365()),
+                    h.expectancy365(),
+                    round2(h.expectancy365() - c.expectancy365()),
                     c.timeoutRate365(),
-                    l.timeoutRate365(),
-                    round2(l.timeoutRate365() - c.timeoutRate365())
+                    h.timeoutRate365(),
+                    round2(h.timeoutRate365() - c.timeoutRate365())
             ));
         }
 
@@ -408,7 +408,7 @@ public class ResearchService {
 
     public record ResearchComparison(
             boolean classicReady,
-            boolean liveParityReady,
+            boolean hybridReady,
             boolean comparisonReady,
             int tickerCount,
             int improvedCount,
@@ -419,15 +419,15 @@ public class ResearchService {
     public record TickerComparison(
             String ticker,
             String classicRecommendation,
-            String liveRecommendation,
+            String hybridRecommendation,
             double classicWinRate,
-            double liveWinRate,
+            double hybridWinRate,
             double winRateDelta,
             double classicExpectancy,
-            double liveExpectancy,
+            double hybridExpectancy,
             double expectancyDelta,
             double classicTimeoutRate,
-            double liveTimeoutRate,
+            double hybridTimeoutRate,
             double timeoutDelta
     ) {}
 
