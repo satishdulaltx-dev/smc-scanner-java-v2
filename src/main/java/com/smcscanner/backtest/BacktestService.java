@@ -146,6 +146,21 @@ public class BacktestService {
             spy5mByDate.computeIfAbsent(d, k -> new ArrayList<>()).add(bar);
         }
 
+        // Pre-fetch correlated asset 15m bars for COIN/MARA (→BTC) and AMD/SMCI (→NVDA).
+        // Mirrors live ScannerService cross-asset correlation check.
+        String corrAssetTicker = null;
+        int corrConflictPenalty = 0, corrAgreementBonus = 0;
+        if (!ticker.startsWith("X:")) {
+            if (ticker.equals("COIN") || ticker.equals("MARA")) {
+                corrAssetTicker = "X:BTCUSD"; corrConflictPenalty = -20; corrAgreementBonus = +5;
+            } else if (ticker.equals("AMD") || ticker.equals("SMCI")) {
+                corrAssetTicker = "NVDA"; corrConflictPenalty = -15; corrAgreementBonus = +5;
+            }
+        }
+        List<OHLCV> corrAsset15m = (corrAssetTicker != null)
+                ? client.getBarsWithLookback(corrAssetTicker, "15m", 10000, lookbackDays + 5)
+                : List.of();
+
         // Per-ticker outcome history for adaptive suppression — mirrors the live
         // AdaptiveSuppressor: bounded to last 6 outcomes so that a win in month 2
         // resets the streak before month 3 (prevents 90-day run from showing fewer
@@ -400,7 +415,71 @@ public class BacktestService {
                              && !"neutral".equals(htfBias) && !"neutral".equals(bias15mLabel)) alignmentAdj = -10;
                 }
 
-                int totalAdj = newsAdj + ctxAdj + qualityAdj + intradayRsAdj + bias15mAdj + alignmentAdj + sma200Adj + rsiAdj + candleAdj + volAdj;
+                // ── Options flow (not available in backtest — stub zero) ──────
+                // Live uses real-time options chain data; no historical equivalent.
+                int flowAdj = 0;
+
+                // ── Regime delta — mirrors AdaptiveSuppressor.getRegimeDelta() ──
+                // Rolling win-rate over last 6 outcomes; catches slow degradation
+                // invisible to a streak counter (e.g. 3 wins then 3 losses = 50% WR).
+                int regimeAdj = 0;
+                if (!ticker.startsWith("X:")) {
+                    java.util.ArrayDeque<Boolean> regHist = btOutcomes.getOrDefault(ticker, new java.util.ArrayDeque<>());
+                    if (regHist.size() >= 4) {
+                        long wins = regHist.stream().filter(b -> Boolean.TRUE.equals(b)).count();
+                        double wr = (double) wins / regHist.size();
+                        if (wr < 0.20) regimeAdj = -25;
+                        else if (wr < 0.33) regimeAdj = -15;
+                        else if (wr < 0.45) regimeAdj = -8;
+                    }
+                }
+
+                // ── Cross-asset correlation — mirrors live corrAdj logic ──────
+                // COIN/MARA track BTC (-20 conflict / +5 agree).
+                // AMD/SMCI track NVDA (-15 conflict / +5 agree).
+                int corrAdj = 0;
+                if (corrAssetTicker != null && !corrAsset15m.isEmpty()) {
+                    List<OHLCV> corrSlice = corrAsset15m.stream()
+                            .filter(b -> b.getTimestamp() < entryEpochMs)
+                            .collect(Collectors.toList());
+                    if (corrSlice.size() >= 10) {
+                        int sz = corrSlice.size();
+                        double smaCorr = corrSlice.subList(sz - Math.min(20, sz), sz).stream()
+                                .mapToDouble(OHLCV::getClose).average().orElse(0);
+                        double lastCorr = corrSlice.get(sz - 1).getClose();
+                        String corrBias = lastCorr > smaCorr * 1.002 ? "bullish"
+                                        : lastCorr < smaCorr * 0.998 ? "bearish" : "neutral";
+                        String dir = setup.getDirection();
+                        boolean conflicts = ("bullish".equals(corrBias) && "short".equals(dir))
+                                         || ("bearish".equals(corrBias) && "long".equals(dir));
+                        boolean agrees    = ("bullish".equals(corrBias) && "long".equals(dir))
+                                         || ("bearish".equals(corrBias) && "short".equals(dir));
+                        if (conflicts) corrAdj = corrConflictPenalty;
+                        else if (agrees) corrAdj = corrAgreementBonus;
+                    }
+                }
+
+                // ── Dead zone penalty — mirrors live deadZoneAdj ──────────────
+                // 11:xx AM and 1:xx PM ET have lower historical WR → -15.
+                // SignalQualityFilter also penalises lunch (11:30-13:30 → -5); both stack in live.
+                int deadZoneAdj = 0;
+                if (!ticker.startsWith("X:")) {
+                    int entryHour = Instant.ofEpochMilli(entryEpochMs).atZone(ET).toLocalTime().getHour();
+                    if (entryHour == 11 || entryHour == 13) deadZoneAdj = -15;
+                }
+
+                // ── Late-day filter (after 3:30 PM ET → skip intraday entry) ──
+                // Live routes these to swing channel instead of taking intraday.
+                // In backtest: skip the entry entirely to match live behaviour.
+                if (!ticker.startsWith("X:")) {
+                    LocalTime entryLt = Instant.ofEpochMilli(entryEpochMs).atZone(ET).toLocalTime();
+                    if (entryLt.getHour() >= 16 || (entryLt.getHour() == 15 && entryLt.getMinute() >= 30)) {
+                        log.debug("{} LATE_DAY_SKIP: entry at {} — matches live swing reroute", ticker, entryLt);
+                        break; // done for today — live wouldn't take this as intraday
+                    }
+                }
+
+                int totalAdj = newsAdj + ctxAdj + qualityAdj + flowAdj + regimeAdj + corrAdj + intradayRsAdj + deadZoneAdj + bias15mAdj + alignmentAdj + sma200Adj + rsiAdj + candleAdj + volAdj;
                 // Penalty floor: secondary filters can reduce base confidence by at most 25%.
                 // A strong base setup (80+) should never be killed by stacking RS + news + quality.
                 // Floor = 75% of base confidence. e.g. base=80 → floor=60, base=70 → floor=52.
@@ -408,11 +487,19 @@ public class BacktestService {
                 int rawAdj = setup.getConfidence() + totalAdj;
                 int adjConf  = Math.max(penaltyFloor, Math.min(100, rawAdj));
 
+                // ── VIX-aware dynamic minimum confidence gate ─────────────────
+                // Mirrors live: raise min bar by 5 pts above VIX 25, another 5 above 35.
+                int vixBoost = 0;
+                if (!ticker.startsWith("X:") && context.vixLevel() > 25) vixBoost  = 5;
+                if (!ticker.startsWith("X:") && context.vixLevel() > 35) vixBoost += 5;
+                int dynamicMinConf = effectiveMinConf + vixBoost;
+
                 // Skip trade if combined filters knocked confidence below threshold
-                if (adjConf < effectiveMinConf) {
-                    log.debug("{} CONF_FILTERED: base={} news={} ctx={} qual={} iRS={} → adj={} floor={} (min={})",
-                            ticker, setup.getConfidence(), newsAdj, ctxAdj, qualityAdj, intradayRsAdj, adjConf, penaltyFloor, effectiveMinConf);
-                    String filteredOutcome = bias15mAdj < 0 && (newsAdj < 0 || ctxAdj < 0 || qualityAdj < 0) ? "MULTI_FILTERED"
+                if (adjConf < dynamicMinConf) {
+                    log.debug("{} CONF_FILTERED: base={} news={} ctx={} qual={} iRS={} regime={} corr={} dz={} → adj={} floor={} (min={} vixBoost={})",
+                            ticker, setup.getConfidence(), newsAdj, ctxAdj, qualityAdj, intradayRsAdj, regimeAdj, corrAdj, deadZoneAdj, adjConf, penaltyFloor, effectiveMinConf, vixBoost);
+                    String filteredOutcome = regimeAdj < -8 ? "REGIME_FILTERED"
+                                           : bias15mAdj < 0 && (newsAdj < 0 || ctxAdj < 0 || qualityAdj < 0) ? "MULTI_FILTERED"
                                            : bias15mAdj < 0 ? "15M_FILTERED"
                                            : (newsAdj < 0 && (ctxAdj < 0 || qualityAdj < 0)) ? "MULTI_FILTERED"
                                            : newsAdj < 0    ? "NEWS_FILTERED"
