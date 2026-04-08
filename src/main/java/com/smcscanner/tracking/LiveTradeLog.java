@@ -373,9 +373,11 @@ public class LiveTradeLog {
     }
 
     private void backfillBrokerResolvedPnL() {
+        Map<String, List<Map<String, Object>>> fillActivitiesBySymbol = getRecentFillActivitiesBySymbol();
         Map<String, List<Map<String, Object>>> filledOrdersBySymbol = getRecentFilledOrdersBySymbol();
         Map<String, List<Map<String, Object>>> filledOrdersByUnderlying = getRecentFilledOrdersByUnderlying(filledOrdersBySymbol);
         Set<String> usedOrderIds = new HashSet<>();
+        Set<String> usedActivityIds = new HashSet<>();
         boolean changed = false;
 
         synchronized (trades) {
@@ -386,7 +388,8 @@ public class LiveTradeLog {
                 if ("OPEN".equals(trade.get("outcome"))) continue;
                 Object amount = trade.get("pnlAmount");
                 if (amount != null && !String.valueOf(amount).isBlank()) continue;
-                if (applyBrokerRealizedPnl(trade, filledOrdersBySymbol, filledOrdersByUnderlying, usedOrderIds)) {
+                if (applyBrokerRealizedPnlFromActivities(trade, fillActivitiesBySymbol, usedActivityIds)
+                        || applyBrokerRealizedPnl(trade, filledOrdersBySymbol, filledOrdersByUnderlying, usedOrderIds)) {
                     changed = true;
                 }
             }
@@ -396,6 +399,59 @@ public class LiveTradeLog {
             persist();
             log.info("Backfilled broker dollar P&L for closed trades");
         }
+    }
+
+    private boolean applyBrokerRealizedPnlFromActivities(Map<String, Object> trade,
+                                                         Map<String, List<Map<String, Object>>> fillActivitiesBySymbol,
+                                                         Set<String> usedActivityIds) {
+        String optionsContract = String.valueOf(trade.getOrDefault("optionsContract", ""));
+        String symbol = normalizeOptionSymbol(optionsContract);
+        if (symbol.isBlank()) return false;
+        List<Map<String, Object>> activities = fillActivitiesBySymbol.getOrDefault(symbol, List.of());
+        if (activities.isEmpty()) return false;
+
+        long tradeTs = ((Number) trade.getOrDefault("timestamp", 0L)).longValue();
+        Map<String, Object> buy = null;
+        Map<String, Object> sell = null;
+        for (Map<String, Object> activity : activities) {
+            String activityId = String.valueOf(activity.getOrDefault("id", ""));
+            if (usedActivityIds.contains(activityId)) continue;
+            String side = String.valueOf(activity.getOrDefault("side", ""));
+            long ts = ((Number) activity.getOrDefault("transaction_time_epoch", 0L)).longValue();
+            if ("buy".equalsIgnoreCase(side) && ts >= tradeTs - 7_200_000L) {
+                if (buy == null || ts < ((Number) buy.getOrDefault("transaction_time_epoch", 0L)).longValue()) {
+                    buy = activity;
+                }
+            }
+            if ("sell".equalsIgnoreCase(side) && ts >= tradeTs) {
+                if (sell == null || ts > ((Number) sell.getOrDefault("transaction_time_epoch", 0L)).longValue()) {
+                    sell = activity;
+                }
+            }
+        }
+        if (buy == null || sell == null) return false;
+
+        double buyAmount = Math.abs(toDouble(buy.get("net_amount")));
+        double sellAmount = Math.abs(toDouble(sell.get("net_amount")));
+        double qty = Math.max(1.0, Math.abs(toDouble(sell.get("qty"))));
+        double entryFill = buyAmount / (100.0 * qty);
+        double exitFill = sellAmount / (100.0 * qty);
+        if (entryFill <= 0 || exitFill <= 0) return false;
+
+        double pnlAmount = sellAmount - buyAmount;
+        double pnlPct = buyAmount > 0 ? (pnlAmount / buyAmount) * 100.0 : 0.0;
+        String outcome = Math.abs(pnlPct) < 0.10 ? "BE_STOP" : (pnlPct > 0 ? "WIN" : "LOSS");
+        trade.put("outcome", outcome);
+        trade.put("pnlPct", Math.round(pnlPct * 100.0) / 100.0);
+        trade.put("pnlAmount", Math.round(pnlAmount * 100.0) / 100.0);
+        trade.put("exitPrice", exitFill);
+        trade.put("entryFillPrice", entryFill);
+        trade.put("resolutionSource", "ALPACA_ACTIVITIES");
+        trade.put("brokerSymbol", symbol);
+        trade.put("brokerExitAt", sell.get("transaction_time"));
+        usedActivityIds.add(String.valueOf(buy.getOrDefault("id", "")));
+        usedActivityIds.add(String.valueOf(sell.getOrDefault("id", "")));
+        return true;
     }
 
     private boolean applyBrokerRealizedPnl(Map<String, Object> trade,
@@ -464,6 +520,18 @@ public class LiveTradeLog {
                     .collect(Collectors.groupingBy(o -> normalizeOptionSymbol(String.valueOf(o.getOrDefault("symbol", "")))));
         } catch (Exception e) {
             log.warn("Could not fetch Alpaca filled orders for realized P&L: {}", e.getMessage());
+            return Map.of();
+        }
+    }
+
+    private Map<String, List<Map<String, Object>>> getRecentFillActivitiesBySymbol() {
+        if (alpaca == null || !alpaca.isEnabled()) return Map.of();
+        try {
+            return alpaca.getFillActivities(BROKER_REBUILD_LOOKBACK_DAYS).stream()
+                    .peek(a -> a.put("transaction_time_epoch", parseEpoch(String.valueOf(a.getOrDefault("transaction_time", "")))))
+                    .collect(Collectors.groupingBy(a -> normalizeOptionSymbol(String.valueOf(a.getOrDefault("symbol", "")))));
+        } catch (Exception e) {
+            log.warn("Could not fetch Alpaca fill activities for realized P&L: {}", e.getMessage());
             return Map.of();
         }
     }
@@ -641,6 +709,23 @@ public class LiveTradeLog {
         }
 
         try {
+            List<Map<String, Object>> fills = alpaca.getFillActivities(BROKER_REBUILD_LOOKBACK_DAYS).stream()
+                    .sorted(Comparator.comparingLong(a -> parseEpoch(String.valueOf(a.getOrDefault("transaction_time", "")))))
+                    .collect(Collectors.toList());
+            if (!fills.isEmpty()) {
+                List<Map<String, Object>> rebuilt = rebuildTradesFromActivities(fills);
+                if (!rebuilt.isEmpty()) {
+                    rebuilt.sort(Comparator.comparingLong(t -> ((Number) t.getOrDefault("timestamp", 0L)).longValue()));
+                    synchronized (trades) {
+                        if (!trades.isEmpty()) return;
+                        trades.addAll(rebuilt);
+                    }
+                    persist();
+                    log.warn("Bootstrapped {} live trade record(s) from Alpaca fill activities because {} was empty/missing", rebuilt.size(), FILE_PATH);
+                    return;
+                }
+            }
+
             List<Map<String, Object>> orders = alpaca.getOrders(BROKER_REBUILD_LOOKBACK_DAYS).stream()
                     .filter(o -> "filled".equalsIgnoreCase(String.valueOf(o.getOrDefault("status", ""))))
                     .sorted(Comparator.comparingLong(o -> parseEpoch(String.valueOf(o.getOrDefault("created_at", "")))))
@@ -691,6 +776,99 @@ public class LiveTradeLog {
         } catch (Exception e) {
             log.warn("Could not bootstrap live trade history from Alpaca: {}", e.getMessage());
         }
+    }
+
+    private List<Map<String, Object>> rebuildTradesFromActivities(List<Map<String, Object>> fills) {
+        Map<String, Deque<Map<String, Object>>> openBuysBySymbol = new HashMap<>();
+        List<Map<String, Object>> rebuilt = new ArrayList<>();
+
+        for (Map<String, Object> fill : fills) {
+            String symbol = String.valueOf(fill.getOrDefault("symbol", ""));
+            String side = String.valueOf(fill.getOrDefault("side", ""));
+            if (symbol.isBlank() || side.isBlank()) continue;
+            if ("buy".equalsIgnoreCase(side)) {
+                openBuysBySymbol.computeIfAbsent(symbol, ignored -> new ArrayDeque<>()).addLast(fill);
+                continue;
+            }
+            if (!"sell".equalsIgnoreCase(side)) continue;
+            Deque<Map<String, Object>> buys = openBuysBySymbol.getOrDefault(symbol, new ArrayDeque<>());
+            if (buys.isEmpty()) continue;
+            rebuilt.add(buildTradeFromBrokerActivities(symbol, buys.pollFirst(), fill));
+        }
+
+        Set<String> openSymbols = alpaca.getPositions().stream()
+                .map(pos -> String.valueOf(pos.getOrDefault("symbol", "")))
+                .filter(s -> !s.isBlank())
+                .collect(Collectors.toSet());
+        for (String symbol : openSymbols) {
+            Deque<Map<String, Object>> buys = openBuysBySymbol.getOrDefault(symbol, new ArrayDeque<>());
+            while (!buys.isEmpty()) {
+                rebuilt.add(buildOpenTradeFromBrokerActivity(symbol, buys.pollFirst()));
+            }
+        }
+        return rebuilt;
+    }
+
+    private Map<String, Object> buildTradeFromBrokerActivities(String symbol, Map<String, Object> buy, Map<String, Object> sell) {
+        double buyAmount = Math.abs(toDouble(buy.get("net_amount")));
+        double sellAmount = Math.abs(toDouble(sell.get("net_amount")));
+        double qty = Math.max(1.0, Math.abs(toDouble(sell.get("qty"))));
+        double entryFill = buyAmount / (100.0 * qty);
+        double exitFill = sellAmount / (100.0 * qty);
+        double pnlAmount = sellAmount - buyAmount;
+        double pnlPct = buyAmount > 0 ? (pnlAmount / buyAmount) * 100.0 : 0.0;
+        String outcome = Math.abs(pnlPct) < 0.10 ? "BE_STOP" : (pnlPct > 0 ? "WIN" : "LOSS");
+
+        Map<String, Object> record = buildBrokerSeedRecordFromActivity(symbol, buy);
+        record.put("outcome", outcome);
+        record.put("pnlPct", Math.round(pnlPct * 100.0) / 100.0);
+        record.put("pnlAmount", Math.round(pnlAmount * 100.0) / 100.0);
+        record.put("resolvedAt", parseEpoch(String.valueOf(sell.getOrDefault("transaction_time", ""))));
+        record.put("brokerExitAt", sell.get("transaction_time"));
+        record.put("exitPrice", exitFill);
+        record.put("entryFillPrice", entryFill);
+        record.put("resolutionSource", "ALPACA_BOOTSTRAP_ACTIVITIES");
+        record.put("brokerSymbol", symbol);
+        return record;
+    }
+
+    private Map<String, Object> buildOpenTradeFromBrokerActivity(String symbol, Map<String, Object> buy) {
+        Map<String, Object> record = buildBrokerSeedRecordFromActivity(symbol, buy);
+        record.put("outcome", "OPEN");
+        record.put("pnlPct", 0.0);
+        record.put("pnlAmount", null);
+        record.put("resolutionSource", "ALPACA_BOOTSTRAP_ACTIVITIES");
+        record.put("brokerSymbol", symbol);
+        return record;
+    }
+
+    private Map<String, Object> buildBrokerSeedRecordFromActivity(String symbol, Map<String, Object> buy) {
+        long entryTs = parseEpoch(String.valueOf(buy.getOrDefault("transaction_time", "")));
+        ZonedDateTime entryTime = entryTs > 0
+                ? Instant.ofEpochMilli(entryTs).atZone(ET)
+                : ZonedDateTime.now(ET);
+        double qty = Math.max(1.0, Math.abs(toDouble(buy.get("qty"))));
+        double buyAmount = Math.abs(toDouble(buy.get("net_amount")));
+        double entryFill = qty > 0 ? buyAmount / (100.0 * qty) : 0.0;
+        String underlying = underlyingFromOcc(symbol);
+        String direction = inferDirectionFromOcc(symbol);
+
+        Map<String, Object> record = new LinkedHashMap<>();
+        record.put("id", UUID.randomUUID().toString().substring(0, 8));
+        record.put("ticker", underlying);
+        record.put("direction", direction);
+        record.put("entry", entryFill);
+        record.put("stopLoss", 0.0);
+        record.put("takeProfit", 0.0);
+        record.put("confidence", 0);
+        record.put("strategy", "broker-bootstrap");
+        record.put("atr", 0.0);
+        record.put("optionsContract", symbol);
+        record.put("optionsPremium", entryFill);
+        record.put("date", entryTime.format(DATE_FMT));
+        record.put("time", entryTime.format(TIME_FMT));
+        record.put("timestamp", entryTs);
+        return record;
     }
 
     private Map<String, Object> buildTradeFromBrokerRoundTrip(String symbol, Map<String, Object> buy, Map<String, Object> sell) {

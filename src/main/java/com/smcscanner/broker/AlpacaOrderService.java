@@ -453,6 +453,46 @@ public class AlpacaOrderService {
         }
     }
 
+    /** Get recent fill activities for the last N days. */
+    public List<Map<String, Object>> getFillActivities(int lookbackDays) {
+        if (!isEnabled()) return List.of();
+        try {
+            int safeLookbackDays = Math.max(1, lookbackDays);
+            String after = ZonedDateTime.now(ET)
+                    .minusDays(safeLookbackDays - 1L)
+                    .toLocalDate()
+                    .format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+            Request req = new Request.Builder()
+                    .url(getBaseUrl() + "/v2/account/activities/FILL?after=" + after + "&page_size=500&direction=desc")
+                    .addHeader("APCA-API-KEY-ID", config.getAlpacaApiKey())
+                    .addHeader("APCA-API-SECRET-KEY", config.getAlpacaSecretKey())
+                    .get().build();
+
+            try (Response resp = http.newCall(req).execute()) {
+                String body = resp.body() != null ? resp.body().string() : "[]";
+                if (!resp.isSuccessful()) return List.of();
+                JsonNode arr = mapper.readTree(body);
+                List<Map<String, Object>> activities = new ArrayList<>();
+                for (JsonNode n : arr) {
+                    Map<String, Object> a = new LinkedHashMap<>();
+                    a.put("id", n.path("id").asText());
+                    a.put("symbol", n.path("symbol").asText());
+                    a.put("side", n.path("side").asText());
+                    a.put("qty", n.path("qty").asText());
+                    a.put("price", n.path("price").asText());
+                    a.put("net_amount", n.path("net_amount").asText());
+                    a.put("transaction_time", n.path("transaction_time").asText());
+                    a.put("type", n.path("activity_type").asText("FILL"));
+                    activities.add(a);
+                }
+                return activities;
+            }
+        } catch (Exception e) {
+            log.error("ALPACA fill activities error ({}d): {}", lookbackDays, e.getMessage());
+            return List.of();
+        }
+    }
+
     /** Cancel all open orders. */
     public boolean cancelAllOrders() {
         if (!isEnabled()) return false;
