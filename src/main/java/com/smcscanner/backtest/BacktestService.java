@@ -14,6 +14,7 @@ import com.smcscanner.news.NewsSentiment;
 import com.smcscanner.news.NewsService;
 import com.smcscanner.options.OptionsFlowAnalyzer;
 import com.smcscanner.strategy.BreakoutStrategyDetector;
+import com.smcscanner.strategy.GapDetector;
 import com.smcscanner.strategy.GammaPinDetector;
 import com.smcscanner.strategy.IndexDivergenceDetector;
 import com.smcscanner.strategy.KeyLevelStrategyDetector;
@@ -52,6 +53,7 @@ public class BacktestService {
     private final SetupDetector            setupDetector;
     private final VwapStrategyDetector     vwapDetector;
     private final BreakoutStrategyDetector breakoutDetector;
+    private final GapDetector              gapDetector;
     private final KeyLevelStrategyDetector  keyLevelDetector;
     private final VolatilitySqueezeDetector vSqueezeDetector;
     private final ThreeDayVwapDetector      vwap3dDetector;
@@ -66,6 +68,7 @@ public class BacktestService {
 
     public BacktestService(PolygonClient client, AtrCalculator atrCalc, SetupDetector setupDetector,
                            VwapStrategyDetector vwapDetector, BreakoutStrategyDetector breakoutDetector,
+                           GapDetector gapDetector,
                            KeyLevelStrategyDetector keyLevelDetector,
                            VolatilitySqueezeDetector vSqueezeDetector, ThreeDayVwapDetector vwap3dDetector,
                            IndexDivergenceDetector indexDivDetector, GammaPinDetector gammaPinDetector,
@@ -75,6 +78,7 @@ public class BacktestService {
                            TechnicalIndicators techIndicators) {
         this.client = client; this.atrCalc = atrCalc; this.setupDetector = setupDetector;
         this.vwapDetector = vwapDetector; this.breakoutDetector = breakoutDetector;
+        this.gapDetector = gapDetector;
         this.keyLevelDetector = keyLevelDetector;
         this.vSqueezeDetector = vSqueezeDetector; this.vwap3dDetector = vwap3dDetector;
         this.indexDivDetector = indexDivDetector; this.gammaPinDetector = gammaPinDetector;
@@ -203,6 +207,7 @@ public class BacktestService {
             boolean isSessionStrat = "breakout".equals(stratType)
                                   || "vwap".equals(stratType)
                                   || "keylevel".equals(stratType)
+                                  || "gap".equals(stratType)
                                   || "vsqueeze".equals(stratType)
                                   || "vwap3d".equals(stratType)
                                   || "idiv".equals(stratType)
@@ -211,6 +216,7 @@ public class BacktestService {
             int minBars = "breakout".equals(stratType)  ? 8
                         : "vwap".equals(stratType)      ? 12
                         : "keylevel".equals(stratType)  ? 20
+                        : "gap".equals(stratType)       ? 1
                         : "vsqueeze".equals(stratType)  ? 25
                         : "vwap3d".equals(stratType)    ? 20
                         : "idiv".equals(stratType)      ? 12
@@ -239,6 +245,19 @@ public class BacktestService {
                     bSetups = vwapDetector.detect(window, ticker, dailyAtr);
                 } else if ("breakout".equals(stratType)) {
                     bSetups = breakoutDetector.detect(window, ticker, dailyAtr);
+                } else if ("gap".equals(stratType)) {
+                    List<OHLCV> rthWindow = window.stream()
+                            .filter(this::isRegularSessionBar)
+                            .collect(Collectors.toList());
+                    if (rthWindow.size() != 1 || di == 0) {
+                        bSetups = List.of();
+                    } else {
+                        List<OHLCV> prevRthBars = byDate.getOrDefault(dates.get(di - 1), List.of()).stream()
+                                .filter(this::isRegularSessionBar)
+                                .collect(Collectors.toList());
+                        GapDetector.GapSignal gap = gapDetector.detect(rthWindow, prevRthBars, dailyAtr, ticker);
+                        bSetups = gap == null ? List.of() : List.of(buildGapSetup(gap, rthWindow.get(0)));
+                    }
                 } else if ("keylevel".equals(stratType)) {
                     // Pass daily bars up to this date (htfSlice) as the level-detection source
                     bSetups = keyLevelDetector.detect(window, htfSlice, ticker, dailyAtr, bp);
@@ -711,6 +730,37 @@ public class BacktestService {
             sum += tr;
         }
         return sum / period;
+    }
+
+    private TradeSetup buildGapSetup(GapDetector.GapSignal gap, OHLCV firstSessionBar) {
+        boolean isGapAndGo = gap.type() == GapDetector.GapType.GAP_AND_GO;
+        double entry = gap.entryPrice();
+        double sl = gap.invalidationPrice();
+        double risk = Math.abs(entry - sl);
+        double tp = isGapAndGo
+                ? ("long".equals(gap.direction()) ? entry + risk * 1.5 : entry - risk * 1.5)
+                : gap.prevClose();
+        tp = Math.round(tp * 10_000.0) / 10_000.0;
+
+        return TradeSetup.builder()
+                .ticker(gap.ticker())
+                .direction(gap.direction())
+                .entry(entry)
+                .stopLoss(sl)
+                .takeProfit(tp)
+                .confidence(gap.confidence())
+                .session("NYSE")
+                .volatility("gap")
+                .atr(gap.dailyAtr())
+                .factorBreakdown(gap.note())
+                .timestamp(Instant.ofEpochMilli(Long.parseLong(firstSessionBar.getTimestamp())).atZone(ET).toLocalDateTime())
+                .build();
+    }
+
+    private boolean isRegularSessionBar(OHLCV bar) {
+        ZonedDateTime zdt = Instant.ofEpochMilli(Long.parseLong(bar.getTimestamp())).atZone(ET);
+        LocalTime time = zdt.toLocalTime();
+        return !time.isBefore(LocalTime.of(9, 30)) && time.isBefore(LocalTime.of(16, 0));
     }
 
     private record ExitResult(String outcome, String exitTime, double pnlPct) {}
