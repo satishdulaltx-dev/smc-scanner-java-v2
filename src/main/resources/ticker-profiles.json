@@ -70,6 +70,17 @@
       "note": "Added Mar 2026: 365d backtest 31 exec trades 57%WR +0.33 exp. Clear reversed-confidence pattern: b85:22@27%WR vs b75-84:9@78%WR. Apply maxConf=84 — high-confidence signals fire after move is exhausted. CrowdStrike has strong SMC sweep + FVG mechanics on 5m. minConf=62 to capture early setups. Apr 2026: explicit tpRrRatio=1.25 keeps primary target closer to nearby prior highs instead of auto-extending to a stretch target."
     },
     {
+      "ticker": "DDOG",
+      "strategyType": "smc",
+      "minConfidence": 65,
+      "maxConfidence": 84,
+      "minFvgPct": 0.0006,
+      "dispAtrMult": 1.3,
+      "slAtrMult": 1.0,
+      "tpRrRatio": 1.25,
+      "note": "Added Apr 2026: DataDog — high-beta SaaS growth, same profile as CRWD/PLTR. Strong retail participation, clean intraday momentum and FVG mechanics. Start with CRWD-like settings (minConf=65, maxConf=84). Revisit after 90d backtest."
+    },
+    {
       "ticker": "DIS",
       "skip": true,
       "skipReason": "0% WR 90d (3 trades, 1 loss + 2 BE). Slow-moving entertainment stock — no intraday SMC edge.",
@@ -104,6 +115,8 @@
       "maxConfidence": 84,
       "slAtrMult": 0.5,
       "tpRrRatio": 1.25,
+      "skip": true,
+      "skipReason": "Apr 2026: 22.2% WR (1yr backtest), -0.16% expectancy. Bank stock driven by Fed/macro news, not intraday SMC patterns. 134 signals filtered vs 11 passed — strategy can't find clean setups here.",
       "note": "Apr 2026 live-parity retune: move JPM from VWAP to KeyLevel. Live-parity research showed the level-based lens was more stable than the old VWAP assignment. Use a tighter 0.5 ATR stop and 1.25R target to focus on cleaner bank-stock rejection setups."
     },
     {
@@ -125,6 +138,17 @@
       "skipReason": "Removed from watchlist Mar 2026 — 0% WR or negative expectancy over 90d."
     },
     {
+      "ticker": "NET",
+      "strategyType": "smc",
+      "minConfidence": 65,
+      "maxConfidence": 84,
+      "minFvgPct": 0.0006,
+      "dispAtrMult": 1.3,
+      "slAtrMult": 1.0,
+      "tpRrRatio": 1.25,
+      "note": "Added Apr 2026: Cloudflare — high-beta tech growth, strong retail participation, similar intraday structure to PLTR. SMC sweep+FVG should work well. Start with PLTR-aligned settings."
+    },
+    {
       "ticker": "MSFT",
       "strategyType": "smc",
       "minConfidence": 78,
@@ -139,7 +163,8 @@
     },
     {
       "ticker": "MSTR",
-      "skip": false,
+      "skip": true,
+      "skipReason": "Apr 2026: 0% WR (1yr backtest), -2.22% expectancy, -$1129 opt P&L. Leveraged BTC proxy — overnight BTC gaps dominate intraday price. SMC 5m patterns are noise. Use MARA for crypto-proxy exposure instead.",
       "minConfidence": 78,
       "minFvgPct": 0.001,
       "maxConfidence": 89,
@@ -175,6 +200,17 @@
       "note": "Apr 2026 live-parity retune: keep NVDA on SMC but tighten the entry bar slightly. minConf=75 + maxConf=84 retains the earlier-entry band, with tpRrRatio=1.25 to avoid stretching targets too far on names where trailing is doing most of the winner management."
     },
     {
+      "ticker": "PANW",
+      "strategyType": "smc",
+      "minConfidence": 62,
+      "maxConfidence": 84,
+      "minFvgPct": 0.0005,
+      "dispAtrMult": 1.3,
+      "slAtrMult": 1.0,
+      "tpRrRatio": 1.25,
+      "note": "Added Apr 2026: Palo Alto Networks — cybersecurity like CRWD, same sector dynamics. Strong SMC sweep mechanics on high-beta trending days. Start with CRWD-identical settings. Expectation: 55-65% WR based on CRWD analogy."
+    },
+    {
       "ticker": "PLTR",
       "minConfidence": 62,
       "minFvgPct": 0.0006,
@@ -194,6 +230,15 @@
       "skip": true,
       "skipReason": "12% WR 90d (8 trades). VWAP reversion on index ETF not working — QQQ trends too strongly intraday.",
       "strategyType": "vwap"
+    },
+    {
+      "ticker": "RIOT",
+      "strategyType": "smc",
+      "minConfidence": 78,
+      "minFvgPct": 0.001,
+      "slAtrMult": 1.0,
+      "tpRrRatio": 1.0,
+      "note": "Added Apr 2026: RIOT Platforms — crypto miner like MARA, same BTC-correlated momentum profile. Start with MARA-identical settings (minConf=78, sl=1.0 ATR, tp=1:1). RIOT has higher beta than MARA so wider stop needed. Expectation: 60-65% WR."
     },
     {
       "ticker": "RIVN",
