@@ -301,19 +301,38 @@ public class BacktestService {
                             window, htfBias, ticker, false, dailyAtr, true); // backtestMode=true, real dailyAtr for TP/SL
                     bSetups = dr.setups();
                 }
-                if (bSetups.isEmpty()) continue;
-
-                TradeSetup setup = bSetups.get(0);
-
-                // ── Market regime detection (backtest: no cache — bar-by-bar) ─
-                // Uses detectForBacktest() so each window gets a fresh computation.
-                // LOW_LIQUIDITY (RVOL < 0.8): skip this bar window, try the next.
+                // ── Market regime (computed once per window, before fallback) ──
+                // Needs to happen before the empty-check so LOW_LIQUIDITY can gate
+                // and regime-based fallback can run when primary returns nothing.
                 MarketRegimeDetector.Regime btRegime = ticker.startsWith("X:") ? MarketRegimeDetector.Regime.RANGING
                         : regimeDetector.detectForBacktest(window);
+
                 if (btRegime == MarketRegimeDetector.Regime.LOW_LIQUIDITY) {
                     log.debug("{} REGIME_LOW_LIQUIDITY {} — skipping bar window", ticker, date);
                     continue;
                 }
+
+                // ── Regime-based fallback — mirrors live ScannerService ────────
+                if (bSetups.isEmpty() && !ticker.startsWith("X:")) {
+                    String fallbackStrat = regimeDetector.suggestStrategy(btRegime, stratType);
+                    if (fallbackStrat != null && !fallbackStrat.equals(stratType)) {
+                        bSetups = switch (fallbackStrat) {
+                            case "smc" -> {
+                                SetupDetector.DetectResult fr = setupDetector.detectSetups(
+                                        window, htfBias, ticker, false, dailyAtr, true);
+                                yield fr.setups();
+                            }
+                            case "keylevel" -> keyLevelDetector.detect(window, htfSlice, ticker, dailyAtr, bp);
+                            case "vsqueeze" -> vSqueezeDetector.detect(window, ticker, dailyAtr);
+                            default -> java.util.List.of();
+                        };
+                        if (!bSetups.isEmpty()) log.debug("{} BT_FALLBACK: {} → {}", ticker, stratType, fallbackStrat);
+                    }
+                }
+
+                if (bSetups.isEmpty()) continue;
+
+                TradeSetup setup = bSetups.get(0);
 
                 // ── VOLATILE regime SL widening — mirrors live ScannerService ─
                 if (btRegime == MarketRegimeDetector.Regime.VOLATILE && !ticker.startsWith("X:")) {

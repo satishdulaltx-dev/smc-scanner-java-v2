@@ -214,6 +214,33 @@ public class ScannerService {
                     setups=r.setups(); phaseMsg=r.state().phaseMsg();
                 }
             }
+
+            // ── Regime-based fallback when primary strategy finds nothing ─────
+            // e.g. SMC ticker in a RANGING day → try keylevel instead.
+            // Only the 3 generic regimes have clear fallbacks; VOLATILE/LOW_LIQUIDITY
+            // don't (LOW_LIQUIDITY is already gated above, VOLATILE trusts the profile).
+            if (setups.isEmpty() && !isC) {
+                String strategyType = profile.getStrategyType(); // safe re-read
+                String fallbackStrat = regimeDetector.suggestStrategy(regime, strategyType);
+                if (fallbackStrat != null && !fallbackStrat.equals(strategyType)) {
+                    List<TradeSetup> fb = switch (fallbackStrat) {
+                        case "smc" -> {
+                            SetupDetector.DetectResult fr = setupDetector.detectSetups(bars, htfBias, ticker, false, dailyAtr);
+                            yield fr.setups();
+                        }
+                        case "keylevel" -> keyLevel.detect(bars, dailyBars, ticker, dailyAtr, profile);
+                        case "vsqueeze" -> vSqueeze.detect(bars, ticker, dailyAtr);
+                        default -> List.of();
+                    };
+                    if (!fb.isEmpty()) {
+                        log.info("{} REGIME_FALLBACK: primary={} regime={} → fallback={} fired",
+                                ticker, strategyType, regime, fallbackStrat);
+                        setups = fb;
+                        phaseMsg = "";
+                    }
+                }
+            }
+
             if (!setups.isEmpty()) {
                 TradeSetup s=setups.get(0);
 

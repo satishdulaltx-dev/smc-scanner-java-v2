@@ -71,6 +71,12 @@ public class BreakoutStrategyDetector {
 
         OHLCV last = sessionBars.get(sessionBars.size() - 1);
 
+        // ── RVOL gate — mirrors VwapStrategyDetector ──────────────────────────
+        // ORB breakouts on thin volume are false breaks that reverse immediately.
+        // Hard gate when RVOL < 0.8 on a mature session (≥ 20 bars).
+        double sessionRvol = avgVol > 0 ? last.getVolume() / avgVol : 1.0;
+        if (sessionBars.size() >= 20 && sessionRvol < 0.8) return result;
+
         // ── 2-bar confirmation window ────────────────────────────────────────
         // Check last 2 bars for breakout criteria. If the breakout bar was the
         // previous one (big candle + volume), the current bar is confirmation.
@@ -136,6 +142,7 @@ public class BreakoutStrategyDetector {
                     if (last.getVolume() > avgVol * 2.5)  confidence += 5;
                     if (orbWidth < atr * 0.8)             confidence += 5;  // tight ORB = explosive
                     if (wideOrb)                          confidence -= 10; // wide ORB = likely faded
+                    if (sessionRvol >= 1.5)               confidence += 5;  // RVOL-confirmed breakout
 
                     result.add(TradeSetup.builder()
                             .ticker(ticker)
@@ -180,6 +187,7 @@ public class BreakoutStrategyDetector {
                     if (last.getVolume() > avgVol * 2.5)  confidence += 5;
                     if (orbWidth < atr * 0.8)             confidence += 5;  // tight ORB = explosive
                     if (wideOrb)                          confidence -= 10; // wide ORB = likely faded
+                    if (sessionRvol >= 1.5)               confidence += 5;  // RVOL-confirmed breakout
 
                     result.add(TradeSetup.builder()
                             .ticker(ticker)
