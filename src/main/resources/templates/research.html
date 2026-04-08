@@ -135,7 +135,7 @@
 </div>
 
 <div class="footer" id="footer-copy">
-    Research combines 90d, 180d, and 365d windows with a 180d strategy comparison across SMC, VWAP, breakout, and key level. "Best strategy" now requires a minimum sample.
+    Research combines 90d, 180d, and 365d windows with a 180d strategy comparison across SMC, VWAP, breakout, key level, and gap. "Best strategy" now requires a minimum sample.
 </div>
 
 <script>
@@ -162,7 +162,7 @@ function renderStats(data) {
         <div class="card"><div class="stat-val red">${data.disableCount}</div><div class="stat-lbl">Disable</div></div>
     `;
     document.getElementById('footer-copy').textContent =
-        `Research is currently using ${data.exitStyleLabel}. It combines 90d, 180d, and 365d windows with a 180d strategy comparison across SMC, VWAP, breakout, and key level. "Best strategy" requires a minimum sample.`;
+        `Research is currently using ${data.exitStyleLabel}. It combines 90d, 180d, and 365d windows with a 180d strategy comparison across SMC, VWAP, breakout, key level, and gap. "Best strategy" requires a minimum sample.`;
 }
 
 function setStatusNote(text) {

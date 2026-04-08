@@ -24,8 +24,7 @@ import java.util.concurrent.Executors;
 @Service
 public class ResearchService {
     private static final int[] WINDOWS = {90, 180, 365};
-    private static final String[] STRATEGIES = {"smc", "vwap", "breakout", "keylevel"};
-    private static final int MIN_BEST_STRATEGY_TRADES = 8;
+    private static final String[] STRATEGIES = {"smc", "vwap", "breakout", "keylevel", "gap"};
     private static final ZoneId ET = ZoneId.of("America/New_York");
 
     private final BacktestService backtestService;
@@ -237,6 +236,7 @@ public class ResearchService {
 
         for (String strategy : STRATEGIES) {
             BacktestService.BacktestResult bt = backtestService.run(ticker, 180, BacktestMode.ALL, strategy, exitStyle);
+            int minTrades = minBestStrategyTrades(strategy);
             results.add(new StrategyScore(
                     strategy,
                     bt.total,
@@ -244,7 +244,7 @@ public class ResearchService {
                     round2(bt.expectancy),
                     round2(bt.totalOptPnl),
                     strategy.equalsIgnoreCase(currentStrategy),
-                    bt.total >= MIN_BEST_STRATEGY_TRADES
+                    bt.total >= minTrades
             ));
         }
 
@@ -253,6 +253,10 @@ public class ResearchService {
                 .thenComparing(StrategyScore::expectancy, Comparator.reverseOrder())
                 .thenComparing(StrategyScore::totalTrades, Comparator.reverseOrder()));
         return results;
+    }
+
+    private int minBestStrategyTrades(String strategy) {
+        return "gap".equalsIgnoreCase(strategy) ? 3 : 8;
     }
 
     private OutcomeSummary summarizeOutcomes(BacktestService.BacktestResult bt) {
