@@ -186,12 +186,12 @@ public class LiveTradeLog {
         // P&L
         double totalPnl = dayTrades.stream()
                 .filter(t -> !"OPEN".equals(t.get("outcome")))
-                .mapToDouble(t -> ((Number) t.getOrDefault("pnlPct", 0.0)).doubleValue())
+                .mapToDouble(t -> toDouble(t.get("pnlPct")))
                 .sum();
         summary.put("totalPnlPct", Math.round(totalPnl * 100) / 100.0);
         double totalPnlAmount = dayTrades.stream()
                 .filter(t -> !"OPEN".equals(t.get("outcome")))
-                .mapToDouble(t -> ((Number) t.getOrDefault("pnlAmount", 0.0)).doubleValue())
+                .mapToDouble(t -> toDouble(t.get("pnlAmount")))
                 .sum();
         summary.put("totalPnlAmount", Math.round(totalPnlAmount * 100) / 100.0);
 
@@ -229,12 +229,12 @@ public class LiveTradeLog {
 
             double totalPnl = trades.stream()
                     .filter(t -> !"OPEN".equals(t.get("outcome")))
-                    .mapToDouble(t -> ((Number) t.getOrDefault("pnlPct", 0.0)).doubleValue())
+                    .mapToDouble(t -> toDouble(t.get("pnlPct")))
                     .sum();
             stats.put("totalPnlPct", Math.round(totalPnl * 100) / 100.0);
             double totalPnlAmount = trades.stream()
                     .filter(t -> !"OPEN".equals(t.get("outcome")))
-                    .mapToDouble(t -> ((Number) t.getOrDefault("pnlAmount", 0.0)).doubleValue())
+                    .mapToDouble(t -> toDouble(t.get("pnlAmount")))
                     .sum();
             stats.put("totalPnlAmount", Math.round(totalPnlAmount * 100) / 100.0);
 
