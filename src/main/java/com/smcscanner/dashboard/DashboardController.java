@@ -479,6 +479,7 @@ public class DashboardController {
             resp.put("opt_avg_loss_pnl",   Math.round(result.avgOptLossPnl*100)/100.0);
             resp.put("opt_expectancy",     Math.round(result.optExpectancy*100)/100.0);
             resp.put("opt_total_return",   result.optTotalReturn);
+            resp.put("avg_contracts",      Math.round(result.avgContracts * 10.0) / 10.0);
             // Confidence bucket analysis
             resp.put("bucket_85plus_total",  result.bucket85PlusTotal);
             resp.put("bucket_85plus_wins",   result.bucket85PlusWins);
@@ -506,12 +507,13 @@ public class DashboardController {
                 if (t.ctxLabel() != null)        m.put("ctx_label",   t.ctxLabel());
                 if (t.qualityAdjustment() != 0)  m.put("qual_adj",    t.qualityAdjustment());
                 if (t.qualityLabel() != null)     m.put("qual_label",  t.qualityLabel());
-                // Options P&L per trade
+                // Options P&L per trade (already scaled by conviction contract count)
                 if (t.optEntryPremium() > 0) {
                     m.put("opt_entry_premium",   t.optEntryPremium());
                     m.put("opt_exit_premium",    t.optExitPremium());
-                    m.put("opt_pnl_per_contract", t.optPnlPerContract());
+                    m.put("opt_pnl_scaled",      t.optPnlPerContract()); // total across all contracts
                     m.put("opt_pnl_pct",         t.optPnlPct());
+                    m.put("contracts",           t.contracts());
                 }
                 return m;
             }).collect(java.util.stream.Collectors.toList());

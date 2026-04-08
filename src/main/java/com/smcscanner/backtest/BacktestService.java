@@ -512,7 +512,7 @@ public class BacktestService {
                             toDateTime(dayBars.get(end - 1).getTimestamp()), toDateTime(dayBars.get(end - 1).getTimestamp()),
                             adjConf, setup.getAtr(), newsAdj, sentiment.label(), ctxAdj, context.rsLabel(),
                             qualityAdj, filteredLabel,
-                            0, 0, 0, 0)); // no options P&L for filtered trades
+                            0, 0, 0, 0, 0)); // no options P&L or contracts for filtered trades
                     tradePlacedToday = true;
                     continue;
                 }
@@ -526,10 +526,18 @@ public class BacktestService {
                             toDateTime(dayBars.get(end - 1).getTimestamp()), toDateTime(dayBars.get(end - 1).getTimestamp()),
                             adjConf, setup.getAtr(), newsAdj, sentiment.label(), ctxAdj, context.rsLabel(),
                             qualityAdj, "CONF_CAP",
-                            0, 0, 0, 0));
+                            0, 0, 0, 0, 0));
                     tradePlacedToday = true;
                     continue;
                 }
+
+                // ── Conviction-based contract count — mirrors live ScannerService ──
+                // 90+ → 3 contracts, 82-89 → 2, else → 1. Same tiers as suggestedOverride.
+                int contracts;
+                if      (adjConf >= 90) contracts = 3;
+                else if (adjConf >= 82) contracts = 2;
+                else                   contracts = 1;
+                log.debug("{} CONVICTION: conf={} → {} contract(s)", ticker, adjConf, contracts);
 
                 tradePlacedToday = true;
 
@@ -578,12 +586,14 @@ public class BacktestService {
                 }
 
                 // Estimate options P&L using delta model (no historical options data available)
+                // pnlPerContract is for 1 contract; scale by conviction-sized count.
                 double exitPrice = "long".equals(dir)
                         ? entry * (1 + pnlPct / 100.0)
                         : entry * (1 - pnlPct / 100.0);
                 double holdDays = 1.0; // most intraday setups resolve within 1 trading day
                 OptionsFlowAnalyzer.BacktestOptionsEstimate optEst =
                         optionsAnalyzer.estimateBacktestOptionsPnl(entry, exitPrice, dir, holdDays, setup.getAtr());
+                double scaledPnlPerContract = round2(optEst.pnlPerContract() * contracts);
 
                 trades.add(new TradeResult(ticker, dir, entry, sl, tp, outcome, pnlPct,
                         entryTime, exitTime != null ? exitTime : entryTime,
@@ -591,7 +601,8 @@ public class BacktestService {
                         ctxAdj, buildContextLabel(context),
                         qualityAdj, qualityLabel,
                         optEst.entryPremium(), optEst.exitPremium(),
-                        optEst.pnlPerContract(), optEst.optionsPnlPct()));
+                        scaledPnlPerContract, optEst.optionsPnlPct(),
+                        contracts));
             }
         }
 
@@ -890,11 +901,12 @@ public class BacktestService {
                                String ctxLabel,       // e.g. "RS+4.2% | VIX 18.5"
                                int qualityAdjustment, // signed delta from R:R+time+streak (e.g. -15)
                                String qualityLabel,   // e.g. "R:R 1.2 (-10) | 3-loss streak (-15)"
-                               // Options P&L estimate (delta model)
+                               // Options P&L estimate (delta model, scaled by contract count)
                                double optEntryPremium,  // estimated entry premium per share
                                double optExitPremium,   // estimated exit premium per share
-                               double optPnlPerContract,// profit/loss per 1 contract (×100)
-                               double optPnlPct         // percentage return on premium invested
+                               double optPnlPerContract,// profit/loss per 1 contract (×100 shares)
+                               double optPnlPct,        // percentage return on premium invested
+                               int contracts            // conviction-scaled contract count (1–3)
     ) {}
 
     public static class BacktestResult {
@@ -905,12 +917,13 @@ public class BacktestService {
         public final BacktestMode mode;
         public final int wins, losses, beStops, timeouts, newsFiltered, ctxFiltered, qualityFiltered, total;
         public final double winRate, avgWinPct, avgLossPct, expectancy;
-        // Options aggregate stats
-        public final double totalOptPnl;        // sum of P&L across all contracts (1 contract each)
-        public final double avgOptWinPnl;       // avg $ profit per winning contract
-        public final double avgOptLossPnl;      // avg $ loss per losing contract
-        public final double optExpectancy;      // avg $ per trade (options)
+        // Options aggregate stats (P&L already scaled by conviction contract count)
+        public final double totalOptPnl;        // total P&L across all trades (conviction-scaled)
+        public final double avgOptWinPnl;       // avg $ profit per winning trade (scaled)
+        public final double avgOptLossPnl;      // avg $ loss per losing trade (scaled)
+        public final double optExpectancy;      // avg $ per trade (options, scaled)
         public final double optTotalReturn;     // % return on total premium invested
+        public final double avgContracts;       // average contracts per executed trade
         // Confidence bucket analysis: shows WR and expectancy by score tier
         // Key insight: if 85+ WR >> 75-84 WR, raise min confidence threshold
         public final int    bucket85PlusTotal,  bucket85PlusWins;
@@ -961,6 +974,7 @@ public class BacktestService {
                               && !"REGIME_FILTERED".equals(t.outcome()))
                     .toList();
 
+            // optPnlPerContract is already conviction-scaled (contracts × per-contract P&L)
             this.totalOptPnl = executed.stream().mapToDouble(TradeResult::optPnlPerContract).sum();
             this.avgOptWinPnl = executed.stream()
                     .filter(t -> t.optPnlPerContract() > 0)
@@ -969,10 +983,13 @@ public class BacktestService {
                     .filter(t -> t.optPnlPerContract() <= 0)
                     .mapToDouble(t -> Math.abs(t.optPnlPerContract())).average().orElse(0);
             this.optExpectancy = executed.isEmpty() ? 0 : totalOptPnl / executed.size();
+            // Premium invested = entry premium × 100 shares × contracts used
             double totalPremiumInvested = executed.stream()
-                    .mapToDouble(t -> t.optEntryPremium() * 100).sum(); // ×100 shares per contract
+                    .mapToDouble(t -> t.optEntryPremium() * 100 * Math.max(1, t.contracts())).sum();
             this.optTotalReturn = totalPremiumInvested > 0
                     ? Math.round(totalOptPnl / totalPremiumInvested * 100 * 10) / 10.0 : 0;
+            this.avgContracts = executed.isEmpty() ? 1.0
+                    : executed.stream().mapToInt(t -> Math.max(1, t.contracts())).average().orElse(1.0);
 
             // ── Confidence bucket analysis ────────────────────────────────────
             // Excludes filtered trades — only look at actually-executed setups.
