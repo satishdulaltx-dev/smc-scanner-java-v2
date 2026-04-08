@@ -3,13 +3,14 @@
     {
       "ticker": "AAPL",
       "strategyType": "keylevel",
-      "minConfidence": 78,
+      "minConfidence": 62,
+      "maxConfidence": 84,
       "slAtrMult": 0.4,
-      "tpRrRatio": 1.25,
+      "tpRrRatio": 2.0,
       "intradayRsGate": true,
       "skip": false,
       "skipReason": null,
-      "note": "Apr 2026: reverted smc→keylevel. Research API 180d favored SMC but 365d backtest showed opposite (keylevel 43.8%WR +0.06% vs SMC 40.9%WR -0.09%). 180d research window too short for AAPL — keylevel is the correct strategy here."
+      "note": "Apr 2026 optimizer rank#1 (180d): KEYLEVEL mc=62 sl=0.4 tp=2:1 → 35t 51.9%WR +0.33%exp $1484. Previous minConf=78 generated only 5 trades in 180d (too restrictive). Lowered to 62, widened TP to 2:1. Added maxConf=84 to avoid over-extended entries."
     },
     {
       "ticker": "ABNB",
