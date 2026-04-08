@@ -65,12 +65,36 @@ public class LiveTradeLog {
         bootstrapFromBrokerIfEmpty();
     }
 
+    private void ensureTradeHistoryAvailable() {
+        synchronized (trades) {
+            if (!trades.isEmpty()) return;
+        }
+
+        List<Map<String, Object>> loaded = loadPersistedTrades();
+        if (!loaded.isEmpty()) {
+            synchronized (trades) {
+                if (trades.isEmpty()) {
+                    trades.addAll(loaded);
+                    log.warn("Recovered {} live trade record(s) from persisted storage on demand", loaded.size());
+                }
+            }
+            return;
+        }
+
+        bootstrapFromBrokerIfEmpty();
+    }
+
     public Map<String, Object> getStorageInfo() {
+        ensureTradeHistoryAvailable();
         File f = new File(FILE_PATH);
+        File backup = new File(BACKUP_FILE_PATH);
         Map<String, Object> info = new LinkedHashMap<>();
         info.put("path", f.getAbsolutePath());
         info.put("exists", f.exists());
         info.put("sizeBytes", f.exists() ? f.length() : 0L);
+        info.put("backupPath", backup.getAbsolutePath());
+        info.put("backupExists", backup.exists());
+        info.put("backupSizeBytes", backup.exists() ? backup.length() : 0L);
         synchronized (trades) {
             info.put("records", trades.size());
         }
@@ -125,6 +149,7 @@ public class LiveTradeLog {
 
     /** Get all trades for a specific date (yyyy-MM-dd). */
     public List<Map<String, Object>> getTradesForDate(String date) {
+        ensureTradeHistoryAvailable();
         synchronized (trades) {
             return trades.stream()
                     .filter(t -> date.equals(t.get("date")))
@@ -134,12 +159,14 @@ public class LiveTradeLog {
 
     /** Get today's trades. */
     public List<Map<String, Object>> getTodayTrades() {
+        ensureTradeHistoryAvailable();
         backfillBrokerResolvedPnL();
         return getTradesForDate(ZonedDateTime.now(ET).format(DATE_FMT));
     }
 
     /** Get all trades (for full history report). */
     public List<Map<String, Object>> getAllTrades() {
+        ensureTradeHistoryAvailable();
         backfillBrokerResolvedPnL();
         synchronized (trades) {
             return new ArrayList<>(trades);
@@ -148,6 +175,7 @@ public class LiveTradeLog {
 
     /** Best-effort lookup for the most recent OPEN trade matching a broker position. */
     public Map<String, Object> findOpenTradeForPosition(String positionSymbol, String underlyingTicker) {
+        ensureTradeHistoryAvailable();
         String normalizedSymbol = normalizeOptionSymbol(positionSymbol);
         synchronized (trades) {
             return trades.stream()
@@ -166,6 +194,7 @@ public class LiveTradeLog {
 
     /** Generate a daily summary for a given date. */
     public Map<String, Object> getDailySummary(String date) {
+        ensureTradeHistoryAvailable();
         List<Map<String, Object>> dayTrades = getTradesForDate(date);
         Map<String, Object> summary = new LinkedHashMap<>();
         summary.put("date", date);
@@ -212,6 +241,7 @@ public class LiveTradeLog {
 
     /** Generate cumulative stats across all recorded trades. */
     public Map<String, Object> getCumulativeStats() {
+        ensureTradeHistoryAvailable();
         synchronized (trades) {
             Map<String, Object> stats = new LinkedHashMap<>();
             long total = trades.size();
@@ -256,6 +286,7 @@ public class LiveTradeLog {
      * Called before daily report to ensure accurate outcome tracking.
      */
     public void resolveOpenTrades() {
+        ensureTradeHistoryAvailable();
         List<Map<String, Object>> openTrades;
         synchronized (trades) {
             openTrades = trades.stream()
