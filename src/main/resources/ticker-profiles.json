@@ -2,14 +2,14 @@
   "profiles": [
     {
       "ticker": "AAPL",
-      "strategyType": "keylevel",
+      "strategyType": "smc",
       "minConfidence": 78,
       "slAtrMult": 0.4,
       "tpRrRatio": 1.25,
       "intradayRsGate": true,
       "skip": false,
       "skipReason": null,
-      "note": "Apr 2026 live-parity retune: keep KeyLevel but tighten it. Raised minConf to 78, enabled intraday RS gate, and trimmed TP ratio to 1.25 so AAPL aims for the nearer prior-high objective instead of a stretch target. Goal is fewer wall-buy entries and cleaner level reactions."
+      "note": "Apr 2026 research: switched keylevel→smc. Research API confirmed SMC beats keylevel on 180d (50%WR +0.11%exp vs keylevel 20%WR -0.3%exp). Retained tight sl=0.4 ATR, tpRrRatio=1.25 and intradayRsGate."
     },
     {
       "ticker": "ABNB",
@@ -72,13 +72,13 @@
     {
       "ticker": "DDOG",
       "strategyType": "smc",
-      "minConfidence": 65,
+      "minConfidence": 72,
       "maxConfidence": 84,
       "minFvgPct": 0.0006,
       "dispAtrMult": 1.3,
       "slAtrMult": 1.0,
       "tpRrRatio": 1.25,
-      "note": "Added Apr 2026: DataDog — high-beta SaaS growth, same profile as CRWD/PLTR. Strong retail participation, clean intraday momentum and FVG mechanics. Start with CRWD-like settings (minConf=65, maxConf=84). Revisit after 90d backtest."
+      "note": "Apr 2026 research retune: raised minConf 65→72. Research showed SMC 180d 54.5%WR exp=0.0% — right at breakeven, needs tighter entry bar. maxConf=84 retained. VWAP showed 66.7%WR (7t, just under eligibility threshold) — revisit if SMC doesn't improve after tightening."
     },
     {
       "ticker": "DIS",
@@ -129,17 +129,17 @@
     },
     {
       "ticker": "META",
-      "strategyType": "smc",
-      "minConfidence": 85,
-      "maxConfidence": 89,
+      "strategyType": "keylevel",
+      "minConfidence": 78,
+      "maxConfidence": 84,
       "minFvgPct": 0.0007,
       "dispAtrMult": 1.5,
       "slAtrMult": 1.0,
-      "tpRrRatio": 1.5,
+      "tpRrRatio": 1.25,
       "intradayRsGate": true,
       "skip": false,
       "skipReason": null,
-      "note": "Re-enabled Apr 2026: New filter stack (15m alignment, triple alignment, dead zone, regime delta, VIX gate) should suppress the noise that caused 25% WR in Mar 2026. High bar: minConf=85, maxConf=89, intradayRsGate=true. Research API will confirm best strategy."
+      "note": "Apr 2026 research: switched smc→keylevel per research recommendation. Previous minConf=85 only yielded 3 trades (too thin). Lowered to 78 to build sample. KeyLevel showed 50%WR (2t) vs SMC 33%WR (3t) on 180d. Retest — need 90d live data before drawing conclusions."
     },
     {
       "ticker": "NET",
@@ -150,6 +150,8 @@
       "dispAtrMult": 1.3,
       "slAtrMult": 1.0,
       "tpRrRatio": 1.25,
+      "skip": true,
+      "skipReason": "Apr 2026 research: disable. Negative expectancy across all 3 windows (90d -1.97%, 180d -0.49%, 365d -0.42%). No strategy showed eligible positive expectancy. PLTR analogy did not hold.",
       "note": "Added Apr 2026: Cloudflare — high-beta tech growth, strong retail participation, similar intraday structure to PLTR. SMC sweep+FVG should work well. Start with PLTR-aligned settings."
     },
     {
@@ -254,6 +256,8 @@
       "dispAtrMult": 1.5,
       "minVolMult": 1.8,
       "tpRrRatio": 1.25,
+      "skip": true,
+      "skipReason": "Apr 2026 research: disable. 90d -2.76% exp, 180d -0.63% exp. No strategy eligible. EV startup with erratic news-driven gaps — no SMC edge confirmed.",
       "note": "Apr 2026 live-parity retune: RIVN stays on SMC for now, but sample quality is still shaky. Keep the higher confidence bar, retain maxConf=84, and use a closer 1.25R target while waiting for a cleaner sample before making a strategy switch.",
       "maxConfidence": 84
     },
