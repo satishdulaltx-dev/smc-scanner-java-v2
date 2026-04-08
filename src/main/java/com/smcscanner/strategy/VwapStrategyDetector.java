@@ -87,7 +87,13 @@ public class VwapStrategyDetector {
         // Average volume of session bars
         double avgVol = sessionBars.stream().mapToDouble(OHLCV::getVolume).average().orElse(1.0);
 
+        // ── RVOL gate ────────────────────────────────────────────────────────
+        // Relative volume = current bar volume / session average.
+        // < 0.8 on a mature session (≥ 20 bars) means very thin participation —
+        // Z-score deviations on thin volume are noise, not signals. Hard gate.
         OHLCV last = sessionBars.get(sessionBars.size() - 1);
+        double sessionRvol = avgVol > 0 ? last.getVolume() / avgVol : 1.0;
+        if (sessionBars.size() >= 20 && sessionRvol < 0.8) return result;
 
         // ── Z-Score velocity filter ─────────────────────────────────────────
         // Compute Z-Score of previous bar to detect if deviation is still expanding.
@@ -199,6 +205,7 @@ public class VwapStrategyDetector {
                 if ((vwap - curClose) > 0.8 * curAtr)            confidence += 5;
                 if (last.getVolume() > avgVol * 2.5)             confidence += 5;
                 if (zScore < -2.0)                               confidence += 5;  // extreme Z-Score = high-probability reversion
+                if (sessionRvol >= 1.5)                          confidence += 5;  // RVOL-confirmed Z-spike
                 // ── Soft trend penalty ─────────────────────────────────────
                 // Moderate bearish day (-0.8% to -1.5%) with declining SMA:
                 // lower confidence by 15 so it needs 80+ to survive filters.
@@ -270,6 +277,7 @@ public class VwapStrategyDetector {
                 if ((curClose - vwap) > 0.8 * curAtr)            confidence += 5;
                 if (last.getVolume() > avgVol * 2.5)             confidence += 5;
                 if (zScore > 2.0)                                confidence += 5;  // extreme Z-Score = high-probability reversion
+                if (sessionRvol >= 1.5)                          confidence += 5;  // RVOL-confirmed Z-spike
                 // Soft trend penalty for moderate counter-trend setup
                 if (trendBullish) confidence -= 15;
 

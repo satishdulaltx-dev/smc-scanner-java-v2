@@ -60,6 +60,8 @@ public class ScannerService {
     private final AlpacaOrderService       alpaca;
     private final TechnicalIndicators      techIndicators;
     private final GapDetector              gapDetector;
+    private final MarketRegimeDetector     regimeDetector;
+    private final PivotPointService        pivotService;
 
     public ScannerService(ScannerConfig config, PolygonClient client, SetupDetector setupDetector,
                           CryptoStrategyService crypto, MultiTimeframeAnalyzer mtf,
@@ -74,7 +76,8 @@ public class ScannerService {
                           AdaptiveSuppressor adaptive, OptionsFlowAnalyzer optionsFlow,
                           EarningsCalendar earnings, SwingTradeDetector swingDetector,
                           RangeDetector rangeDetector, AlpacaOrderService alpaca,
-                          TechnicalIndicators techIndicators, GapDetector gapDetector) {
+                          TechnicalIndicators techIndicators, GapDetector gapDetector,
+                          MarketRegimeDetector regimeDetector, PivotPointService pivotService) {
         this.config=config; this.client=client; this.setupDetector=setupDetector; this.crypto=crypto;
         this.mtf=mtf; this.discord=discord; this.dedup=dedup; this.tracker=tracker; this.liveLog=liveLog; this.state=state;
         this.atrCalc=atrCalc; this.vwap=vwap; this.breakout=breakout; this.keyLevel=keyLevel;
@@ -82,7 +85,7 @@ public class ScannerService {
         this.news=news; this.marketCtx=marketCtx; this.qualityFilter=qualityFilter; this.adaptive=adaptive;
         this.optionsFlow=optionsFlow; this.earnings=earnings; this.swingDetector=swingDetector;
         this.rangeDetector=rangeDetector; this.alpaca=alpaca; this.techIndicators=techIndicators;
-        this.gapDetector=gapDetector;
+        this.gapDetector=gapDetector; this.regimeDetector=regimeDetector; this.pivotService=pivotService;
     }
 
     public boolean isCrypto(String t) { return t.startsWith("X:"); }
@@ -102,6 +105,18 @@ public class ScannerService {
             boolean isC=isCrypto(ticker);
             List<OHLCV> bars=client.getBars(ticker,"5m",100);
             if (bars==null||bars.size()<20) { setTs(ticker,"idle",null,0,"No data"); return; }
+
+            // ── Market regime detection (live: 15-min cache per ticker) ───────
+            // LOW_LIQUIDITY (RVOL < 0.8) gates out the scan entirely — signals on
+            // thin volume are noise. Other regimes feed regimeStratAdj later.
+            MarketRegimeDetector.Regime regime = MarketRegimeDetector.Regime.RANGING;
+            if (!isC) {
+                regime = regimeDetector.detect(bars, ticker);
+                if (regime == MarketRegimeDetector.Regime.LOW_LIQUIDITY) {
+                    setTs(ticker, "idle", null, 0, "⊘ Low liquidity — RVOL < 0.8");
+                    return;
+                }
+            }
 
             String htfBias="neutral";
             double dailyAtr=0.0;
@@ -207,13 +222,58 @@ public class ScannerService {
                 // Also checks absolute trend anchor to prevent "falling knife" longs
                 // (buying a stock just because it's bleeding slower than SPY).
                 int intradayRsAdj = 0;
+                double intradayRsVal = 0.0;
                 if (profile.isIntradayRsGate() && !isC) {
-                    double intradayRs = marketCtx.computeIntradayRs(bars);
-                    intradayRsAdj = marketCtx.computeIntradayRsDelta(intradayRs, bars, s.getDirection());
+                    intradayRsVal = marketCtx.computeIntradayRs(bars);
+                    intradayRsAdj = marketCtx.computeIntradayRsDelta(intradayRsVal, bars, s.getDirection());
                     if (intradayRsAdj != 0) {
                         log.info("{} intraday RS adj={} rs={} dir={}", ticker, intradayRsAdj,
-                                String.format("%.4f", intradayRs), s.getDirection());
+                                String.format("%.4f", intradayRsVal), s.getDirection());
                     }
+                }
+
+                // ── RS continuous TP multiplier [0.7 → 1.5] ─────────────────
+                // Strong outperformance vs SPY → extend TP (stock has momentum).
+                // Lagging SPY → tighten TP (less room to run). Float, not boolean.
+                if (profile.isIntradayRsGate() && !isC && intradayRsVal > 0) {
+                    double rsMultiplier = 1.0;
+                    if      (intradayRsVal > 1.3) rsMultiplier = Math.min(1.5, intradayRsVal);
+                    else if (intradayRsVal < 0.8) rsMultiplier = Math.max(0.7, intradayRsVal);
+                    if (rsMultiplier != 1.0) {
+                        double entry  = s.getEntry();
+                        double tpDist = Math.abs(s.getTakeProfit() - entry) * rsMultiplier;
+                        double newTp  = "long".equals(s.getDirection()) ? entry + tpDist : entry - tpDist;
+                        newTp = Math.round(newTp * 10000.0) / 10000.0;
+                        s = TradeSetup.builder()
+                                .ticker(s.getTicker()).direction(s.getDirection())
+                                .entry(s.getEntry()).stopLoss(s.getStopLoss()).takeProfit(newTp)
+                                .confidence(s.getConfidence()).session(s.getSession()).volatility(s.getVolatility())
+                                .atr(s.getAtr()).hasBos(s.isHasBos()).hasChoch(s.isHasChoch())
+                                .fvgTop(s.getFvgTop()).fvgBottom(s.getFvgBottom()).timestamp(s.getTimestamp())
+                                .build();
+                        log.info("{} RS_TP_MULT: rs={} mult={} newTp={}", ticker,
+                                String.format("%.3f", intradayRsVal), String.format("%.2f", rsMultiplier), newTp);
+                    }
+                }
+
+                // ── VOLATILE regime SL widening ──────────────────────────────
+                // In chaotic conditions ATR expands; a normal SL gets clipped almost
+                // immediately. Widen by slExpansionFactor (1.5×) so the trade has
+                // room to breathe. Pairs with VOLATILE regimeStratAdj penalty below.
+                if (regime == MarketRegimeDetector.Regime.VOLATILE && !isC) {
+                    double slFactor = regimeDetector.slExpansionFactor(regime);
+                    double entry   = s.getEntry();
+                    double slDist  = Math.abs(s.getStopLoss() - entry) * slFactor;
+                    double newSl   = "long".equals(s.getDirection()) ? entry - slDist : entry + slDist;
+                    newSl = Math.round(newSl * 10000.0) / 10000.0;
+                    s = TradeSetup.builder()
+                            .ticker(s.getTicker()).direction(s.getDirection())
+                            .entry(s.getEntry()).stopLoss(newSl).takeProfit(s.getTakeProfit())
+                            .confidence(s.getConfidence()).session(s.getSession()).volatility(s.getVolatility())
+                            .atr(s.getAtr()).hasBos(s.isHasBos()).hasChoch(s.isHasChoch())
+                            .fvgTop(s.getFvgTop()).fvgBottom(s.getFvgBottom()).timestamp(s.getTimestamp())
+                            .build();
+                    log.info("{} VOLATILE_SL: widened {}\u00d7 newSl={}", ticker, slFactor, newSl);
                 }
 
                 // ── 15m alignment check ───────────────────────────────────────
@@ -405,10 +465,27 @@ public class ScannerService {
                     }
                 }
 
+                // ── Regime-strategy alignment adjustment ─────────────────────
+                // Running SMC (trend-following) in a RANGING day → -5.
+                // Running KeyLevel in a RANGING day → +5. Drives strategy selection.
+                int regimeStratAdj = !isC ? regimeDetector.computeStrategyAlignment(regime, stratType) : 0;
+                if (regimeStratAdj != 0) {
+                    log.info("{} REGIME_STRAT_ADJ: regime={} strat={} → {}", ticker, regime, stratType, regimeStratAdj);
+                }
+
+                // ── Multi-day pivot level adjustment ─────────────────────────
+                // Entry near recent pivot high = resistance (LONG → -12, SHORT → +8).
+                // Entry near recent pivot low  = support  (SHORT → -12, LONG → +8).
+                int pivotAdj = !isC ? pivotService.computePivotAdj(dailyBars, s.getEntry(), s.getDirection()) : 0;
+                if (pivotAdj != 0) {
+                    log.info("{} PIVOT_ADJ: entry={} dir={} → {}", ticker,
+                            String.format("%.2f", s.getEntry()), s.getDirection(), pivotAdj);
+                }
+
                 // Apply combined confidence adjustment (news + context + quality + flow + regime + correlation + RS)
                 // Penalty floor: secondary filters can reduce base confidence by at most 25%.
                 // e.g. base=80 → floor=60, base=70 → floor=52. Prevents "death by a thousand filters."
-                int rawAdj   = newsAdj + ctxAdj + qualityAdj + flowAdj + regimeAdj + corrAdj + intradayRsAdj + deadZoneAdj + bias15mAdj + alignmentAdj + sma200Adj + rsiAdj + candleAdj + volAdj;
+                int rawAdj   = newsAdj + ctxAdj + qualityAdj + flowAdj + regimeAdj + corrAdj + intradayRsAdj + deadZoneAdj + bias15mAdj + alignmentAdj + sma200Adj + rsiAdj + candleAdj + volAdj + regimeStratAdj + pivotAdj;
                 int penaltyFloor = (int)(s.getConfidence() * 0.75);
                 int totalAdj = rawAdj; // no longer clamping at -40; floor handles it
                 if (rawAdj != totalAdj) {
@@ -473,7 +550,7 @@ public class ScannerService {
                 String factorBreakdown = buildFactorBreakdown(
                         newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj,
                         bias15mAdj, vixBoost, s.getConfidence(),
-                        sma200Adj, rsiAdj, candleAdj, volAdj);
+                        sma200Adj, rsiAdj, candleAdj, volAdj, regimeStratAdj, pivotAdj);
 
                 // ── Conviction tier (suggested contract size) ─────────────────
                 // Based on final adjusted confidence — scales exposure to signal quality.
@@ -839,20 +916,23 @@ public class ScannerService {
     private String buildFactorBreakdown(int newsAdj, int ctxAdj, int qualityAdj,
                                          int flowAdj, int regimeAdj, int corrAdj,
                                          int bias15mAdj, int vixBoost, int finalConf,
-                                         int sma200Adj, int rsiAdj, int candleAdj, int volAdj) {
+                                         int sma200Adj, int rsiAdj, int candleAdj, int volAdj,
+                                         int regimeStratAdj, int pivotAdj) {
         java.util.List<String> parts = new java.util.ArrayList<>();
-        if (Math.abs(newsAdj)    >= 2) parts.add("news "    + (newsAdj    > 0 ? "+" : "") + newsAdj);
-        if (Math.abs(ctxAdj)     >= 2) parts.add("RS/VIX "  + (ctxAdj     > 0 ? "+" : "") + ctxAdj);
-        if (Math.abs(qualityAdj) >= 2) parts.add("quality " + (qualityAdj > 0 ? "+" : "") + qualityAdj);
-        if (Math.abs(flowAdj)    >= 2) parts.add("flow "    + (flowAdj    > 0 ? "+" : "") + flowAdj);
-        if (Math.abs(regimeAdj)  >= 2) parts.add("regime "  + (regimeAdj  > 0 ? "+" : "") + regimeAdj);
-        if (Math.abs(corrAdj)    >= 2) parts.add("corr "    + (corrAdj    > 0 ? "+" : "") + corrAdj);
-        if (Math.abs(bias15mAdj) >= 2) parts.add("15m "     + (bias15mAdj > 0 ? "+" : "") + bias15mAdj);
-        if (Math.abs(sma200Adj)  >= 2) parts.add("SMA200 "  + (sma200Adj  > 0 ? "+" : "") + sma200Adj);
-        if (Math.abs(rsiAdj)     >= 2) parts.add("RSI "     + (rsiAdj     > 0 ? "+" : "") + rsiAdj);
-        if (Math.abs(candleAdj)  >= 2) parts.add("candle "  + (candleAdj  > 0 ? "+" : "") + candleAdj);
-        if (Math.abs(volAdj)     >= 2) parts.add("vol "     + (volAdj     > 0 ? "+" : "") + volAdj);
-        if (vixBoost             >= 5) parts.add("VIX gate +" + vixBoost + " to min");
+        if (Math.abs(newsAdj)         >= 2) parts.add("news "        + (newsAdj         > 0 ? "+" : "") + newsAdj);
+        if (Math.abs(ctxAdj)          >= 2) parts.add("RS/VIX "      + (ctxAdj          > 0 ? "+" : "") + ctxAdj);
+        if (Math.abs(qualityAdj)      >= 2) parts.add("quality "     + (qualityAdj      > 0 ? "+" : "") + qualityAdj);
+        if (Math.abs(flowAdj)         >= 2) parts.add("flow "        + (flowAdj         > 0 ? "+" : "") + flowAdj);
+        if (Math.abs(regimeAdj)       >= 2) parts.add("regime "      + (regimeAdj       > 0 ? "+" : "") + regimeAdj);
+        if (Math.abs(corrAdj)         >= 2) parts.add("corr "        + (corrAdj         > 0 ? "+" : "") + corrAdj);
+        if (Math.abs(bias15mAdj)      >= 2) parts.add("15m "         + (bias15mAdj      > 0 ? "+" : "") + bias15mAdj);
+        if (Math.abs(sma200Adj)       >= 2) parts.add("SMA200 "      + (sma200Adj       > 0 ? "+" : "") + sma200Adj);
+        if (Math.abs(rsiAdj)          >= 2) parts.add("RSI "         + (rsiAdj          > 0 ? "+" : "") + rsiAdj);
+        if (Math.abs(candleAdj)       >= 2) parts.add("candle "      + (candleAdj       > 0 ? "+" : "") + candleAdj);
+        if (Math.abs(volAdj)          >= 2) parts.add("vol "         + (volAdj          > 0 ? "+" : "") + volAdj);
+        if (Math.abs(regimeStratAdj)  >= 2) parts.add("regimeStrat " + (regimeStratAdj  > 0 ? "+" : "") + regimeStratAdj);
+        if (Math.abs(pivotAdj)        >= 2) parts.add("pivot "       + (pivotAdj        > 0 ? "+" : "") + pivotAdj);
+        if (vixBoost                  >= 5) parts.add("VIX gate +" + vixBoost + " to min");
         if (parts.isEmpty()) return "Base score — no adjustments";
         return String.join(" | ", parts) + " → **" + finalConf + "**";
     }

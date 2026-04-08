@@ -18,6 +18,8 @@ import com.smcscanner.strategy.GapDetector;
 import com.smcscanner.strategy.GammaPinDetector;
 import com.smcscanner.strategy.IndexDivergenceDetector;
 import com.smcscanner.strategy.KeyLevelStrategyDetector;
+import com.smcscanner.strategy.MarketRegimeDetector;
+import com.smcscanner.strategy.PivotPointService;
 import com.smcscanner.strategy.SetupDetector;
 import com.smcscanner.strategy.ThreeDayVwapDetector;
 import com.smcscanner.strategy.VolatilitySqueezeDetector;
@@ -65,6 +67,8 @@ public class BacktestService {
     private final ScannerConfig            config;
     private final OptionsFlowAnalyzer      optionsAnalyzer;
     private final TechnicalIndicators      techIndicators;
+    private final MarketRegimeDetector     regimeDetector;
+    private final PivotPointService        pivotService;
 
     public BacktestService(PolygonClient client, AtrCalculator atrCalc, SetupDetector setupDetector,
                            VwapStrategyDetector vwapDetector, BreakoutStrategyDetector breakoutDetector,
@@ -75,7 +79,8 @@ public class BacktestService {
                            NewsService newsService,
                            MarketContextService marketCtxService, SignalQualityFilter qualityFilter,
                            ScannerConfig config, OptionsFlowAnalyzer optionsAnalyzer,
-                           TechnicalIndicators techIndicators) {
+                           TechnicalIndicators techIndicators,
+                           MarketRegimeDetector regimeDetector, PivotPointService pivotService) {
         this.client = client; this.atrCalc = atrCalc; this.setupDetector = setupDetector;
         this.vwapDetector = vwapDetector; this.breakoutDetector = breakoutDetector;
         this.gapDetector = gapDetector;
@@ -85,6 +90,7 @@ public class BacktestService {
         this.newsService = newsService;
         this.marketCtxService = marketCtxService; this.qualityFilter = qualityFilter;
         this.config = config; this.optionsAnalyzer = optionsAnalyzer; this.techIndicators = techIndicators;
+        this.regimeDetector = regimeDetector; this.pivotService = pivotService;
     }
 
     public BacktestResult run(String ticker, int lookbackDays) {
@@ -299,6 +305,32 @@ public class BacktestService {
 
                 TradeSetup setup = bSetups.get(0);
 
+                // ── Market regime detection (backtest: no cache — bar-by-bar) ─
+                // Uses detectForBacktest() so each window gets a fresh computation.
+                // LOW_LIQUIDITY (RVOL < 0.8): skip this bar window, try the next.
+                MarketRegimeDetector.Regime btRegime = ticker.startsWith("X:") ? MarketRegimeDetector.Regime.RANGING
+                        : regimeDetector.detectForBacktest(window);
+                if (btRegime == MarketRegimeDetector.Regime.LOW_LIQUIDITY) {
+                    log.debug("{} REGIME_LOW_LIQUIDITY {} — skipping bar window", ticker, date);
+                    continue;
+                }
+
+                // ── VOLATILE regime SL widening — mirrors live ScannerService ─
+                if (btRegime == MarketRegimeDetector.Regime.VOLATILE && !ticker.startsWith("X:")) {
+                    double slFactor = regimeDetector.slExpansionFactor(btRegime);
+                    double btEntry  = setup.getEntry();
+                    double slDist   = Math.abs(setup.getStopLoss() - btEntry) * slFactor;
+                    double newSl    = "long".equals(setup.getDirection()) ? btEntry - slDist : btEntry + slDist;
+                    newSl = Math.round(newSl * 10000.0) / 10000.0;
+                    setup = TradeSetup.builder()
+                            .ticker(setup.getTicker()).direction(setup.getDirection())
+                            .entry(setup.getEntry()).stopLoss(newSl).takeProfit(setup.getTakeProfit())
+                            .confidence(setup.getConfidence()).session(setup.getSession()).volatility(setup.getVolatility())
+                            .atr(setup.getAtr()).hasBos(setup.isHasBos()).hasChoch(setup.isHasChoch())
+                            .fvgTop(setup.getFvgTop()).fvgBottom(setup.getFvgBottom()).timestamp(setup.getTimestamp())
+                            .build();
+                }
+
                 // ── Historical context checks (news + market) ────────────────
                 long entryEpochMs = dayBars.get(end - 1).getTimestamp();
 
@@ -337,13 +369,34 @@ public class BacktestService {
                 // penalty when not. Includes absolute trend anchor to prevent
                 // "falling knife" longs (buying just because bleeding slower).
                 int intradayRsAdj = 0;
+                double btIntradayRs = 0.0;
                 if (bp.isIntradayRsGate() && !ticker.startsWith("X:")) {
                     List<OHLCV> spyDay = spy5mByDate.getOrDefault(date, List.of());
                     List<OHLCV> spyWindow = spyDay.stream()
                             .filter(b -> b.getTimestamp() <= entryEpochMs)
                             .collect(Collectors.toList());
-                    double intradayRs = marketCtxService.computeIntradayRsFromBars(window, spyWindow);
-                    intradayRsAdj = marketCtxService.computeIntradayRsDelta(intradayRs, window, setup.getDirection());
+                    btIntradayRs = marketCtxService.computeIntradayRsFromBars(window, spyWindow);
+                    intradayRsAdj = marketCtxService.computeIntradayRsDelta(btIntradayRs, window, setup.getDirection());
+                }
+
+                // ── RS continuous TP multiplier [0.7 → 1.5] — mirrors live ──
+                if (bp.isIntradayRsGate() && !ticker.startsWith("X:") && btIntradayRs > 0) {
+                    double rsMultiplier = 1.0;
+                    if      (btIntradayRs > 1.3) rsMultiplier = Math.min(1.5, btIntradayRs);
+                    else if (btIntradayRs < 0.8) rsMultiplier = Math.max(0.7, btIntradayRs);
+                    if (rsMultiplier != 1.0) {
+                        double btEntry  = setup.getEntry();
+                        double tpDist   = Math.abs(setup.getTakeProfit() - btEntry) * rsMultiplier;
+                        double newTp    = "long".equals(setup.getDirection()) ? btEntry + tpDist : btEntry - tpDist;
+                        newTp = Math.round(newTp * 10000.0) / 10000.0;
+                        setup = TradeSetup.builder()
+                                .ticker(setup.getTicker()).direction(setup.getDirection())
+                                .entry(setup.getEntry()).stopLoss(setup.getStopLoss()).takeProfit(newTp)
+                                .confidence(setup.getConfidence()).session(setup.getSession()).volatility(setup.getVolatility())
+                                .atr(setup.getAtr()).hasBos(setup.isHasBos()).hasChoch(setup.isHasChoch())
+                                .fvgTop(setup.getFvgTop()).fvgBottom(setup.getFvgBottom()).timestamp(setup.getTimestamp())
+                                .build();
+                    }
                 }
 
                 TickerProfile bp2 = config.getTickerProfile(ticker);
@@ -479,7 +532,15 @@ public class BacktestService {
                     }
                 }
 
-                int totalAdj = newsAdj + ctxAdj + qualityAdj + flowAdj + regimeAdj + corrAdj + intradayRsAdj + deadZoneAdj + bias15mAdj + alignmentAdj + sma200Adj + rsiAdj + candleAdj + volAdj;
+                // ── Regime-strategy alignment — mirrors live ScannerService ──
+                int regimeStratAdj = !ticker.startsWith("X:")
+                        ? regimeDetector.computeStrategyAlignment(btRegime, stratType) : 0;
+
+                // ── Multi-day pivot level adjustment — mirrors live ────────────
+                int pivotAdj = !ticker.startsWith("X:")
+                        ? pivotService.computePivotAdj(htfSlice, setup.getEntry(), setup.getDirection()) : 0;
+
+                int totalAdj = newsAdj + ctxAdj + qualityAdj + flowAdj + regimeAdj + corrAdj + intradayRsAdj + deadZoneAdj + bias15mAdj + alignmentAdj + sma200Adj + rsiAdj + candleAdj + volAdj + regimeStratAdj + pivotAdj;
                 // Penalty floor: secondary filters can reduce base confidence by at most 25%.
                 // A strong base setup (80+) should never be killed by stacking RS + news + quality.
                 // Floor = 75% of base confidence. e.g. base=80 → floor=60, base=70 → floor=52.
