@@ -741,16 +741,60 @@ public class ScannerService {
                                     double gapTp = isGapAndGo
                                             ? (gap.direction().equals("long") ? gap.todayOpen() + dailyAtr * 1.5 : gap.todayOpen() - dailyAtr * 1.5)
                                             : gap.prevClose();
-                                    TradeSetup gapSetup = TradeSetup.builder()
+                                    TradeSetup.Builder gapBuilder = TradeSetup.builder()
                                             .ticker(ticker).direction(gap.direction())
                                             .entry(gap.todayOpen())
                                             .stopLoss(gapSl).takeProfit(gapTp)
                                             .confidence(gap.confidence())
+                                            .session("NYSE")
+                                            .volatility("gap")
                                             .atr(dailyAtr)
-                                            .factorBreakdown(gap.note())
-                                            .build();
-                                    discord.sendSwingAlert(gapSetup);
-                                    tracker.recordStrategySignal("gap_" + gap.type().name().toLowerCase(), gap.confidence());
+                                            .factorBreakdown(gap.note());
+
+                                    try {
+                                        OptionsRecommendation gapRec = optionsFlow.recommendContract(
+                                                ticker, gap.direction(), gap.todayOpen(), gapSl, gapTp);
+                                        if (gapRec.hasData()) {
+                                            gapBuilder.optionsContract(gapRec.contractTicker())
+                                                    .optionsType(gapRec.contractType())
+                                                    .optionsStrike(gapRec.strike())
+                                                    .optionsExpiry(gapRec.expirationDate())
+                                                    .optionsPremium(gapRec.estimatedPremium())
+                                                    .optionsDelta(gapRec.delta())
+                                                    .optionsIV(gapRec.iv())
+                                                    .optionsIVPct(gapRec.ivPercentile())
+                                                    .optionsBreakEven(gapRec.breakEvenPrice())
+                                                    .optionsProfitPer(gapRec.profitPerContract())
+                                                    .optionsLossPer(gapRec.lossPerContract())
+                                                    .optionsRR(gapRec.optionsRR())
+                                                    .optionsSuggested(1);
+                                            if (gapRec.greeksWarning() != null) {
+                                                gapBuilder.optionsGreeksWarning(gapRec.greeksWarning());
+                                            }
+                                        }
+                                    } catch (Exception e) {
+                                        log.debug("{} gap options rec error: {}", ticker, e.getMessage());
+                                    }
+
+                                    TradeSetup gapSetup = gapBuilder.build();
+                                    String gapStrategy = "gap_" + gap.type().name().toLowerCase();
+                                    if (!gapSetup.hasOptionsData()) {
+                                        log.info("GAP ALERT SUPPRESSED {} {} type={} conf={} — no options contract available (options-only mode)",
+                                                ticker, gap.direction().toUpperCase(), gap.type(), gap.confidence());
+                                    } else {
+                                        log.info("GAP INTRADAY ALERT {} {} type={} conf={} entry={}",
+                                                ticker, gap.direction().toUpperCase(), gap.type(), gap.confidence(), gap.todayOpen());
+                                        discord.sendSetupAlert(gapSetup);
+                                        liveLog.recordTrade(gapSetup, gapStrategy);
+                                        tracker.recordStrategySignal(gapStrategy, gap.confidence());
+                                        if (alpaca.isEnabled()) {
+                                            String orderId = alpaca.placeOrder(gapSetup);
+                                            if (orderId != null) {
+                                                log.info("ALPACA GAP ORDER {} {} type={} orderId={}",
+                                                        ticker, gap.direction(), gap.type(), orderId);
+                                            }
+                                        }
+                                    }
                                     dedup.markSent(gapKey, gap.direction(), gap.todayOpen());
                                 }
                             }
