@@ -34,6 +34,7 @@ import java.util.stream.Collectors;
 public class LiveTradeLog {
     private static final Logger log = LoggerFactory.getLogger(LiveTradeLog.class);
     private static final String FILE_PATH = resolveStoragePath("live-trades.json");
+    private static final int BROKER_REBUILD_LOOKBACK_DAYS = 30;
     private static final ZoneId ET = ZoneId.of("America/New_York");
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm");
@@ -457,7 +458,7 @@ public class LiveTradeLog {
     private Map<String, List<Map<String, Object>>> getRecentFilledOrdersBySymbol() {
         if (alpaca == null || !alpaca.isEnabled()) return Map.of();
         try {
-            return alpaca.getOrders().stream()
+            return alpaca.getOrders(BROKER_REBUILD_LOOKBACK_DAYS).stream()
                     .filter(o -> "filled".equalsIgnoreCase(String.valueOf(o.getOrDefault("status", ""))))
                     .peek(o -> o.put("created_at_epoch", parseEpoch(String.valueOf(o.getOrDefault("created_at", "")))))
                     .collect(Collectors.groupingBy(o -> normalizeOptionSymbol(String.valueOf(o.getOrDefault("symbol", "")))));
@@ -640,7 +641,7 @@ public class LiveTradeLog {
         }
 
         try {
-            List<Map<String, Object>> orders = alpaca.getOrders().stream()
+            List<Map<String, Object>> orders = alpaca.getOrders(BROKER_REBUILD_LOOKBACK_DAYS).stream()
                     .filter(o -> "filled".equalsIgnoreCase(String.valueOf(o.getOrDefault("status", ""))))
                     .sorted(Comparator.comparingLong(o -> parseEpoch(String.valueOf(o.getOrDefault("created_at", "")))))
                     .collect(Collectors.toList());

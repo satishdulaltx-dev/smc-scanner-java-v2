@@ -404,11 +404,20 @@ public class AlpacaOrderService {
 
     /** Get today's orders. */
     public List<Map<String, Object>> getOrders() {
+        return getOrders(1);
+    }
+
+    /** Get recent orders for the last N days. */
+    public List<Map<String, Object>> getOrders(int lookbackDays) {
         if (!isEnabled()) return List.of();
         try {
-            String today = ZonedDateTime.now(ET).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
+            int safeLookbackDays = Math.max(1, lookbackDays);
+            String after = ZonedDateTime.now(ET)
+                    .minusDays(safeLookbackDays - 1L)
+                    .toLocalDate()
+                    .format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
             Request req = new Request.Builder()
-                    .url(getBaseUrl() + "/v2/orders?status=all&after=" + today + "T00:00:00Z&limit=200&direction=desc")
+                    .url(getBaseUrl() + "/v2/orders?status=all&after=" + after + "T00:00:00Z&limit=500&direction=desc")
                     .addHeader("APCA-API-KEY-ID", config.getAlpacaApiKey())
                     .addHeader("APCA-API-SECRET-KEY", config.getAlpacaSecretKey())
                     .get().build();
@@ -429,6 +438,9 @@ public class AlpacaOrderService {
                         o.put("limit_price", n.path("limit_price").asText());
                         o.put("filled_avg_price", n.path("filled_avg_price").asText());
                         o.put("created_at", n.path("created_at").asText());
+                        o.put("filled_at", n.path("filled_at").asText());
+                        o.put("updated_at", n.path("updated_at").asText());
+                        o.put("asset_class", n.path("asset_class").asText());
                         orders.add(o);
                     }
                     return orders;
@@ -436,7 +448,7 @@ public class AlpacaOrderService {
                 return List.of();
             }
         } catch (Exception e) {
-            log.error("ALPACA orders error: {}", e.getMessage());
+            log.error("ALPACA orders error ({}d): {}", lookbackDays, e.getMessage());
             return List.of();
         }
     }

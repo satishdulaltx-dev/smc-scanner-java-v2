@@ -740,7 +740,7 @@ public class DashboardController {
     @ResponseBody
     public ResponseEntity<List<Map<String,Object>>> alpacaPositions() {
         List<Map<String,Object>> positions = new ArrayList<>(alpaca.getPositions());
-        List<Map<String, Object>> brokerOrders = alpaca.getOrders();
+        List<Map<String, Object>> brokerOrders = alpaca.getOrders(30);
         for (Map<String, Object> pos : positions) {
             Object tracked = pos.get("tracked");
             boolean alreadyTracked = tracked instanceof Boolean b && b;
