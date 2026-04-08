@@ -34,16 +34,13 @@
     },
     {
       "ticker": "AMZN",
-      "strategyType": "smc",
-      "minConfidence": 72,
-      "maxConfidence": 84,
-      "minFvgPct": 0.0005,
-      "dispAtrMult": 1.3,
-      "tpRrRatio": 1.25,
-      "intradayRsGate": true,
+      "strategyType": "keylevel",
+      "minConfidence": 70,
+      "slAtrMult": 0.4,
+      "tpRrRatio": 2.0,
       "skip": false,
       "skipReason": null,
-      "note": "Apr 2026 live-parity retune: SMC remains the best fit, but defaults were too loose. Raised minConf to 72, added maxConf=84 to avoid late/exhausted entries, and trimmed TP ratio to 1.25. AMZN improved under trailing exits but still needs tighter selection."
+      "note": "Apr 2026 optimizer rank#1 (180d): KEYLEVEL mc=70 sl=0.4 tp=2:1 → 13t 55.6%WR +0.58%exp $1055. Previous SMC was outside top 19 — KEYLEVEL dominates all combos for AMZN. E-commerce stock reacts better to key levels than FVG sweeps."
     },
     {
       "ticker": "BA",
@@ -198,13 +195,12 @@
     {
       "ticker": "NVDA",
       "strategyType": "smc",
-      "minConfidence": 75,
+      "minConfidence": 78,
       "maxConfidence": 84,
-      "minFvgPct": 0.0005,
-      "dispAtrMult": 1.3,
-      "tpRrRatio": 1.25,
+      "slAtrMult": 0.4,
+      "tpRrRatio": 1.0,
       "intradayRsGate": true,
-      "note": "Apr 2026 live-parity retune: keep NVDA on SMC but tighten the entry bar slightly. minConf=75 + maxConf=84 retains the earlier-entry band, with tpRrRatio=1.25 to avoid stretching targets too far on names where trailing is doing most of the winner management."
+      "note": "Apr 2026 optimizer rank#3 best eligible (180d): SMC mc=78 sl=0.4 tp=1:1 → 15t 66.7%WR +0.30%exp $1729. Rank 1 (VWAP 1t) and Rank 2 (KEYLEVEL 4t) not eligible. Changed sl 1.0→0.4 and tp 1.25→1:1. minConf 75→78 tightens entry quality."
     },
     {
       "ticker": "PANW",
@@ -281,10 +277,10 @@
     {
       "ticker": "SMCI",
       "strategyType": "smc",
-      "minConfidence": 78,
+      "minConfidence": 62,
       "slAtrMult": 0.4,
       "tpRrRatio": 1.0,
-      "note": "180d optimizer rank#2: SMC mc=78 sl=0.4 tp=1.0 → 17t 64.7%WR +2.50%avgW -2.33%avgL +0.79%exp $391 optP&L. Tight sl=0.4 ATR fixes R:R. VWAP was rank#16 (+0.01%). No maxConf cap."
+      "note": "Apr 2026 optimizer rank#3 (180d): SMC mc=62 sl=0.4 tp=1:1 → 46t 52.2%WR +0.18%exp $940. Previous minConf=78 gave only 12 trades at -0.04%exp (rank 10). Lowered minConf 78→62 to generate reliable sample volume. sl=0.4 and tp=1:1 retained."
     },
     {
       "ticker": "SNAP",
