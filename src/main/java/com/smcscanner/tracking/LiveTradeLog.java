@@ -62,6 +62,7 @@ public class LiveTradeLog {
         } else {
             log.warn("Live trade log file not found at {} — starting with empty history", FILE_PATH);
         }
+        bootstrapFromBrokerIfEmpty();
     }
 
     public Map<String, Object> getStorageInfo() {
@@ -630,6 +631,132 @@ public class LiveTradeLog {
         } catch (IOException e) {
             log.error("Failed to persist live trades: {}", e.getMessage());
         }
+    }
+
+    private void bootstrapFromBrokerIfEmpty() {
+        if (alpaca == null || !alpaca.isEnabled()) return;
+        synchronized (trades) {
+            if (!trades.isEmpty()) return;
+        }
+
+        try {
+            List<Map<String, Object>> orders = alpaca.getOrders().stream()
+                    .filter(o -> "filled".equalsIgnoreCase(String.valueOf(o.getOrDefault("status", ""))))
+                    .sorted(Comparator.comparingLong(o -> parseEpoch(String.valueOf(o.getOrDefault("created_at", "")))))
+                    .collect(Collectors.toList());
+            if (orders.isEmpty()) return;
+
+            Map<String, Deque<Map<String, Object>>> openBuysBySymbol = new HashMap<>();
+            List<Map<String, Object>> rebuilt = new ArrayList<>();
+
+            for (Map<String, Object> order : orders) {
+                String symbol = String.valueOf(order.getOrDefault("symbol", ""));
+                String side = String.valueOf(order.getOrDefault("side", ""));
+                if (symbol.isBlank() || side.isBlank()) continue;
+
+                if ("buy".equalsIgnoreCase(side)) {
+                    openBuysBySymbol.computeIfAbsent(symbol, ignored -> new ArrayDeque<>()).addLast(order);
+                    continue;
+                }
+
+                if (!"sell".equalsIgnoreCase(side)) continue;
+                Deque<Map<String, Object>> buys = openBuysBySymbol.getOrDefault(symbol, new ArrayDeque<>());
+                if (buys.isEmpty()) continue;
+
+                Map<String, Object> buy = buys.pollFirst();
+                rebuilt.add(buildTradeFromBrokerRoundTrip(symbol, buy, order));
+            }
+
+            Set<String> openSymbols = alpaca.getPositions().stream()
+                    .map(pos -> String.valueOf(pos.getOrDefault("symbol", "")))
+                    .filter(s -> !s.isBlank())
+                    .collect(Collectors.toSet());
+
+            for (String symbol : openSymbols) {
+                Deque<Map<String, Object>> buys = openBuysBySymbol.getOrDefault(symbol, new ArrayDeque<>());
+                while (!buys.isEmpty()) {
+                    rebuilt.add(buildOpenTradeFromBroker(symbol, buys.pollFirst()));
+                }
+            }
+
+            if (rebuilt.isEmpty()) return;
+            rebuilt.sort(Comparator.comparingLong(t -> ((Number) t.getOrDefault("timestamp", 0L)).longValue()));
+            synchronized (trades) {
+                if (!trades.isEmpty()) return;
+                trades.addAll(rebuilt);
+            }
+            persist();
+            log.warn("Bootstrapped {} live trade record(s) from Alpaca because {} was empty/missing", rebuilt.size(), FILE_PATH);
+        } catch (Exception e) {
+            log.warn("Could not bootstrap live trade history from Alpaca: {}", e.getMessage());
+        }
+    }
+
+    private Map<String, Object> buildTradeFromBrokerRoundTrip(String symbol, Map<String, Object> buy, Map<String, Object> sell) {
+        double entryFill = toDouble(buy.get("filled_avg_price"));
+        double exitFill = toDouble(sell.get("filled_avg_price"));
+        double qty = Math.max(1.0, Math.abs(toDouble(sell.get("qty"))));
+        double pnlAmount = (exitFill - entryFill) * 100.0 * qty;
+        double pnlPct = entryFill > 0 ? (exitFill - entryFill) / entryFill * 100.0 : 0.0;
+        String outcome = Math.abs(pnlPct) < 0.10 ? "BE_STOP" : (pnlPct > 0 ? "WIN" : "LOSS");
+
+        Map<String, Object> record = buildBrokerSeedRecord(symbol, buy);
+        record.put("outcome", outcome);
+        record.put("pnlPct", Math.round(pnlPct * 100.0) / 100.0);
+        record.put("pnlAmount", Math.round(pnlAmount * 100.0) / 100.0);
+        record.put("resolvedAt", parseEpoch(String.valueOf(sell.getOrDefault("created_at", ""))));
+        record.put("brokerExitAt", sell.get("created_at"));
+        record.put("exitPrice", exitFill);
+        record.put("entryFillPrice", entryFill);
+        record.put("resolutionSource", "ALPACA_BOOTSTRAP");
+        record.put("brokerSymbol", symbol);
+        return record;
+    }
+
+    private Map<String, Object> buildOpenTradeFromBroker(String symbol, Map<String, Object> buy) {
+        Map<String, Object> record = buildBrokerSeedRecord(symbol, buy);
+        record.put("outcome", "OPEN");
+        record.put("pnlPct", 0.0);
+        record.put("pnlAmount", null);
+        record.put("resolutionSource", "ALPACA_BOOTSTRAP");
+        record.put("brokerSymbol", symbol);
+        return record;
+    }
+
+    private Map<String, Object> buildBrokerSeedRecord(String symbol, Map<String, Object> buy) {
+        long entryTs = parseEpoch(String.valueOf(buy.getOrDefault("created_at", "")));
+        ZonedDateTime entryTime = entryTs > 0
+                ? Instant.ofEpochMilli(entryTs).atZone(ET)
+                : ZonedDateTime.now(ET);
+        double entryFill = toDouble(buy.get("filled_avg_price"));
+        String underlying = underlyingFromOcc(symbol);
+        String direction = inferDirectionFromOcc(symbol);
+
+        Map<String, Object> record = new LinkedHashMap<>();
+        record.put("id", UUID.randomUUID().toString().substring(0, 8));
+        record.put("ticker", underlying);
+        record.put("direction", direction);
+        record.put("entry", entryFill);
+        record.put("stopLoss", 0.0);
+        record.put("takeProfit", 0.0);
+        record.put("confidence", 0);
+        record.put("strategy", "broker-bootstrap");
+        record.put("atr", 0.0);
+        record.put("optionsContract", symbol);
+        record.put("optionsPremium", entryFill);
+        record.put("date", entryTime.format(DATE_FMT));
+        record.put("time", entryTime.format(TIME_FMT));
+        record.put("timestamp", entryTs);
+        return record;
+    }
+
+    private String inferDirectionFromOcc(String symbol) {
+        String normalized = normalizeOptionSymbol(symbol);
+        int idx = 0;
+        while (idx < normalized.length() && !Character.isDigit(normalized.charAt(idx))) idx++;
+        if (idx + 6 >= normalized.length()) return "unknown";
+        char cp = normalized.charAt(idx + 6);
+        return cp == 'P' ? "short" : cp == 'C' ? "long" : "unknown";
     }
 
     private static String resolveStoragePath(String fileName) {
