@@ -55,13 +55,14 @@
     },
     {
       "ticker": "COIN",
-      "minConfidence": 78,
-      "minFvgPct": 0.0006,
-      "strategyType": "smc",
-      "tpRrRatio": 2.0,
-      "skip": true,
-      "skipReason": "Apr 2026 backtest matrix: 0 trades on ALL 10 strategies in 90d. COIN price action driven entirely by BTC/crypto overnight gaps — no intraday 5m SMC pattern generates reliable entries. Note: OvernightMomentumService also excludes COIN from gap holds.",
-      "note": "365d optimizer: SMC mc=78 sl=0.4 tp=2.0 → 9t 71%WR +2.64% exp $2045 opt P&L. Higher bar filters noise, wider TP captures crypto-proxy momentum."
+      "strategyType": "keylevel",
+      "minConfidence": 70,
+      "maxConfidence": 84,
+      "slAtrMult": 0.5,
+      "tpRrRatio": 1.0,
+      "skip": false,
+      "skipReason": null,
+      "note": "Apr 2026 scalp retune: KEYLEVEL 365d best — 19T 61.1%WR $1940 (vs vsqueeze $1858, idiv $1705). COIN reacts violently to key S/R levels because BTC-proxy momentum amplifies level breaks. Scalp config: tpRrRatio=1.0 for fast 1:1 exit, slAtrMult=0.5 to give room for crypto volatility. 90d was an anomaly (0 trades) — 365d and 180d both confirm the edge."
     },
     {
       "ticker": "CRWD",
@@ -295,25 +296,25 @@
     },
     {
       "ticker": "SOFI",
-      "strategyType": "smc",
-      "minConfidence": 80,
-      "slAtrMult": 1.0,
+      "strategyType": "breakout",
+      "minConfidence": 65,
+      "maxConfidence": 84,
+      "slAtrMult": 0.5,
       "tpRrRatio": 1.0,
-      "skip": true,
-      "skipReason": "Apr 2026 backtest matrix: 0 intraday SMC trades at minConf=80. Gap strategy 8.3% WR -$389 (12 trades). No strategy profitable in 90d — low-float fintech, moves on consumer-credit headlines, not intraday structure.",
-      "note": "Apr 2026 outside-research retune: keep SOFI active, but stay selective because the name is still catalyst-sensitive around earnings and consumer-finance headlines. Raised minConf 78→80 while keeping maxConf=84 and tpRrRatio=1.0 so only cleaner SMC entries survive and the trail does the heavy lifting.",
-      "maxConfidence": 84
+      "skip": false,
+      "skipReason": null,
+      "note": "Apr 2026 scalp retune: BREAKOUT is the only consistently profitable SOFI strategy — 365d: 7T 71.4%WR $63; 180d: 4T 75%WR $50. SOFI momentum-breaks out of intraday consolidations and trends hard when it goes. Scalp config: tpRrRatio=1.0 for fast 1:1 exit within 15 min, slAtrMult=0.5 tight stop below breakout level. minConf=65 (loosened from 80 to generate breakout signals — smc at 80 gave 0 trades)."
     },
     {
       "ticker": "SPY",
-      "strategyType": "smc",
-      "minConfidence": 80,
+      "strategyType": "keylevel",
+      "minConfidence": 72,
       "maxConfidence": 84,
-      "slAtrMult": 0.4,
-      "tpRrRatio": 2.0,
-      "skip": true,
-      "skipReason": "Apr 2026 backtest matrix: ALL 10 strategies negative in 90d. SMC 0% WR -$154, VWAP -$52, gap -$1447. ETF with ~$600B AUM — too liquid and trend-driven for 5m reversal strategies. No edge confirmed.",
-      "note": "Apr 2026: raised minConf 70→80 to reduce near-random-coin-flip trades (45.5% WR at 70). Higher bar filters out marginal SPY setups."
+      "slAtrMult": 0.3,
+      "tpRrRatio": 0.75,
+      "skip": false,
+      "skipReason": null,
+      "note": "Apr 2026 scalp retune: KEYLEVEL only profitable SPY strategy — 365d: 8T 37.5% +$184 (all other strategies negative). SPY scalp logic: ultra-tight SL (0.3 ATR) and quick TP (0.75:1 R:R) to exit within 15 min on key S/R bounces (major moving averages, previous highs/lows, round numbers). High win frequency on failed breakdowns at major levels. minConf=72 to get enough signals."
     },
     {
       "ticker": "SQ",
