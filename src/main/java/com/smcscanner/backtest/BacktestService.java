@@ -147,7 +147,9 @@ public class BacktestService {
         TickerProfile preProfile = config.getTickerProfile(ticker);
         boolean needsSpy5m = preProfile.isIntradayRsGate()
                 || "idiv".equals(preProfile.getStrategyType())
-                || "idiv".equals(strategyOverride);
+                || "idiv".equals(strategyOverride)
+                || "gap".equals(preProfile.getStrategyType())
+                || "gap".equals(strategyOverride);
         List<OHLCV> spy5mBars = needsSpy5m
                 ? client.getBarsWithLookback("SPY", "5m", 50000, lookbackDays + 5)
                 : List.of();
@@ -856,6 +858,58 @@ public class BacktestService {
                     }
                 }
 
+                // ── Gap Early-Exit: red reversal candle on next-day open ─────────
+                // If stock gaps in trade direction but the first 5-min RTH candle is
+                // bearish (for long) or bullish (for short) with high volume, exit
+                // immediately at that candle's open to lock in gap profit.
+                // Prevents "gap then full reversal" from erasing overnight gains.
+                if ("gap".equals(stratType) && holdSignal.shouldHold() && !fwdBars.isEmpty()) {
+                    LocalDate entryDateEarly = Instant.ofEpochMilli(entryEpochMs).atZone(ET).toLocalDate();
+                    for (int fi = 0; fi < fwdBars.size(); fi++) {
+                        OHLCV fb = fwdBars.get(fi);
+                        LocalDate fbDate = Instant.ofEpochMilli(fb.getTimestamp()).atZone(ET).toLocalDate();
+                        if (!fbDate.isAfter(entryDateEarly)) continue; // skip same-day bars
+                        // First next-day RTH bar found
+                        boolean reversalCandle = "long".equals(dir)
+                                ? fb.getClose() < fb.getOpen()   // red candle for long
+                                : fb.getClose() > fb.getOpen();  // green candle for short
+                        // Compute morning volume avg from today's RTH bars for comparison
+                        double morningVolAvgFwd = dayBars.stream()
+                                .filter(this::isRegularSessionBar)
+                                .limit(12).skip(1)
+                                .mapToDouble(OHLCV::getVolume).average().orElse(1);
+                        boolean highVolReversal = morningVolAvgFwd > 0
+                                && fb.getVolume() > morningVolAvgFwd * 1.5;
+                        if (reversalCandle && highVolReversal) {
+                            double earlyExit = fb.getOpen();
+                            double earlyPnlPct = "long".equals(dir)
+                                    ? (earlyExit - entry) / entry * 100.0
+                                    : (entry - earlyExit) / entry * 100.0;
+                            log.debug("{} GAP_EARLY_EXIT: red reversal at {} pnl={}%",
+                                    ticker, toDateTime(fb.getTimestamp()), String.format("%.2f", earlyPnlPct));
+                            String earlyExitTime = toDateTime(fb.getTimestamp());
+                            double earlyExitPrice = earlyExit;
+                            double holdDaysEarly = 1.0;
+                            OptionsFlowAnalyzer.BacktestOptionsEstimate optEstEarly =
+                                    optionsAnalyzer.estimateBacktestOptionsPnl(entry, earlyExitPrice, dir, holdDaysEarly, setup.getAtr(), contracts);
+                            double scaledPnlEarly = round2(optEstEarly.pnlPerContract() * contracts);
+                            String earlyOutcome = earlyPnlPct > 0 ? "WIN" : (earlyPnlPct < 0 ? "LOSS" : "BE_STOP");
+                            trades.add(new TradeResult(ticker, dir, entry, sl, tp, earlyOutcome, earlyPnlPct,
+                                    entryTime, earlyExitTime,
+                                    adjConf, setup.getAtr(), newsAdj, sentiment.label(),
+                                    ctxAdj, buildContextLabel(context),
+                                    qualityAdj, qualityLabel,
+                                    optEstEarly.entryPremium(), optEstEarly.exitPremium(),
+                                    scaledPnlEarly, optEstEarly.optionsPnlPct(),
+                                    contracts));
+                            tradePlacedToday = true;
+                            continue; // skip normal exit simulation
+                        }
+                        break; // only check the first next-day bar
+                    }
+                    if (tradePlacedToday) continue;
+                }
+
                 ExitResult exit = switch (exitStyle) {
                     case LIVE_PARITY -> simulateLiveParityExit(window, fwdBars, entry, sl, tp, dir);
                     case HYBRID -> simulateHybridExit(window, fwdBars, entry, sl, tp, dir);
@@ -956,21 +1010,18 @@ public class BacktestService {
             atrWindow.add(fb);
             if (atrWindow.size() > 20) atrWindow.remove(0);
 
-            double hi = fb.getHigh();
-            double lo = fb.getLow();
             double close = fb.getClose();
             double atr = computeAtr5m(atrWindow);
             if (atr <= 0) atr = Math.abs(entry - sl);
 
-            // In live trading, the current stop level exists before this bar completes.
-            // If the bar breaches it intrabar, assume we are out before granting any
-            // benefit from the bar close or a newly tightened stop.
-            boolean stopBreached = isLong ? lo <= activeSl : hi >= activeSl;
+            // Mirror live trailing behavior: the scheduler processes confirmed 5m
+            // candle closes, not intrabar highs/lows, and closes after the stop
+            // has been violated on a confirmed close.
+            boolean stopBreached = isLong ? close <= activeSl : close >= activeSl;
             if (stopBreached) {
-                double slippedStop = applyTrailSlippage(activeSl, isLong);
                 double pnlPct = isLong
-                        ? round2((slippedStop - entry) / entry * 100)
-                        : round2((entry - slippedStop) / entry * 100);
+                        ? round2((close - entry) / entry * 100)
+                        : round2((entry - close) / entry * 100);
                 String outcome = Math.abs(pnlPct) < 0.05 ? "BE_STOP" : (pnlPct > 0 ? "TRAIL_WIN" : "TRAIL_LOSS");
                 return new ExitResult(outcome, toDateTime(fb.getTimestamp()), pnlPct);
             }

@@ -42,8 +42,9 @@ public class OvernightMomentumService {
 
     /** Close must be within this ratio from the extreme (0.85 = top/bottom 15% of daily range). */
     private static final double CLOSING_RANGE_THRESHOLD = 0.85;
-    /** Last-30-min avg volume must exceed morning-session avg by this multiple. */
-    private static final double VOL_ACCEL_MULTIPLIER = 1.80;
+    /** Last-30-min avg volume must exceed morning-session avg by this multiple.
+     *  1.3x catches mega-caps (NVDA, AAPL) that rarely hit 1.8x. */
+    private static final double VOL_ACCEL_MULTIPLIER = 1.30;
     /** Minimum RS outperformance vs SPY in final hour to qualify. */
     private static final double RS_OUTPERFORM_THRESHOLD = 0.001;  // 0.1%
 
@@ -122,9 +123,10 @@ public class OvernightMomentumService {
         double dynamicRsThreshold = Math.max(RS_OUTPERFORM_THRESHOLD,
                 Math.min(0.005, avgBarRangePct * 0.40));
 
+        // Institutional moves happen fast at the close — shorten lookback to last 20 min (4 bars).
         boolean rsTrendOk = false;
         if (spySessionBars != null && spySessionBars.size() >= 4) {
-            int lookback     = Math.min(12, Math.min(n, spySessionBars.size()));
+            int lookback     = Math.min(4, Math.min(n, spySessionBars.size()));
             List<OHLCV> tSlice = sessionBars.subList(n - lookback, n);
             List<OHLCV> sSlice = spySessionBars.subList(spySessionBars.size() - lookback,
                                                           spySessionBars.size());
@@ -147,11 +149,14 @@ public class OvernightMomentumService {
         if (rsTrendOk)      score += 15;
 
         // ── Hold decision ──────────────────────────────────────────────────────
-        // With catalyst   : any 1 technical confirmation + score ≥ 55
-        // Without catalyst: all 3 technical signals required + score ≥ 70
+        // With catalyst   : closing extreme OR volume accel + score ≥ 45
+        //   (catalyst alone with any 1 confirmation is enough — news is the driver)
+        // Without catalyst: closing extreme required PLUS either vol accel or RS lead + score ≥ 55
+        //   (need the coiling signal: price at extreme + institutional loading)
+        // Rationale: requiring all 3 simultaneously was too strict → 0 trades in 90-day backtest
         boolean shouldHold = hasCatalyst
-                ? score >= 55 && (closingRangeOk || volumeAccelOk)
-                : score >= 70 && closingRangeOk && volumeAccelOk && rsTrendOk;
+                ? score >= 45 && (closingRangeOk || volumeAccelOk)
+                : score >= 55 && closingRangeOk && (volumeAccelOk || rsTrendOk);
 
         // ── Reason string ──────────────────────────────────────────────────────
         StringBuilder sb = new StringBuilder();
