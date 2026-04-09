@@ -12,9 +12,10 @@ import java.util.*;
  * Two-phase optimizer: first finds which strategies produce trades,
  * then tunes parameters only for viable strategies.
  *
- * Phase 1: Test each strategy with default params (4 runs)
- * Phase 2: For strategies that produced 2+ trades, test minConf × tpRrRatio (6 combos each)
- * Total: ~4 + ~12 = ~16 backtests instead of 240
+ * Scalp-aware behavior:
+ * - Momentum/scalp profiles use SCALP backtest mode (max ~15 min hold)
+ * - Strategy candidates shift toward fast reaction setups (scalp/keylevel/vwap/vsqueeze/idiv/breakout)
+ * - Parameter grids tighten around quick-entry / quick-exit combos
  */
 @Service
 public class ProfileOptimizer {
@@ -31,22 +32,29 @@ public class ProfileOptimizer {
     public OptimizeResult optimize(String ticker, int days) {
         TickerProfile original = config.getTickerProfile(ticker);
         String currentStrategy = original.getStrategyType();
+        boolean scalpMode = isScalpProfile(original);
+        BacktestMode mode = scalpMode ? BacktestMode.SCALP : BacktestMode.INTRADAY;
         List<ParamResult> results = new ArrayList<>();
 
         // ── Phase 1: Screen strategies with default params ──────────────────
-        String[] strategies = {"smc", "vwap", "breakout", "keylevel"};
+        String[] strategies = scalpMode
+                ? new String[]{"scalp", "keylevel", "vwap", "vsqueeze", "idiv", "breakout"}
+                : new String[]{"smc", "vwap", "breakout", "keylevel"};
         List<String> viableStrategies = new ArrayList<>();
 
         for (String strat : strategies) {
             try {
-                TickerProfile test = buildProfile(ticker, original, strat, 65, 0.5, 1.5);
+                int defaultMc = scalpMode ? 74 : 65;
+                double defaultSl = scalpMode ? 0.4 : 0.5;
+                double defaultTp = scalpMode ? 1.0 : 1.5;
+                TickerProfile test = buildProfile(ticker, original, strat, defaultMc, defaultSl, defaultTp);
                 config.setProfileOverride(ticker, test);
-                BacktestService.BacktestResult bt = backtestService.run(ticker, days);
+                BacktestService.BacktestResult bt = backtestService.run(ticker, days, mode);
                 int executed = bt.wins + bt.losses + bt.beStops;
 
                 // Record this default-params result
                 if (executed >= 1) {
-                    results.add(toParamResult(strat, 65, 0.5, 1.5, bt));
+                    results.add(toParamResult(strat, defaultMc, defaultSl, defaultTp, bt));
                 }
                 // Strategy is viable if it produced any executed trades
                 if (executed >= 2) {
@@ -60,20 +68,23 @@ public class ProfileOptimizer {
         }
 
         // ── Phase 2: Tune viable strategies ─────────────────────────────────
-        int[] minConfs = {62, 70, 78};
-        double[] tpRatios = {1.0, 1.5, 2.0};
-        double[] slMults = {0.4, 1.0};
+        int[] minConfs = scalpMode ? new int[]{68, 74, 80, 86} : new int[]{62, 70, 78};
+        double[] tpRatios = scalpMode ? new double[]{0.75, 1.0, 1.25} : new double[]{1.0, 1.5, 2.0};
+        double[] slMults = scalpMode ? new double[]{0.3, 0.4, 0.5, 0.6} : new double[]{0.4, 1.0};
+        int defaultMc = scalpMode ? 74 : 65;
+        double defaultTp = scalpMode ? 1.0 : 1.5;
+        double defaultSl = scalpMode ? 0.4 : 0.5;
 
         for (String strat : viableStrategies) {
             for (int mc : minConfs) {
                 for (double tp : tpRatios) {
                     for (double sl : slMults) {
                         // Skip the default combo we already tested in phase 1
-                        if (mc == 65 && tp == 1.5 && sl == 0.5) continue;
+                        if (mc == defaultMc && tp == defaultTp && sl == defaultSl) continue;
                         try {
                             TickerProfile test = buildProfile(ticker, original, strat, mc, sl, tp);
                             config.setProfileOverride(ticker, test);
-                            BacktestService.BacktestResult bt = backtestService.run(ticker, days);
+                            BacktestService.BacktestResult bt = backtestService.run(ticker, days, mode);
                             int executed = bt.wins + bt.losses + bt.beStops;
                             if (executed >= 2) {
                                 results.add(toParamResult(strat, mc, sl, tp, bt));
@@ -92,11 +103,29 @@ public class ProfileOptimizer {
 
         // Sort by expectancy descending, then by trade count (prefer more data)
         results.sort((a, b) -> {
+            int minTradesCmp = Integer.compare(b.totalTrades, a.totalTrades);
+            if ((a.totalTrades >= 6) != (b.totalTrades >= 6)) {
+                return Boolean.compare(b.totalTrades >= 6, a.totalTrades >= 6);
+            }
+            if (scalpMode) {
+                int wrCmp = Double.compare(b.winRate, a.winRate);
+                if (wrCmp != 0) return wrCmp;
+            }
             int cmp = Double.compare(b.expectancy, a.expectancy);
-            return cmp != 0 ? cmp : Integer.compare(b.totalTrades, a.totalTrades);
+            return cmp != 0 ? cmp : minTradesCmp;
         });
 
         return new OptimizeResult(ticker, days, currentStrategy, results);
+    }
+
+    private boolean isScalpProfile(TickerProfile profile) {
+        if (profile == null) return false;
+        String strat = profile.getStrategyType();
+        boolean fastStrategy = Set.of("scalp", "keylevel", "vwap", "vsqueeze", "idiv", "breakout").contains(strat);
+        boolean fastTarget = profile.getTpRrRatio() != null && profile.getTpRrRatio() <= 1.0;
+        String note = profile.getNote();
+        boolean explicitScalp = note != null && note.toLowerCase(Locale.ROOT).contains("scalp");
+        return explicitScalp || (fastStrategy && fastTarget);
     }
 
     private TickerProfile buildProfile(String ticker, TickerProfile original,

@@ -67,6 +67,7 @@ public class DiscordAlertService {
         double slPct=s.getEntry()>0?slPts/s.getEntry()*100:0, tpPct=s.getEntry()>0?tpPts/s.getEntry()*100:0;
         String ts=ZonedDateTime.now(ZoneOffset.UTC).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))+" UTC";
         String strategy = "normal".equals(s.getVolatility())   ? "📊 VWAP Reversion"
+                        : "scalp".equals(s.getVolatility())    ? "⚡ Momentum Scalp"
                         : "high".equals(s.getVolatility())     ? "🚀 ORB Breakout"
                         : "keylevel".equals(s.getVolatility()) ? "🎯 Key Level Rejection"
                         : "gap".equals(s.getVolatility())      ? "🚀 Gap Momentum / Overnight"

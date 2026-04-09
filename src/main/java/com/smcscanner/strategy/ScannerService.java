@@ -44,6 +44,7 @@ public class ScannerService {
     private final AtrCalculator          atrCalc;
     private final VwapStrategyDetector      vwap;
     private final BreakoutStrategyDetector  breakout;
+    private final ScalpMomentumDetector     scalpMomentum;
     private final KeyLevelStrategyDetector  keyLevel;
     private final VolatilitySqueezeDetector vSqueeze;
     private final ThreeDayVwapDetector      vwap3d;
@@ -71,6 +72,7 @@ public class ScannerService {
                           DiscordAlertService discord, AlertDedup dedup,
                           PerformanceTracker tracker, LiveTradeLog liveLog, SharedState state, AtrCalculator atrCalc,
                           VwapStrategyDetector vwap, BreakoutStrategyDetector breakout,
+                          ScalpMomentumDetector scalpMomentum,
                           KeyLevelStrategyDetector keyLevel,
                           VolatilitySqueezeDetector vSqueeze, ThreeDayVwapDetector vwap3d,
                           IndexDivergenceDetector indexDiv, GammaPinDetector gammaPin,
@@ -85,7 +87,7 @@ public class ScannerService {
                           PowerEarningsGapDetector pegDetector) {
         this.config=config; this.client=client; this.setupDetector=setupDetector; this.crypto=crypto;
         this.mtf=mtf; this.discord=discord; this.dedup=dedup; this.tracker=tracker; this.liveLog=liveLog; this.state=state;
-        this.atrCalc=atrCalc; this.vwap=vwap; this.breakout=breakout; this.keyLevel=keyLevel;
+        this.atrCalc=atrCalc; this.vwap=vwap; this.breakout=breakout; this.scalpMomentum=scalpMomentum; this.keyLevel=keyLevel;
         this.vSqueeze=vSqueeze; this.vwap3d=vwap3d; this.indexDiv=indexDiv; this.gammaPin=gammaPin;
         this.news=news; this.marketCtx=marketCtx; this.qualityFilter=qualityFilter; this.adaptive=adaptive;
         this.optionsFlow=optionsFlow; this.earnings=earnings; this.swingDetector=swingDetector;
@@ -222,7 +224,10 @@ public class ScannerService {
                 if (profile.hasTimeRouting()) {
                     log.debug("{} TIME_ROUTE: ts={} → strategy={}", ticker, lastBarTs, strategyType);
                 }
-                if ("vwap".equals(strategyType)) {
+                if ("scalp".equals(strategyType)) {
+                    setups = scalpMomentum.detect(bars, ticker, dailyAtr);
+                    phaseMsg = setups.isEmpty() ? "Waiting for momentum impulse + volume burst..." : "";
+                } else if ("vwap".equals(strategyType)) {
                     setups = vwap.detect(bars, ticker, dailyAtr);
                     phaseMsg = setups.isEmpty() ? "Waiting for VWAP reversion..." : "";
                 } else if ("breakout".equals(strategyType)) {
@@ -274,6 +279,7 @@ public class ScannerService {
                             SetupDetector.DetectResult fr = setupDetector.detectSetups(bars, htfBias, ticker, false, dailyAtr);
                             yield fr.setups();
                         }
+                        case "scalp" -> scalpMomentum.detect(bars, ticker, dailyAtr);
                         case "keylevel" -> keyLevel.detect(bars, dailyBars, ticker, dailyAtr, profile);
                         case "vsqueeze" -> vSqueeze.detect(bars, ticker, dailyAtr);
                         default -> List.of();
@@ -1145,6 +1151,7 @@ public class ScannerService {
         cur.removeIf(x->s.getTicker().equals(x.get("ticker")));
         double rr=Math.abs(s.getStopLoss()-s.getEntry())>0?Math.round(Math.abs(s.getTakeProfit()-s.getEntry())/Math.abs(s.getStopLoss()-s.getEntry())*10)/10.0:0;
         String reasons = isCrypto(s.getTicker())             ? "Momentum+Volume"
+                       : "scalp".equals(s.getVolatility())    ? "Momentum Impulse"
                        : "normal".equals(s.getVolatility())   ? "VWAP Reversion"
                        : "high".equals(s.getVolatility())     ? "ORB Breakout"
                        : "keylevel".equals(s.getVolatility()) ? "Key Level Rejection"

@@ -86,6 +86,10 @@ public class AlpacaOrderService {
     private static final int    REVERSAL_CLOSES    = 2;    // consecutive closes against direction to confirm reversal
     private static final double HYBRID_BE_R        = 1.0;  // move SL to breakeven at 1R
     private static final double HYBRID_TRAIL_R     = 1.5;  // start ATR trailing only after 1.5R
+    private static final double SCALP_BE_R         = 0.60; // scalp moves to BE faster
+    private static final double SCALP_TRAIL_R      = 0.90; // scalp arms trail after first push
+    private static final double SCALP_TRAIL_NORMAL = 0.35; // tighter trail for fast momentum
+    private static final double SCALP_TRAIL_REVERSAL = 0.18;
 
     // Config defaults (overridden by env vars)
     private static final double DEFAULT_MAX_POSITION = 500.0;   // max $ per trade
@@ -586,12 +590,13 @@ public class AlpacaOrderService {
                 continue;
             }
 
-            // ── Scalp time exit: force-close after 20 minutes ────────────────
-            // Options bleed theta on every tick — never hold a scalp trade past 20 min.
-            // If TP/SL hasn't resolved by then, the setup has failed — exit at market.
+            // ── Scalp time exit: force-close after 15 minutes ────────────────
+            // Options bleed theta on every tick — never hold a scalp trade past 15 min.
+            // This is only the fail-safe. Profitable scalp trades should usually resolve
+            // well before the hard timeout via TP, BE, or trail.
             long heldMinutes = (nowMs - tp.entryEpochMs()) / 60_000L;
-            if (heldMinutes >= 20 && tp.optionsContract() != null && !tp.optionsContract().isBlank()) {
-                log.warn("SCALP_TIMEOUT: {} held {}min ≥ 20min — force-closing options to stop theta bleed",
+            if (heldMinutes >= 15 && tp.optionsContract() != null && !tp.optionsContract().isBlank()) {
+                log.warn("SCALP_TIMEOUT: {} held {}min ≥ 15min — force-closing options to stop theta bleed",
                         symbol, heldMinutes);
                 closeOptionsPosition(symbol, tp.optionsContract());
                 removeTrackedPosition(symbol);
@@ -642,12 +647,13 @@ public class AlpacaOrderService {
         double risk = Math.abs(tp.entry() - originalStop);
         if (risk <= 0) risk = Math.abs(tp.entry() - tp.stopLoss());
         if (risk <= 0) return;
+        boolean scalpManaged = isScalpManaged(tp.entry(), originalStop, tp.takeProfit());
         double beTrigger = isLong
-                ? tp.entry() + risk * HYBRID_BE_R
-                : tp.entry() - risk * HYBRID_BE_R;
+                ? tp.entry() + risk * (scalpManaged ? SCALP_BE_R : HYBRID_BE_R)
+                : tp.entry() - risk * (scalpManaged ? SCALP_BE_R : HYBRID_BE_R);
         double trailTrigger = isLong
-                ? tp.entry() + risk * HYBRID_TRAIL_R
-                : tp.entry() - risk * HYBRID_TRAIL_R;
+                ? tp.entry() + risk * (scalpManaged ? SCALP_TRAIL_R : HYBRID_TRAIL_R)
+                : tp.entry() - risk * (scalpManaged ? SCALP_TRAIL_R : HYBRID_TRAIL_R);
         boolean breakEvenArmed = hybrid.breakEvenArmed();
         boolean trailArmed = hybrid.trailArmed();
 
@@ -685,9 +691,14 @@ public class AlpacaOrderService {
                 ? candleClose < newPeak - atr * 0.20
                 : candleClose > newPeak + atr * 0.20;
         int newReversalCount = isReversalClose ? tp.consecutiveReversal() + 1 : 0;
+        double progress = isLong ? newPeak - tp.entry() : tp.entry() - newPeak;
+        boolean weakClose = isLong ? candleClose < confirmedBar.getOpen() : candleClose > confirmedBar.getOpen();
+        long heldMinutes = Math.max(0L, (System.currentTimeMillis() - tp.entryEpochMs()) / 60_000L);
 
         // ── 3. Calculate target stop ──────────────────────────────────────────
-        double atrMult = (newReversalCount >= REVERSAL_CLOSES) ? ATR_TRAIL_REVERSAL : ATR_TRAIL_NORMAL;
+        double atrMult = scalpManaged
+                ? (newReversalCount >= 1 ? SCALP_TRAIL_REVERSAL : SCALP_TRAIL_NORMAL)
+                : ((newReversalCount >= REVERSAL_CLOSES) ? ATR_TRAIL_REVERSAL : ATR_TRAIL_NORMAL);
         double targetStop = isLong
                 ? newPeak - atr * atrMult
                 : newPeak + atr * atrMult;
@@ -729,6 +740,29 @@ public class AlpacaOrderService {
             removeTrackedPosition(symbol);
             lastProcessedCandle.remove(symbol);
             return;
+        }
+
+        if (scalpManaged) {
+            boolean immediateFailure = weakClose && progress < risk * 0.25;
+            boolean noFollowThrough = heldMinutes >= 10 && progress < risk * 0.35;
+            boolean bankOnStall = progress > 0 && (newReversalCount >= 1 || (heldMinutes >= 5 && weakClose));
+            if (immediateFailure || noFollowThrough || bankOnStall) {
+                log.info("SCALP_EXIT {} close=${} held={}m progressR={} weakClose={} reversalCount={} — closing to protect momentum edge",
+                        symbol,
+                        String.format("%.2f", candleClose),
+                        heldMinutes,
+                        String.format("%.2f", progress / risk),
+                        weakClose,
+                        newReversalCount);
+                if (isOptionsPosition) {
+                    closeOptionsPosition(symbol, tp.optionsContract());
+                } else {
+                    closeEquityPosition(symbol);
+                }
+                removeTrackedPosition(symbol);
+                lastProcessedCandle.remove(symbol);
+                return;
+            }
         }
 
         // ── 6. Before trail activation, only keep BE + state updates ─────────────
@@ -794,6 +828,12 @@ public class AlpacaOrderService {
                     encodeHybridState(originalStop, true, true, hybrid.brokerStopOrderId()),
                     newPeak, newReversalCount, tp.optionsContract(), tp.entryEpochMs()));
         }
+    }
+
+    private boolean isScalpManaged(double entry, double stopLoss, double takeProfit) {
+        double risk = Math.abs(entry - stopLoss);
+        double reward = Math.abs(takeProfit - entry);
+        return risk > 0 && reward <= risk * 1.1;
     }
 
     /**

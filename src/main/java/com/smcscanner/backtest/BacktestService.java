@@ -23,6 +23,7 @@ import com.smcscanner.strategy.OvernightMomentumService;
 import com.smcscanner.strategy.PivotPointService;
 import com.smcscanner.strategy.PowerEarningsGapDetector;
 import com.smcscanner.strategy.PressureService;
+import com.smcscanner.strategy.ScalpMomentumDetector;
 import com.smcscanner.strategy.SetupDetector;
 import com.smcscanner.strategy.ThreeDayVwapDetector;
 import com.smcscanner.strategy.VolatilitySqueezeDetector;
@@ -58,6 +59,7 @@ public class BacktestService {
     private final SetupDetector            setupDetector;
     private final VwapStrategyDetector     vwapDetector;
     private final BreakoutStrategyDetector breakoutDetector;
+    private final ScalpMomentumDetector    scalpDetector;
     private final GapDetector              gapDetector;
     private final KeyLevelStrategyDetector  keyLevelDetector;
     private final VolatilitySqueezeDetector vSqueezeDetector;
@@ -78,6 +80,7 @@ public class BacktestService {
 
     public BacktestService(PolygonClient client, AtrCalculator atrCalc, SetupDetector setupDetector,
                            VwapStrategyDetector vwapDetector, BreakoutStrategyDetector breakoutDetector,
+                           ScalpMomentumDetector scalpDetector,
                            GapDetector gapDetector,
                            KeyLevelStrategyDetector keyLevelDetector,
                            VolatilitySqueezeDetector vSqueezeDetector, ThreeDayVwapDetector vwap3dDetector,
@@ -90,7 +93,7 @@ public class BacktestService {
                            PressureService pressureService, OvernightMomentumService overnightService,
                            PowerEarningsGapDetector pegDetector) {
         this.client = client; this.atrCalc = atrCalc; this.setupDetector = setupDetector;
-        this.vwapDetector = vwapDetector; this.breakoutDetector = breakoutDetector;
+        this.vwapDetector = vwapDetector; this.breakoutDetector = breakoutDetector; this.scalpDetector = scalpDetector;
         this.gapDetector = gapDetector;
         this.keyLevelDetector = keyLevelDetector;
         this.vSqueezeDetector = vSqueezeDetector; this.vwap3dDetector = vwap3dDetector;
@@ -253,6 +256,7 @@ public class BacktestService {
                     ? strategyOverride : bp.getStrategyType();
             // Session strategies skip pre-market windows in the loop below
             boolean isSessionStrat = "breakout".equals(stratType)
+                                  || "scalp".equals(stratType)
                                   || "vwap".equals(stratType)
                                   || "keylevel".equals(stratType)
                                   || "gap".equals(stratType)
@@ -263,6 +267,7 @@ public class BacktestService {
                                   || "gammapin".equals(stratType);
             // Minimum bars before we start checking each strategy
             int minBars = "breakout".equals(stratType)  ? 8
+                        : "scalp".equals(stratType)     ? 8
                         : "vwap".equals(stratType)      ? 12
                         : "keylevel".equals(stratType)  ? 20
                         : "gap".equals(stratType)       ? 20
@@ -299,7 +304,9 @@ public class BacktestService {
                 MarketRegimeDetector.Regime btRegime = ticker.startsWith("X:") ? MarketRegimeDetector.Regime.RANGING
                         : regimeDetector.detectForBacktest(window);
                 List<TradeSetup> bSetups;
-                if ("vwap".equals(effectiveStrat)) {
+                if ("scalp".equals(effectiveStrat)) {
+                    bSetups = scalpDetector.detect(window, ticker, dailyAtr);
+                } else if ("vwap".equals(effectiveStrat)) {
                     bSetups = vwapDetector.detect(window, ticker, dailyAtr);
                 } else if ("breakout".equals(effectiveStrat)) {
                     bSetups = breakoutDetector.detect(window, ticker, dailyAtr);
@@ -424,6 +431,7 @@ public class BacktestService {
                     String fallbackStrat = regimeDetector.suggestStrategy(btRegime, effectiveStrat);
                     if (fallbackStrat != null && !fallbackStrat.equals(effectiveStrat)) {
                         bSetups = switch (fallbackStrat) {
+                            case "scalp" -> scalpDetector.detect(window, ticker, dailyAtr);
                             case "smc" -> {
                                 SetupDetector.DetectResult fr = setupDetector.detectSetups(
                                         window, htfBias, ticker, false, dailyAtr, true);
@@ -913,9 +921,14 @@ public class BacktestService {
                     }
                 }
 
+                boolean scalpManaged = mode == BacktestMode.SCALP || "scalp".equals(setup.getVolatility());
                 ExitResult exit = switch (exitStyle) {
-                    case LIVE_PARITY -> simulateLiveParityExit(window, fwdBars, entry, sl, tp, dir);
-                    case HYBRID -> simulateHybridExit(window, fwdBars, entry, sl, tp, dir);
+                    case LIVE_PARITY -> scalpManaged
+                            ? simulateScalpExit(window, fwdBars, entry, sl, tp, dir)
+                            : simulateLiveParityExit(window, fwdBars, entry, sl, tp, dir);
+                    case HYBRID -> scalpManaged
+                            ? simulateScalpExit(window, fwdBars, entry, sl, tp, dir)
+                            : simulateHybridExit(window, fwdBars, entry, sl, tp, dir);
                     case CLASSIC -> simulateClassicExit(fwdBars, entry, sl, tp, dir);
                 };
                 if (exit == null) continue;
@@ -1127,6 +1140,93 @@ public class BacktestService {
                 boolean improving = isLong ? targetStop > activeSl : targetStop < activeSl;
                 boolean protectsAtLeastBe = isLong ? targetStop >= entry : targetStop <= entry;
                 if (improving && protectsAtLeastBe) activeSl = targetStop;
+            }
+        }
+
+        OHLCV lastFwd = fwdBars.get(fwdBars.size() - 1);
+        double exitPrice = lastFwd.getClose();
+        double pnlPct = isLong
+                ? round2((exitPrice - entry) / entry * 100)
+                : round2((entry - exitPrice) / entry * 100);
+        return new ExitResult("TIMEOUT", toDateTime(lastFwd.getTimestamp()), pnlPct);
+    }
+
+    private ExitResult simulateScalpExit(List<OHLCV> entryWindow, List<OHLCV> fwdBars,
+                                         double entry, double sl, double tp, String dir) {
+        if (fwdBars.isEmpty()) return null;
+        boolean isLong = "long".equals(dir);
+        double risk = Math.abs(entry - sl);
+        if (risk <= 0) return null;
+
+        double activeSl = sl;
+        double peakClose = entry;
+        boolean beActive = false;
+        boolean trailActive = false;
+        int reversalCount = 0;
+        List<OHLCV> atrWindow = new ArrayList<>(entryWindow);
+
+        for (int i = 0; i < fwdBars.size(); i++) {
+            OHLCV fb = fwdBars.get(i);
+            atrWindow.add(fb);
+            if (atrWindow.size() > 20) atrWindow.remove(0);
+
+            double close = fb.getClose();
+            double open = fb.getOpen();
+            double atr = computeAtr5m(atrWindow);
+            if (atr <= 0) atr = risk;
+
+            boolean stopBreached = isLong ? close <= activeSl : close >= activeSl;
+            if (stopBreached) {
+                double pnlPct = isLong
+                        ? round2((close - entry) / entry * 100)
+                        : round2((entry - close) / entry * 100);
+                String outcome = Math.abs(pnlPct) < 0.05 ? "BE_STOP" : (pnlPct > 0 ? "TRAIL_WIN" : "TRAIL_LOSS");
+                return new ExitResult(outcome, toDateTime(fb.getTimestamp()), pnlPct);
+            }
+
+            boolean tpHit = isLong ? close >= tp : close <= tp;
+            if (tpHit) {
+                double pnlPct = isLong
+                        ? round2((close - entry) / entry * 100)
+                        : round2((entry - close) / entry * 100);
+                return new ExitResult("WIN", toDateTime(fb.getTimestamp()), pnlPct);
+            }
+
+            if (isLong && close > peakClose) peakClose = close;
+            if (!isLong && close < peakClose) peakClose = close;
+
+            double progress = isLong ? peakClose - entry : entry - peakClose;
+            boolean weakClose = isLong ? close < open : close > open;
+
+            if (!beActive && progress >= risk * 0.60) {
+                beActive = true;
+                activeSl = entry;
+            }
+            if (!trailActive && progress >= risk * 0.90) {
+                trailActive = true;
+            }
+
+            boolean reversalClose = isLong
+                    ? close < peakClose - atr * 0.15
+                    : close > peakClose + atr * 0.15;
+            reversalCount = reversalClose ? reversalCount + 1 : 0;
+
+            if (trailActive) {
+                double targetStop = isLong ? peakClose - atr * 0.35 : peakClose + atr * 0.35;
+                boolean improving = isLong ? targetStop > activeSl : targetStop < activeSl;
+                boolean inProfit = isLong ? targetStop >= entry : targetStop <= entry;
+                if (improving && inProfit) activeSl = targetStop;
+            }
+
+            boolean noFollowThrough = i >= 1 && progress < risk * 0.35;
+            boolean immediateFailure = i == 0 && weakClose && progress < risk * 0.25;
+            boolean momentumStall = progress > 0 && (reversalCount >= 1 || (i >= 1 && weakClose));
+            if (immediateFailure || noFollowThrough || momentumStall) {
+                double pnlPct = isLong
+                        ? round2((close - entry) / entry * 100)
+                        : round2((entry - close) / entry * 100);
+                String outcome = Math.abs(pnlPct) < 0.05 ? "BE_STOP" : (pnlPct > 0 ? "TRAIL_WIN" : "TRAIL_LOSS");
+                return new ExitResult(outcome, toDateTime(fb.getTimestamp()), pnlPct);
             }
         }
 
