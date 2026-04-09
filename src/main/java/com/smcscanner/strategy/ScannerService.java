@@ -1004,8 +1004,10 @@ public class ScannerService {
                                     double gapSl = gap.invalidationPrice();
                                     double risk = Math.abs(gapEntry - gapSl);
                                     if (risk > 0) {
+                                        boolean gapIsRunner = Math.abs(gap.gapPct()) >= 5.0;
+                                        double gapTpMult = gapIsRunner ? 3.0 : 1.5;
                                         double gapTp = isGapAndGo
-                                                ? (gap.direction().equals("long") ? gapEntry + risk * 1.5 : gapEntry - risk * 1.5)
+                                                ? (gap.direction().equals("long") ? gapEntry + risk * gapTpMult : gapEntry - risk * gapTpMult)
                                                 : gap.prevClose();
                                         TradeSetup.Builder gapBuilder = TradeSetup.builder()
                                                 .ticker(ticker).direction(gap.direction())

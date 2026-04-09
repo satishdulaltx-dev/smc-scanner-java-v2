@@ -69,7 +69,7 @@ public class DiscordAlertService {
         String strategy = "normal".equals(s.getVolatility())   ? "📊 VWAP Reversion"
                         : "high".equals(s.getVolatility())     ? "🚀 ORB Breakout"
                         : "keylevel".equals(s.getVolatility()) ? "🎯 Key Level Rejection"
-                        : "gap".equals(s.getVolatility())      ? "🪟 Gap Open Scalp"
+                        : "gap".equals(s.getVolatility())      ? "🚀 Gap Momentum / Overnight"
                         : "🔷 SMC Sweep+FVG";
 
         List<Map<String,Object>> fields = new java.util.ArrayList<>();

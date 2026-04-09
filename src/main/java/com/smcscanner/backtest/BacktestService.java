@@ -1033,8 +1033,13 @@ public class BacktestService {
         double entry = gap.entryPrice();
         double sl = gap.invalidationPrice();
         double risk = Math.abs(entry - sl);
+        // Institutional runners (≥5% gap) use 3R TP so the trade survives to EOD
+        // and the overnight hold gate can decide whether to extend into next day.
+        // Standard Gap & Go uses 1.5R (intraday scalp target).
+        boolean isRunner = Math.abs(gap.gapPct()) >= 5.0;
+        double tpMultiplier = isRunner ? 3.0 : 1.5;
         double tp = isGapAndGo
-                ? ("long".equals(gap.direction()) ? entry + risk * 1.5 : entry - risk * 1.5)
+                ? ("long".equals(gap.direction()) ? entry + risk * tpMultiplier : entry - risk * tpMultiplier)
                 : gap.prevClose();
         tp = Math.round(tp * 10_000.0) / 10_000.0;
 
