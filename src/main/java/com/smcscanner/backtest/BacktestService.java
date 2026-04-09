@@ -304,12 +304,12 @@ public class BacktestService {
                         List<OHLCV> rthBars = window.stream()
                                 .filter(this::isRegularSessionBar)
                                 .collect(Collectors.toList());
+                        final long scanTs = dayBars.get(end - 1).getTimestamp();
                         List<OHLCV> spyForEntry = spy5mByDate.getOrDefault(date, List.of()).stream()
                                 .filter(this::isRegularSessionBar)
-                                .filter(b -> b.getTimestamp() <= dayBars.get(end - 1).getTimestamp())
+                                .filter(b -> b.getTimestamp() <= scanTs)
                                 .collect(Collectors.toList());
                         bSetups = List.of();
-                        long scanTs = dayBars.get(end - 1).getTimestamp();
                         for (String tryDir : List.of("long", "short")) {
                             boolean hasCat = !ticker.startsWith("X:")
                                     && newsService.getSentimentAt(ticker, scanTs).isAligned(tryDir);
