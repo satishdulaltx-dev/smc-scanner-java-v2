@@ -50,7 +50,7 @@ public class SetupDetector {
 
         double atrPct=atrCalc.atrPercentile(atrArr,-1,100);
         if (atrPct<config.getMinAtrPercentile()) {
-            log.debug("{} filtered: LOW_VOL atrPct={:.1f}", ticker, atrPct);
+            log.trace("{} filtered: LOW_VOL atrPct={}", ticker, String.format("%.1f", atrPct));
             state.setPhase(SetupPhase.LOW_VOLATILITY); return new DetectResult(List.of(),state);
         }
 
@@ -65,7 +65,7 @@ public class SetupDetector {
 
         state=runStateMachine(bars,atrArr,state,effDispAtrMult);
         if (!state.isComplete()) {
-            log.debug("{} filtered: state={}", ticker, state.getPhase());
+            log.trace("{} filtered: state={}", ticker, state.getPhase());
             return new DetectResult(List.of(),state);
         }
 
