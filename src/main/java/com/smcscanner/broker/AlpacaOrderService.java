@@ -63,9 +63,19 @@ public class AlpacaOrderService {
     // consecutiveReversal = number of consecutive closes moving against direction
     // optionsContract = OCC symbol (e.g. "AAPL250418C00200000") for options trades, null for equity
     // stopOrderId is reused for options-only metadata because options have no native stop order
+    // entryEpochMs: wall-clock time when order was placed — used for scalp time exit
     public record TrackedPosition(String symbol, String direction, double entry, double stopLoss,
                                    double takeProfit, String orderId, String stopOrderId,
-                                   double peakClose, int consecutiveReversal, String optionsContract) {}
+                                   double peakClose, int consecutiveReversal, String optionsContract,
+                                   long entryEpochMs) {
+        // Backward-compat constructor for deserialization of existing tracked-positions.json (no entryEpochMs)
+        public TrackedPosition(String symbol, String direction, double entry, double stopLoss,
+                               double takeProfit, String orderId, String stopOrderId,
+                               double peakClose, int consecutiveReversal, String optionsContract) {
+            this(symbol, direction, entry, stopLoss, takeProfit, orderId, stopOrderId,
+                 peakClose, consecutiveReversal, optionsContract, System.currentTimeMillis());
+        }
+    }
     private record HybridState(double originalStopLoss, boolean breakEvenArmed, boolean trailArmed, String brokerStopOrderId) {}
     private final Map<String, TrackedPosition> trackedPositions = new ConcurrentHashMap<>();
     // Track last processed candle timestamp to avoid re-processing same candle
@@ -278,7 +288,7 @@ public class AlpacaOrderService {
                             s.getTicker(), s.getDirection(), s.getEntry(),
                             s.getStopLoss(), s.getTakeProfit(), orderId,
                             encodeHybridState(s.getStopLoss(), false, false, null),
-                            s.getEntry(), 0, occSymbol));
+                            s.getEntry(), 0, occSymbol, System.currentTimeMillis()));
 
                     dailyOrderCount.merge(s.getTicker(), 1, Integer::sum);
                     return orderId;
@@ -561,6 +571,7 @@ public class AlpacaOrderService {
         }
 
         // Check each tracked position using candle closes
+        long nowMs = System.currentTimeMillis();
         for (Map.Entry<String, TrackedPosition> e : new ArrayList<>(trackedPositions.entrySet())) {
             String symbol = e.getKey();
             TrackedPosition tp = e.getValue();
@@ -570,6 +581,19 @@ public class AlpacaOrderService {
                     ? tp.optionsContract() : symbol;
             if (!heldSymbols.contains(checkSymbol)) {
                 log.info("TRAIL: {} no longer held — removing from tracker", symbol);
+                removeTrackedPosition(symbol);
+                lastProcessedCandle.remove(symbol);
+                continue;
+            }
+
+            // ── Scalp time exit: force-close after 20 minutes ────────────────
+            // Options bleed theta on every tick — never hold a scalp trade past 20 min.
+            // If TP/SL hasn't resolved by then, the setup has failed — exit at market.
+            long heldMinutes = (nowMs - tp.entryEpochMs()) / 60_000L;
+            if (heldMinutes >= 20 && tp.optionsContract() != null && !tp.optionsContract().isBlank()) {
+                log.warn("SCALP_TIMEOUT: {} held {}min ≥ 20min — force-closing options to stop theta bleed",
+                        symbol, heldMinutes);
+                closeOptionsPosition(symbol, tp.optionsContract());
                 removeTrackedPosition(symbol);
                 lastProcessedCandle.remove(symbol);
                 continue;
@@ -643,7 +667,7 @@ public class AlpacaOrderService {
                             tp.symbol(), tp.direction(), tp.entry(), tp.entry(),
                             tp.takeProfit(), tp.orderId(),
                             encodeHybridState(originalStop, true, trailArmed, hybrid.brokerStopOrderId()),
-                            newPeak, tp.consecutiveReversal(), tp.optionsContract()));
+                            newPeak, tp.consecutiveReversal(), tp.optionsContract(), tp.entryEpochMs()));
                     tp = trackedPositions.getOrDefault(symbol, tp);
                 }
             }
@@ -714,7 +738,7 @@ public class AlpacaOrderService {
                         tp.symbol(), tp.direction(), tp.entry(), tp.stopLoss(),
                         tp.takeProfit(), tp.orderId(),
                         encodeHybridState(originalStop, breakEvenArmed, false, hybrid.brokerStopOrderId()),
-                        newPeak, newReversalCount, tp.optionsContract()));
+                        newPeak, newReversalCount, tp.optionsContract(), tp.entryEpochMs()));
             }
             return;
         }
@@ -736,7 +760,7 @@ public class AlpacaOrderService {
                         tp.symbol(), tp.direction(), tp.entry(), targetStop,
                         tp.takeProfit(), tp.orderId(),
                         encodeHybridState(originalStop, true, true, hybrid.brokerStopOrderId()),
-                        newPeak, newReversalCount, tp.optionsContract()));
+                        newPeak, newReversalCount, tp.optionsContract(), tp.entryEpochMs()));
                 return;
             }
             boolean updated = updateStopOrder(symbol, targetStop, isLong, hybrid.brokerStopOrderId());
@@ -753,7 +777,7 @@ public class AlpacaOrderService {
                         tp.symbol(), tp.direction(), tp.entry(), targetStop,
                         tp.takeProfit(), tp.orderId(),
                         encodeHybridState(originalStop, true, true, hybrid.brokerStopOrderId()),
-                        newPeak, newReversalCount, tp.optionsContract()));
+                        newPeak, newReversalCount, tp.optionsContract(), tp.entryEpochMs()));
                 return;
             }
         }
@@ -768,7 +792,7 @@ public class AlpacaOrderService {
                     tp.symbol(), tp.direction(), tp.entry(), tp.stopLoss(),
                     tp.takeProfit(), tp.orderId(),
                     encodeHybridState(originalStop, true, true, hybrid.brokerStopOrderId()),
-                    newPeak, newReversalCount, tp.optionsContract()));
+                    newPeak, newReversalCount, tp.optionsContract(), tp.entryEpochMs()));
         }
     }
 
