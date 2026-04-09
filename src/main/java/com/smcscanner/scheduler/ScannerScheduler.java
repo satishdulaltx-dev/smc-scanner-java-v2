@@ -17,6 +17,9 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -113,6 +116,11 @@ public class ScannerScheduler {
         ZonedDateTime nowET=ZonedDateTime.now(ET);
         LocalTime time=nowET.toLocalTime(); int day=nowET.getDayOfYear();
         if (day!=lastEodDay) { eodSentToday=false; dailyReportSentToday=false; forceCloseDoneToday=false; lastEodDay=day; }
+        // Survive restarts: if marker file exists for today we already sent — no double-fire on redeploy
+        if (!eodSentToday && eodMarkerExistsForDate(nowET.toLocalDate())) {
+            log.debug("EOD already sent today (marker file found) — skipping");
+            eodSentToday=true;
+        }
         if (nowET.getDayOfWeek().getValue()>=6||eodSentToday||isNyseHoliday(nowET.toLocalDate())) return;
         if (time.isBefore(EOD_TRIGGER)||time.isAfter(EOD_CUTOFF)) return;
         log.info("Generating overnight watchlist report (post-market + next morning prep)...");
@@ -122,7 +130,28 @@ public class ScannerScheduler {
             reportCache.save(reports);
             log.info("\n{}", eodReport.formatTextReport(reports));
             discord.sendEodReport(reports);
+            writeEodMarkerForDate(nowET.toLocalDate());
         } catch (Exception e) { log.error("EOD report failed: {}",e.getMessage()); }
+    }
+
+    private File eodMarkerFile(LocalDate date) {
+        String dir = System.getenv("TRADE_LOG_DIR");
+        if (dir == null || dir.isBlank()) dir = "data";
+        return new File(dir.replaceAll("/$", ""), "eod-sent-" + date + ".flag");
+    }
+
+    private boolean eodMarkerExistsForDate(LocalDate date) {
+        return eodMarkerFile(date).exists();
+    }
+
+    private void writeEodMarkerForDate(LocalDate date) {
+        try {
+            File f = eodMarkerFile(date);
+            f.getParentFile().mkdirs();
+            Files.writeString(f.toPath(), date.toString());
+        } catch (IOException e) {
+            log.warn("Could not write EOD marker file: {}", e.getMessage());
+        }
     }
 
     /** Daily trade report — sent at 4:30 PM ET with today's live trade summary + cumulative stats. */
