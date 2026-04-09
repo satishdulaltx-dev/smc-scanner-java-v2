@@ -104,14 +104,22 @@ public class PowerEarningsGapDetector {
         String direction = gapUp ? "long" : "short";
         double absGapPct = Math.abs(gapPct);
 
-        // ── 2. Volume: today's cumulative vs 20-day avg daily volume ───────
-        // Use 20 bars before the most recent daily bar (current day not yet closed).
-        double todayVolume  = sessionBars5m.stream().mapToDouble(OHLCV::getVolume).sum();
-        int    volEnd       = dailyBars.size() - 1; // exclude today
-        int    volStart     = Math.max(0, volEnd - 20);
-        double avgDailyVol  = dailyBars.subList(volStart, volEnd).stream()
+        // ── 2. Volume: projected full-day rate vs 20-day avg daily volume ──
+        // Early scans (first 30 min = ~6 bars) only have a fraction of the day's volume.
+        // Project to a full 78-bar equivalent so we're comparing apples to apples.
+        // A PEG shows 4x+ the DAILY volume rate — meaning the first 30 min alone
+        // runs at a pace that would produce 4× the normal full day if sustained.
+        // Formula: projectedVol = avgVolumePerBar × 78
+        //          volumeRatio  = projectedVol / avgDailyVol
+        //        ≡ (todayVolume / sessionBars.size()) / (avgDailyVol / 78)
+        double todayVolume   = sessionBars5m.stream().mapToDouble(OHLCV::getVolume).sum();
+        double avgBarVolToday = sessionBars5m.isEmpty() ? 0 : todayVolume / sessionBars5m.size();
+        int    volEnd         = dailyBars.size() - 1; // exclude today
+        int    volStart       = Math.max(0, volEnd - 20);
+        double avgDailyVol    = dailyBars.subList(volStart, volEnd).stream()
                 .mapToDouble(OHLCV::getVolume).average().orElse(1.0);
-        double volumeRatio  = avgDailyVol > 0 ? todayVolume / avgDailyVol : 0;
+        double avgBarVolHist  = avgDailyVol > 0 ? avgDailyVol / 78.0 : 1.0;
+        double volumeRatio    = avgBarVolHist > 0 ? avgBarVolToday / avgBarVolHist : 0;
         boolean volumeOk    = volumeRatio >= MIN_VOLUME_RATIO;
 
         // ── 3. Near 52-week extreme ────────────────────────────────────────
@@ -164,8 +172,10 @@ public class PowerEarningsGapDetector {
                 direction.toUpperCase(), gapPct * 100, volumeRatio,
                 near52w ? "✓" : "✗", closingStr ? "✓" : "✗", score);
 
-        log.debug("PowerEarningsGap {}: {} detected={} vol={:.1f}x gap={:.1f}% near52w={} closeStr={}",
-                direction, note, detected, volumeRatio, gapPct * 100, near52w, closingStr);
+        log.debug("PowerEarningsGap {}: detected={} vol={}x gap={}% near52w={} closeStr={}",
+                direction, detected,
+                String.format("%.1f", volumeRatio), String.format("%.1f", gapPct * 100),
+                near52w, closingStr);
 
         return new PEGSignal(detected, direction, gapPct, volumeRatio,
                 near52w, closingStr, score, entry, stopLoss, takeProfit, note);
