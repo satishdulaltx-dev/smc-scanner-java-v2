@@ -13,6 +13,7 @@ import com.smcscanner.model.TradeSetup;
 import com.smcscanner.news.NewsSentiment;
 import com.smcscanner.news.NewsService;
 import com.smcscanner.options.OptionsFlowAnalyzer;
+import com.smcscanner.options.OptionsRecommendation;
 import com.smcscanner.strategy.BreakoutStrategyDetector;
 import com.smcscanner.strategy.GapDetector;
 import com.smcscanner.strategy.GammaPinDetector;
@@ -21,6 +22,7 @@ import com.smcscanner.strategy.KeyLevelStrategyDetector;
 import com.smcscanner.strategy.MarketRegimeDetector;
 import com.smcscanner.strategy.OvernightMomentumService;
 import com.smcscanner.strategy.PivotPointService;
+import com.smcscanner.strategy.PowerEarningsGapDetector;
 import com.smcscanner.strategy.PressureService;
 import com.smcscanner.strategy.SetupDetector;
 import com.smcscanner.strategy.ThreeDayVwapDetector;
@@ -73,6 +75,7 @@ public class BacktestService {
     private final PivotPointService        pivotService;
     private final PressureService          pressureService;
     private final OvernightMomentumService overnightService;
+    private final PowerEarningsGapDetector pegDetector;
 
     public BacktestService(PolygonClient client, AtrCalculator atrCalc, SetupDetector setupDetector,
                            VwapStrategyDetector vwapDetector, BreakoutStrategyDetector breakoutDetector,
@@ -85,7 +88,8 @@ public class BacktestService {
                            ScannerConfig config, OptionsFlowAnalyzer optionsAnalyzer,
                            TechnicalIndicators techIndicators,
                            MarketRegimeDetector regimeDetector, PivotPointService pivotService,
-                           PressureService pressureService, OvernightMomentumService overnightService) {
+                           PressureService pressureService, OvernightMomentumService overnightService,
+                           PowerEarningsGapDetector pegDetector) {
         this.client = client; this.atrCalc = atrCalc; this.setupDetector = setupDetector;
         this.vwapDetector = vwapDetector; this.breakoutDetector = breakoutDetector;
         this.gapDetector = gapDetector;
@@ -97,6 +101,7 @@ public class BacktestService {
         this.config = config; this.optionsAnalyzer = optionsAnalyzer; this.techIndicators = techIndicators;
         this.regimeDetector = regimeDetector; this.pivotService = pivotService;
         this.pressureService = pressureService; this.overnightService = overnightService;
+        this.pegDetector = pegDetector;
     }
 
     public BacktestResult run(String ticker, int lookbackDays) {
@@ -252,6 +257,7 @@ public class BacktestService {
                                   || "vwap".equals(stratType)
                                   || "keylevel".equals(stratType)
                                   || "gap".equals(stratType)
+                                  || "peg".equals(stratType)
                                   || "vsqueeze".equals(stratType)
                                   || "vwap3d".equals(stratType)
                                   || "idiv".equals(stratType)
@@ -261,6 +267,7 @@ public class BacktestService {
                         : "vwap".equals(stratType)      ? 12
                         : "keylevel".equals(stratType)  ? 20
                         : "gap".equals(stratType)       ? 20
+                        : "peg".equals(stratType)       ? 6   // first 30 min of session
                         : "vsqueeze".equals(stratType)  ? 25
                         : "vwap3d".equals(stratType)    ? 20
                         : "idiv".equals(stratType)      ? 12
@@ -338,6 +345,37 @@ public class BacktestService {
                             }
                         }
                     }
+                } else if ("peg".equals(stratType)) {
+                    // Power Earnings Gap: scan at 9:30–10:00 AM (first 6 bars).
+                    // Requires gap ≥3% on 4x volume vs 20d avg, near 52-week high,
+                    // and closing strength. Entry at close of 6th bar (first 30 min).
+                    ZonedDateTime pegZdt = Instant.ofEpochMilli(dayBars.get(end - 1).getTimestamp()).atZone(ET);
+                    LocalTime pegTime = pegZdt.toLocalTime();
+                    boolean isOpenWindow = !pegTime.isBefore(LocalTime.of(9, 30))
+                            && pegTime.isBefore(LocalTime.of(10, 1));
+                    List<OHLCV> pegSession = window.stream()
+                            .filter(this::isRegularSessionBar)
+                            .collect(Collectors.toList());
+                    double pegPrevClose = htfSlice.isEmpty() ? 0.0
+                            : htfSlice.get(htfSlice.size() - 1).getClose();
+                    if (!isOpenWindow || pegSession.size() < 3 || pegPrevClose <= 0) {
+                        bSetups = List.of();
+                    } else {
+                        PowerEarningsGapDetector.PEGSignal peg =
+                                pegDetector.detect(pegSession, htfSlice, pegPrevClose, dailyAtr);
+                        if (peg.detected()) {
+                            bSetups = List.of(TradeSetup.builder()
+                                    .ticker(ticker).direction(peg.direction())
+                                    .entry(peg.entry()).stopLoss(peg.stopLoss()).takeProfit(peg.takeProfit())
+                                    .confidence(peg.confidence())
+                                    .session("NYSE").volatility("gap").atr(dailyAtr)
+                                    .factorBreakdown(peg.note())
+                                    .timestamp(pegZdt.toLocalDateTime())
+                                    .build());
+                        } else {
+                            bSetups = List.of();
+                        }
+                    }
                 } else if ("keylevel".equals(stratType)) {
                     // Pass daily bars up to this date (htfSlice) as the level-detection source
                     bSetups = keyLevelDetector.detect(window, htfSlice, ticker, dailyAtr, bp);
@@ -368,7 +406,7 @@ public class BacktestService {
                 // ── Regime-based fallback — mirrors live ScannerService ────────
                 // Gap strategy is time-sensitive: only valid at the 9:30 AM open.
                 // Fallback would generate SMC/keylevel setups at 3 PM under the "gap" umbrella — wrong.
-                if (bSetups.isEmpty() && !ticker.startsWith("X:") && !"gap".equals(stratType)) {
+                if (bSetups.isEmpty() && !ticker.startsWith("X:") && !"gap".equals(stratType) && !"peg".equals(stratType)) {
                     String fallbackStrat = regimeDetector.suggestStrategy(btRegime, stratType);
                     if (fallbackStrat != null && !fallbackStrat.equals(stratType)) {
                         bSetups = switch (fallbackStrat) {
@@ -666,7 +704,7 @@ public class BacktestService {
                 // Live routes these to swing channel instead of taking intraday.
                 // In backtest: skip the entry entirely to match live behaviour.
                 // Exception: gap strategy entries ARE intentionally at 3:30-3:55 PM.
-                if (!ticker.startsWith("X:") && !"gap".equals(stratType)) {
+                if (!ticker.startsWith("X:") && !"gap".equals(stratType) && !"peg".equals(stratType)) {
                     LocalTime entryLt = Instant.ofEpochMilli(entryEpochMs).atZone(ET).toLocalTime();
                     if (entryLt.getHour() >= 16 || (entryLt.getHour() == 15 && entryLt.getMinute() >= 30)) {
                         log.debug("{} LATE_DAY_SKIP: entry at {} — matches live swing reroute", ticker, entryLt);
@@ -710,7 +748,7 @@ public class BacktestService {
                 // Skip trade if combined filters knocked confidence below threshold.
                 // Gap strategy: score is already gated by OvernightMomentumService.shouldHold()
                 // which enforces its own 55/45 threshold — skip the intraday conf gate.
-                if (adjConf < dynamicMinConf && !"gap".equals(stratType)) {
+                if (adjConf < dynamicMinConf && !"gap".equals(stratType) && !"peg".equals(stratType)) {
                     log.debug("{} CONF_FILTERED: base={} news={} ctx={} qual={} iRS={} regime={} corr={} dz={} → adj={} floor={} (min={} vixBoost={})",
                             ticker, setup.getConfidence(), newsAdj, ctxAdj, qualityAdj, intradayRsAdj, regimeAdj, corrAdj, deadZoneAdj, adjConf, penaltyFloor, effectiveMinConf, vixBoost);
                     String filteredOutcome = confluenceVetoAdj < 0 ? "CONFLUENCE_FILTERED"
@@ -746,6 +784,35 @@ public class BacktestService {
                             0, 0, 0, 0, 0));
                     tradePlacedToday = true;
                     continue;
+                }
+
+                if (!ticker.startsWith("X:")) {
+                    try {
+                        OptionsRecommendation rec = optionsAnalyzer.recommendContract(
+                                ticker, setup.getDirection(), setup.getEntry(), setup.getStopLoss(), setup.getTakeProfit());
+                        if (!rec.hasData() || rec.contractTicker() == null || rec.contractTicker().isBlank()) {
+                            trades.add(new TradeResult(ticker, setup.getDirection(),
+                                    setup.getEntry(), setup.getStopLoss(), setup.getTakeProfit(),
+                                    "OPTIONS_FILTERED", 0.0,
+                                    toDateTime(dayBars.get(end - 1).getTimestamp()), toDateTime(dayBars.get(end - 1).getTimestamp()),
+                                    adjConf, setup.getAtr(), newsAdj, sentiment.label(), ctxAdj, context.rsLabel(),
+                                    qualityAdj, "OPTIONS_UNAVAILABLE",
+                                    0, 0, 0, 0, 0));
+                            tradePlacedToday = true;
+                            continue;
+                        }
+                    } catch (Exception e) {
+                        log.debug("{} OPTIONS_FILTERED: recommendation unavailable during backtest ({})", ticker, e.getMessage());
+                        trades.add(new TradeResult(ticker, setup.getDirection(),
+                                setup.getEntry(), setup.getStopLoss(), setup.getTakeProfit(),
+                                "OPTIONS_FILTERED", 0.0,
+                                toDateTime(dayBars.get(end - 1).getTimestamp()), toDateTime(dayBars.get(end - 1).getTimestamp()),
+                                adjConf, setup.getAtr(), newsAdj, sentiment.label(), ctxAdj, context.rsLabel(),
+                                qualityAdj, "OPTIONS_UNAVAILABLE",
+                                0, 0, 0, 0, 0));
+                        tradePlacedToday = true;
+                        continue;
+                    }
                 }
 
                 // ── Flat 5 contracts per trade (aggressive backtest sizing) ──
@@ -859,58 +926,6 @@ public class BacktestService {
                             break; // only check the first next-day bar
                         }
                     }
-                }
-
-                // ── Gap Early-Exit: red reversal candle on next-day open ─────────
-                // If stock gaps in trade direction but the first 5-min RTH candle is
-                // bearish (for long) or bullish (for short) with high volume, exit
-                // immediately at that candle's open to lock in gap profit.
-                // Prevents "gap then full reversal" from erasing overnight gains.
-                if ("gap".equals(stratType) && holdSignal.shouldHold() && !fwdBars.isEmpty()) {
-                    LocalDate entryDateEarly = Instant.ofEpochMilli(entryEpochMs).atZone(ET).toLocalDate();
-                    for (int fi = 0; fi < fwdBars.size(); fi++) {
-                        OHLCV fb = fwdBars.get(fi);
-                        LocalDate fbDate = Instant.ofEpochMilli(fb.getTimestamp()).atZone(ET).toLocalDate();
-                        if (!fbDate.isAfter(entryDateEarly)) continue; // skip same-day bars
-                        // First next-day RTH bar found
-                        boolean reversalCandle = "long".equals(dir)
-                                ? fb.getClose() < fb.getOpen()   // red candle for long
-                                : fb.getClose() > fb.getOpen();  // green candle for short
-                        // Compute morning volume avg from today's RTH bars for comparison
-                        double morningVolAvgFwd = dayBars.stream()
-                                .filter(this::isRegularSessionBar)
-                                .limit(12).skip(1)
-                                .mapToDouble(OHLCV::getVolume).average().orElse(1);
-                        boolean highVolReversal = morningVolAvgFwd > 0
-                                && fb.getVolume() > morningVolAvgFwd * 1.5;
-                        if (reversalCandle && highVolReversal) {
-                            double earlyExit = fb.getOpen();
-                            double earlyPnlPct = "long".equals(dir)
-                                    ? (earlyExit - entry) / entry * 100.0
-                                    : (entry - earlyExit) / entry * 100.0;
-                            log.debug("{} GAP_EARLY_EXIT: red reversal at {} pnl={}%",
-                                    ticker, toDateTime(fb.getTimestamp()), String.format("%.2f", earlyPnlPct));
-                            String earlyExitTime = toDateTime(fb.getTimestamp());
-                            double earlyExitPrice = earlyExit;
-                            double holdDaysEarly = 1.0;
-                            OptionsFlowAnalyzer.BacktestOptionsEstimate optEstEarly =
-                                    optionsAnalyzer.estimateBacktestOptionsPnl(entry, earlyExitPrice, dir, holdDaysEarly, setup.getAtr(), contracts);
-                            double scaledPnlEarly = round2(optEstEarly.pnlPerContract() * contracts);
-                            String earlyOutcome = earlyPnlPct > 0 ? "WIN" : (earlyPnlPct < 0 ? "LOSS" : "BE_STOP");
-                            trades.add(new TradeResult(ticker, dir, entry, sl, tp, earlyOutcome, earlyPnlPct,
-                                    entryTime, earlyExitTime,
-                                    adjConf, setup.getAtr(), newsAdj, sentiment.label(),
-                                    ctxAdj, buildContextLabel(context),
-                                    qualityAdj, qualityLabel,
-                                    optEstEarly.entryPremium(), optEstEarly.exitPremium(),
-                                    scaledPnlEarly, optEstEarly.optionsPnlPct(),
-                                    contracts));
-                            tradePlacedToday = true;
-                            continue; // skip normal exit simulation
-                        }
-                        break; // only check the first next-day bar
-                    }
-                    if (tradePlacedToday) continue;
                 }
 
                 ExitResult exit = switch (exitStyle) {
@@ -1071,54 +1086,49 @@ public class BacktestService {
             atrWindow.add(fb);
             if (atrWindow.size() > 20) atrWindow.remove(0);
 
-            double hi = fb.getHigh();
-            double lo = fb.getLow();
             double close = fb.getClose();
-
-            double currentStop = trailActive ? activeSl : (beActive ? entry : sl);
-            boolean stopBreached = isLong ? lo <= currentStop : hi >= currentStop;
-            if (stopBreached) {
-                double exitPrice = trailActive ? applyTrailSlippage(currentStop, isLong) : currentStop;
-                double pnlPct = isLong
-                        ? round2((exitPrice - entry) / entry * 100)
-                        : round2((entry - exitPrice) / entry * 100);
-                String outcome;
-                if (trailActive) outcome = pnlPct > 0 ? "TRAIL_WIN" : "TRAIL_LOSS";
-                else outcome = beActive ? "BE_STOP" : "LOSS";
-                return new ExitResult(outcome, toDateTime(fb.getTimestamp()), pnlPct);
-            }
+            if (isLong && close > peakClose) peakClose = close;
+            if (!isLong && close < peakClose) peakClose = close;
 
             if (!beActive) {
-                if (isLong && hi >= beLevel) beActive = true;
-                if (!isLong && lo <= beLevel) beActive = true;
+                boolean touchedBe = isLong ? peakClose >= beLevel : peakClose <= beLevel;
+                if (touchedBe) beActive = true;
             }
 
             // Keep the classic large-target payout alive until the trade has moved
             // far enough to justify active trailing.
             if (!trailActive) {
-                if (isLong && hi >= tp) {
-                    double pnlPct = round2((tp - entry) / entry * 100);
-                    return new ExitResult("WIN", toDateTime(fb.getTimestamp()), pnlPct);
-                }
-                if (!isLong && lo <= tp) {
-                    double pnlPct = round2((entry - tp) / entry * 100);
+                boolean tpHit = isLong ? close >= tp : close <= tp;
+                if (tpHit) {
+                    double pnlPct = isLong
+                            ? round2((close - entry) / entry * 100)
+                            : round2((entry - close) / entry * 100);
                     return new ExitResult("WIN", toDateTime(fb.getTimestamp()), pnlPct);
                 }
             }
 
             if (!trailActive) {
-                if (isLong && hi >= trailArmLevel) trailActive = true;
-                if (!isLong && lo <= trailArmLevel) trailActive = true;
+                if (isLong && peakClose >= trailArmLevel) trailActive = true;
+                if (!isLong && peakClose <= trailArmLevel) trailActive = true;
                 if (trailActive) {
                     peakClose = close;
                     activeSl = beActive ? entry : sl;
                 }
             }
 
-            if (trailActive) {
-                if (isLong && close > peakClose) peakClose = close;
-                if (!isLong && close < peakClose) peakClose = close;
+            double currentStop = trailActive ? activeSl : (beActive ? entry : sl);
+            boolean stopBreached = isLong ? close <= currentStop : close >= currentStop;
+            if (stopBreached) {
+                double pnlPct = isLong
+                        ? round2((close - entry) / entry * 100)
+                        : round2((entry - close) / entry * 100);
+                String outcome;
+                if (trailActive) outcome = pnlPct > 0 ? "TRAIL_WIN" : "TRAIL_LOSS";
+                else outcome = beActive ? "BE_STOP" : "LOSS";
+                return new ExitResult(outcome, toDateTime(fb.getTimestamp()), pnlPct);
+            }
 
+            if (trailActive) {
                 double atr = computeAtr5m(atrWindow);
                 if (atr <= 0) atr = risk;
 
@@ -1141,11 +1151,6 @@ public class BacktestService {
                 ? round2((exitPrice - entry) / entry * 100)
                 : round2((entry - exitPrice) / entry * 100);
         return new ExitResult("TIMEOUT", toDateTime(lastFwd.getTimestamp()), pnlPct);
-    }
-
-    private double applyTrailSlippage(double stopPrice, boolean isLong) {
-        double slip = stopPrice * (TRAIL_EXIT_SLIPPAGE_BPS / 10_000.0);
-        return isLong ? stopPrice - slip : stopPrice + slip;
     }
 
     private double computeAtr5m(List<OHLCV> bars) {
@@ -1200,6 +1205,10 @@ public class BacktestService {
     }
 
     private record ExitResult(String outcome, String exitTime, double pnlPct) {}
+
+    private static boolean isFilteredOutcome(TradeResult t) {
+        return t != null && t.outcome() != null && t.outcome().endsWith("_FILTERED");
+    }
 
     private static boolean isWinOutcome(TradeResult t) {
         return "WIN".equals(t.outcome())
@@ -1290,7 +1299,7 @@ public class BacktestService {
             // Filtered trades are excluded from win/loss stats — never actually entered.
             this.newsFiltered = (int) trades.stream().filter(t -> "NEWS_FILTERED".equals(t.outcome())).count();
             this.ctxFiltered  = (int) trades.stream().filter(t ->
-                    "CTX_FILTERED".equals(t.outcome())).count();
+                    "CTX_FILTERED".equals(t.outcome()) || "OPTIONS_FILTERED".equals(t.outcome())).count();
             this.qualityFiltered = (int) trades.stream().filter(t ->
                     "QUALITY_FILTERED".equals(t.outcome()) || "MULTI_FILTERED".equals(t.outcome())
                     || "15M_FILTERED".equals(t.outcome())  || "CORR_FILTERED".equals(t.outcome())
@@ -1315,7 +1324,7 @@ public class BacktestService {
             // ── Options aggregate P&L ────────────────────────────────────────
             // Only count executed trades (not filtered) — exclude anything ending in _FILTERED
             List<TradeResult> executed = trades.stream()
-                    .filter(t -> t.outcome() != null && !t.outcome().endsWith("_FILTERED"))
+                    .filter(t -> !isFilteredOutcome(t))
                     .toList();
 
             // optPnlPerContract is already conviction-scaled (contracts × per-contract P&L)
@@ -1339,12 +1348,6 @@ public class BacktestService {
             // Excludes filtered trades — only look at actually-executed setups.
             // Counts wins per bucket using the same WIN/TIMEOUT>0 logic as global WR.
             java.util.function.Predicate<TradeResult> isWin = BacktestService::isWinOutcome;
-            java.util.function.Predicate<TradeResult> isExecuted = t ->
-                    !"NEWS_FILTERED".equals(t.outcome()) && !"CTX_FILTERED".equals(t.outcome())
-                    && !"QUALITY_FILTERED".equals(t.outcome()) && !"MULTI_FILTERED".equals(t.outcome())
-                    && !"15M_FILTERED".equals(t.outcome()) && !"CORR_FILTERED".equals(t.outcome())
-                    && !"REGIME_FILTERED".equals(t.outcome());
-
             List<TradeResult> b85  = executed.stream().filter(t -> t.confidence() >= 85).toList();
             List<TradeResult> b75  = executed.stream().filter(t -> t.confidence() >= 75 && t.confidence() < 85).toList();
             List<TradeResult> bLow = executed.stream().filter(t -> t.confidence() <  75).toList();

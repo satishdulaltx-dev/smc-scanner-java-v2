@@ -64,6 +64,7 @@ public class ScannerService {
     private final PivotPointService        pivotService;
     private final PressureService          pressureService;
     private final OvernightMomentumService overnightService;
+    private final PowerEarningsGapDetector pegDetector;
 
     public ScannerService(ScannerConfig config, PolygonClient client, SetupDetector setupDetector,
                           CryptoStrategyService crypto, MultiTimeframeAnalyzer mtf,
@@ -80,7 +81,8 @@ public class ScannerService {
                           RangeDetector rangeDetector, AlpacaOrderService alpaca,
                           TechnicalIndicators techIndicators, GapDetector gapDetector,
                           MarketRegimeDetector regimeDetector, PivotPointService pivotService,
-                          PressureService pressureService, OvernightMomentumService overnightService) {
+                          PressureService pressureService, OvernightMomentumService overnightService,
+                          PowerEarningsGapDetector pegDetector) {
         this.config=config; this.client=client; this.setupDetector=setupDetector; this.crypto=crypto;
         this.mtf=mtf; this.discord=discord; this.dedup=dedup; this.tracker=tracker; this.liveLog=liveLog; this.state=state;
         this.atrCalc=atrCalc; this.vwap=vwap; this.breakout=breakout; this.keyLevel=keyLevel;
@@ -90,6 +92,7 @@ public class ScannerService {
         this.rangeDetector=rangeDetector; this.alpaca=alpaca; this.techIndicators=techIndicators;
         this.gapDetector=gapDetector; this.regimeDetector=regimeDetector; this.pivotService=pivotService;
         this.pressureService=pressureService; this.overnightService=overnightService;
+        this.pegDetector=pegDetector;
     }
 
     public boolean isCrypto(String t) { return t.startsWith("X:"); }
@@ -1051,6 +1054,66 @@ public class ScannerService {
                     }
 
                 } catch (Exception e) { log.debug("{} gap scan error: {}", ticker, e.getMessage()); }
+            }
+
+            // ── Power Earnings Gap (PEG) scan (9:30–10:00 AM ET) ──────────────
+            // Detect gap ≥3% on 4x volume, near 52-week high, with closing strength.
+            // Fires once per day at the open if earnings drove a big gap.
+            if (!isC && dailyAtr > 0 && sessionBars5m.size() >= 3
+                    && dailyBars != null && dailyBars.size() >= 22) {
+                try {
+                    java.time.LocalTime etNowPeg = java.time.ZonedDateTime.now(
+                            java.time.ZoneId.of("America/New_York")).toLocalTime();
+                    boolean isPegWindow = !etNowPeg.isBefore(java.time.LocalTime.of(9, 30))
+                            && etNowPeg.isBefore(java.time.LocalTime.of(10, 1));
+                    if (isPegWindow) {
+                        double pegPrevClose = pressureService.getPrevSessionClose(bars);
+                        PowerEarningsGapDetector.PEGSignal peg =
+                                pegDetector.detect(sessionBars5m, dailyBars, pegPrevClose, dailyAtr);
+                        if (peg.detected()) {
+                            String pegKey = "peg_" + ticker;
+                            if (!dedup.isDuplicate(pegKey, peg.direction(), peg.entry(), 60)) {
+                                log.info("PEG_DETECTED {} {} gap={}% vol={}x score={} entry={} sl={} tp={}",
+                                        ticker, peg.direction().toUpperCase(),
+                                        String.format("%.1f", peg.gapPct() * 100),
+                                        String.format("%.1f", peg.volumeRatio()),
+                                        peg.confidence(),
+                                        String.format("%.2f", peg.entry()),
+                                        String.format("%.2f", peg.stopLoss()),
+                                        String.format("%.2f", peg.takeProfit()));
+                                TradeSetup.Builder pegBuilder = TradeSetup.builder()
+                                        .ticker(ticker).direction(peg.direction())
+                                        .entry(peg.entry()).stopLoss(peg.stopLoss()).takeProfit(peg.takeProfit())
+                                        .confidence(peg.confidence())
+                                        .session("NYSE").volatility("gap").atr(dailyAtr)
+                                        .factorBreakdown(peg.note());
+                                try {
+                                    OptionsRecommendation pegRec = optionsFlow.recommendContract(
+                                            ticker, peg.direction(), peg.entry(), peg.stopLoss(), peg.takeProfit());
+                                    if (pegRec.hasData()) {
+                                        pegBuilder.optionsContract(pegRec.contractTicker())
+                                                .optionsType(pegRec.contractType())
+                                                .optionsStrike(pegRec.strike())
+                                                .optionsExpiry(pegRec.expirationDate())
+                                                .optionsPremium(pegRec.estimatedPremium())
+                                                .optionsDelta(pegRec.delta())
+                                                .optionsIV(pegRec.iv()).optionsIVPct(pegRec.ivPercentile())
+                                                .optionsBreakEven(pegRec.breakEvenPrice())
+                                                .optionsProfitPer(pegRec.profitPerContract())
+                                                .optionsLossPer(pegRec.lossPerContract())
+                                                .optionsRR(pegRec.optionsRR()).optionsSuggested(1);
+                                    }
+                                } catch (Exception e) { log.debug("{} PEG options rec error: {}", ticker, e.getMessage()); }
+                                TradeSetup pegSetup = pegBuilder.build();
+                                discord.sendOvernightHoldAlert(pegSetup, peg.confidence(), peg.note());
+                                liveLog.recordTrade(pegSetup, "peg");
+                                tracker.recordStrategySignal("peg", peg.confidence());
+                                dedup.markSent(pegKey, peg.direction(), peg.entry());
+                                if (alpaca.isEnabled()) alpaca.placeOrder(pegSetup);
+                            }
+                        }
+                    }
+                } catch (Exception e) { log.debug("{} PEG scan error: {}", ticker, e.getMessage()); }
             }
 
         } catch (Exception e) { log.error("Error scanning {}: {}",ticker,e.getMessage()); setTs(ticker,"idle",null,0,"Error: "+e.getMessage()); }
