@@ -665,7 +665,8 @@ public class BacktestService {
                 // ── Late-day filter (after 3:30 PM ET → skip intraday entry) ──
                 // Live routes these to swing channel instead of taking intraday.
                 // In backtest: skip the entry entirely to match live behaviour.
-                if (!ticker.startsWith("X:")) {
+                // Exception: gap strategy entries ARE intentionally at 3:30-3:55 PM.
+                if (!ticker.startsWith("X:") && !"gap".equals(stratType)) {
                     LocalTime entryLt = Instant.ofEpochMilli(entryEpochMs).atZone(ET).toLocalTime();
                     if (entryLt.getHour() >= 16 || (entryLt.getHour() == 15 && entryLt.getMinute() >= 30)) {
                         log.debug("{} LATE_DAY_SKIP: entry at {} — matches live swing reroute", ticker, entryLt);
@@ -706,8 +707,10 @@ public class BacktestService {
                 if (!ticker.startsWith("X:") && context.vixLevel() > 35) vixBoost += 2; // was +5 — total max 7, not 10
                 int dynamicMinConf = effectiveMinConf + vixBoost;
 
-                // Skip trade if combined filters knocked confidence below threshold
-                if (adjConf < dynamicMinConf) {
+                // Skip trade if combined filters knocked confidence below threshold.
+                // Gap strategy: score is already gated by OvernightMomentumService.shouldHold()
+                // which enforces its own 55/45 threshold — skip the intraday conf gate.
+                if (adjConf < dynamicMinConf && !"gap".equals(stratType)) {
                     log.debug("{} CONF_FILTERED: base={} news={} ctx={} qual={} iRS={} regime={} corr={} dz={} → adj={} floor={} (min={} vixBoost={})",
                             ticker, setup.getConfidence(), newsAdj, ctxAdj, qualityAdj, intradayRsAdj, regimeAdj, corrAdj, deadZoneAdj, adjConf, penaltyFloor, effectiveMinConf, vixBoost);
                     String filteredOutcome = confluenceVetoAdj < 0 ? "CONFLUENCE_FILTERED"
