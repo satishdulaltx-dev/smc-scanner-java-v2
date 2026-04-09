@@ -2,15 +2,15 @@
   "profiles": [
     {
       "ticker": "AAPL",
-      "strategyType": "breakout",
+      "strategyType": "smc",
       "minConfidence": 70,
       "maxConfidence": 84,
-      "slAtrMult": 0.4,
-      "tpRrRatio": 1.0,
+      "slAtrMult": 1.0,
+      "tpRrRatio": 1.5,
       "intradayRsGate": true,
       "skip": false,
       "skipReason": null,
-      "note": "Apr 2026 90d frequency retune: BREAKOUT mc=70 sl=0.4 tp=1:1 → 10T 80%WR +0.29%exp $154. Previous mc=78 gave only 1 trade in 90d (too restrictive). Lowered mc=78→70 and tp=2:1→1:1 to boost signal frequency 1→10 trades. 80%WR at 10 trades is statistically reliable. Tight sl=0.4 ATR for clean ORB entries."
+      "note": "Apr 2026 deep research: switched breakout→SMC. Multi-timeframe analysis: smc 180d=24T 67%WR $365, 365d=51T 69%WR $917. Breakout only $168 at 365d. SMC dominates every window on AAPL — institutional VWAP-anchored stock creates clean FVG+OB sweeps around key levels. sl=1.0 ATR (wider for FVG sweeps vs tight ORB), tp=1.5 for better R:R. Optimizer missed smc due to Phase1 sl=0.5 bias."
     },
     {
       "ticker": "ABNB",
@@ -280,12 +280,12 @@
     },
     {
       "ticker": "SMCI",
-      "strategyType": "keylevel",
+      "strategyType": "vwap",
       "minConfidence": 70,
       "maxConfidence": 84,
-      "slAtrMult": 0.4,
-      "tpRrRatio": 1.0,
-      "note": "Apr 2026 90d frequency retune: KEYLEVEL mc=70 sl=0.4 tp=1:1 → 14T 64.3%WR +0.99%exp $16. Previous SMC mc=78 gave 0 trades in 90d. KEYLEVEL mc=70 gives 14 trades — best frequency+quality balance. SMCI key levels work because institutional algos defend major S/R from AI-server headlines. sl=0.4 ATR (tight — level rejections are crisp). NVDA correlation penalty -15 / +5 agree still active."
+      "slAtrMult": 1.0,
+      "tpRrRatio": 1.5,
+      "note": "Apr 2026 deep research: switched keylevel→vwap. Multi-timeframe analysis: vwap 180d=22T 64%WR $120 vs keylevel $15, 365d=39T 62%WR $48. SMCI has 94.8% retail long float — strong VWAP mean-reversion behaviour intraday as institutional players accumulate/distribute at VWAP. sl=1.0 ATR for SMCI's volatile AI-server headline moves, tp=1.5 for better R:R than previous 1:1."
     },
     {
       "ticker": "SNAP",
