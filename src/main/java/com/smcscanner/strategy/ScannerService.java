@@ -991,7 +991,7 @@ public class ScannerService {
 
                         for (String tryDir : java.util.List.of("long", "short")) {
                             boolean hasCat = overnightService.evaluate(sessionBars5m, tryDir, false, spyGapFinal).gapScore() > 0
-                                    && news.getSentimentForTicker(ticker).isAligned(tryDir);
+                                    && news.getSentiment(ticker).isAligned(tryDir);
                             OvernightMomentumService.HoldSignal gapSig =
                                     overnightService.evaluate(sessionBars5m, tryDir, hasCat, spyGapFinal);
                             if (!gapSig.shouldHold()) continue;
