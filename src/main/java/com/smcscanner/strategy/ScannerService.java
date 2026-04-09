@@ -62,6 +62,7 @@ public class ScannerService {
     private final GapDetector              gapDetector;
     private final MarketRegimeDetector     regimeDetector;
     private final PivotPointService        pivotService;
+    private final PressureService          pressureService;
 
     public ScannerService(ScannerConfig config, PolygonClient client, SetupDetector setupDetector,
                           CryptoStrategyService crypto, MultiTimeframeAnalyzer mtf,
@@ -77,7 +78,8 @@ public class ScannerService {
                           EarningsCalendar earnings, SwingTradeDetector swingDetector,
                           RangeDetector rangeDetector, AlpacaOrderService alpaca,
                           TechnicalIndicators techIndicators, GapDetector gapDetector,
-                          MarketRegimeDetector regimeDetector, PivotPointService pivotService) {
+                          MarketRegimeDetector regimeDetector, PivotPointService pivotService,
+                          PressureService pressureService) {
         this.config=config; this.client=client; this.setupDetector=setupDetector; this.crypto=crypto;
         this.mtf=mtf; this.discord=discord; this.dedup=dedup; this.tracker=tracker; this.liveLog=liveLog; this.state=state;
         this.atrCalc=atrCalc; this.vwap=vwap; this.breakout=breakout; this.keyLevel=keyLevel;
@@ -86,6 +88,7 @@ public class ScannerService {
         this.optionsFlow=optionsFlow; this.earnings=earnings; this.swingDetector=swingDetector;
         this.rangeDetector=rangeDetector; this.alpaca=alpaca; this.techIndicators=techIndicators;
         this.gapDetector=gapDetector; this.regimeDetector=regimeDetector; this.pivotService=pivotService;
+        this.pressureService=pressureService;
     }
 
     public boolean isCrypto(String t) { return t.startsWith("X:"); }
@@ -117,6 +120,14 @@ public class ScannerService {
                     return;
                 }
             }
+
+            // ── Session bars + gap state (computed once, reused by pressure checks) ──
+            // Session bars = today's 9:30–4:00 bars only (no pre-market noise).
+            // prevSessionClose = last close before today's open (gap calculation).
+            // gapLongBlocked = LONG disabled until gap 50% filled or 30 min elapsed.
+            List<OHLCV> sessionBars5m       = isC ? bars : pressureService.getSessionBars(bars);
+            double      prevSessionClose    = isC ? 0.0  : pressureService.getPrevSessionClose(bars);
+            boolean     gapLongBlocked      = !isC && pressureService.isLongBlockedByGap(sessionBars5m, prevSessionClose);
 
             String htfBias="neutral";
             double dailyAtr=0.0;
@@ -243,6 +254,51 @@ public class ScannerService {
 
             if (!setups.isEmpty()) {
                 TradeSetup s=setups.get(0);
+
+                // ── Gap long block (hard gate for LONG on unresolved gap-up) ─
+                // Smart money sells into retail longs on gap-up opens. Hold off
+                // until the gap is 50% filled or 30 minutes have elapsed.
+                if ("long".equals(s.getDirection()) && gapLongBlocked) {
+                    log.info("{} GAP_LONG_BLOCK: gap-up unfilled — LONG disabled this tick", ticker);
+                    setTs(ticker, "idle", null, 0, "⊘ Gap-fill wait — LONG blocked");
+                    removeSetup(ticker);
+                    return;
+                }
+
+                // ── Volume pressure trap detection ────────────────────────────
+                // BOS with declining bar pressure = institutional trap. Bypassed
+                // for VWAP (mean-reversion) and SQUEEZE regime (volume naturally low).
+                int trapAdj = !isC ? pressureService.computeTrapAdj(
+                        bars, s.getDirection(), profile.getStrategyType(), regime) : 0;
+                if (trapAdj != 0) {
+                    log.info("{} TRAP_ADJ: dir={} strat={} regime={} → {}",
+                            ticker, s.getDirection(), profile.getStrategyType(), regime, trapAdj);
+                }
+
+                // ── ATR exhaustion gate ───────────────────────────────────────
+                // Session range ≥ 90% of 20d avg daily range → ticker is tired.
+                // Cap TP to 1:1 R:R; apply -10 confidence penalty.
+                int exhaustionAdj = 0;
+                if (!isC && !sessionBars5m.isEmpty()) {
+                    PressureService.ExhaustionResult exh =
+                            pressureService.checkExhaustion(sessionBars5m, dailyBars);
+                    if (exh.exhausted()) {
+                        exhaustionAdj = -10;
+                        double entry = s.getEntry();
+                        double risk  = Math.abs(s.getStopLoss() - entry);
+                        double capTp = "long".equals(s.getDirection()) ? entry + risk : entry - risk;
+                        capTp = Math.round(capTp * 10000.0) / 10000.0;
+                        s = TradeSetup.builder()
+                                .ticker(s.getTicker()).direction(s.getDirection())
+                                .entry(s.getEntry()).stopLoss(s.getStopLoss()).takeProfit(capTp)
+                                .confidence(s.getConfidence()).session(s.getSession()).volatility(s.getVolatility())
+                                .atr(s.getAtr()).hasBos(s.isHasBos()).hasChoch(s.isHasChoch())
+                                .fvgTop(s.getFvgTop()).fvgBottom(s.getFvgBottom()).timestamp(s.getTimestamp())
+                                .build();
+                        log.info("{} EXHAUSTION: rangeRatio={} → 1:1 TP={} adj={}",
+                                ticker, String.format("%.2f", exh.rangeRatio()), capTp, exhaustionAdj);
+                    }
+                }
 
                 // ── Intraday RS (mega-caps: AAPL, MSFT, NVDA, AMZN) ────────
                 // Soft confidence adjustment (not hard block) to avoid signal starvation.
@@ -512,7 +568,7 @@ public class ScannerService {
                 // Apply combined confidence adjustment (news + context + quality + flow + regime + correlation + RS)
                 // Penalty floor: secondary filters can reduce base confidence by at most 25%.
                 // e.g. base=80 → floor=60, base=70 → floor=52. Prevents "death by a thousand filters."
-                int rawAdj   = newsAdj + ctxAdj + qualityAdj + flowAdj + regimeAdj + corrAdj + intradayRsAdj + deadZoneAdj + bias15mAdj + alignmentAdj + sma200Adj + rsiAdj + candleAdj + volAdj + regimeStratAdj + pivotAdj;
+                int rawAdj   = newsAdj + ctxAdj + qualityAdj + flowAdj + regimeAdj + corrAdj + intradayRsAdj + deadZoneAdj + bias15mAdj + alignmentAdj + sma200Adj + rsiAdj + candleAdj + volAdj + regimeStratAdj + pivotAdj + trapAdj + exhaustionAdj;
                 int penaltyFloor = (int)(s.getConfidence() * 0.75);
                 int totalAdj = rawAdj; // no longer clamping at -40; floor handles it
                 if (rawAdj != totalAdj) {
@@ -577,7 +633,8 @@ public class ScannerService {
                 String factorBreakdown = buildFactorBreakdown(
                         newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj,
                         bias15mAdj, vixBoost, s.getConfidence(),
-                        sma200Adj, rsiAdj, candleAdj, volAdj, regimeStratAdj, pivotAdj);
+                        sma200Adj, rsiAdj, candleAdj, volAdj, regimeStratAdj, pivotAdj,
+                        trapAdj, exhaustionAdj);
 
                 // ── Conviction tier (suggested contract size) ─────────────────
                 // Based on final adjusted confidence — scales exposure to signal quality.
@@ -944,7 +1001,8 @@ public class ScannerService {
                                          int flowAdj, int regimeAdj, int corrAdj,
                                          int bias15mAdj, int vixBoost, int finalConf,
                                          int sma200Adj, int rsiAdj, int candleAdj, int volAdj,
-                                         int regimeStratAdj, int pivotAdj) {
+                                         int regimeStratAdj, int pivotAdj,
+                                         int trapAdj, int exhaustionAdj) {
         java.util.List<String> parts = new java.util.ArrayList<>();
         if (Math.abs(newsAdj)         >= 2) parts.add("news "        + (newsAdj         > 0 ? "+" : "") + newsAdj);
         if (Math.abs(ctxAdj)          >= 2) parts.add("RS/VIX "      + (ctxAdj          > 0 ? "+" : "") + ctxAdj);
@@ -959,6 +1017,8 @@ public class ScannerService {
         if (Math.abs(volAdj)          >= 2) parts.add("vol "         + (volAdj          > 0 ? "+" : "") + volAdj);
         if (Math.abs(regimeStratAdj)  >= 2) parts.add("regimeStrat " + (regimeStratAdj  > 0 ? "+" : "") + regimeStratAdj);
         if (Math.abs(pivotAdj)        >= 2) parts.add("pivot "       + (pivotAdj        > 0 ? "+" : "") + pivotAdj);
+        if (Math.abs(trapAdj)         >= 2) parts.add("trap "        + (trapAdj         > 0 ? "+" : "") + trapAdj);
+        if (Math.abs(exhaustionAdj)   >= 2) parts.add("exhaust "     + (exhaustionAdj   > 0 ? "+" : "") + exhaustionAdj);
         if (vixBoost                  >= 5) parts.add("VIX gate +" + vixBoost + " to min");
         if (parts.isEmpty()) return "Base score — no adjustments";
         return String.join(" | ", parts) + " → **" + finalConf + "**";

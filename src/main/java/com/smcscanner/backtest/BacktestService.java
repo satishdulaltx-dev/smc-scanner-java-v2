@@ -20,6 +20,7 @@ import com.smcscanner.strategy.IndexDivergenceDetector;
 import com.smcscanner.strategy.KeyLevelStrategyDetector;
 import com.smcscanner.strategy.MarketRegimeDetector;
 import com.smcscanner.strategy.PivotPointService;
+import com.smcscanner.strategy.PressureService;
 import com.smcscanner.strategy.SetupDetector;
 import com.smcscanner.strategy.ThreeDayVwapDetector;
 import com.smcscanner.strategy.VolatilitySqueezeDetector;
@@ -69,6 +70,7 @@ public class BacktestService {
     private final TechnicalIndicators      techIndicators;
     private final MarketRegimeDetector     regimeDetector;
     private final PivotPointService        pivotService;
+    private final PressureService          pressureService;
 
     public BacktestService(PolygonClient client, AtrCalculator atrCalc, SetupDetector setupDetector,
                            VwapStrategyDetector vwapDetector, BreakoutStrategyDetector breakoutDetector,
@@ -80,7 +82,8 @@ public class BacktestService {
                            MarketContextService marketCtxService, SignalQualityFilter qualityFilter,
                            ScannerConfig config, OptionsFlowAnalyzer optionsAnalyzer,
                            TechnicalIndicators techIndicators,
-                           MarketRegimeDetector regimeDetector, PivotPointService pivotService) {
+                           MarketRegimeDetector regimeDetector, PivotPointService pivotService,
+                           PressureService pressureService) {
         this.client = client; this.atrCalc = atrCalc; this.setupDetector = setupDetector;
         this.vwapDetector = vwapDetector; this.breakoutDetector = breakoutDetector;
         this.gapDetector = gapDetector;
@@ -91,6 +94,7 @@ public class BacktestService {
         this.marketCtxService = marketCtxService; this.qualityFilter = qualityFilter;
         this.config = config; this.optionsAnalyzer = optionsAnalyzer; this.techIndicators = techIndicators;
         this.regimeDetector = regimeDetector; this.pivotService = pivotService;
+        this.pressureService = pressureService;
     }
 
     public BacktestResult run(String ticker, int lookbackDays) {
@@ -350,6 +354,49 @@ public class BacktestService {
                             .build();
                 }
 
+                // ── Gap long block — mirrors live ScannerService ──────────────
+                // Previous close = last daily bar before this date.
+                // Session bars = window filtered to regular session.
+                if (!ticker.startsWith("X:") && "long".equals(setup.getDirection())) {
+                    List<OHLCV> btSessionBars = window.stream()
+                            .filter(this::isRegularSessionBar)
+                            .collect(Collectors.toList());
+                    double btPrevClose = htfSlice.isEmpty() ? 0.0
+                            : htfSlice.get(htfSlice.size() - 1).getClose();
+                    if (pressureService.isLongBlockedByGap(btSessionBars, btPrevClose)) {
+                        log.debug("{} GAP_LONG_BLOCK_BT {}: gap fill pending, skipping", ticker, date);
+                        continue; // try later bar when conditions lift
+                    }
+                }
+
+                // ── Volume pressure trap detection — mirrors live ──────────────
+                int trapAdj = !ticker.startsWith("X:") ? pressureService.computeTrapAdj(
+                        window, setup.getDirection(), stratType, btRegime) : 0;
+
+                // ── ATR exhaustion gate — mirrors live ────────────────────────
+                int exhaustionAdj = 0;
+                if (!ticker.startsWith("X:")) {
+                    List<OHLCV> btSessionBarsEx = window.stream()
+                            .filter(this::isRegularSessionBar)
+                            .collect(Collectors.toList());
+                    PressureService.ExhaustionResult exh =
+                            pressureService.checkExhaustion(btSessionBarsEx, htfSlice);
+                    if (exh.exhausted()) {
+                        exhaustionAdj = -10;
+                        double btEntry = setup.getEntry();
+                        double risk    = Math.abs(setup.getStopLoss() - btEntry);
+                        double capTp   = "long".equals(setup.getDirection()) ? btEntry + risk : btEntry - risk;
+                        capTp = Math.round(capTp * 10000.0) / 10000.0;
+                        setup = TradeSetup.builder()
+                                .ticker(setup.getTicker()).direction(setup.getDirection())
+                                .entry(setup.getEntry()).stopLoss(setup.getStopLoss()).takeProfit(capTp)
+                                .confidence(setup.getConfidence()).session(setup.getSession()).volatility(setup.getVolatility())
+                                .atr(setup.getAtr()).hasBos(setup.isHasBos()).hasChoch(setup.isHasChoch())
+                                .fvgTop(setup.getFvgTop()).fvgBottom(setup.getFvgBottom()).timestamp(setup.getTimestamp())
+                                .build();
+                    }
+                }
+
                 // ── Historical context checks (news + market) ────────────────
                 long entryEpochMs = dayBars.get(end - 1).getTimestamp();
 
@@ -559,7 +606,7 @@ public class BacktestService {
                 int pivotAdj = !ticker.startsWith("X:")
                         ? pivotService.computePivotAdj(htfSlice, setup.getEntry(), setup.getDirection()) : 0;
 
-                int totalAdj = newsAdj + ctxAdj + qualityAdj + flowAdj + regimeAdj + corrAdj + intradayRsAdj + deadZoneAdj + bias15mAdj + alignmentAdj + sma200Adj + rsiAdj + candleAdj + volAdj + regimeStratAdj + pivotAdj;
+                int totalAdj = newsAdj + ctxAdj + qualityAdj + flowAdj + regimeAdj + corrAdj + intradayRsAdj + deadZoneAdj + bias15mAdj + alignmentAdj + sma200Adj + rsiAdj + candleAdj + volAdj + regimeStratAdj + pivotAdj + trapAdj + exhaustionAdj;
                 // Penalty floor: secondary filters can reduce base confidence by at most 25%.
                 // A strong base setup (80+) should never be killed by stacking RS + news + quality.
                 // Floor = 75% of base confidence. e.g. base=80 → floor=60, base=70 → floor=52.
