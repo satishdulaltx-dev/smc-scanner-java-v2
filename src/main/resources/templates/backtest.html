@@ -166,6 +166,7 @@
         <label>Mode</label>
         <select id="strategy-mode" autocomplete="off">
             <option value="ALL" selected>All (default)</option>
+            <option value="SCALP">Scalp (15m max hold)</option>
             <option value="INTRADAY">Intraday (4h max hold)</option>
             <option value="SWING">Swing (multi-day)</option>
             <option value="OPTIONS">Options (4h + P&L focus)</option>
@@ -176,6 +177,7 @@
         <select id="strategy-type" autocomplete="off">
             <option value="" selected>Profile default</option>
             <optgroup label="── Standard ──">
+                <option value="scalp">Momentum Scalp</option>
                 <option value="smc">SMC (sweep+FVG)</option>
                 <option value="vwap">VWAP (1-day reversion)</option>
                 <option value="keylevel">Key Level rejection</option>
