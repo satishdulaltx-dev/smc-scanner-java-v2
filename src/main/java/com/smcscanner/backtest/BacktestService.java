@@ -1176,15 +1176,9 @@ public class BacktestService {
                     ? (winRate / 100 * avgWinPct) - ((1 - winRate / 100) * avgLossPct) : 0;
 
             // ── Options aggregate P&L ────────────────────────────────────────
-            // Only count executed trades (not filtered)
+            // Only count executed trades (not filtered) — exclude anything ending in _FILTERED
             List<TradeResult> executed = trades.stream()
-                    .filter(t -> !"NEWS_FILTERED".equals(t.outcome())
-                              && !"CTX_FILTERED".equals(t.outcome())
-                              && !"QUALITY_FILTERED".equals(t.outcome())
-                              && !"MULTI_FILTERED".equals(t.outcome())
-                              && !"15M_FILTERED".equals(t.outcome())
-                              && !"CORR_FILTERED".equals(t.outcome())
-                              && !"REGIME_FILTERED".equals(t.outcome()))
+                    .filter(t -> t.outcome() != null && !t.outcome().endsWith("_FILTERED"))
                     .toList();
 
             // optPnlPerContract is already conviction-scaled (contracts × per-contract P&L)
