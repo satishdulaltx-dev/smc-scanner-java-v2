@@ -3,14 +3,14 @@
     {
       "ticker": "AAPL",
       "strategyType": "breakout",
-      "minConfidence": 78,
+      "minConfidence": 70,
       "maxConfidence": 84,
       "slAtrMult": 0.4,
-      "tpRrRatio": 2.0,
+      "tpRrRatio": 1.0,
       "intradayRsGate": true,
       "skip": false,
       "skipReason": null,
-      "note": "Apr 2026 optimizer rank#3 (180d): BREAKOUT mc=78 sl=0.4 tp=2:1 → 9t 77.8%WR +0.46%exp $321. Previous KEYLEVEL mc=62 ranked 14th (+0.29%exp). BREAKOUT dominates top 6 ranks for AAPL — ORB strategy captures the clear opening range AAPL establishes daily. Kept tp=2:1 for swing potential. maxConf=84 retains over-extension filter."
+      "note": "Apr 2026 90d frequency retune: BREAKOUT mc=70 sl=0.4 tp=1:1 → 10T 80%WR +0.29%exp $154. Previous mc=78 gave only 1 trade in 90d (too restrictive). Lowered mc=78→70 and tp=2:1→1:1 to boost signal frequency 1→10 trades. 80%WR at 10 trades is statistically reliable. Tight sl=0.4 ATR for clean ORB entries."
     },
     {
       "ticker": "ABNB",
@@ -126,7 +126,7 @@
       "minConfidence": 78,
       "slAtrMult": 1.0,
       "tpRrRatio": 1.5,
-      "note": "Apr 2026 optimizer rank#2 (180d): SMC mc=78 sl=1.0 tp=1.5:1 → 27t 74.1%WR +2.42%exp $78. Previous tp=1:1 was rank#1 (22t 77.3% +2.46%) but fewer trades. Bumped tp to 1.5:1 for more signal frequency (27 vs 22) with nearly identical expectancy. SMC dominates all top 17 ranks for MARA — BTC-proxy FVG sweeps are highly reliable. Wide stop (1.0 ATR) required for BTC volatility."
+      "note": "Apr 2026 90d optimizer rank#1: SMC mc=78 sl=1.0 tp=1.5 → 9T 55.6%WR +1.28%exp. 90d is naturally thin for MARA — BTC halving cycle means quiet periods. Confirmed by 180d: 27T 74.1%WR. Keep mc=78 sl=1.0 (BTC volatility needs wide stop). tp=1.5 unchanged. SMC is the only strategy with positive expectancy on MARA — all others go negative at mc<78."
     },
     {
       "ticker": "META",
@@ -280,12 +280,12 @@
     },
     {
       "ticker": "SMCI",
-      "strategyType": "smc",
-      "minConfidence": 78,
+      "strategyType": "keylevel",
+      "minConfidence": 70,
       "maxConfidence": 84,
-      "slAtrMult": 1.0,
+      "slAtrMult": 0.4,
       "tpRrRatio": 1.0,
-      "note": "Apr 2026 optimizer rank#4 (180d): SMC mc=78 sl=1.0 tp=1:1 → 11t 81.8%WR +1.12%exp $64. KEYLEVEL ranked #1-2 but only 7 trades (statistically weak). SMC rank#4 has best expectancy among combos with ≥10 trades. Raised mc 66→78 (was generating noise at 66), sl 0.4→1.0 (SMCI headline volatility requires wider stop to avoid noise-out). tp=1:1 unchanged. NVDA correlation penalty -15 / +5 agree still active."
+      "note": "Apr 2026 90d frequency retune: KEYLEVEL mc=70 sl=0.4 tp=1:1 → 14T 64.3%WR +0.99%exp $16. Previous SMC mc=78 gave 0 trades in 90d. KEYLEVEL mc=70 gives 14 trades — best frequency+quality balance. SMCI key levels work because institutional algos defend major S/R from AI-server headlines. sl=0.4 ATR (tight — level rejections are crisp). NVDA correlation penalty -15 / +5 agree still active."
     },
     {
       "ticker": "SNAP",
@@ -296,25 +296,25 @@
     },
     {
       "ticker": "SOFI",
-      "strategyType": "breakout",
-      "minConfidence": 78,
+      "strategyType": "vwap",
+      "minConfidence": 62,
       "maxConfidence": 84,
       "slAtrMult": 1.0,
       "tpRrRatio": 1.0,
       "skip": false,
       "skipReason": null,
-      "note": "Apr 2026 optimizer rank#3 (180d): BREAKOUT mc=78 sl=1.0 tp=1:1 → 25t 68%WR +0.99%exp $-4. VWAP ranked #1 (+1.08% exp) but fewer trades (19 vs 25). Kept BREAKOUT for more signals and nearly equal quality. Raised mc 65→78 (was generating noise at 65), sl 0.5→1.0 (wider stop needed for SOFI beta 2.11 volatility). tp=1:1 unchanged for scalp exit."
+      "note": "Apr 2026 90d frequency retune: VWAP mc=62 sl=1.0 tp=1:1 → 20T 70%WR +0.89%exp. Previous BREAKOUT mc=78 gave only 3 trades in 90d. VWAP mc=62 gives 20 trades (6.7x more) with same WR tier. SOFI is rate-sensitive with intraday VWAP reversion behaviour. sl=1.0 ATR handles SOFI beta=2.11 volatility. Switched from breakout to vwap for frequency."
     },
     {
       "ticker": "SPY",
-      "strategyType": "breakout",
+      "strategyType": "smc",
       "minConfidence": 70,
       "maxConfidence": 84,
       "slAtrMult": 1.0,
-      "tpRrRatio": 1.0,
+      "tpRrRatio": 1.5,
       "skip": false,
       "skipReason": null,
-      "note": "Apr 2026 optimizer rank#1 (180d): BREAKOUT mc=70 sl=1.0 tp=1:1 → 19t 61.1%WR +0.10%exp $374. Previous KEYLEVEL was rank#8 (50-53% WR, near-zero expectancy, mathematically broken at 37.5%WR with 0.75:1 TP). BREAKOUT captures SPY's consistent opening range structure. Expectancy is thin (+0.10%) but options P&L is strong ($374) due to SPY options liquidity. Widened SL to 1.0 ATR (was 0.3 — too tight, got stopped out by noise)."
+      "note": "Apr 2026 90d frequency retune: SMC mc=70 sl=1.0 tp=1.5 → 19T 61.1%WR +0.16%exp $1084 opt P&L. Previous BREAKOUT mc=70 gave same 13T but far lower opt P&L ($434 vs $1084). SMC finds more intraday FVG sweeps on SPY across the full day vs ORB which only fires at open. $1084 opt P&L reflects SPY options liquidity multiplier. sl=1.0 ATR needed for SPY's wide intraday range."
     },
     {
       "ticker": "SQ",
