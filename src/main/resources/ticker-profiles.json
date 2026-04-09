@@ -72,11 +72,11 @@
     {
       "ticker": "DDOG",
       "strategyType": "vwap",
-      "minConfidence": 68,
-      "maxConfidence": 84,
+      "minConfidence": 70,
+      "maxConfidence": 82,
       "slAtrMult": 1.0,
-      "tpRrRatio": 1.25,
-      "note": "Apr 2026: switched smc→vwap. SMC stayed at -0.15% exp after tightening (minConf 65→72, no improvement). Research showed VWAP 66.7%WR (7t, just under 8-trade eligibility threshold) — testing at 365d scale to validate. MinConf=68 to generate enough signal volume."
+      "tpRrRatio": 1.0,
+      "note": "Apr 2026 outside-research retune: keep DDOG on VWAP, but tighten execution because the sample is still thin and AI-driven reactions can overshoot. Raised minConf 68→70, lowered maxConf 84→82 to avoid exhausted extension entries, and trimmed TP 1.25→1.0 so the setup banks the first clean mean-reversion move instead of waiting for a larger stretch."
     },
     {
       "ticker": "DIS",
@@ -128,8 +128,8 @@
     {
       "ticker": "META",
       "strategyType": "keylevel",
-      "minConfidence": 78,
-      "maxConfidence": 84,
+      "minConfidence": 80,
+      "maxConfidence": 82,
       "minFvgPct": 0.0007,
       "dispAtrMult": 1.5,
       "slAtrMult": 1.0,
@@ -137,7 +137,7 @@
       "intradayRsGate": true,
       "skip": false,
       "skipReason": null,
-      "note": "Apr 2026 research: switched smc→keylevel per research recommendation. Previous minConf=85 only yielded 3 trades (too thin). Lowered to 78 to build sample. KeyLevel showed 50%WR (2t) vs SMC 33%WR (3t) on 180d. Retest — need 90d live data before drawing conclusions."
+      "note": "Apr 2026 outside-research retune: keep META on KEYLEVEL, but tighten the trigger into earnings-season/event risk. Raised minConf 78→80 and lowered maxConf 84→82 so the engine favors cleaner level reactions instead of chasing post-news expansion candles. Strategy stays in retest mode until more live data confirms the edge."
     },
     {
       "ticker": "NET",
@@ -239,11 +239,12 @@
     {
       "ticker": "RIOT",
       "strategyType": "smc",
-      "minConfidence": 78,
+      "minConfidence": 80,
+      "maxConfidence": 84,
       "minFvgPct": 0.001,
       "slAtrMult": 1.0,
       "tpRrRatio": 1.0,
-      "note": "Added Apr 2026: RIOT Platforms — crypto miner like MARA, same BTC-correlated momentum profile. Start with MARA-identical settings (minConf=78, sl=1.0 ATR, tp=1:1). RIOT has higher beta than MARA so wider stop needed. Expectation: 60-65% WR."
+      "note": "Apr 2026 outside-research retune: RIOT stays on SMC as a BTC-beta name, but use a stricter bar than MARA because the business is noisier and more headline-sensitive. Raised minConf 78→80 and added maxConf=84 to avoid late/exhausted crypto-sympathy entries while keeping the 1:1 target and 1.0 ATR stop."
     },
     {
       "ticker": "RIVN",
@@ -277,10 +278,11 @@
     {
       "ticker": "SMCI",
       "strategyType": "smc",
-      "minConfidence": 62,
+      "minConfidence": 66,
+      "maxConfidence": 84,
       "slAtrMult": 0.4,
       "tpRrRatio": 1.0,
-      "note": "Apr 2026 optimizer rank#3 (180d): SMC mc=62 sl=0.4 tp=1:1 → 46t 52.2%WR +0.18%exp $940. Previous minConf=78 gave only 12 trades at -0.04%exp (rank 10). Lowered minConf 78→62 to generate reliable sample volume. sl=0.4 and tp=1:1 retained."
+      "note": "Apr 2026 outside-research retune: keep SMCI on SMC, but tighten it because legal/accounting overhang and AI-server headline swings can distort the weaker setups. Raised minConf 62→66 and added maxConf=84 to avoid both low-quality noise and late exhaustion entries. sl=0.4 and tp=1:1 remain because the backtest still wants a fast first target."
     },
     {
       "ticker": "SNAP",
@@ -292,10 +294,10 @@
     {
       "ticker": "SOFI",
       "strategyType": "smc",
-      "minConfidence": 78,
+      "minConfidence": 80,
       "slAtrMult": 1.0,
       "tpRrRatio": 1.0,
-      "note": "Apr 2026 live-parity review: keep SOFI active, but treat it as exit-model-sensitive. SMC with higher confidence and maxConf=84 stays in place; tpRrRatio=1.0 keeps the first target close and lets the trail do the rest.",
+      "note": "Apr 2026 outside-research retune: keep SOFI active, but stay selective because the name is still catalyst-sensitive around earnings and consumer-finance headlines. Raised minConf 78→80 while keeping maxConf=84 and tpRrRatio=1.0 so only cleaner SMC entries survive and the trail does the heavy lifting.",
       "maxConfidence": 84
     },
     {
@@ -319,13 +321,13 @@
     {
       "ticker": "TSLA",
       "strategyType": "smc",
-      "minConfidence": 72,
+      "minConfidence": 74,
       "maxConfidence": 84,
       "minFvgPct": 0.001,
       "dispAtrMult": 1.6,
       "slAtrMult": 1.0,
-      "tpRrRatio": 1.25,
-      "note": "Apr 2026 live-parity retune: TSLA remains an SMC name, but its edge is still noisy. Add maxConf=84 to avoid late/exhausted entries and trim TP ratio to 1.25 so the trail can lock trend continuation instead of waiting for a distant fixed target."
+      "tpRrRatio": 1.0,
+      "note": "Apr 2026 outside-research retune: TSLA remains an SMC name, but the tape is still too event-driven to ask for a distant fixed target. Raised minConf 72→74 and trimmed TP 1.25→1.0 while keeping maxConf=84 so the system takes cleaner entries, banks the first move sooner, and lets the trail manage the rest."
     },
     {
       "ticker": "UBER",
