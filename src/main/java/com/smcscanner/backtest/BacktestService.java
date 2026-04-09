@@ -267,7 +267,7 @@ public class BacktestService {
                         : "vwap".equals(stratType)      ? 12
                         : "keylevel".equals(stratType)  ? 20
                         : "gap".equals(stratType)       ? 20
-                        : "peg".equals(stratType)       ? 6   // first 30 min of session
+                        : "peg".equals(stratType)       ? 2   // 2nd RTH bar = 9:35 AM confirmation
                         : "vsqueeze".equals(stratType)  ? 25
                         : "vwap3d".equals(stratType)    ? 20
                         : "idiv".equals(stratType)      ? 12
@@ -351,8 +351,9 @@ public class BacktestService {
                     // and closing strength. Entry at close of 6th bar (first 30 min).
                     ZonedDateTime pegZdt = Instant.ofEpochMilli(dayBars.get(end - 1).getTimestamp()).atZone(ET);
                     LocalTime pegTime = pegZdt.toLocalTime();
-                    boolean isOpenWindow = !pegTime.isBefore(LocalTime.of(9, 30))
-                            && pegTime.isBefore(LocalTime.of(10, 1));
+                    // 9:35–9:45 AM: second RTH bar confirms gap is holding, not fading
+                    boolean isOpenWindow = !pegTime.isBefore(LocalTime.of(9, 35))
+                            && pegTime.isBefore(LocalTime.of(9, 46));
                     List<OHLCV> pegSession = window.stream()
                             .filter(this::isRegularSessionBar)
                             .collect(Collectors.toList());

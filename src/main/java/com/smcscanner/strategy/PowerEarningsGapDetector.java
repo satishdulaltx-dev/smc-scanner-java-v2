@@ -41,9 +41,10 @@ public class PowerEarningsGapDetector {
 
     private static final double MIN_GAP_PCT          = 0.03;   // 3% minimum gap
     private static final double STRONG_GAP_PCT       = 0.05;   // 5%+ = strong PEG
-    private static final double MIN_VOLUME_RATIO     = 4.0;    // 4x 20-day avg
-    private static final double NEAR_52W_THRESHOLD   = 0.05;   // within 5% of 52-week extreme
-    private static final double CLOSING_STRENGTH_PCT = 0.75;   // top 25% of day's range
+    private static final double MIN_VOLUME_RATIO     = 4.0;    // 4x 20-day per-bar rate
+    private static final double NEAR_52W_THRESHOLD   = 0.20;   // within 20% of 52-week extreme
+    //  (loosened from 5% — macro selloffs push stocks far from highs even on strong earnings)
+    private static final double CLOSING_STRENGTH_PCT = 0.60;   // top 40% of early session range
 
     /**
      * Full PEG signal with all sub-signals exposed for debugging and Discord alerts.
@@ -149,8 +150,10 @@ public class PowerEarningsGapDetector {
         if (near52w)    score += 25;   // breaking to new extreme
         if (closingStr) score += 15;   // holding the gap
 
-        // Volume is mandatory — no institutional conviction = no PEG
-        boolean detected = score >= 50 && volumeOk;
+        // Volume is mandatory. Score ≥ 40 = gap + volume alone is enough for a PEG
+        // (earnings catalyst implies institutional knowledge — 52w high and closing
+        //  strength are bonus confirmations, not requirements).
+        boolean detected = score >= 40 && volumeOk;
 
         // ── Entry / SL / TP ────────────────────────────────────────────────
         // Entry at current close.
