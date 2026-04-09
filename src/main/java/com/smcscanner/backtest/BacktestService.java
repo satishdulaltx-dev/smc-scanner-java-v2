@@ -290,15 +290,20 @@ public class BacktestService {
                     if (lastZdt.toLocalTime().isBefore(LocalTime.of(9, 30))) continue;
                 }
                 List<OHLCV> window = dayBars.subList(0, end);
+                // Resolve effective strategy: time-routing overrides base stratType per bar
+                long barEpochMs = dayBars.get(end - 1).getTimestamp();
+                String effectiveStrat = (strategyOverride == null || strategyOverride.isBlank()) && bp.hasTimeRouting()
+                        ? bp.resolveStrategyForTime(barEpochMs)
+                        : stratType;
                 // Regime computed before strategy detection so gap strategy can use it
                 MarketRegimeDetector.Regime btRegime = ticker.startsWith("X:") ? MarketRegimeDetector.Regime.RANGING
                         : regimeDetector.detectForBacktest(window);
                 List<TradeSetup> bSetups;
-                if ("vwap".equals(stratType)) {
+                if ("vwap".equals(effectiveStrat)) {
                     bSetups = vwapDetector.detect(window, ticker, dailyAtr);
-                } else if ("breakout".equals(stratType)) {
+                } else if ("breakout".equals(effectiveStrat)) {
                     bSetups = breakoutDetector.detect(window, ticker, dailyAtr);
-                } else if ("gap".equals(stratType)) {
+                } else if ("gap".equals(effectiveStrat)) {
                     // Pre-close overnight entry: scan at 3:30–3:55 PM ET for stocks
                     // predicted to gap the next morning. Enter near close, hold overnight,
                     // exit next day when the gap materialises (e.g. AAPL jumps $20-30).
@@ -344,7 +349,7 @@ public class BacktestService {
                             }
                         }
                     }
-                } else if ("peg".equals(stratType)) {
+                } else if ("peg".equals(effectiveStrat)) {
                     // Power Earnings Gap: scan at 9:30–10:00 AM (first 6 bars).
                     // Requires gap ≥3% on 4x volume vs 20d avg, near 52-week high,
                     // and closing strength. Entry at close of 6th bar (first 30 min).
@@ -385,22 +390,22 @@ public class BacktestService {
                             bSetups = List.of();
                         }
                     }
-                } else if ("keylevel".equals(stratType)) {
+                } else if ("keylevel".equals(effectiveStrat)) {
                     // Pass daily bars up to this date (htfSlice) as the level-detection source
                     bSetups = keyLevelDetector.detect(window, htfSlice, ticker, dailyAtr, bp);
-                } else if ("vsqueeze".equals(stratType)) {
+                } else if ("vsqueeze".equals(effectiveStrat)) {
                     bSetups = vSqueezeDetector.detect(window, ticker, dailyAtr);
-                } else if ("vwap3d".equals(stratType)) {
+                } else if ("vwap3d".equals(effectiveStrat)) {
                     List<OHLCV> multiDay = new ArrayList<>(prevDaysBars);
                     multiDay.addAll(window);
                     bSetups = vwap3dDetector.detect(multiDay, ticker, dailyAtr);
-                } else if ("idiv".equals(stratType)) {
+                } else if ("idiv".equals(effectiveStrat)) {
                     long entryTs = window.get(window.size() - 1).getTimestamp();
                     List<OHLCV> spySlice = spy5mByDate.getOrDefault(date, List.of()).stream()
                             .filter(b -> b.getTimestamp() <= entryTs)
                             .collect(java.util.stream.Collectors.toList());
                     bSetups = indexDivDetector.detect(window, spySlice, ticker, dailyAtr);
-                } else if ("gammapin".equals(stratType)) {
+                } else if ("gammapin".equals(effectiveStrat)) {
                     bSetups = gammaPinDetector.detect(window, ticker, dailyAtr);
                 } else {
                     SetupDetector.DetectResult dr = setupDetector.detectSetups(
@@ -415,9 +420,9 @@ public class BacktestService {
                 // ── Regime-based fallback — mirrors live ScannerService ────────
                 // Gap strategy is time-sensitive: only valid at the 9:30 AM open.
                 // Fallback would generate SMC/keylevel setups at 3 PM under the "gap" umbrella — wrong.
-                if (bSetups.isEmpty() && !ticker.startsWith("X:") && !"gap".equals(stratType) && !"peg".equals(stratType)) {
-                    String fallbackStrat = regimeDetector.suggestStrategy(btRegime, stratType);
-                    if (fallbackStrat != null && !fallbackStrat.equals(stratType)) {
+                if (bSetups.isEmpty() && !ticker.startsWith("X:") && !"gap".equals(effectiveStrat) && !"peg".equals(effectiveStrat)) {
+                    String fallbackStrat = regimeDetector.suggestStrategy(btRegime, effectiveStrat);
+                    if (fallbackStrat != null && !fallbackStrat.equals(effectiveStrat)) {
                         bSetups = switch (fallbackStrat) {
                             case "smc" -> {
                                 SetupDetector.DetectResult fr = setupDetector.detectSetups(
@@ -428,7 +433,7 @@ public class BacktestService {
                             case "vsqueeze" -> vSqueezeDetector.detect(window, ticker, dailyAtr);
                             default -> java.util.List.of();
                         };
-                        if (!bSetups.isEmpty()) log.debug("{} BT_FALLBACK: {} → {}", ticker, stratType, fallbackStrat);
+                        if (!bSetups.isEmpty()) log.debug("{} BT_FALLBACK: {} → {}", ticker, effectiveStrat, fallbackStrat);
                     }
                 }
 
@@ -469,7 +474,7 @@ public class BacktestService {
 
                 // ── Volume pressure trap detection — mirrors live ──────────────
                 int trapAdj = !ticker.startsWith("X:") ? pressureService.computeTrapAdj(
-                        window, setup.getDirection(), stratType, btRegime) : 0;
+                        window, setup.getDirection(), effectiveStrat, btRegime) : 0;
 
                 // ── ATR exhaustion gate — mirrors live ────────────────────────
                 int exhaustionAdj = 0;
@@ -511,7 +516,7 @@ public class BacktestService {
                         : all15mBars.stream()
                                 .filter(b -> b.getTimestamp() < entryEpochMs)
                                 .collect(java.util.stream.Collectors.toList());
-                boolean is15mApplicable = !"vwap".equals(stratType) && !"vwap3d".equals(stratType);
+                boolean is15mApplicable = !"vwap".equals(effectiveStrat) && !"vwap3d".equals(effectiveStrat);
                 if (is15mApplicable && !ticker.startsWith("X:") && !slice15Ref.isEmpty()) {
                     List<OHLCV> slice15 = slice15Ref;
                     if (slice15.size() >= 20) {
@@ -575,7 +580,7 @@ public class BacktestService {
                 // News: 48h window ending at entry timestamp
                 NewsSentiment sentiment = ticker.startsWith("X:") ? NewsSentiment.NONE
                         : newsService.getSentimentAt(ticker, entryEpochMs);
-                int newsAdj = sentiment.confidenceDelta(setup.getDirection(), stratType);
+                int newsAdj = sentiment.confidenceDelta(setup.getDirection(), effectiveStrat);
 
                 // News-aligned TP extension: widen TP to 3:1 R:R (but respect ticker tpRrRatio)
                 // If profile sets tpRrRatio (e.g. JPM=1.0), don't override — the low ratio is intentional
@@ -616,7 +621,7 @@ public class BacktestService {
                 // Market context: SPY RS + VIX regime as-of entry date
                 MarketContext context = ticker.startsWith("X:") ? MarketContext.NONE
                         : marketCtxService.getContextAt(ticker, dailyBars, spyBars, vixBars, entryEpochMs);
-                int ctxAdj = context.confidenceDelta(setup.getDirection(), stratType);
+                int ctxAdj = context.confidenceDelta(setup.getDirection(), effectiveStrat);
 
                 // Signal quality: R:R + time-of-day + consecutive loss streak
                 // Streak = consecutive losses at the tail of the last-6-outcomes window
@@ -713,7 +718,7 @@ public class BacktestService {
                 // Live routes these to swing channel instead of taking intraday.
                 // In backtest: skip the entry entirely to match live behaviour.
                 // Exception: gap strategy entries ARE intentionally at 3:30-3:55 PM.
-                if (!ticker.startsWith("X:") && !"gap".equals(stratType) && !"peg".equals(stratType)) {
+                if (!ticker.startsWith("X:") && !"gap".equals(effectiveStrat) && !"peg".equals(effectiveStrat)) {
                     LocalTime entryLt = Instant.ofEpochMilli(entryEpochMs).atZone(ET).toLocalTime();
                     if (entryLt.getHour() >= 16 || (entryLt.getHour() == 15 && entryLt.getMinute() >= 30)) {
                         log.debug("{} LATE_DAY_SKIP: entry at {} — matches live swing reroute", ticker, entryLt);
@@ -723,7 +728,7 @@ public class BacktestService {
 
                 // ── Regime-strategy alignment — mirrors live ScannerService ──
                 int regimeStratAdj = !ticker.startsWith("X:")
-                        ? regimeDetector.computeStrategyAlignment(btRegime, stratType) : 0;
+                        ? regimeDetector.computeStrategyAlignment(btRegime, effectiveStrat) : 0;
 
                 // ── Multi-day pivot level adjustment — mirrors live ────────────
                 int pivotAdj = !ticker.startsWith("X:")
@@ -757,7 +762,7 @@ public class BacktestService {
                 // Skip trade if combined filters knocked confidence below threshold.
                 // Gap strategy: score is already gated by OvernightMomentumService.shouldHold()
                 // which enforces its own 55/45 threshold — skip the intraday conf gate.
-                if (adjConf < dynamicMinConf && !"gap".equals(stratType) && !"peg".equals(stratType)) {
+                if (adjConf < dynamicMinConf && !"gap".equals(effectiveStrat) && !"peg".equals(effectiveStrat)) {
                     log.debug("{} CONF_FILTERED: base={} news={} ctx={} qual={} iRS={} regime={} corr={} dz={} → adj={} floor={} (min={} vixBoost={})",
                             ticker, setup.getConfidence(), newsAdj, ctxAdj, qualityAdj, intradayRsAdj, regimeAdj, corrAdj, deadZoneAdj, adjConf, penaltyFloor, effectiveMinConf, vixBoost);
                     String filteredOutcome = confluenceVetoAdj < 0 ? "CONFLUENCE_FILTERED"
@@ -818,7 +823,7 @@ public class BacktestService {
                 // late volume, and RS vs SPY — not just the 1-2 bars available at open.
                 // All other strategies use the bars available at entry time (no look-ahead).
                 List<OHLCV> sessionBarsForOvernight;
-                if ("gap".equals(stratType) && !ticker.startsWith("X:")) {
+                if ("gap".equals(effectiveStrat) && !ticker.startsWith("X:")) {
                     sessionBarsForOvernight = dayBars.stream().filter(this::isRegularSessionBar).collect(Collectors.toList());
                 } else {
                     sessionBarsForOvernight = ticker.startsWith("X:") ? List.of()
@@ -873,7 +878,7 @@ public class BacktestService {
 
                 // Gap overnight: always extend into next day — the entry was made specifically
                 // to capture next morning's gap. Override holdSignal for this strategy.
-                if ("gap".equals(stratType) && di + 1 < dates.size() && !fwdBarsRaw.contains(byDate.get(dates.get(di + 1)).get(0))) {
+                if ("gap".equals(effectiveStrat) && di + 1 < dates.size() && !fwdBarsRaw.contains(byDate.get(dates.get(di + 1)).get(0))) {
                     fwdBarsRaw.addAll(byDate.get(dates.get(di + 1)));
                 }
 

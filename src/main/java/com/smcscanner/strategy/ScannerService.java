@@ -211,10 +211,17 @@ public class ScannerService {
             }
 
             // ── Intraday alert (5m bars → original Discord channel) ─────────
+            long lastBarTs = bars.isEmpty() ? System.currentTimeMillis()
+                    : bars.get(bars.size() - 1).getTimestamp();
             List<TradeSetup> setups; String phaseMsg;
             if (isC) { setups=crypto.detectCryptoSetup(bars,ticker); phaseMsg=setups.isEmpty()?"Waiting for breakout + volume spike...":""; }
             else {
-                String strategyType = profile.getStrategyType();
+                String strategyType = profile.hasTimeRouting()
+                        ? profile.resolveStrategyForTime(lastBarTs)
+                        : profile.getStrategyType();
+                if (profile.hasTimeRouting()) {
+                    log.debug("{} TIME_ROUTE: ts={} → strategy={}", ticker, lastBarTs, strategyType);
+                }
                 if ("vwap".equals(strategyType)) {
                     setups = vwap.detect(bars, ticker, dailyAtr);
                     phaseMsg = setups.isEmpty() ? "Waiting for VWAP reversion..." : "";
@@ -257,7 +264,9 @@ public class ScannerService {
             // Only the 3 generic regimes have clear fallbacks; VOLATILE/LOW_LIQUIDITY
             // don't (LOW_LIQUIDITY is already gated above, VOLATILE trusts the profile).
             if (setups.isEmpty() && !isC) {
-                String strategyType = profile.getStrategyType(); // safe re-read
+                String strategyType = profile.hasTimeRouting()
+                        ? profile.resolveStrategyForTime(lastBarTs)
+                        : profile.getStrategyType();
                 String fallbackStrat = regimeDetector.suggestStrategy(regime, strategyType);
                 if (fallbackStrat != null && !fallbackStrat.equals(strategyType)) {
                     List<TradeSetup> fb = switch (fallbackStrat) {
@@ -294,11 +303,13 @@ public class ScannerService {
                 // ── Volume pressure trap detection ────────────────────────────
                 // BOS with declining bar pressure = institutional trap. Bypassed
                 // for VWAP (mean-reversion) and SQUEEZE regime (volume naturally low).
+                String activeStrat = profile.hasTimeRouting()
+                        ? profile.resolveStrategyForTime(lastBarTs) : profile.getStrategyType();
                 int trapAdj = !isC ? pressureService.computeTrapAdj(
-                        bars, s.getDirection(), profile.getStrategyType(), regime) : 0;
+                        bars, s.getDirection(), activeStrat, regime) : 0;
                 if (trapAdj != 0) {
                     log.info("{} TRAP_ADJ: dir={} strat={} regime={} → {}",
-                            ticker, s.getDirection(), profile.getStrategyType(), regime, trapAdj);
+                            ticker, s.getDirection(), activeStrat, regime, trapAdj);
                 }
 
                 // ── ATR exhaustion gate ───────────────────────────────────────
@@ -390,7 +401,9 @@ public class ScannerService {
                 // Hard block was wiping valid counter-trend entries that had strong
                 // conviction from other signals (volume, key level, etc).
                 // BYPASS for VWAP: mean-reversion trades intentionally fight the trend.
-                String stratTypeForFilter = profile.getStrategyType();
+                String stratTypeForFilter = profile.hasTimeRouting()
+                        ? profile.resolveStrategyForTime(lastBarTs)
+                        : profile.getStrategyType();
                 boolean is15mApplicable = !"vwap".equals(stratTypeForFilter) && !"vwap3d".equals(stratTypeForFilter);
                 int bias15mAdj = 0;
                 boolean is15mConflict = !isC && is15mApplicable && (
@@ -403,7 +416,8 @@ public class ScannerService {
 
                 // ── News sentiment check ──────────────────────────────────────
                 NewsSentiment sentiment = isC ? NewsSentiment.NONE : news.getSentiment(ticker);
-                String stratType = profile.getStrategyType();
+                String stratType = profile.hasTimeRouting()
+                        ? profile.resolveStrategyForTime(lastBarTs) : profile.getStrategyType();
                 int newsAdj = sentiment.confidenceDelta(s.getDirection(), stratType);
                 if (newsAdj != 0) {
                     log.info("{} news adj={} score={} dir={}", ticker, newsAdj, sentiment.netScore(), s.getDirection());
