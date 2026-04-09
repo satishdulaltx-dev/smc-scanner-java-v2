@@ -972,105 +972,84 @@ public class ScannerService {
             }
 
 
-            // ── Gap detection (market open only: 9:30-9:40 ET → swing channel) ──────
-            if (!isC && dailyAtr > 0 && bars.size() >= 2) {
+            // ── Pre-close overnight gap prediction (3:30–3:55 PM ET) ─────────────
+            // Scan near close for stocks coiling for a next-morning gap.
+            // Enter near today's close; exit tomorrow when price jumps $20-30.
+            if (!isC && dailyAtr > 0 && sessionBars5m.size() >= 20) {
                 try {
                     java.time.LocalTime etNowGap = java.time.ZonedDateTime.now(
                             java.time.ZoneId.of("America/New_York")).toLocalTime();
-                    boolean isOpenWindow = !etNowGap.isBefore(java.time.LocalTime.of(9, 30))
-                            && etNowGap.isBefore(java.time.LocalTime.of(9, 50)); // extended 9:40→9:50 — 4 bars to confirm gap trap
-                    if (isOpenWindow) {
-                        // Split bars into today vs previous session
-                        java.time.LocalDate today = java.time.ZonedDateTime.now(
-                                java.time.ZoneId.of("America/New_York")).toLocalDate();
-                        List<OHLCV> todayBars5m = bars.stream()
-                                .filter(b -> java.time.Instant.ofEpochMilli(b.getTimestamp())
-                                        .atZone(java.time.ZoneId.of("America/New_York")).toLocalDate().equals(today))
-                                .collect(java.util.stream.Collectors.toList());
-                        List<OHLCV> prevBars5m = bars.stream()
-                                .filter(b -> java.time.Instant.ofEpochMilli(b.getTimestamp())
-                                        .atZone(java.time.ZoneId.of("America/New_York")).toLocalDate().isBefore(today))
-                                .collect(java.util.stream.Collectors.toList());
-                        if (!todayBars5m.isEmpty() && !prevBars5m.isEmpty()) {
-                            GapDetector.GapSignal gap = gapDetector.detect(todayBars5m, prevBars5m, dailyAtr, ticker, regime);
-                            if (gap != null) {
-                                String gapKey = "gap_" + ticker;
-                                if (!dedup.isDuplicate(gapKey, gap.direction(), gap.entryPrice(), 60)) {
-                                    log.info("GAP ALERT {} {} type={} gap={}% conf={}",
-                                            ticker, gap.direction().toUpperCase(), gap.type(),
-                                            String.format("%.2f", gap.gapPct()), gap.confidence());
-                                    boolean isGapAndGo = gap.type() == GapDetector.GapType.GAP_AND_GO;
-                                    double gapEntry = gap.entryPrice();
-                                    double gapSl = gap.invalidationPrice();
-                                    double risk = Math.abs(gapEntry - gapSl);
-                                    if (risk > 0) {
-                                        boolean gapIsRunner = Math.abs(gap.gapPct()) >= 5.0;
-                                        double gapTpMult = gapIsRunner ? 3.0 : 1.5;
-                                        double gapTp = isGapAndGo
-                                                ? (gap.direction().equals("long") ? gapEntry + risk * gapTpMult : gapEntry - risk * gapTpMult)
-                                                : gap.prevClose();
-                                        TradeSetup.Builder gapBuilder = TradeSetup.builder()
-                                                .ticker(ticker).direction(gap.direction())
-                                                .entry(gapEntry)
-                                                .stopLoss(gapSl).takeProfit(gapTp)
-                                                .confidence(gap.confidence())
-                                                .session("NYSE")
-                                                .volatility("gap")
-                                                .atr(dailyAtr)
-                                                .factorBreakdown(gap.note());
+                    boolean isPreCloseWindow = !etNowGap.isBefore(java.time.LocalTime.of(15, 30))
+                            && etNowGap.isBefore(java.time.LocalTime.of(16, 0));
+                    if (isPreCloseWindow) {
+                        List<OHLCV> spyBarsForGap = java.util.List.of();
+                        try {
+                            List<OHLCV> sp = client.getBars("SPY", "5m", 80);
+                            if (sp != null) spyBarsForGap = pressureService.getSessionBars(sp);
+                        } catch (Exception e) { log.debug("{} SPY gap fetch: {}", ticker, e.getMessage()); }
+                        final List<OHLCV> spyGapFinal = spyBarsForGap;
 
-                                        try {
-                                            OptionsRecommendation gapRec = optionsFlow.recommendContract(
-                                                    ticker, gap.direction(), gapEntry, gapSl, gapTp);
-                                            if (gapRec.hasData()) {
-                                                gapBuilder.optionsContract(gapRec.contractTicker())
-                                                        .optionsType(gapRec.contractType())
-                                                        .optionsStrike(gapRec.strike())
-                                                        .optionsExpiry(gapRec.expirationDate())
-                                                        .optionsPremium(gapRec.estimatedPremium())
-                                                        .optionsDelta(gapRec.delta())
-                                                        .optionsIV(gapRec.iv())
-                                                        .optionsIVPct(gapRec.ivPercentile())
-                                                        .optionsBreakEven(gapRec.breakEvenPrice())
-                                                        .optionsProfitPer(gapRec.profitPerContract())
-                                                        .optionsLossPer(gapRec.lossPerContract())
-                                                        .optionsRR(gapRec.optionsRR())
-                                                        .optionsSuggested(1);
-                                                if (gapRec.greeksWarning() != null) {
-                                                    gapBuilder.optionsGreeksWarning(gapRec.greeksWarning());
-                                                }
-                                            }
-                                        } catch (Exception e) {
-                                            log.debug("{} gap options rec error: {}", ticker, e.getMessage());
-                                        }
+                        for (String tryDir : java.util.List.of("long", "short")) {
+                            boolean hasCat = overnightService.evaluate(sessionBars5m, tryDir, false, spyGapFinal).gapScore() > 0
+                                    && news.getSentimentForTicker(ticker).isAligned(tryDir);
+                            OvernightMomentumService.HoldSignal gapSig =
+                                    overnightService.evaluate(sessionBars5m, tryDir, hasCat, spyGapFinal);
+                            if (!gapSig.shouldHold()) continue;
 
-                                        TradeSetup gapSetup = gapBuilder.build();
-                                        String gapStrategy = "gap_" + gap.type().name().toLowerCase();
-                                        if (!gapSetup.hasOptionsData()) {
-                                            log.info("GAP ALERT SUPPRESSED {} {} type={} conf={} — no options contract available (options-only mode)",
-                                                    ticker, gap.direction().toUpperCase(), gap.type(), gap.confidence());
-                                        } else {
-                                            log.info("GAP INTRADAY ALERT {} {} type={} conf={} entry={}",
-                                                    ticker, gap.direction().toUpperCase(), gap.type(), gap.confidence(), gapEntry);
-                                            discord.sendSetupAlert(gapSetup);
-                                            liveLog.recordTrade(gapSetup, gapStrategy);
-                                            tracker.recordStrategySignal(gapStrategy, gap.confidence());
-                                            if (alpaca.isEnabled()) {
-                                                String orderId = alpaca.placeOrder(gapSetup);
-                                                if (orderId != null) {
-                                                    log.info("ALPACA GAP ORDER {} {} type={} orderId={}",
-                                                            ticker, gap.direction(), gap.type(), orderId);
-                                                }
-                                            }
-                                        }
-                                        dedup.markSent(gapKey, gap.direction(), gapEntry);
-                                    } else {
-                                        log.debug("{} gap skipped: invalid risk entry={} stop={}", ticker, gapEntry, gapSl);
+                            double gapEntry = sessionBars5m.get(sessionBars5m.size() - 1).getClose();
+                            double gapSl    = gapSig.suggestedSl() > 0 ? gapSig.suggestedSl()
+                                    : ("long".equals(tryDir) ? gapEntry - dailyAtr : gapEntry + dailyAtr);
+                            double gapTp    = "long".equals(tryDir)
+                                    ? gapEntry + 2.0 * dailyAtr
+                                    : gapEntry - 2.0 * dailyAtr;
+                            double gapRisk  = Math.abs(gapEntry - gapSl);
+                            if (gapRisk <= 0) continue;
+
+                            String gapKey = "gap_overnight_" + ticker;
+                            if (!dedup.isDuplicate(gapKey, tryDir, gapEntry, 60)) {
+                                log.info("GAP_OVERNIGHT {} {} score={} reason=[{}] entry={} sl={} tp={}",
+                                        ticker, tryDir.toUpperCase(), gapSig.gapScore(), gapSig.reason(),
+                                        String.format("%.2f", gapEntry), String.format("%.2f", gapSl),
+                                        String.format("%.2f", gapTp));
+                                TradeSetup.Builder gapBuilder = TradeSetup.builder()
+                                        .ticker(ticker).direction(tryDir)
+                                        .entry(gapEntry).stopLoss(gapSl).takeProfit(gapTp)
+                                        .confidence(gapSig.gapScore())
+                                        .session("NYSE").volatility("gap").atr(dailyAtr)
+                                        .factorBreakdown("Overnight gap predict [" + gapSig.reason() + "] score=" + gapSig.gapScore());
+                                try {
+                                    OptionsRecommendation gapRec = optionsFlow.recommendContract(
+                                            ticker, tryDir, gapEntry, gapSl, gapTp);
+                                    if (gapRec.hasData()) {
+                                        gapBuilder.optionsContract(gapRec.contractTicker())
+                                                .optionsType(gapRec.contractType())
+                                                .optionsStrike(gapRec.strike())
+                                                .optionsExpiry(gapRec.expirationDate())
+                                                .optionsPremium(gapRec.estimatedPremium())
+                                                .optionsDelta(gapRec.delta())
+                                                .optionsIV(gapRec.iv())
+                                                .optionsIVPct(gapRec.ivPercentile())
+                                                .optionsBreakEven(gapRec.breakEvenPrice())
+                                                .optionsProfitPer(gapRec.profitPerContract())
+                                                .optionsLossPer(gapRec.lossPerContract())
+                                                .optionsRR(gapRec.optionsRR())
+                                                .optionsSuggested(1);
                                     }
+                                } catch (Exception e) { log.debug("{} gap overnight options: {}", ticker, e.getMessage()); }
+
+                                TradeSetup gapNightSetup = gapBuilder.build();
+                                if (gapNightSetup.hasOptionsData()) {
+                                    discord.sendOvernightHoldAlert(gapNightSetup, gapSig.gapScore(), gapSig.reason());
+                                    liveLog.recordTrade(gapNightSetup, "gap_overnight_" + tryDir);
+                                    tracker.recordStrategySignal("gap_overnight", gapSig.gapScore());
+                                    dedup.markSent(gapKey, tryDir, gapEntry);
+                                    if (alpaca.isEnabled()) alpaca.placeOrder(gapNightSetup);
                                 }
                             }
+                            break; // only one direction per ticker per scan
                         }
                     }
+
                 } catch (Exception e) { log.debug("{} gap scan error: {}", ticker, e.getMessage()); }
             }
 

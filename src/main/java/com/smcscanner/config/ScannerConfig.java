@@ -22,6 +22,7 @@ public class ScannerConfig {
     private String discordWebhookUrl      = "";
     private String discordEodWebhookUrl   = "";  // dedicated EOD report channel
     private String discordSwingWebhookUrl = "";  // swing trade alerts channel
+    private String discordScalpWebhookUrl = "";  // intraday scalp alerts channel
     private String discordDailyReportWebhookUrl = "";  // daily trade report channel
     private int    scanInterval       = 15;
     private int    minConfidence      = 70;
@@ -58,7 +59,12 @@ public class ScannerConfig {
     public String getPolygonApiKey()         { return polygonApiKey; }
     public String getDiscordWebhookUrl()     { return discordWebhookUrl; }
     public String getDiscordEodWebhookUrl()  { return discordEodWebhookUrl; }
-    public String getDiscordSwingWebhookUrl(){ return discordSwingWebhookUrl; }
+    public String getDiscordSwingWebhookUrl() { return discordSwingWebhookUrl; }
+    public String getDiscordScalpWebhookUrl() {
+        // Fall back to main webhook if no dedicated scalp channel configured
+        return (discordScalpWebhookUrl != null && !discordScalpWebhookUrl.isBlank())
+               ? discordScalpWebhookUrl : discordWebhookUrl;
+    }
     public String getDiscordDailyReportWebhookUrl(){ return discordDailyReportWebhookUrl; }
     public String resolveDailyReportWebhookUrl() {
         return (discordDailyReportWebhookUrl != null && !discordDailyReportWebhookUrl.isBlank())
@@ -96,7 +102,8 @@ public class ScannerConfig {
     public void setPolygonApiKey(String v)          { this.polygonApiKey = v; }
     public void setDiscordWebhookUrl(String v)      { this.discordWebhookUrl = v; }
     public void setDiscordEodWebhookUrl(String v)   { this.discordEodWebhookUrl = v; }
-    public void setDiscordSwingWebhookUrl(String v) { this.discordSwingWebhookUrl = v; }
+    public void setDiscordSwingWebhookUrl(String v)  { this.discordSwingWebhookUrl = v; }
+    public void setDiscordScalpWebhookUrl(String v)  { this.discordScalpWebhookUrl = v; }
     public void setDiscordDailyReportWebhookUrl(String v) { this.discordDailyReportWebhookUrl = v; }
     public void setScanInterval(int v)           { this.scanInterval = v; }
     public void setMinConfidence(int v)          { this.minConfidence = v; }

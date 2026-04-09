@@ -258,7 +258,7 @@ public class BacktestService {
             int minBars = "breakout".equals(stratType)  ? 8
                         : "vwap".equals(stratType)      ? 12
                         : "keylevel".equals(stratType)  ? 20
-                        : "gap".equals(stratType)       ? 1
+                        : "gap".equals(stratType)       ? 20
                         : "vsqueeze".equals(stratType)  ? 25
                         : "vwap3d".equals(stratType)    ? 20
                         : "idiv".equals(stratType)      ? 12
@@ -291,17 +291,50 @@ public class BacktestService {
                 } else if ("breakout".equals(stratType)) {
                     bSetups = breakoutDetector.detect(window, ticker, dailyAtr);
                 } else if ("gap".equals(stratType)) {
-                    List<OHLCV> rthWindow = window.stream()
-                            .filter(this::isRegularSessionBar)
-                            .collect(Collectors.toList());
-                    if (rthWindow.size() != 1 || di == 0) {
+                    // Pre-close overnight entry: scan at 3:30–3:55 PM ET for stocks
+                    // predicted to gap the next morning. Enter near close, hold overnight,
+                    // exit next day when the gap materialises (e.g. AAPL jumps $20-30).
+                    ZonedDateTime barZdt = Instant.ofEpochMilli(dayBars.get(end - 1).getTimestamp()).atZone(ET);
+                    LocalTime barLocalTime = barZdt.toLocalTime();
+                    boolean isPreCloseWindow = !barLocalTime.isBefore(LocalTime.of(15, 30))
+                            && barLocalTime.isBefore(LocalTime.of(16, 0));
+                    if (!isPreCloseWindow || di >= dates.size() - 1) {
                         bSetups = List.of();
                     } else {
-                        List<OHLCV> prevRthBars = byDate.getOrDefault(dates.get(di - 1), List.of()).stream()
+                        List<OHLCV> rthBars = window.stream()
                                 .filter(this::isRegularSessionBar)
                                 .collect(Collectors.toList());
-                        GapDetector.GapSignal gap = gapDetector.detect(rthWindow, prevRthBars, dailyAtr, ticker, btRegime);
-                        bSetups = gap == null ? List.of() : List.of(buildGapSetup(gap, rthWindow.get(0)));
+                        List<OHLCV> spyForEntry = spy5mByDate.getOrDefault(date, List.of()).stream()
+                                .filter(this::isRegularSessionBar)
+                                .filter(b -> b.getTimestamp() <= dayBars.get(end - 1).getTimestamp())
+                                .collect(Collectors.toList());
+                        bSetups = List.of();
+                        long scanTs = dayBars.get(end - 1).getTimestamp();
+                        for (String tryDir : List.of("long", "short")) {
+                            boolean hasCat = !ticker.startsWith("X:")
+                                    && newsService.getSentimentAt(ticker, scanTs).isAligned(tryDir);
+                            OvernightMomentumService.HoldSignal sig =
+                                    overnightService.evaluate(rthBars, tryDir, hasCat, spyForEntry);
+                            if (sig.shouldHold()) {
+                                double ep  = rthBars.get(rthBars.size() - 1).getClose();
+                                double bsl = sig.suggestedSl() > 0 ? sig.suggestedSl()
+                                        : ("long".equals(tryDir)
+                                                ? rthBars.stream().mapToDouble(OHLCV::getLow).min().orElse(ep * 0.98)
+                                                : rthBars.stream().mapToDouble(OHLCV::getHigh).max().orElse(ep * 1.02));
+                                double btp = "long".equals(tryDir)
+                                        ? ep + 2.0 * dailyAtr
+                                        : ep - 2.0 * dailyAtr;
+                                bSetups = List.of(TradeSetup.builder()
+                                        .ticker(ticker).direction(tryDir)
+                                        .entry(ep).stopLoss(bsl).takeProfit(btp)
+                                        .confidence(sig.gapScore())
+                                        .session("NYSE").volatility("gap").atr(dailyAtr)
+                                        .factorBreakdown("Gap predict [" + sig.reason() + "] score=" + sig.gapScore())
+                                        .timestamp(barZdt.toLocalDateTime())
+                                        .build());
+                                break;
+                            }
+                        }
                     }
                 } else if ("keylevel".equals(stratType)) {
                     // Pass daily bars up to this date (htfSlice) as the level-detection source
@@ -786,23 +819,10 @@ public class BacktestService {
                     fwdBars = fwdBars.subList(0, mode.maxForwardBars());
                 }
 
-                // Gap-specific time box: exit by 11 AM if TP/SL not hit.
-                // Gap momentum resolves in the first 60–90 minutes — holding a stalled
-                // gap all day burns theta with no direction. Runners (TP ≥ 2.5R) are
-                // exempt: they can trend through the full session and into overnight.
-                if ("gap".equals(stratType)) {
-                    double gapRisk = Math.abs(entry - sl);
-                    boolean isGapRunner = gapRisk > 0 && (Math.abs(tp - entry) / gapRisk) >= 2.5;
-                    if (!isGapRunner) {
-                        LocalTime gapCutoff = LocalTime.of(11, 0);
-                        List<OHLCV> cappedGapBars = new ArrayList<>();
-                        for (OHLCV fb : fwdBars) {
-                            if (Instant.ofEpochMilli(fb.getTimestamp()).atZone(ET).toLocalTime().isBefore(gapCutoff)) {
-                                cappedGapBars.add(fb);
-                            }
-                        }
-                        fwdBars = cappedGapBars;
-                    }
+                // Gap overnight: always extend into next day — the entry was made specifically
+                // to capture next morning's gap. Override holdSignal for this strategy.
+                if ("gap".equals(stratType) && di + 1 < dates.size() && !fwdBarsRaw.contains(byDate.get(dates.get(di + 1)).get(0))) {
+                    fwdBarsRaw.addAll(byDate.get(dates.get(di + 1)));
                 }
 
                 ExitResult exit = switch (exitStyle) {

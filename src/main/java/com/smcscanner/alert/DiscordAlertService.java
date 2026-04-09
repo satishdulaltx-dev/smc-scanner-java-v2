@@ -49,8 +49,8 @@ public class DiscordAlertService {
 
     public boolean sendSetupAlert(TradeSetup s, NewsSentiment sentiment, MarketContext context,
                                    EarningsCalendar.EarningsCheck earningsCheck) {
-        String url=config.getDiscordWebhookUrl();
-        if (url==null||url.isBlank()) { log.warn("No Discord webhook URL"); return false; }
+        String url = config.getDiscordScalpWebhookUrl(); // intraday scalp alerts → scalp channel
+        if (url==null||url.isBlank()) { log.warn("No Discord scalp webhook URL"); return false; }
         return postEmbeds(url, List.of(buildEmbed(s, sentiment, context, earningsCheck)));
     }
 
