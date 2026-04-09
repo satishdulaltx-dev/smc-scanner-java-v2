@@ -59,15 +59,17 @@
       "minFvgPct": 0.0006,
       "strategyType": "smc",
       "tpRrRatio": 2.0,
+      "skip": true,
+      "skipReason": "Apr 2026 backtest matrix: 0 trades on ALL 10 strategies in 90d. COIN price action driven entirely by BTC/crypto overnight gaps — no intraday 5m SMC pattern generates reliable entries. Note: OvernightMomentumService also excludes COIN from gap holds.",
       "note": "365d optimizer: SMC mc=78 sl=0.4 tp=2.0 → 9t 71%WR +2.64% exp $2045 opt P&L. Higher bar filters noise, wider TP captures crypto-proxy momentum."
     },
     {
       "ticker": "CRWD",
-      "strategyType": "smc",
+      "strategyType": "vwap",
       "minConfidence": 62,
       "maxConfidence": 84,
       "tpRrRatio": 1.25,
-      "note": "Added Mar 2026: 365d backtest 31 exec trades 57%WR +0.33 exp. Clear reversed-confidence pattern: b85:22@27%WR vs b75-84:9@78%WR. Apply maxConf=84 — high-confidence signals fire after move is exhausted. CrowdStrike has strong SMC sweep + FVG mechanics on 5m. minConf=62 to capture early setups. Apr 2026: explicit tpRrRatio=1.25 keeps primary target closer to nearby prior highs instead of auto-extending to a stretch target."
+      "note": "Apr 2026 backtest matrix: VWAP dominates on CRWD — 90d: 17T 64.7%WR $1652 vs SMC 18T 61.1% $1168 (+$484). CRWD makes clean VWAP mean-reversion moves intraday due to high institutional float. maxConf=84 retained (reversed-confidence pattern still applies). minConf=62 captures early setups."
     },
     {
       "ticker": "DDOG",
@@ -127,9 +129,9 @@
     },
     {
       "ticker": "META",
-      "strategyType": "keylevel",
-      "minConfidence": 80,
-      "maxConfidence": 82,
+      "strategyType": "vwap",
+      "minConfidence": 78,
+      "maxConfidence": 84,
       "minFvgPct": 0.0007,
       "dispAtrMult": 1.5,
       "slAtrMult": 1.0,
@@ -137,7 +139,7 @@
       "intradayRsGate": true,
       "skip": false,
       "skipReason": null,
-      "note": "Apr 2026 outside-research retune: keep META on KEYLEVEL, but tighten the trigger into earnings-season/event risk. Raised minConf 78→80 and lowered maxConf 84→82 so the engine favors cleaner level reactions instead of chasing post-news expansion candles. Strategy stays in retest mode until more live data confirms the edge."
+      "note": "Apr 2026 backtest matrix: VWAP crushes KeyLevel on META — 90d: VWAP 2T 100%WR $299 vs KeyLevel 1T 0% -$158 (+$457 swing). META is a VWAP-magnet mega-cap; large-cap tech funds use VWAP as benchmark for execution so pullbacks to VWAP get absorbed quickly. minConf lowered 80→78 to generate more trades while maxConf=84 caps exhausted entries."
     },
     {
       "ticker": "NET",
@@ -297,6 +299,8 @@
       "minConfidence": 80,
       "slAtrMult": 1.0,
       "tpRrRatio": 1.0,
+      "skip": true,
+      "skipReason": "Apr 2026 backtest matrix: 0 intraday SMC trades at minConf=80. Gap strategy 8.3% WR -$389 (12 trades). No strategy profitable in 90d — low-float fintech, moves on consumer-credit headlines, not intraday structure.",
       "note": "Apr 2026 outside-research retune: keep SOFI active, but stay selective because the name is still catalyst-sensitive around earnings and consumer-finance headlines. Raised minConf 78→80 while keeping maxConf=84 and tpRrRatio=1.0 so only cleaner SMC entries survive and the trail does the heavy lifting.",
       "maxConfidence": 84
     },
@@ -307,8 +311,8 @@
       "maxConfidence": 84,
       "slAtrMult": 0.4,
       "tpRrRatio": 2.0,
-      "skip": false,
-      "skipReason": null,
+      "skip": true,
+      "skipReason": "Apr 2026 backtest matrix: ALL 10 strategies negative in 90d. SMC 0% WR -$154, VWAP -$52, gap -$1447. ETF with ~$600B AUM — too liquid and trend-driven for 5m reversal strategies. No edge confirmed.",
       "note": "Apr 2026: raised minConf 70→80 to reduce near-random-coin-flip trades (45.5% WR at 70). Higher bar filters out marginal SPY setups."
     },
     {
@@ -320,14 +324,14 @@
     },
     {
       "ticker": "TSLA",
-      "strategyType": "smc",
+      "strategyType": "vwap",
       "minConfidence": 74,
       "maxConfidence": 84,
       "minFvgPct": 0.001,
       "dispAtrMult": 1.6,
       "slAtrMult": 1.0,
       "tpRrRatio": 1.0,
-      "note": "Apr 2026 outside-research retune: TSLA remains an SMC name, but the tape is still too event-driven to ask for a distant fixed target. Raised minConf 72→74 and trimmed TP 1.25→1.0 while keeping maxConf=84 so the system takes cleaner entries, banks the first move sooner, and lets the trail manage the rest."
+      "note": "Apr 2026 backtest matrix: VWAP beats SMC on TSLA — 90d: VWAP 7T 71.4%WR $1306 vs SMC 7T 57.1% $1206 (+$100, +14%WR). TSLA's intraday VWAP magnets are well-documented — institutional algos accumulate/distribute at VWAP on high-volume EV/macro days. maxConf=84, tpRrRatio=1.0 retained for fast target on volatile tape."
     },
     {
       "ticker": "UBER",

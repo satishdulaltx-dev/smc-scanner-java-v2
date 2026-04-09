@@ -13,7 +13,6 @@ import com.smcscanner.model.TradeSetup;
 import com.smcscanner.news.NewsSentiment;
 import com.smcscanner.news.NewsService;
 import com.smcscanner.options.OptionsFlowAnalyzer;
-import com.smcscanner.options.OptionsRecommendation;
 import com.smcscanner.strategy.BreakoutStrategyDetector;
 import com.smcscanner.strategy.GapDetector;
 import com.smcscanner.strategy.GammaPinDetector;
@@ -794,35 +793,6 @@ public class BacktestService {
                             0, 0, 0, 0, 0));
                     tradePlacedToday = true;
                     continue;
-                }
-
-                if (!ticker.startsWith("X:")) {
-                    try {
-                        OptionsRecommendation rec = optionsAnalyzer.recommendContract(
-                                ticker, setup.getDirection(), setup.getEntry(), setup.getStopLoss(), setup.getTakeProfit());
-                        if (!rec.hasData() || rec.contractTicker() == null || rec.contractTicker().isBlank()) {
-                            trades.add(new TradeResult(ticker, setup.getDirection(),
-                                    setup.getEntry(), setup.getStopLoss(), setup.getTakeProfit(),
-                                    "OPTIONS_FILTERED", 0.0,
-                                    toDateTime(dayBars.get(end - 1).getTimestamp()), toDateTime(dayBars.get(end - 1).getTimestamp()),
-                                    adjConf, setup.getAtr(), newsAdj, sentiment.label(), ctxAdj, context.rsLabel(),
-                                    qualityAdj, "OPTIONS_UNAVAILABLE",
-                                    0, 0, 0, 0, 0));
-                            tradePlacedToday = true;
-                            continue;
-                        }
-                    } catch (Exception e) {
-                        log.debug("{} OPTIONS_FILTERED: recommendation unavailable during backtest ({})", ticker, e.getMessage());
-                        trades.add(new TradeResult(ticker, setup.getDirection(),
-                                setup.getEntry(), setup.getStopLoss(), setup.getTakeProfit(),
-                                "OPTIONS_FILTERED", 0.0,
-                                toDateTime(dayBars.get(end - 1).getTimestamp()), toDateTime(dayBars.get(end - 1).getTimestamp()),
-                                adjConf, setup.getAtr(), newsAdj, sentiment.label(), ctxAdj, context.rsLabel(),
-                                qualityAdj, "OPTIONS_UNAVAILABLE",
-                                0, 0, 0, 0, 0));
-                        tradePlacedToday = true;
-                        continue;
-                    }
                 }
 
                 // ── 1 contract per trade ──
