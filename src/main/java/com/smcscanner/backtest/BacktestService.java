@@ -825,8 +825,8 @@ public class BacktestService {
                     }
                 }
 
-                // ── Flat 5 contracts per trade (aggressive backtest sizing) ──
-                int contracts = 5;
+                // ── 1 contract per trade ──
+                int contracts = 1;
                 log.debug("{} CONVICTION: conf={} → {} contract(s)", ticker, adjConf, contracts);
 
                 tradePlacedToday = true;
