@@ -978,7 +978,7 @@ public class ScannerService {
                     java.time.LocalTime etNowGap = java.time.ZonedDateTime.now(
                             java.time.ZoneId.of("America/New_York")).toLocalTime();
                     boolean isOpenWindow = !etNowGap.isBefore(java.time.LocalTime.of(9, 30))
-                            && etNowGap.isBefore(java.time.LocalTime.of(9, 40));
+                            && etNowGap.isBefore(java.time.LocalTime.of(9, 50)); // extended 9:40→9:50 — 4 bars to confirm gap trap
                     if (isOpenWindow) {
                         // Split bars into today vs previous session
                         java.time.LocalDate today = java.time.ZonedDateTime.now(

@@ -12,17 +12,22 @@ import java.util.List;
  *
  * Gap = today's first bar open vs yesterday's last bar close.
  *
- * Two tradeable setups:
- * - Gap & Go: large gap (>1x ATR) + strong volume → trade in gap direction
- * - Gap Fill: small gap (<0.5x ATR) + weak volume → fade, price reverts to prev close
+ * Three tradeable setups:
+ * - Gap & Go   : large gap (≥1x ATR) + strong volume + first bar HOLDS → trade in gap direction
+ * - Gap Trap   : large gap (≥1x ATR) + first bar FAILS/reverses → fade (most predictable news-day setup)
+ * - Gap Fill   : small gap (<0.5x ATR) + weak volume + opening rejection → fade to prev close
  *
- * Signals are fired in the first 1-2 bars after 9:30 ET only.
+ * Gap Trap is the critical missing case: COIN/AMD/AAPL/CRWD gapped 5-14% on April 8 tariff-pause
+ * news but immediately reversed — institutions selling into retail excitement. First bar bearish
+ * after a gap-up = trapped buyers, strong fade signal.
+ *
+ * Signals are fired in the first 4 bars after 9:30 ET (extended to 9:50 from 9:40).
  */
 @Service
 public class GapDetector {
     private static final Logger log = LoggerFactory.getLogger(GapDetector.class);
 
-    public enum GapType { GAP_AND_GO, GAP_FILL, NONE }
+    public enum GapType { GAP_AND_GO, GAP_TRAP, GAP_FILL, NONE }
 
     public record GapSignal(
             String ticker,
@@ -103,6 +108,35 @@ public class GapDetector {
                     String.format("%.2f", gapAtrRatio), String.format("%.1f", volRatio), conf);
             return new GapSignal(ticker, GapType.GAP_AND_GO, direction, gapPct,
                     gapAtrRatio, prevClose, todayOpen, entry, invalidation, dailyAtr, conf, note);
+        }
+
+        // ── Gap Trap: large gap + first bar FAILS (reverses against gap) ────────
+        // The most dangerous and predictable news-day setup.
+        // Institutions sell into the retail gap-up excitement — first bar closes bearish.
+        // E.g. COIN/AMD/AAPL April 8: gapped 5-14% up, first bar immediately reversed.
+        // Fade direction: short a failed gap-up, long a failed gap-down.
+        if (gapAtrRatio >= 1.0) {
+            boolean gapUpFailed   = gapPct > 0 && firstClose < firstOpen && closePos <= 0.45;
+            boolean gapDownFailed = gapPct < 0 && firstClose > firstOpen && closePos >= 0.55;
+            if (gapUpFailed || gapDownFailed) {
+                String fadeDir = gapPct > 0 ? "short" : "long";
+                int conf = 68;
+                if (gapAtrRatio >= 2.0) conf += 8;   // bigger gap = more trapped participants
+                if (volRatio >= 2.0)    conf += 5;    // high volume into reversal = distribution
+                if ((gapPct > 0 && closePos <= 0.25) || (gapPct < 0 && closePos >= 0.75)) conf += 5; // strong rejection candle
+                conf = Math.min(conf, 90);
+                double entry         = firstClose;
+                double invalidation  = gapPct > 0 ? firstHigh : firstLow;
+                String note = String.format(
+                        "Gap %s %.1f%% (%.1fx ATR) FAILED — first bar reversed (close pos %.0f%%); fading trapped buyers toward $%.2f",
+                        gapPct > 0 ? "UP" : "DOWN", Math.abs(gapPct), gapAtrRatio, closePos * 100, prevClose);
+                log.info("GAP_TRAP {} {} gap={}% atrRatio={} vol={}x closePos={} conf={}",
+                        ticker, fadeDir.toUpperCase(), String.format("%.2f", gapPct),
+                        String.format("%.2f", gapAtrRatio), String.format("%.1f", volRatio),
+                        String.format("%.2f", closePos), conf);
+                return new GapSignal(ticker, GapType.GAP_TRAP, fadeDir, gapPct,
+                        gapAtrRatio, prevClose, todayOpen, entry, invalidation, dailyAtr, conf, note);
+            }
         }
 
         // ── Gap Fill: small gap with weak volume ─────────────────────────────
