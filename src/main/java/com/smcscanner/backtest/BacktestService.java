@@ -331,7 +331,9 @@ public class BacktestService {
                 }
 
                 // ── Regime-based fallback — mirrors live ScannerService ────────
-                if (bSetups.isEmpty() && !ticker.startsWith("X:")) {
+                // Gap strategy is time-sensitive: only valid at the 9:30 AM open.
+                // Fallback would generate SMC/keylevel setups at 3 PM under the "gap" umbrella — wrong.
+                if (bSetups.isEmpty() && !ticker.startsWith("X:") && !"gap".equals(stratType)) {
                     String fallbackStrat = regimeDetector.suggestStrategy(btRegime, stratType);
                     if (fallbackStrat != null && !fallbackStrat.equals(stratType)) {
                         bSetups = switch (fallbackStrat) {
@@ -726,8 +728,17 @@ public class BacktestService {
                 // Previously the backtest always added next-day bars, which inflated wins from
                 // lucky overnight gaps. Now only *earned* overnight holds roll forward.
                 // Crypto runs 24/7 → always allow next-day extension.
-                List<OHLCV> sessionBarsForOvernight = ticker.startsWith("X:") ? List.of()
-                        : window.stream().filter(this::isRegularSessionBar).collect(Collectors.toList());
+                // Gap trades enter at 9:30 AM but the overnight decision is made at 3:55 PM.
+                // Use the full day's RTH bars so the overnight service sees closing price action,
+                // late volume, and RS vs SPY — not just the 1-2 bars available at open.
+                // All other strategies use the bars available at entry time (no look-ahead).
+                List<OHLCV> sessionBarsForOvernight;
+                if ("gap".equals(stratType) && !ticker.startsWith("X:")) {
+                    sessionBarsForOvernight = dayBars.stream().filter(this::isRegularSessionBar).collect(Collectors.toList());
+                } else {
+                    sessionBarsForOvernight = ticker.startsWith("X:") ? List.of()
+                            : window.stream().filter(this::isRegularSessionBar).collect(Collectors.toList());
+                }
                 List<OHLCV> spySessionForOvernight = spy5mByDate.getOrDefault(date, List.of()).stream()
                         .filter(this::isRegularSessionBar)
                         .filter(b -> b.getTimestamp() <= entryEpochMs)
@@ -773,6 +784,25 @@ public class BacktestService {
                 // Mode-specific hold limit: INTRADAY/OPTIONS cap at 48 bars (~4h)
                 if (fwdBars.size() > mode.maxForwardBars()) {
                     fwdBars = fwdBars.subList(0, mode.maxForwardBars());
+                }
+
+                // Gap-specific time box: exit by 11 AM if TP/SL not hit.
+                // Gap momentum resolves in the first 60–90 minutes — holding a stalled
+                // gap all day burns theta with no direction. Runners (TP ≥ 2.5R) are
+                // exempt: they can trend through the full session and into overnight.
+                if ("gap".equals(stratType)) {
+                    double gapRisk = Math.abs(entry - sl);
+                    boolean isGapRunner = gapRisk > 0 && (Math.abs(tp - entry) / gapRisk) >= 2.5;
+                    if (!isGapRunner) {
+                        LocalTime gapCutoff = LocalTime.of(11, 0);
+                        List<OHLCV> cappedGapBars = new ArrayList<>();
+                        for (OHLCV fb : fwdBars) {
+                            if (Instant.ofEpochMilli(fb.getTimestamp()).atZone(ET).toLocalTime().isBefore(gapCutoff)) {
+                                cappedGapBars.add(fb);
+                            }
+                        }
+                        fwdBars = cappedGapBars;
+                    }
                 }
 
                 ExitResult exit = switch (exitStyle) {
