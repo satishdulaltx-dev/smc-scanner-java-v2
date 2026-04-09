@@ -139,10 +139,14 @@ public class ScannerService {
 
             // ── 15m bias (pre-fetched here, used for alignment check after setup detection) ──
             String bias15m = "neutral";
+            List<OHLCV> bars15Ref = List.of(); // kept for fractal-anchor squeeze check below
             if (!isC) {
                 try {
                     List<OHLCV> bars15 = client.getBars(ticker, "15m", 60);
-                    if (bars15 != null && bars15.size() >= 10) bias15m = mtf.getHtfBias(bars15);
+                    if (bars15 != null && bars15.size() >= 10) {
+                        bias15m   = mtf.getHtfBias(bars15);
+                        bars15Ref = bars15;
+                    }
                 } catch (Exception e) { log.debug("{} 15m bias error: {}", ticker, e.getMessage()); }
             }
 
@@ -401,6 +405,29 @@ public class ScannerService {
                     log.info("{} news-aligned: TP extended to 3:1 tp={}", ticker, tp3x);
                 }
 
+                // ── Fractal Anchor: 15m SQUEEZE → scalp-only (1:1 TP hard cap) ──
+                // When the 15m timeframe is coiling (BB inside Keltner), there is no
+                // established direction. Any RS extension or news-aligned TP widening
+                // above 1:1 is premature — the squeeze hasn't resolved yet.
+                // Hard geometric cap; no confidence penalty (trade still fires, tighter).
+                boolean m15Squeeze = !isC && !bars15Ref.isEmpty() && regimeDetector.detectSqueeze(bars15Ref);
+                if (m15Squeeze) {
+                    double fa_entry = s.getEntry();
+                    double fa_risk  = Math.abs(s.getStopLoss() - fa_entry);
+                    double fa_oneR  = "long".equals(s.getDirection()) ? fa_entry + fa_risk : fa_entry - fa_risk;
+                    fa_oneR = Math.round(fa_oneR * 10000.0) / 10000.0;
+                    if (Math.abs(s.getTakeProfit() - fa_entry) > fa_risk + 0.0001) {
+                        s = TradeSetup.builder()
+                                .ticker(s.getTicker()).direction(s.getDirection())
+                                .entry(s.getEntry()).stopLoss(s.getStopLoss()).takeProfit(fa_oneR)
+                                .confidence(s.getConfidence()).session(s.getSession()).volatility(s.getVolatility())
+                                .atr(s.getAtr()).hasBos(s.isHasBos()).hasChoch(s.isHasChoch())
+                                .fvgTop(s.getFvgTop()).fvgBottom(s.getFvgBottom()).timestamp(s.getTimestamp())
+                                .build();
+                        log.info("{} FRACTAL_ANCHOR: 15m squeeze → 1:1 TP cap tp={}", ticker, fa_oneR);
+                    }
+                }
+
                 // ── Market context (SPY RS + VIX regime) ─────────────────────
                 // SPY relative strength: if the stock is strongly outperforming
                 // SPY while we try to SHORT (or underperforming while going LONG),
@@ -565,10 +592,28 @@ public class ScannerService {
                             String.format("%.2f", s.getEntry()), s.getDirection(), pivotAdj);
                 }
 
+                // ── Confluence veto: 3+ independent primary filters all negative ─
+                // Each filter measures a different risk dimension (structure, momentum,
+                // regime, correlation, pressure). When 3+ say "no" simultaneously,
+                // that is a compound warning no single high base-confidence score should
+                // override. Apply an additional -20 penalty on top of all other adjustments.
+                int negPrimaryCount = 0;
+                if (trapAdj        < 0) negPrimaryCount++;
+                if (bias15mAdj     < 0) negPrimaryCount++;
+                if (regimeStratAdj < 0) negPrimaryCount++;
+                if (pivotAdj       < 0) negPrimaryCount++;
+                if (corrAdj        < 0) negPrimaryCount++;
+                if (sma200Adj      < 0) negPrimaryCount++;
+                int confluenceVetoAdj = negPrimaryCount >= 3 ? -20 : 0;
+                if (confluenceVetoAdj != 0) {
+                    log.info("{} CONFLUENCE_VETO: {}/6 primary filters negative → {}",
+                            ticker, negPrimaryCount, confluenceVetoAdj);
+                }
+
                 // Apply combined confidence adjustment (news + context + quality + flow + regime + correlation + RS)
                 // Penalty floor: secondary filters can reduce base confidence by at most 25%.
                 // e.g. base=80 → floor=60, base=70 → floor=52. Prevents "death by a thousand filters."
-                int rawAdj   = newsAdj + ctxAdj + qualityAdj + flowAdj + regimeAdj + corrAdj + intradayRsAdj + deadZoneAdj + bias15mAdj + alignmentAdj + sma200Adj + rsiAdj + candleAdj + volAdj + regimeStratAdj + pivotAdj + trapAdj + exhaustionAdj;
+                int rawAdj   = newsAdj + ctxAdj + qualityAdj + flowAdj + regimeAdj + corrAdj + intradayRsAdj + deadZoneAdj + bias15mAdj + alignmentAdj + sma200Adj + rsiAdj + candleAdj + volAdj + regimeStratAdj + pivotAdj + trapAdj + exhaustionAdj + confluenceVetoAdj;
                 int penaltyFloor = (int)(s.getConfidence() * 0.75);
                 int totalAdj = rawAdj; // no longer clamping at -40; floor handles it
                 if (rawAdj != totalAdj) {
@@ -634,7 +679,7 @@ public class ScannerService {
                         newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj,
                         bias15mAdj, vixBoost, s.getConfidence(),
                         sma200Adj, rsiAdj, candleAdj, volAdj, regimeStratAdj, pivotAdj,
-                        trapAdj, exhaustionAdj);
+                        trapAdj, exhaustionAdj, confluenceVetoAdj);
 
                 // ── Conviction tier (suggested contract size) ─────────────────
                 // Based on final adjusted confidence — scales exposure to signal quality.
@@ -1002,7 +1047,7 @@ public class ScannerService {
                                          int bias15mAdj, int vixBoost, int finalConf,
                                          int sma200Adj, int rsiAdj, int candleAdj, int volAdj,
                                          int regimeStratAdj, int pivotAdj,
-                                         int trapAdj, int exhaustionAdj) {
+                                         int trapAdj, int exhaustionAdj, int confluenceVetoAdj) {
         java.util.List<String> parts = new java.util.ArrayList<>();
         if (Math.abs(newsAdj)         >= 2) parts.add("news "        + (newsAdj         > 0 ? "+" : "") + newsAdj);
         if (Math.abs(ctxAdj)          >= 2) parts.add("RS/VIX "      + (ctxAdj          > 0 ? "+" : "") + ctxAdj);
@@ -1017,9 +1062,10 @@ public class ScannerService {
         if (Math.abs(volAdj)          >= 2) parts.add("vol "         + (volAdj          > 0 ? "+" : "") + volAdj);
         if (Math.abs(regimeStratAdj)  >= 2) parts.add("regimeStrat " + (regimeStratAdj  > 0 ? "+" : "") + regimeStratAdj);
         if (Math.abs(pivotAdj)        >= 2) parts.add("pivot "       + (pivotAdj        > 0 ? "+" : "") + pivotAdj);
-        if (Math.abs(trapAdj)         >= 2) parts.add("trap "        + (trapAdj         > 0 ? "+" : "") + trapAdj);
-        if (Math.abs(exhaustionAdj)   >= 2) parts.add("exhaust "     + (exhaustionAdj   > 0 ? "+" : "") + exhaustionAdj);
-        if (vixBoost                  >= 5) parts.add("VIX gate +" + vixBoost + " to min");
+        if (Math.abs(trapAdj)           >= 2) parts.add("trap "        + (trapAdj           > 0 ? "+" : "") + trapAdj);
+        if (Math.abs(exhaustionAdj)     >= 2) parts.add("exhaust "     + (exhaustionAdj     > 0 ? "+" : "") + exhaustionAdj);
+        if (Math.abs(confluenceVetoAdj) >= 2) parts.add("confluence "  + (confluenceVetoAdj > 0 ? "+" : "") + confluenceVetoAdj);
+        if (vixBoost                    >= 5) parts.add("VIX gate +" + vixBoost + " to min");
         if (parts.isEmpty()) return "Base score — no adjustments";
         return String.join(" | ", parts) + " → **" + finalConf + "**";
     }

@@ -406,11 +406,13 @@ public class BacktestService {
                 // BYPASS for VWAP/vwap3d: mean-reversion intentionally fights the 15m trend.
                 int bias15mAdj = 0;
                 String bias15mLabel = "neutral";
+                List<OHLCV> slice15Ref = List.of(); // kept for fractal anchor squeeze check
                 boolean is15mApplicable = !"vwap".equals(stratType) && !"vwap3d".equals(stratType);
                 if (is15mApplicable && !ticker.startsWith("X:") && !all15mBars.isEmpty()) {
                     List<OHLCV> slice15 = all15mBars.stream()
                             .filter(b -> b.getTimestamp() < entryEpochMs)
                             .collect(java.util.stream.Collectors.toList());
+                    slice15Ref = slice15;
                     if (slice15.size() >= 20) {
                         int sz = slice15.size();
                         double sma15 = slice15.subList(sz - 20, sz).stream()
@@ -489,6 +491,25 @@ public class BacktestService {
                             .atr(setup.getAtr()).hasBos(setup.isHasBos()).hasChoch(setup.isHasChoch())
                             .fvgTop(setup.getFvgTop()).fvgBottom(setup.getFvgBottom()).timestamp(setup.getTimestamp())
                             .build();
+                }
+
+                // ── Fractal Anchor — mirrors live ScannerService ──────────────
+                // 15m SQUEEZE → cap TP to 1:1. Uses slice15Ref computed above.
+                if (!ticker.startsWith("X:") && !slice15Ref.isEmpty()
+                        && regimeDetector.detectSqueeze(slice15Ref)) {
+                    double fa_entry = setup.getEntry();
+                    double fa_risk  = Math.abs(setup.getStopLoss() - fa_entry);
+                    double fa_oneR  = "long".equals(setup.getDirection()) ? fa_entry + fa_risk : fa_entry - fa_risk;
+                    fa_oneR = Math.round(fa_oneR * 10000.0) / 10000.0;
+                    if (Math.abs(setup.getTakeProfit() - fa_entry) > fa_risk + 0.0001) {
+                        setup = TradeSetup.builder()
+                                .ticker(setup.getTicker()).direction(setup.getDirection())
+                                .entry(setup.getEntry()).stopLoss(setup.getStopLoss()).takeProfit(fa_oneR)
+                                .confidence(setup.getConfidence()).session(setup.getSession()).volatility(setup.getVolatility())
+                                .atr(setup.getAtr()).hasBos(setup.isHasBos()).hasChoch(setup.isHasChoch())
+                                .fvgTop(setup.getFvgTop()).fvgBottom(setup.getFvgBottom()).timestamp(setup.getTimestamp())
+                                .build();
+                    }
                 }
 
                 // Market context: SPY RS + VIX regime as-of entry date
@@ -606,7 +627,17 @@ public class BacktestService {
                 int pivotAdj = !ticker.startsWith("X:")
                         ? pivotService.computePivotAdj(htfSlice, setup.getEntry(), setup.getDirection()) : 0;
 
-                int totalAdj = newsAdj + ctxAdj + qualityAdj + flowAdj + regimeAdj + corrAdj + intradayRsAdj + deadZoneAdj + bias15mAdj + alignmentAdj + sma200Adj + rsiAdj + candleAdj + volAdj + regimeStratAdj + pivotAdj + trapAdj + exhaustionAdj;
+                // ── Confluence veto — mirrors live ScannerService ─────────────
+                int negPrimaryCountBt = 0;
+                if (trapAdj        < 0) negPrimaryCountBt++;
+                if (bias15mAdj     < 0) negPrimaryCountBt++;
+                if (regimeStratAdj < 0) negPrimaryCountBt++;
+                if (pivotAdj       < 0) negPrimaryCountBt++;
+                if (corrAdj        < 0) negPrimaryCountBt++;
+                if (sma200Adj      < 0) negPrimaryCountBt++;
+                int confluenceVetoAdj = negPrimaryCountBt >= 3 ? -20 : 0;
+
+                int totalAdj = newsAdj + ctxAdj + qualityAdj + flowAdj + regimeAdj + corrAdj + intradayRsAdj + deadZoneAdj + bias15mAdj + alignmentAdj + sma200Adj + rsiAdj + candleAdj + volAdj + regimeStratAdj + pivotAdj + trapAdj + exhaustionAdj + confluenceVetoAdj;
                 // Penalty floor: secondary filters can reduce base confidence by at most 25%.
                 // A strong base setup (80+) should never be killed by stacking RS + news + quality.
                 // Floor = 75% of base confidence. e.g. base=80 → floor=60, base=70 → floor=52.
