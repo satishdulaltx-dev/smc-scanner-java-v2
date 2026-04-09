@@ -282,6 +282,9 @@ public class BacktestService {
                     if (lastZdt.toLocalTime().isBefore(LocalTime.of(9, 30))) continue;
                 }
                 List<OHLCV> window = dayBars.subList(0, end);
+                // Regime computed before strategy detection so gap strategy can use it
+                MarketRegimeDetector.Regime btRegime = ticker.startsWith("X:") ? MarketRegimeDetector.Regime.RANGING
+                        : regimeDetector.detectForBacktest(window);
                 List<TradeSetup> bSetups;
                 if ("vwap".equals(stratType)) {
                     bSetups = vwapDetector.detect(window, ticker, dailyAtr);
@@ -297,7 +300,7 @@ public class BacktestService {
                         List<OHLCV> prevRthBars = byDate.getOrDefault(dates.get(di - 1), List.of()).stream()
                                 .filter(this::isRegularSessionBar)
                                 .collect(Collectors.toList());
-                        GapDetector.GapSignal gap = gapDetector.detect(rthWindow, prevRthBars, dailyAtr, ticker);
+                        GapDetector.GapSignal gap = gapDetector.detect(rthWindow, prevRthBars, dailyAtr, ticker, btRegime);
                         bSetups = gap == null ? List.of() : List.of(buildGapSetup(gap, rthWindow.get(0)));
                     }
                 } else if ("keylevel".equals(stratType)) {
@@ -322,12 +325,6 @@ public class BacktestService {
                             window, htfBias, ticker, false, dailyAtr, true); // backtestMode=true, real dailyAtr for TP/SL
                     bSetups = dr.setups();
                 }
-                // ── Market regime (computed once per window, before fallback) ──
-                // Needs to happen before the empty-check so LOW_LIQUIDITY can gate
-                // and regime-based fallback can run when primary returns nothing.
-                MarketRegimeDetector.Regime btRegime = ticker.startsWith("X:") ? MarketRegimeDetector.Regime.RANGING
-                        : regimeDetector.detectForBacktest(window);
-
                 if (btRegime == MarketRegimeDetector.Regime.LOW_LIQUIDITY) {
                     log.debug("{} REGIME_LOW_LIQUIDITY {} — skipping bar window", ticker, date);
                     continue;

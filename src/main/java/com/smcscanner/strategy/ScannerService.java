@@ -992,7 +992,7 @@ public class ScannerService {
                                         .atZone(java.time.ZoneId.of("America/New_York")).toLocalDate().isBefore(today))
                                 .collect(java.util.stream.Collectors.toList());
                         if (!todayBars5m.isEmpty() && !prevBars5m.isEmpty()) {
-                            GapDetector.GapSignal gap = gapDetector.detect(todayBars5m, prevBars5m, dailyAtr, ticker);
+                            GapDetector.GapSignal gap = gapDetector.detect(todayBars5m, prevBars5m, dailyAtr, ticker, regime);
                             if (gap != null) {
                                 String gapKey = "gap_" + ticker;
                                 if (!dedup.isDuplicate(gapKey, gap.direction(), gap.entryPrice(), 60)) {
