@@ -369,10 +369,11 @@ public class BacktestService {
                     } else {
                         PowerEarningsGapDetector.PEGSignal peg =
                                 pegDetector.detect(pegSession, htfSlice, pegPrevClose, dailyAtr);
-                        // Require aligned news — earnings catalyst is what makes PEGs reliable
-                        boolean newsAligned = ("long".equals(peg.direction()) && pegSentiment.isBullish())
-                                || ("short".equals(peg.direction()) && pegSentiment.isBearish());
-                        if (peg.detected() && newsAligned) {
+                        // Block only when news is clearly CONFLICTING (e.g. bearish news on a gap-up).
+                        // Historical sentiment data rarely hits the 0.4 threshold for earnings beats,
+                        // so requiring isAligned() would kill all valid signals.
+                        boolean newsOk = !pegSentiment.isConflicting(peg.direction());
+                        if (peg.detected() && newsOk) {
                             bSetups = List.of(TradeSetup.builder()
                                     .ticker(ticker).direction(peg.direction())
                                     .entry(peg.entry()).stopLoss(peg.stopLoss()).takeProfit(peg.takeProfit())
