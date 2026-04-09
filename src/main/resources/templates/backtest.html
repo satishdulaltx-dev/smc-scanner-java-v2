@@ -314,7 +314,11 @@
 
 <script>
 let equityChart = null, distChart = null;
-const FILTERED_OUTCOMES = new Set(['NEWS_FILTERED','CTX_FILTERED','QUALITY_FILTERED','MULTI_FILTERED','15M_FILTERED','CORR_FILTERED','REGIME_FILTERED','OVEREXTENDED_FILTERED']);
+const FILTERED_OUTCOMES = new Set([
+    'NEWS_FILTERED','CTX_FILTERED','QUALITY_FILTERED','MULTI_FILTERED',
+    '15M_FILTERED','CORR_FILTERED','REGIME_FILTERED','OVEREXTENDED_FILTERED',
+    'CONFLUENCE_FILTERED','TRAP_FILTERED','CONF_CAP_FILTERED'
+]);
 function isWinOutcome(t) { return t.outcome === 'WIN' || t.outcome === 'TRAIL_WIN' || (t.outcome === 'TIMEOUT' && t.pnl_pct > 0); }
 function isLossOutcome(t) { return t.outcome === 'LOSS' || t.outcome === 'TRAIL_LOSS' || (t.outcome === 'TIMEOUT' && t.pnl_pct <= 0); }
 function isBeOutcome(t) { return t.outcome === 'BE_STOP'; }
@@ -526,6 +530,27 @@ function renderSingle(d) {
         `;
     }
 
+    // Gap-specific scorecard
+    if (document.getElementById('strategy-type').value === 'gap') {
+        const executed = d.trades.filter(t => !FILTERED_OUTCOMES.has(t.outcome));
+        const correct = executed.filter(isWinOutcome).length;
+        const incorrect = executed.filter(isLossOutcome).length;
+        const neutral = executed.length - correct - incorrect;
+        const filtered = d.trades.length - executed.length;
+        const hitRate = executed.length > 0 ? Math.round((correct / executed.length) * 100) : 0;
+        const hitColor = hitRate >= 60 ? 'var(--green)' : hitRate >= 40 ? 'var(--yellow)' : 'var(--red)';
+        document.getElementById('stats-grid').innerHTML += `
+            <div style="grid-column:1/-1;height:1px;background:var(--border);margin:4px 0"></div>
+            <div style="grid-column:1/-1;font-size:10px;color:#58d68d;text-transform:uppercase;letter-spacing:.8px;font-weight:600">📈 Gap Prediction Scorecard</div>
+            <div class="stat-card"><div class="val" style="color:var(--blue)">${d.trades.length}</div><div class="lbl">Gap Setups Found</div></div>
+            <div class="stat-card"><div class="val" style="color:${hitColor}">${hitRate}%</div><div class="lbl">Prediction Hit Rate</div></div>
+            <div class="stat-card"><div class="val" style="color:var(--green)">${correct}</div><div class="lbl">Predicted Correct</div></div>
+            <div class="stat-card"><div class="val" style="color:var(--red)">${incorrect}</div><div class="lbl">Predicted Incorrect</div></div>
+            <div class="stat-card"><div class="val" style="color:var(--yellow)">${neutral}</div><div class="lbl">Neutral / Timeout</div></div>
+            <div class="stat-card"><div class="val" style="color:var(--muted)">${filtered}</div><div class="lbl">Filtered / Skipped</div></div>
+        `;
+    }
+
     // Equity curve — exclude all filtered outcomes (trades were never entered)
     let cum = 0;
     const labels = [], cumData = [];
@@ -553,7 +578,11 @@ function renderSingle(d) {
     // Trades are already sorted by date from backend — extract date from entry_time (format: "MM/dd HH:mm ET")
     let lastDate = '';
     tradeNum = 0;
-    const FILTERED_SET = new Set(['NEWS_FILTERED','CTX_FILTERED','QUALITY_FILTERED','MULTI_FILTERED','15M_FILTERED','CORR_FILTERED','REGIME_FILTERED','OVEREXTENDED_FILTERED']);
+    const FILTERED_SET = new Set([
+        'NEWS_FILTERED','CTX_FILTERED','QUALITY_FILTERED','MULTI_FILTERED',
+        '15M_FILTERED','CORR_FILTERED','REGIME_FILTERED','OVEREXTENDED_FILTERED',
+        'CONFLUENCE_FILTERED','TRAP_FILTERED','CONF_CAP_FILTERED'
+    ]);
     const COL_COUNT = 13; // total columns in the table
 
     document.getElementById('trades-tbody').innerHTML = d.trades.map((t, i) => {
@@ -561,9 +590,7 @@ function renderSingle(d) {
         const isCtxFiltered     = t.outcome === 'CTX_FILTERED';
         const isQualityFiltered = t.outcome === 'QUALITY_FILTERED';
         const isMultiFiltered   = t.outcome === 'MULTI_FILTERED';
-        const isFiltered        = isNewsFiltered || isCtxFiltered || isQualityFiltered || isMultiFiltered
-                               || t.outcome === '15M_FILTERED' || t.outcome === 'CORR_FILTERED'
-                               || t.outcome === 'REGIME_FILTERED' || t.outcome === 'OVEREXTENDED_FILTERED';
+        const isFiltered        = FILTERED_SET.has(t.outcome);
         const tvUrl = `https://www.tradingview.com/chart/?symbol=${tvTicker}&interval=5`;
         const confColor = t.confidence >= 80 ? 'var(--green)' : t.confidence >= 65 ? 'var(--yellow)' : 'var(--muted)';
         const rowClass  = isMultiFiltered   ? 'multi-filtered-row'
@@ -588,6 +615,7 @@ function renderSingle(d) {
         const newsTag  = t.news_adj  ? `<span class="adj-tag" title="${t.news_label||''}">${t.news_adj>0?'+':''}${t.news_adj}📰</span>` : '';
         const ctxTag   = t.ctx_adj   ? `<span class="adj-tag" title="${t.ctx_label||''}">${t.ctx_adj>0?'+':''}${t.ctx_adj}📊</span>` : '';
         const qualTag  = t.qual_adj  ? `<span class="adj-tag" title="${t.qual_label||''}">${t.qual_adj>0?'+':''}${t.qual_adj}⚡</span>` : '';
+        const optPnl = t.opt_pnl_scaled ?? t.opt_pnl_per_contract;
         // PnL cell or filter reason
         const filterReason = [t.news_label, t.ctx_label, t.qual_label].filter(Boolean).join(' | ') || 'filtered';
         const pnlCell = isFiltered
@@ -634,7 +662,7 @@ function renderSingle(d) {
             ${pnlCell}
             ${t.opt_entry_premium ? `<td style="font-size:11px;color:var(--muted)">$${t.opt_entry_premium.toFixed(2)}</td>` : '<td style="color:var(--muted);font-size:10px">—</td>'}
             ${t.opt_exit_premium  ? `<td style="font-size:11px;color:var(--muted)">$${t.opt_exit_premium.toFixed(2)}</td>`  : '<td style="color:var(--muted);font-size:10px">—</td>'}
-            ${t.opt_pnl_per_contract ? `<td style="font-size:11px;font-weight:600;color:${t.opt_pnl_per_contract >= 0 ? 'var(--green)' : 'var(--red)'}">${t.opt_pnl_per_contract >= 0 ? '+' : ''}$${t.opt_pnl_per_contract.toFixed(0)}</td>` : '<td style="color:var(--muted);font-size:10px">—</td>'}
+            ${optPnl !== undefined && optPnl !== null ? `<td style="font-size:11px;font-weight:600;color:${optPnl >= 0 ? 'var(--green)' : 'var(--red)'}">${optPnl >= 0 ? '+' : ''}$${optPnl.toFixed(0)}</td>` : '<td style="color:var(--muted);font-size:10px">—</td>'}
             <td style="color:${confColor};font-size:11px">${t.confidence}/100${newsTag}${ctxTag}${qualTag}</td>
         </tr>`;
     }).join('');
@@ -645,7 +673,11 @@ function renderBatch(results, days) {
     results.sort((a, b) => b.expectancy - a.expectancy);
 
     // ── Aggregate stats ───────────────────────────────────────────────────────
-    const FILTERED = new Set(['NEWS_FILTERED','CTX_FILTERED','QUALITY_FILTERED','MULTI_FILTERED']);
+    const FILTERED = new Set([
+        'NEWS_FILTERED','CTX_FILTERED','QUALITY_FILTERED','MULTI_FILTERED',
+        '15M_FILTERED','CORR_FILTERED','REGIME_FILTERED','OVEREXTENDED_FILTERED',
+        'CONFLUENCE_FILTERED','TRAP_FILTERED','CONF_CAP_FILTERED'
+    ]);
     let totalTrades = 0, totalWins = 0, totalLosses = 0, totalFiltered = 0;
     let sumWinPnl = 0, sumLossPnl = 0, sumExpectancy = 0, tickersWithTrades = 0;
     let bestTicker = null, worstTicker = null;
