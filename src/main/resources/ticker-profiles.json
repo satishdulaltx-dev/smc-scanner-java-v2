@@ -301,13 +301,13 @@
     {
       "ticker": "SPY",
       "strategyType": "smc",
-      "minConfidence": 70,
+      "minConfidence": 80,
       "maxConfidence": 84,
       "slAtrMult": 0.4,
       "tpRrRatio": 2.0,
       "skip": false,
       "skipReason": null,
-      "note": "Apr 2026 optimizer rank#1 (180d): SMC mc=70 sl=0.4 tp=2:1 → 26t 47.6%WR +0.20%exp $3115 opt P&L. Tighter stop (0.4 ATR) suits SPY's controlled index moves. 2:1 TP beats 1.25:1 on expectancy even with lower WR. Previous sl=1.0 tp=1.25 not in top 10."
+      "note": "Apr 2026: raised minConf 70→80 to reduce near-random-coin-flip trades (45.5% WR at 70). Higher bar filters out marginal SPY setups."
     },
     {
       "ticker": "SQ",

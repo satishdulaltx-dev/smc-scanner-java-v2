@@ -189,6 +189,24 @@ public class ScannerService {
                 }
             } catch (Exception e) { log.debug("{} daily bars error: {}",ticker,e.getMessage()); }
 
+            // ── HTF staleness gate ────────────────────────────────────────────
+            // If hourly price moved > 1.5× dailyATR against the HTF bias in the
+            // last 10 bars, that bias is stale (rapid regime shift). Degrade to
+            // "neutral" so HTF_CONFLICT doesn't block setups aligned with the
+            // NEW trend direction. Catches crashes/squeezes like April 2026 tariff.
+            if (!"neutral".equals(htfBias) && dailyAtr > 0 && hourlyBars != null && hourlyBars.size() >= 5) {
+                int staleWindow = Math.min(10, hourlyBars.size());
+                List<OHLCV> recentHtf = hourlyBars.subList(hourlyBars.size() - staleWindow, hourlyBars.size());
+                double priceMove = recentHtf.get(recentHtf.size() - 1).getClose() - recentHtf.get(0).getOpen();
+                boolean staleUp   = "bearish".equals(htfBias) && priceMove >  dailyAtr * 1.5;
+                boolean staleDown = "bullish".equals(htfBias) && priceMove < -dailyAtr * 1.5;
+                if (staleUp || staleDown) {
+                    log.debug("{} HTF_STALE: bias={} priceMove={} dailyAtr={} → neutral",
+                        ticker, htfBias, String.format("%.2f", priceMove), String.format("%.2f", dailyAtr));
+                    htfBias = "neutral";
+                }
+            }
+
             // ── Intraday alert (5m bars → original Discord channel) ─────────
             List<TradeSetup> setups; String phaseMsg;
             if (isC) { setups=crypto.detectCryptoSetup(bars,ticker); phaseMsg=setups.isEmpty()?"Waiting for breakout + volume spike...":""; }
@@ -605,7 +623,7 @@ public class ScannerService {
                 if (pivotAdj       < 0) negPrimaryCount++;
                 if (corrAdj        < 0) negPrimaryCount++;
                 if (sma200Adj      < 0) negPrimaryCount++;
-                int confluenceVetoAdj = negPrimaryCount >= 3 ? -20 : 0;
+                int confluenceVetoAdj = negPrimaryCount >= 4 ? -20 : negPrimaryCount == 3 ? -10 : 0;
                 if (confluenceVetoAdj != 0) {
                     log.info("{} CONFLUENCE_VETO: {}/6 primary filters negative → {}",
                             ticker, negPrimaryCount, confluenceVetoAdj);

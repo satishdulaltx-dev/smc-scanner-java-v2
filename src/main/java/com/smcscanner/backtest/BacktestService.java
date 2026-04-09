@@ -224,6 +224,21 @@ public class BacktestService {
                         else if (mom < -0.03) htfBias = "bearish";
                     }
                 }
+
+                // HTF staleness gate — mirrors live ScannerService logic
+                // If daily price moved > 1.5× dailyATR against bias in last 10 bars,
+                // bias is stale (regime flipped). Degrade to neutral so HTF_CONFLICT
+                // doesn't block counter-trend setups aligned with the new direction.
+                if (!"neutral".equals(htfBias) && dailyAtr > 0 && htfSlice.size() >= 5) {
+                    int staleWindow = Math.min(10, htfSlice.size());
+                    double priceMove = htfSlice.get(htfSlice.size() - 1).getClose()
+                                     - htfSlice.get(htfSlice.size() - staleWindow).getOpen();
+                    boolean staleUp   = "bearish".equals(htfBias) && priceMove >  dailyAtr * 1.5;
+                    boolean staleDown = "bullish".equals(htfBias) && priceMove < -dailyAtr * 1.5;
+                    if (staleUp || staleDown) {
+                        htfBias = "neutral";
+                    }
+                }
             }
 
             // Slide through day's bars — detect first valid setup
@@ -640,7 +655,7 @@ public class BacktestService {
                 if (pivotAdj       < 0) negPrimaryCountBt++;
                 if (corrAdj        < 0) negPrimaryCountBt++;
                 if (sma200Adj      < 0) negPrimaryCountBt++;
-                int confluenceVetoAdj = negPrimaryCountBt >= 3 ? -20 : 0;
+                int confluenceVetoAdj = negPrimaryCountBt >= 4 ? -20 : negPrimaryCountBt == 3 ? -10 : 0;
 
                 int totalAdj = newsAdj + ctxAdj + qualityAdj + flowAdj + regimeAdj + corrAdj + intradayRsAdj + deadZoneAdj + bias15mAdj + alignmentAdj + sma200Adj + rsiAdj + candleAdj + volAdj + regimeStratAdj + pivotAdj + trapAdj + exhaustionAdj + confluenceVetoAdj;
                 // Penalty floor: secondary filters can reduce base confidence by at most 25%.
