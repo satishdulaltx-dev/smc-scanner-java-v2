@@ -16,14 +16,8 @@ import java.util.List;
 /**
  * Dedicated momentum scalp detector.
  *
- * Goal: catch a live impulse, ride the train briefly, and get off quickly.
- * This is intentionally different from the slower intraday setup detectors.
- *
- * Core requirements:
- * - expansion candle
- * - volume burst
- * - breakout through nearby micro structure
- * - close near the candle extreme (little hesitation)
+ * Goal: catch a live impulse sequence early, ride the train briefly,
+ * and get off as soon as momentum fades.
  */
 @Service
 public class ScalpMomentumDetector {
@@ -53,77 +47,116 @@ public class ScalpMomentumDetector {
         LocalTime now = Instant.ofEpochMilli(last.getTimestamp()).atZone(ET).toLocalTime();
         if (now.isBefore(LocalTime.of(9, 35)) || !now.isBefore(LocalTime.of(15, 30))) return result;
 
-        int evalWindow = Math.min(6, sessionBars.size() - 1);
-        if (evalWindow < 4) return result;
-
-        List<OHLCV> recent = sessionBars.subList(sessionBars.size() - 1 - evalWindow, sessionBars.size() - 1);
-        double avgVol = recent.stream().mapToDouble(OHLCV::getVolume).average().orElse(1.0);
-        double avgRange = recent.stream().mapToDouble(b -> b.getHigh() - b.getLow()).average().orElse(0.01);
         double atr = Math.max(computeAtr(sessionBars), last.getClose() * 0.0015);
 
-        double range = Math.max(0.0001, last.getHigh() - last.getLow());
-        double body = Math.abs(last.getClose() - last.getOpen());
-        double bodyPct = body / range;
-        double volRatio = avgVol > 0 ? last.getVolume() / avgVol : 1.0;
-        double rangeRatio = avgRange > 0 ? range / avgRange : 1.0;
+        int seqLen = Math.min(4, sessionBars.size());
+        int baseLen = Math.min(6, sessionBars.size() - seqLen);
+        if (seqLen < 3 || baseLen < 4) return result;
 
-        double highestPrev = recent.stream().mapToDouble(OHLCV::getHigh).max().orElse(last.getHigh());
-        double lowestPrev = recent.stream().mapToDouble(OHLCV::getLow).min().orElse(last.getLow());
-        double breakoutBuffer = Math.max(atr * 0.10, last.getClose() * 0.0008);
+        List<OHLCV> sequence = sessionBars.subList(sessionBars.size() - seqLen, sessionBars.size());
+        List<OHLCV> base = sessionBars.subList(sessionBars.size() - seqLen - baseLen, sessionBars.size() - seqLen);
+        OHLCV firstSeq = sequence.get(0);
+        OHLCV prevBar = base.get(base.size() - 1);
 
-        boolean closeNearHigh = (last.getHigh() - last.getClose()) <= range * 0.20;
-        boolean closeNearLow = (last.getClose() - last.getLow()) <= range * 0.20;
-
-        boolean prevBarsUp = recent.get(recent.size() - 1).getClose() >= recent.get(recent.size() - 2).getClose()
-                || recent.get(recent.size() - 2).getClose() >= recent.get(recent.size() - 3).getClose();
-        boolean prevBarsDown = recent.get(recent.size() - 1).getClose() <= recent.get(recent.size() - 2).getClose()
-                || recent.get(recent.size() - 2).getClose() <= recent.get(recent.size() - 3).getClose();
+        double avgVol = base.stream().mapToDouble(OHLCV::getVolume).average().orElse(1.0);
+        double avgRange = base.stream().mapToDouble(b -> b.getHigh() - b.getLow()).average().orElse(0.01);
+        double sequenceAvgVol = sequence.stream().mapToDouble(OHLCV::getVolume).average().orElse(avgVol);
+        double sequenceRange = sequence.stream().mapToDouble(b -> b.getHigh() - b.getLow()).sum();
+        double highestBase = base.stream().mapToDouble(OHLCV::getHigh).max().orElse(prevBar.getHigh());
+        double lowestBase = base.stream().mapToDouble(OHLCV::getLow).min().orElse(prevBar.getLow());
         double sessionOpen = sessionBars.get(0).getOpen();
+        double sessionVwap = computeSessionVwap(sessionBars, sessionBars.size() - 1);
+        double prevSessionVwap = computeSessionVwap(sessionBars, sessionBars.size() - 2);
+        double vwapDistance = Math.abs(last.getClose() - sessionVwap);
         double moveFromOpen = Math.abs(last.getClose() - sessionOpen) / Math.max(0.01, atr);
+        double cumulativeUpMove = last.getClose() - firstSeq.getOpen();
+        double cumulativeDownMove = firstSeq.getOpen() - last.getClose();
+        double strongImpulseMove = Math.max(atr * 0.85, last.getClose() * 0.0035);
+        double extensionCap = atr * 2.2;
+        double breakoutBuffer = Math.max(atr * 0.08, last.getClose() * 0.0006);
 
-        boolean expansion = rangeRatio >= 1.6 && bodyPct >= 0.60;
-        boolean volumeBurst = volRatio >= 1.8;
+        int greenCount = 0;
+        int redCount = 0;
+        int closeNearHighCount = 0;
+        int closeNearLowCount = 0;
+        int rangeExpansionCount = 0;
+        int volumeExpansionCount = 0;
+        for (OHLCV bar : sequence) {
+            double range = Math.max(0.0001, bar.getHigh() - bar.getLow());
+            double bodyPct = Math.abs(bar.getClose() - bar.getOpen()) / range;
+            double rangeRatio = range / Math.max(avgRange, 0.01);
+            double volRatio = bar.getVolume() / Math.max(avgVol, 1.0);
+            if (bar.getClose() > bar.getOpen()) greenCount++;
+            if (bar.getClose() < bar.getOpen()) redCount++;
+            if ((bar.getHigh() - bar.getClose()) <= range * 0.25) closeNearHighCount++;
+            if ((bar.getClose() - bar.getLow()) <= range * 0.25) closeNearLowCount++;
+            if (rangeRatio >= 1.15 && bodyPct >= 0.45) rangeExpansionCount++;
+            if (volRatio >= 1.25) volumeExpansionCount++;
+        }
 
-        boolean longImpulse = expansion
-                && volumeBurst
-                && last.getClose() > last.getOpen()
-                && closeNearHigh
-                && last.getClose() > highestPrev + breakoutBuffer
-                && prevBarsUp;
+        boolean closesStackedUp = last.getClose() > sequence.get(sequence.size() - 2).getClose()
+                && sequence.get(sequence.size() - 2).getClose() >= sequence.get(sequence.size() - 3).getClose();
+        boolean closesStackedDown = last.getClose() < sequence.get(sequence.size() - 2).getClose()
+                && sequence.get(sequence.size() - 2).getClose() <= sequence.get(sequence.size() - 3).getClose();
+        boolean vwapAlignedLong = last.getClose() > sessionVwap && sessionVwap >= prevSessionVwap;
+        boolean vwapAlignedShort = last.getClose() < sessionVwap && sessionVwap <= prevSessionVwap;
+        boolean baseBreakLong = firstSeq.getOpen() > highestBase - breakoutBuffer || last.getClose() > highestBase + breakoutBuffer;
+        boolean baseBreakShort = firstSeq.getOpen() < lowestBase + breakoutBuffer || last.getClose() < lowestBase - breakoutBuffer;
+        boolean volumeTrendUp = sequenceAvgVol >= avgVol * 1.35;
+        boolean notTooExtended = vwapDistance <= extensionCap;
 
-        boolean shortImpulse = expansion
-                && volumeBurst
-                && last.getClose() < last.getOpen()
-                && closeNearLow
-                && last.getClose() < lowestPrev - breakoutBuffer
-                && prevBarsDown;
+        boolean longImpulse = greenCount >= 3
+                && closeNearHighCount >= 2
+                && rangeExpansionCount >= 2
+                && volumeExpansionCount >= 2
+                && closesStackedUp
+                && cumulativeUpMove >= strongImpulseMove
+                && volumeTrendUp
+                && vwapAlignedLong
+                && baseBreakLong
+                && notTooExtended;
+
+        boolean shortImpulse = redCount >= 3
+                && closeNearLowCount >= 2
+                && rangeExpansionCount >= 2
+                && volumeExpansionCount >= 2
+                && closesStackedDown
+                && cumulativeDownMove >= strongImpulseMove
+                && volumeTrendUp
+                && vwapAlignedShort
+                && baseBreakShort
+                && notTooExtended;
 
         if (!longImpulse && !shortImpulse) return result;
 
         boolean isLong = longImpulse;
+        double lastRange = Math.max(0.0001, last.getHigh() - last.getLow());
         double entry = r4(last.getClose());
         double stop = isLong
-                ? r4(Math.min(last.getLow() - atr * 0.08, entry - Math.max(range * 0.45, atr * 0.28)))
-                : r4(Math.max(last.getHigh() + atr * 0.08, entry + Math.max(range * 0.45, atr * 0.28)));
+                ? r4(Math.min(sequence.get(sequence.size() - 2).getLow(), last.getLow()) - Math.max(atr * 0.12, lastRange * 0.20))
+                : r4(Math.max(sequence.get(sequence.size() - 2).getHigh(), last.getHigh()) + Math.max(atr * 0.12, lastRange * 0.20));
         double risk = Math.abs(entry - stop);
         if (risk <= 0) return result;
 
-        // Scalp target: bank the first momentum leg quickly rather than asking
-        // for a full intraday move.
-        double tp = isLong ? r4(entry + risk * 0.85) : r4(entry - risk * 0.85);
+        double tp = isLong ? r4(entry + risk * 0.75) : r4(entry - risk * 0.75);
 
         int confidence = 68;
-        if (volRatio >= 2.2) confidence += 6;
-        if (rangeRatio >= 2.0) confidence += 6;
-        if ((isLong && last.getClose() > highestPrev + atr * 0.25)
-                || (!isLong && last.getClose() < lowestPrev - atr * 0.25)) confidence += 5;
-        if (dailyAtr > 0 && range >= dailyAtr * 0.12) confidence += 4;
+        if (sequenceAvgVol >= avgVol * 1.6) confidence += 6;
+        if (sequenceRange >= avgRange * 3.8) confidence += 5;
+        if (Math.max(cumulativeUpMove, cumulativeDownMove) >= atr * 1.2) confidence += 5;
+        if (dailyAtr > 0 && sequenceRange >= dailyAtr * 0.18) confidence += 4;
         if (moveFromOpen >= 1.0) confidence += 3;
         confidence = Math.min(90, confidence);
 
         ZonedDateTime signalTs = Instant.ofEpochMilli(last.getTimestamp()).atZone(ET);
-        String factors = String.format("vol x%.1f | range x%.1f | body %.0f%% | open move %.1f ATR",
-                volRatio, rangeRatio, bodyPct * 100.0, moveFromOpen);
+        String factors = String.format("seq %s%d/%d | vol x%.1f | move %.2f ATR | VWAP %s | open %.1f ATR",
+                isLong ? "g" : "r",
+                isLong ? greenCount : redCount,
+                sequence.size(),
+                sequenceAvgVol / Math.max(avgVol, 1.0),
+                Math.max(cumulativeUpMove, cumulativeDownMove) / Math.max(atr, 0.01),
+                isLong ? "above" : "below",
+                moveFromOpen);
 
         result.add(TradeSetup.builder()
                 .ticker(ticker)
@@ -137,8 +170,8 @@ public class ScalpMomentumDetector {
                 .atr(atr)
                 .hasBos(false)
                 .hasChoch(false)
-                .fvgTop(r4(highestPrev))
-                .fvgBottom(r4(lowestPrev))
+                .fvgTop(r4(highestBase))
+                .fvgBottom(r4(lowestBase))
                 .factorBreakdown(factors)
                 .timestamp(signalTs.toLocalDateTime())
                 .build());
@@ -159,6 +192,18 @@ public class ScalpMomentumDetector {
             sum += tr;
         }
         return sum / period;
+    }
+
+    private double computeSessionVwap(List<OHLCV> bars, int endIdxInclusive) {
+        double pv = 0.0;
+        double vol = 0.0;
+        for (int i = 0; i <= endIdxInclusive && i < bars.size(); i++) {
+            OHLCV b = bars.get(i);
+            double typical = (b.getHigh() + b.getLow() + b.getClose()) / 3.0;
+            pv += typical * b.getVolume();
+            vol += b.getVolume();
+        }
+        return vol > 0 ? pv / vol : bars.get(Math.max(0, Math.min(endIdxInclusive, bars.size() - 1))).getClose();
     }
 
     private double r4(double v) {
