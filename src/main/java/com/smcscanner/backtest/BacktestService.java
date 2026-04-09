@@ -825,6 +825,37 @@ public class BacktestService {
                     fwdBarsRaw.addAll(byDate.get(dates.get(di + 1)));
                 }
 
+                // ── Gap-Open Stop (Fix B) ─────────────────────────────────────────
+                // If the stock gaps >3% at the next morning's open, immediately move
+                // SL from previous-day midpoint to today's opening price.
+                // Prevents "gap-up then fill-and-fail" from giving back all the profit.
+                // Only applied when an overnight hold was taken (next-day bars are present).
+                if (holdSignal.shouldHold() && !fwdBars.isEmpty()) {
+                    // Find the first next-day RTH bar (date > trade entry date)
+                    LocalDate entryDate = Instant.ofEpochMilli(entryEpochMs).atZone(ET).toLocalDate();
+                    for (OHLCV nextBar : fwdBars) {
+                        LocalDate barDate = Instant.ofEpochMilli(nextBar.getTimestamp()).atZone(ET).toLocalDate();
+                        if (barDate.isAfter(entryDate)) {
+                            double nextOpen = nextBar.getOpen();
+                            double gapOpenPct = "long".equals(dir)
+                                    ? (nextOpen - entry) / entry
+                                    : (entry - nextOpen) / entry;
+                            if (gapOpenPct >= 0.03) {
+                                // Gap ≥ 3%: protect the gap by moving SL to today's open
+                                double newSl = "long".equals(dir)
+                                        ? Math.max(sl, nextOpen * 0.999) // just below gap open
+                                        : Math.min(sl, nextOpen * 1.001);
+                                if (("long".equals(dir) && newSl > sl) || ("short".equals(dir) && newSl < sl)) {
+                                    log.debug("{} GAP_OPEN_STOP: gap={}% SL {} → {} (locked at gap open)",
+                                            ticker, String.format("%.1f", gapOpenPct * 100), sl, newSl);
+                                    sl = newSl;
+                                }
+                            }
+                            break; // only check the first next-day bar
+                        }
+                    }
+                }
+
                 ExitResult exit = switch (exitStyle) {
                     case LIVE_PARITY -> simulateLiveParityExit(window, fwdBars, entry, sl, tp, dir);
                     case HYBRID -> simulateHybridExit(window, fwdBars, entry, sl, tp, dir);

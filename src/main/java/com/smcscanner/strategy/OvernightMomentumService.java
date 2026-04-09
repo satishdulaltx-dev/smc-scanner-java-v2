@@ -108,8 +108,20 @@ public class OvernightMomentumService {
 
         // ── 3. Relative strength lead in final hour ────────────────────────────
         // Compare ticker % change vs SPY % change over the last ~60 min (12 bars).
-        // LONG: ticker must outperform SPY by ≥ 0.1% (institutions buying while market fades)
-        // SHORT: ticker must underperform SPY by ≥ 0.1% (distribution into strength)
+        // LONG: ticker must outperform SPY by ≥ dynamicRsThreshold
+        // SHORT: ticker must underperform SPY by ≥ dynamicRsThreshold
+        //
+        // Dynamic threshold: flat 0.1% is noise for high-beta names (NVDA, SMCI move
+        // ±2% intraday normally). Scale by ticker's avg bar range vs a low-vol baseline.
+        // High-vol (avg bar range ~1% of price) → needs 0.4–0.5% RS lead.
+        // Low-vol  (avg bar range ~0.2% of price) → 0.1% RS lead is meaningful.
+        double avgBarRangePct = sessionBars.stream()
+                .mapToDouble(b -> b.getClose() > 0 ? (b.getHigh() - b.getLow()) / b.getClose() : 0)
+                .average().orElse(0.002);
+        // Clamp: 0.1% (slow mover) → 0.5% (high-beta runner). Scale at 40% of avg bar range.
+        double dynamicRsThreshold = Math.max(RS_OUTPERFORM_THRESHOLD,
+                Math.min(0.005, avgBarRangePct * 0.40));
+
         boolean rsTrendOk = false;
         if (spySessionBars != null && spySessionBars.size() >= 4) {
             int lookback     = Math.min(12, Math.min(n, spySessionBars.size()));
@@ -122,8 +134,8 @@ public class OvernightMomentumService {
                 double tChg = (tSlice.get(lookback - 1).getClose() - tOpen) / tOpen;
                 double sChg = (sSlice.get(lookback - 1).getClose() - sOpen) / sOpen;
                 rsTrendOk = isLong
-                        ? tChg > sChg + RS_OUTPERFORM_THRESHOLD
-                        : tChg < sChg - RS_OUTPERFORM_THRESHOLD;
+                        ? tChg > sChg + dynamicRsThreshold
+                        : tChg < sChg - dynamicRsThreshold;
             }
         }
 
@@ -150,10 +162,11 @@ public class OvernightMomentumService {
         String reason = sb.toString().trim();
         if (reason.isEmpty()) reason = "no_signals";
 
-        log.debug("OvernightMomentum dir={} score={} hold={} reason=[{}] cr={} volMult={}",
+        log.debug("OvernightMomentum dir={} score={} hold={} reason=[{}] cr={} volMult={} rsThresh={}%",
                 direction, score, shouldHold, reason,
                 String.format("%.2f", crRatio),
-                morningVolAvg > 0 ? String.format("%.2f", lastVolAvg / morningVolAvg) : "n/a");
+                morningVolAvg > 0 ? String.format("%.2f", lastVolAvg / morningVolAvg) : "n/a",
+                String.format("%.2f", dynamicRsThreshold * 100));
 
         return new HoldSignal(shouldHold, score, reason, dayMid);
     }
