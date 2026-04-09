@@ -669,7 +669,7 @@ public class BacktestService {
                 // Mirrors live: raise min bar by 5 pts above VIX 25, another 5 above 35.
                 int vixBoost = 0;
                 if (!ticker.startsWith("X:") && context.vixLevel() > 25) vixBoost  = 5;
-                if (!ticker.startsWith("X:") && context.vixLevel() > 35) vixBoost += 5;
+                if (!ticker.startsWith("X:") && context.vixLevel() > 35) vixBoost += 2; // was +5 — total max 7, not 10
                 int dynamicMinConf = effectiveMinConf + vixBoost;
 
                 // Skip trade if combined filters knocked confidence below threshold

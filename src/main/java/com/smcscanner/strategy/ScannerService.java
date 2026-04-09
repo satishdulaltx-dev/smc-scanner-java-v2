@@ -688,7 +688,7 @@ public class ScannerService {
                 // another 5 pts above 35 (crisis). Prevents marginal calls in chaos.
                 int vixBoost = 0;
                 if (!isC && context.vixLevel() > 25) vixBoost  = 5;
-                if (!isC && context.vixLevel() > 35) vixBoost += 5;
+                if (!isC && context.vixLevel() > 35) vixBoost += 2; // was +5 — total max 7, not 10; ATR sizing already tightens SL/TP in high VIX
                 int dynamicMinConf = effectiveMinConf + vixBoost;
 
                 // ── Attribution string (factor breakdown) ──────────────────────
