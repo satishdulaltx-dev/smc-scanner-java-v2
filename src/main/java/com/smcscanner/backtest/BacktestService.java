@@ -711,11 +711,13 @@ public class BacktestService {
                     continue;
                 }
 
-                // ── Conviction-based contract count — mirrors live ScannerService ──
-                // 90+ → 3 contracts, 82-89 → 2, else → 1. Same tiers as suggestedOverride.
+                // ── Conviction-based contract count — aggressive sizing (5 max) ──
+                // 90+ → 5 contracts, 85-89 → 4, 80-84 → 3, 75-79 → 2, else → 1.
                 int contracts;
-                if      (adjConf >= 90) contracts = 3;
-                else if (adjConf >= 82) contracts = 2;
+                if      (adjConf >= 90) contracts = 5;
+                else if (adjConf >= 85) contracts = 4;
+                else if (adjConf >= 80) contracts = 3;
+                else if (adjConf >= 75) contracts = 2;
                 else                   contracts = 1;
                 log.debug("{} CONVICTION: conf={} → {} contract(s)", ticker, adjConf, contracts);
 
