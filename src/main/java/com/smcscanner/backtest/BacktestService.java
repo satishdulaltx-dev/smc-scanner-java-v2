@@ -316,7 +316,7 @@ public class BacktestService {
                             boolean hasCat = !ticker.startsWith("X:")
                                     && newsService.getSentimentAt(ticker, scanTs).isAligned(tryDir);
                             OvernightMomentumService.HoldSignal sig =
-                                    overnightService.evaluate(rthBars, tryDir, hasCat, spyForEntry);
+                                    overnightService.evaluate(ticker, rthBars, tryDir, hasCat, spyForEntry);
                             if (sig.shouldHold()) {
                                 double ep  = rthBars.get(rthBars.size() - 1).getClose();
                                 double bsl = sig.suggestedSl() > 0 ? sig.suggestedSl()
@@ -784,7 +784,7 @@ public class BacktestService {
                 boolean hasCatalyst = sentiment.isAligned(dir);
                 OvernightMomentumService.HoldSignal holdSignal = ticker.startsWith("X:")
                         ? new OvernightMomentumService.HoldSignal(true, 100, "crypto_24_7", 0.0)
-                        : overnightService.evaluate(sessionBarsForOvernight, dir, hasCatalyst, spySessionForOvernight);
+                        : overnightService.evaluate(ticker, sessionBarsForOvernight, dir, hasCatalyst, spySessionForOvernight);
 
                 // Forward test: rest of today; next day only when overnight hold qualifies.
                 // Filter to regular session only (9:30 AM–4:00 PM ET) — pre-market/after-hours

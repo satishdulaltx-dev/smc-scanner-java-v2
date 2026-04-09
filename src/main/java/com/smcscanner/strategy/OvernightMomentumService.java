@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Set;
 
 /**
  * Overnight Gap Momentum Filter.
@@ -40,6 +41,13 @@ import java.util.List;
 public class OvernightMomentumService {
     private static final Logger log = LoggerFactory.getLogger(OvernightMomentumService.class);
 
+    /**
+     * Tickers driven by external catalysts (BTC, Elon tweets, macro fear) rather than
+     * intraday coiling signals. Their overnight gaps are unpredictable from close-price
+     * action alone — excluding them stops the strategy from bleeding on noise.
+     */
+    private static final Set<String> CORRELATED_EXCLUSIONS = Set.of("MARA", "COIN", "RIOT", "TSLA");
+
     /** Close must be within this ratio from the extreme (0.85 = top/bottom 15% of daily range). */
     private static final double CLOSING_RANGE_THRESHOLD = 0.85;
     /** Last-30-min avg volume must exceed morning-session avg by this multiple.
@@ -68,6 +76,21 @@ public class OvernightMomentumService {
      */
     public HoldSignal evaluate(List<OHLCV> sessionBars, String direction,
                                 boolean hasCatalyst, List<OHLCV> spySessionBars) {
+        return evaluate(null, sessionBars, direction, hasCatalyst, spySessionBars);
+    }
+
+    /**
+     * Evaluate whether to hold an open position overnight (ticker-aware overload).
+     * Tickers in {@link #CORRELATED_EXCLUSIONS} are always rejected — their gaps are
+     * driven by BTC/macro rather than intraday coiling signals.
+     */
+    public HoldSignal evaluate(String ticker, List<OHLCV> sessionBars, String direction,
+                                boolean hasCatalyst, List<OHLCV> spySessionBars) {
+
+        if (ticker != null && CORRELATED_EXCLUSIONS.contains(ticker)) {
+            log.debug("OvernightMomentum EXCLUDED ticker={} (external-driver correlation)", ticker);
+            return new HoldSignal(false, 0, "EXCLUDED_EXTERNAL_CORRELATION", 0.0);
+        }
 
         if (sessionBars == null || sessionBars.size() < 10) {
             return new HoldSignal(false, 0, "insufficient_bars", 0.0);
@@ -151,12 +174,11 @@ public class OvernightMomentumService {
         // ── Hold decision ──────────────────────────────────────────────────────
         // With catalyst   : closing extreme OR volume accel + score ≥ 45
         //   (catalyst alone with any 1 confirmation is enough — news is the driver)
-        // Without catalyst: closing extreme required PLUS either vol accel or RS lead + score ≥ 55
-        //   (need the coiling signal: price at extreme + institutional loading)
-        // Rationale: requiring all 3 simultaneously was too strict → 0 trades in 90-day backtest
+        // Without catalyst: closing extreme required PLUS either vol accel or RS lead + score ≥ 60
+        //   (raised from 55 → 60 to filter marginal setups that bleed on noise)
         boolean shouldHold = hasCatalyst
                 ? score >= 45 && (closingRangeOk || volumeAccelOk)
-                : score >= 55 && closingRangeOk && (volumeAccelOk || rsTrendOk);
+                : score >= 60 && closingRangeOk && (volumeAccelOk || rsTrendOk);
 
         // ── Reason string ──────────────────────────────────────────────────────
         StringBuilder sb = new StringBuilder();

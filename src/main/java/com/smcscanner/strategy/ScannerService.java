@@ -825,7 +825,7 @@ public class ScannerService {
                                 }
                                 boolean hasCat = sentiment.isAligned(s.getDirection());
                                 OvernightMomentumService.HoldSignal overnightSignal =
-                                        overnightService.evaluate(sessionBars5m, s.getDirection(),
+                                        overnightService.evaluate(ticker, sessionBars5m, s.getDirection(),
                                                 hasCat, spyBarsForOvernight);
 
                                 if (overnightSignal.shouldHold()) {
@@ -990,10 +990,10 @@ public class ScannerService {
                         final List<OHLCV> spyGapFinal = spyBarsForGap;
 
                         for (String tryDir : java.util.List.of("long", "short")) {
-                            boolean hasCat = overnightService.evaluate(sessionBars5m, tryDir, false, spyGapFinal).gapScore() > 0
+                            boolean hasCat = overnightService.evaluate(ticker, sessionBars5m, tryDir, false, spyGapFinal).gapScore() > 0
                                     && news.getSentiment(ticker).isAligned(tryDir);
                             OvernightMomentumService.HoldSignal gapSig =
-                                    overnightService.evaluate(sessionBars5m, tryDir, hasCat, spyGapFinal);
+                                    overnightService.evaluate(ticker, sessionBars5m, tryDir, hasCat, spyGapFinal);
                             if (!gapSig.shouldHold()) continue;
 
                             double gapEntry = sessionBars5m.get(sessionBars5m.size() - 1).getClose();
