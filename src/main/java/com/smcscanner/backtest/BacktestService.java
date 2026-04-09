@@ -19,6 +19,7 @@ import com.smcscanner.strategy.GammaPinDetector;
 import com.smcscanner.strategy.IndexDivergenceDetector;
 import com.smcscanner.strategy.KeyLevelStrategyDetector;
 import com.smcscanner.strategy.MarketRegimeDetector;
+import com.smcscanner.strategy.OvernightMomentumService;
 import com.smcscanner.strategy.PivotPointService;
 import com.smcscanner.strategy.PressureService;
 import com.smcscanner.strategy.SetupDetector;
@@ -71,6 +72,7 @@ public class BacktestService {
     private final MarketRegimeDetector     regimeDetector;
     private final PivotPointService        pivotService;
     private final PressureService          pressureService;
+    private final OvernightMomentumService overnightService;
 
     public BacktestService(PolygonClient client, AtrCalculator atrCalc, SetupDetector setupDetector,
                            VwapStrategyDetector vwapDetector, BreakoutStrategyDetector breakoutDetector,
@@ -83,7 +85,7 @@ public class BacktestService {
                            ScannerConfig config, OptionsFlowAnalyzer optionsAnalyzer,
                            TechnicalIndicators techIndicators,
                            MarketRegimeDetector regimeDetector, PivotPointService pivotService,
-                           PressureService pressureService) {
+                           PressureService pressureService, OvernightMomentumService overnightService) {
         this.client = client; this.atrCalc = atrCalc; this.setupDetector = setupDetector;
         this.vwapDetector = vwapDetector; this.breakoutDetector = breakoutDetector;
         this.gapDetector = gapDetector;
@@ -94,7 +96,7 @@ public class BacktestService {
         this.marketCtxService = marketCtxService; this.qualityFilter = qualityFilter;
         this.config = config; this.optionsAnalyzer = optionsAnalyzer; this.techIndicators = techIndicators;
         this.regimeDetector = regimeDetector; this.pivotService = pivotService;
-        this.pressureService = pressureService;
+        this.pressureService = pressureService; this.overnightService = overnightService;
     }
 
     public BacktestResult run(String ticker, int lookbackDays) {
@@ -406,13 +408,16 @@ public class BacktestService {
                 // BYPASS for VWAP/vwap3d: mean-reversion intentionally fights the 15m trend.
                 int bias15mAdj = 0;
                 String bias15mLabel = "neutral";
-                List<OHLCV> slice15Ref = List.of(); // kept for fractal anchor squeeze check
+                // slice15Ref computed unconditionally so the fractal anchor squeeze check
+                // fires for ALL strategies including VWAP/vwap3d — matches live ScannerService.
+                List<OHLCV> slice15Ref = ticker.startsWith("X:") || all15mBars.isEmpty()
+                        ? List.of()
+                        : all15mBars.stream()
+                                .filter(b -> b.getTimestamp() < entryEpochMs)
+                                .collect(java.util.stream.Collectors.toList());
                 boolean is15mApplicable = !"vwap".equals(stratType) && !"vwap3d".equals(stratType);
-                if (is15mApplicable && !ticker.startsWith("X:") && !all15mBars.isEmpty()) {
-                    List<OHLCV> slice15 = all15mBars.stream()
-                            .filter(b -> b.getTimestamp() < entryEpochMs)
-                            .collect(java.util.stream.Collectors.toList());
-                    slice15Ref = slice15;
+                if (is15mApplicable && !ticker.startsWith("X:") && !slice15Ref.isEmpty()) {
+                    List<OHLCV> slice15 = slice15Ref;
                     if (slice15.size() >= 20) {
                         int sz = slice15.size();
                         double sma15 = slice15.subList(sz - 20, sz).stream()
@@ -656,7 +661,9 @@ public class BacktestService {
                 if (adjConf < dynamicMinConf) {
                     log.debug("{} CONF_FILTERED: base={} news={} ctx={} qual={} iRS={} regime={} corr={} dz={} → adj={} floor={} (min={} vixBoost={})",
                             ticker, setup.getConfidence(), newsAdj, ctxAdj, qualityAdj, intradayRsAdj, regimeAdj, corrAdj, deadZoneAdj, adjConf, penaltyFloor, effectiveMinConf, vixBoost);
-                    String filteredOutcome = regimeAdj < -8 ? "REGIME_FILTERED"
+                    String filteredOutcome = confluenceVetoAdj < 0 ? "CONFLUENCE_FILTERED"
+                                           : trapAdj < -8        ? "TRAP_FILTERED"
+                                           : regimeAdj < -8      ? "REGIME_FILTERED"
                                            : bias15mAdj < 0 && (newsAdj < 0 || ctxAdj < 0 || qualityAdj < 0) ? "MULTI_FILTERED"
                                            : bias15mAdj < 0 ? "15M_FILTERED"
                                            : (newsAdj < 0 && (ctxAdj < 0 || qualityAdj < 0)) ? "MULTI_FILTERED"
@@ -705,11 +712,48 @@ public class BacktestService {
                 String dir   = setup.getDirection();
                 String entryTime = toDateTime(dayBars.get(end - 1).getTimestamp());
 
-                // Forward test: rest of today + all of next trading day
+                // ── Overnight hold gate — mirrors live OvernightMomentumService ─────────────
+                // Only extend simulation into the next trading day when the session is "coiling":
+                // closing at extreme + late volume surge + RS lead (and/or news catalyst).
+                // Previously the backtest always added next-day bars, which inflated wins from
+                // lucky overnight gaps. Now only *earned* overnight holds roll forward.
+                // Crypto runs 24/7 → always allow next-day extension.
+                List<OHLCV> sessionBarsForOvernight = ticker.startsWith("X:") ? List.of()
+                        : window.stream().filter(this::isRegularSessionBar).collect(Collectors.toList());
+                List<OHLCV> spySessionForOvernight = spy5mByDate.getOrDefault(date, List.of()).stream()
+                        .filter(this::isRegularSessionBar)
+                        .filter(b -> b.getTimestamp() <= entryEpochMs)
+                        .collect(Collectors.toList());
+                boolean hasCatalyst = sentiment.isAligned(dir);
+                OvernightMomentumService.HoldSignal holdSignal = ticker.startsWith("X:")
+                        ? new OvernightMomentumService.HoldSignal(true, 100, "crypto_24_7", 0.0)
+                        : overnightService.evaluate(sessionBarsForOvernight, dir, hasCatalyst, spySessionForOvernight);
+
+                // Forward test: rest of today; next day only when overnight hold qualifies.
                 // Filter to regular session only (9:30 AM–4:00 PM ET) — pre-market/after-hours
                 // bars have thin liquidity and unrealistic fills; exits there are not executable.
                 List<OHLCV> fwdBarsRaw = new ArrayList<>(dayBars.subList(end, dayBars.size()));
-                if (di + 1 < dates.size()) fwdBarsRaw.addAll(byDate.get(dates.get(di + 1)));
+                if (di + 1 < dates.size() && holdSignal.shouldHold()) {
+                    fwdBarsRaw.addAll(byDate.get(dates.get(di + 1)));
+                    // Tighten SL to day's midpoint: protects against gap-up then full reversal.
+                    // Only tighten (never widen) — if current SL is already tighter, keep it.
+                    double dayMid = holdSignal.suggestedSl();
+                    if (dayMid > 0) {
+                        if ("long".equals(dir) && dayMid > sl) {
+                            log.debug("{} OVERNIGHT_HOLD: SL tightened {} → {} (score={} reason={})",
+                                    ticker, sl, dayMid, holdSignal.gapScore(), holdSignal.reason());
+                            sl = dayMid;
+                        } else if ("short".equals(dir) && dayMid < sl) {
+                            log.debug("{} OVERNIGHT_HOLD: SL tightened {} → {} (score={} reason={})",
+                                    ticker, sl, dayMid, holdSignal.gapScore(), holdSignal.reason());
+                            sl = dayMid;
+                        }
+                    }
+                } else if (di + 1 < dates.size()) {
+                    log.debug("{} NO_OVERNIGHT_HOLD: closing at session end (score={} reason={})",
+                            ticker, holdSignal.gapScore(), holdSignal.reason());
+                }
+
                 List<OHLCV> fwdBars = new ArrayList<>();
                 for (OHLCV fb : fwdBarsRaw) {
                     ZonedDateTime fbZdt = Instant.ofEpochMilli(fb.getTimestamp()).atZone(ET);

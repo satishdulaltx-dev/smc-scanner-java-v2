@@ -263,6 +263,56 @@ public class DiscordAlertService {
         return e;
     }
 
+    /**
+     * Send an overnight-hold alert to the swing channel.
+     * Distinct from a plain swing alert: shows gap score, coiling signals, and
+     * the tightened day-midpoint stop-loss so traders know this is a targeted hold.
+     */
+    public boolean sendOvernightHoldAlert(TradeSetup s, int gapScore, String reason) {
+        String url = config.getDiscordSwingWebhookUrl();
+        if (url == null || url.isBlank()) { log.warn("No swing Discord webhook URL"); return false; }
+        return postEmbeds(url, List.of(buildOvernightEmbed(s, gapScore, reason)));
+    }
+
+    private Map<String,Object> buildOvernightEmbed(TradeSetup s, int gapScore, String reason) {
+        boolean isLong = "long".equals(s.getDirection());
+        String arrow   = isLong ? "⬆️" : "⬇️";
+        String grade   = gapScore >= 80 ? "🔥" : (gapScore >= 60 ? "⭐" : "✅");
+        double slPct   = s.getEntry() > 0 ? Math.abs(s.getEntry() - s.getStopLoss()) / s.getEntry() * 100 : 0;
+        double tpPct   = s.getEntry() > 0 ? Math.abs(s.getTakeProfit() - s.getEntry()) / s.getEntry() * 100 : 0;
+        String ts      = ZonedDateTime.now(ZoneOffset.UTC).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")) + " UTC";
+
+        // Human-readable signal labels
+        String signals = reason.replace("CATALYST", "News Catalyst")
+                               .replace("CLOSE_EXTREME", "Closing at Extreme")
+                               .replace("VOL_ACCEL", "Late Volume Surge")
+                               .replace("RS_LEAD", "RS Leading SPY")
+                               .replace("no_signals", "—")
+                               .trim();
+
+        String desc = String.format(
+                "**Entry** $%.2f → **TP** $%.2f (+%.1f%%) | **SL** $%.2f (-%.1f%%)\n" +
+                "R:R **%.1f:1** | ATR $%.2f\n" +
+                "SL tightened to **day midpoint** — hold until gap resolves\n" +
+                "Signals: %s",
+                s.getEntry(), s.getTakeProfit(), tpPct,
+                s.getStopLoss(), slPct,
+                s.rrRatio(), s.getAtr(),
+                signals);
+
+        List<Map<String,Object>> fields = new java.util.ArrayList<>();
+        fields.add(f("Confidence", s.getConfidence() + "/100", true));
+        fields.add(f("Gap Score",  grade + " " + gapScore + "/100", true));
+
+        Map<String,Object> e = new HashMap<>();
+        e.put("title", arrow + " " + s.getTicker() + " — OVERNIGHT HOLD " + s.getDirection().toUpperCase());
+        e.put("description", desc);
+        e.put("color",  isLong ? 0xF39C12 : 0x8E44AD);  // amber for long, purple for short
+        e.put("fields", fields);
+        e.put("footer", Map.of("text", "SD Scanner · Overnight · 3:30PM Gate | " + ts));
+        return e;
+    }
+
     public boolean sendEodReport(List<TickerReport> reports) {
         String url=config.resolveEodWebhookUrl();
         if (url==null||url.isBlank()) return false;

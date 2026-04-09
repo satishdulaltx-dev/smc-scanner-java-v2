@@ -63,6 +63,7 @@ public class ScannerService {
     private final MarketRegimeDetector     regimeDetector;
     private final PivotPointService        pivotService;
     private final PressureService          pressureService;
+    private final OvernightMomentumService overnightService;
 
     public ScannerService(ScannerConfig config, PolygonClient client, SetupDetector setupDetector,
                           CryptoStrategyService crypto, MultiTimeframeAnalyzer mtf,
@@ -79,7 +80,7 @@ public class ScannerService {
                           RangeDetector rangeDetector, AlpacaOrderService alpaca,
                           TechnicalIndicators techIndicators, GapDetector gapDetector,
                           MarketRegimeDetector regimeDetector, PivotPointService pivotService,
-                          PressureService pressureService) {
+                          PressureService pressureService, OvernightMomentumService overnightService) {
         this.config=config; this.client=client; this.setupDetector=setupDetector; this.crypto=crypto;
         this.mtf=mtf; this.discord=discord; this.dedup=dedup; this.tracker=tracker; this.liveLog=liveLog; this.state=state;
         this.atrCalc=atrCalc; this.vwap=vwap; this.breakout=breakout; this.keyLevel=keyLevel;
@@ -88,7 +89,7 @@ public class ScannerService {
         this.optionsFlow=optionsFlow; this.earnings=earnings; this.swingDetector=swingDetector;
         this.rangeDetector=rangeDetector; this.alpaca=alpaca; this.techIndicators=techIndicators;
         this.gapDetector=gapDetector; this.regimeDetector=regimeDetector; this.pivotService=pivotService;
-        this.pressureService=pressureService;
+        this.pressureService=pressureService; this.overnightService=overnightService;
     }
 
     public boolean isCrypto(String t) { return t.startsWith("X:"); }
@@ -794,11 +795,51 @@ public class ScannerService {
                             }
 
                             if (lateDay) {
-                                // After 3:30 PM ET — not enough time for intraday trade, route to swing channel
-                                log.info("LATE_DAY SWING REROUTE {} {} conf={} entry={} (after 3:30 PM ET)",
-                                        ticker, s.getDirection().toUpperCase(), s.getConfidence(), s.getEntry());
-                                discord.sendSwingAlert(s);
-                                tracker.recordStrategySignal("swing_lateday", s.getConfidence());
+                                // After 3:30 PM ET — check overnight coiling conditions before routing.
+                                // Only hold overnight when institutions are visibly loading into the close.
+                                // Without those signals, routing as a standard swing is safer.
+                                List<OHLCV> spyBarsForOvernight = List.of();
+                                try {
+                                    List<OHLCV> sp = client.getBars("SPY", "5m", 50);
+                                    if (sp != null) spyBarsForOvernight = pressureService.getSessionBars(sp);
+                                } catch (Exception _e) {
+                                    log.debug("{} SPY overnight RS fetch error: {}", ticker, _e.getMessage());
+                                }
+                                boolean hasCat = sentiment.isAligned(s.getDirection());
+                                OvernightMomentumService.HoldSignal overnightSignal =
+                                        overnightService.evaluate(sessionBars5m, s.getDirection(),
+                                                hasCat, spyBarsForOvernight);
+
+                                if (overnightSignal.shouldHold()) {
+                                    // Tighten SL to day's midpoint (only tighten, never widen)
+                                    double dayMid = overnightSignal.suggestedSl();
+                                    if (dayMid > 0) {
+                                        boolean tighten = ("long".equals(s.getDirection()) && dayMid > s.getStopLoss())
+                                                       || ("short".equals(s.getDirection()) && dayMid < s.getStopLoss());
+                                        if (tighten) {
+                                            s = TradeSetup.builder()
+                                                    .ticker(s.getTicker()).direction(s.getDirection())
+                                                    .entry(s.getEntry()).stopLoss(dayMid).takeProfit(s.getTakeProfit())
+                                                    .confidence(s.getConfidence()).session(s.getSession())
+                                                    .volatility(s.getVolatility()).atr(s.getAtr())
+                                                    .hasBos(s.isHasBos()).hasChoch(s.isHasChoch())
+                                                    .fvgTop(s.getFvgTop()).fvgBottom(s.getFvgBottom())
+                                                    .timestamp(s.getTimestamp()).build();
+                                        }
+                                    }
+                                    log.info("OVERNIGHT_HOLD {} {} conf={} gapScore={} reason=[{}] sl={}",
+                                            ticker, s.getDirection().toUpperCase(), s.getConfidence(),
+                                            overnightSignal.gapScore(), overnightSignal.reason(), s.getStopLoss());
+                                    discord.sendOvernightHoldAlert(s, overnightSignal.gapScore(), overnightSignal.reason());
+                                    tracker.recordStrategySignal("overnight_hold", s.getConfidence());
+                                } else {
+                                    // No coiling signals → plain late-day swing reroute
+                                    log.info("LATE_DAY SWING REROUTE {} {} conf={} entry={} (overnight score={} — no hold)",
+                                            ticker, s.getDirection().toUpperCase(), s.getConfidence(),
+                                            s.getEntry(), overnightSignal.gapScore());
+                                    discord.sendSwingAlert(s);
+                                    tracker.recordStrategySignal("swing_lateday", s.getConfidence());
+                                }
                             } else {
                                 // Options-only gate: suppress alert entirely if no contract found
                                 if (!s.hasOptionsData()) {
