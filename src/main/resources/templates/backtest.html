@@ -283,12 +283,24 @@
 
 <!-- Batch results -->
 <div id="batch-results" style="display:none">
-    <div style="padding:16px 24px 8px; color:var(--muted); font-size:11px; text-transform:uppercase; font-weight:600; letter-spacing:.8px;">
-        WATCHLIST BACKTEST RESULTS
-        <span style="color:var(--muted); font-size:10px; margin-left:8px;">CLICK A CARD TO DRILL IN</span>
+    <div style="padding:16px 24px 8px; display:flex; align-items:center; justify-content:space-between;">
+        <span style="color:var(--muted); font-size:11px; text-transform:uppercase; font-weight:600; letter-spacing:.8px;">
+            WATCHLIST BACKTEST RESULTS
+            <span style="color:var(--muted); font-size:10px; margin-left:8px;">CLICK A CARD TO DRILL IN</span>
+        </span>
+        <button onclick="toggleFilteredBox()" style="background:rgba(139,148,158,.1);border:1px solid var(--border);color:var(--muted);font-size:11px;padding:4px 10px;border-radius:4px;cursor:pointer;" id="filtered-toggle-btn">
+            Show Filtered Trades
+        </button>
     </div>
     <div class="batch-summary" id="batch-summary"></div>
     <div class="batch-grid" id="batch-grid"></div>
+    <!-- Filtered trades breakdown — hidden by default -->
+    <div id="filtered-box" style="display:none; padding:0 24px 16px;">
+        <div style="border:1px solid var(--border);border-radius:8px;padding:16px;background:var(--surface);">
+            <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.7px;color:var(--muted);margin-bottom:12px;">Filtered Trades (would-be setups blocked by confidence/regime filters)</div>
+            <div id="filtered-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;"></div>
+        </div>
+    </div>
 </div>
 
 <!-- Empty state -->
@@ -712,11 +724,19 @@ function renderBatch(results, days) {
     document.getElementById('batch-grid').innerHTML = results.map(d => {
         const positive = d.expectancy >= 0;
         const wrColor = d.win_rate >= 60 ? '#3fb950' : d.win_rate >= 45 ? '#d29922' : '#f85149';
-        const filtered = (d.news_filtered||0) + (d.ctx_filtered||0) + (d.quality_filtered||0);
+        const wins   = d.wins   || 0;
+        const losses = d.losses || 0;
         return `<div class="batch-card ${positive ? 'positive' : 'negative'}" onclick="drillIn('${d.ticker}', ${days})">
             <div class="bt-ticker">${d.ticker} ${positive ? '📈' : '📉'}</div>
             <div class="bt-row"><span>Win Rate</span><span class="bt-val" style="color:${wrColor}">${d.win_rate}%</span></div>
-            <div class="bt-row"><span>Trades</span><span class="bt-val">${d.total_trades}${filtered > 0 ? ` <span style="color:#8b949e;font-size:9px">(${filtered} filtered)</span>` : ''}</span></div>
+            <div class="bt-row">
+                <span>Trades</span>
+                <span class="bt-val">${d.total_trades} &nbsp;
+                    <span style="color:#3fb950;font-size:10px">${wins}W</span>
+                    <span style="color:var(--muted);font-size:10px"> / </span>
+                    <span style="color:#f85149;font-size:10px">${losses}L</span>
+                </span>
+            </div>
             <div class="bt-row"><span>Expectancy</span>
                 <span class="bt-val" style="color:${positive ? '#3fb950' : '#f85149'}">${d.expectancy >= 0 ? '+' : ''}${d.expectancy}%</span>
             </div>
@@ -724,6 +744,17 @@ function renderBatch(results, days) {
             ${d.opt_total_pnl ? `<div class="bt-row"><span>Opt P&L</span><span class="bt-val" style="color:${d.opt_total_pnl >= 0 ? '#3fb950' : '#f85149'}">${d.opt_total_pnl >= 0 ? '+' : ''}$${d.opt_total_pnl.toFixed(0)}</span></div>` : ''}
         </div>`;
     }).join('');
+
+    // ── Filtered trades box (hidden by default) ───────────────────────────────
+    document.getElementById('filtered-grid').innerHTML = results
+        .map(d => ({ ticker: d.ticker, filtered: (d.news_filtered||0)+(d.ctx_filtered||0)+(d.quality_filtered||0) }))
+        .filter(d => d.filtered > 0)
+        .sort((a,b) => b.filtered - a.filtered)
+        .map(d => `<div style="background:rgba(139,148,158,.07);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:11px;">
+            <span style="font-weight:700;color:var(--text)">${d.ticker}</span>
+            <span style="color:#8b949e;margin-left:6px">${d.filtered} filtered</span>
+        </div>`)
+        .join('');
 }
 
 function drillIn(ticker, days) {
@@ -804,6 +835,18 @@ function setLoading(on) {
 }
 function show(id) { document.getElementById(id).style.display = ''; }
 function hide(id) { document.getElementById(id).style.display = 'none'; }
+
+function toggleFilteredBox() {
+    const box = document.getElementById('filtered-box');
+    const btn = document.getElementById('filtered-toggle-btn');
+    if (box.style.display === 'none') {
+        box.style.display = 'block';
+        btn.textContent = 'Hide Filtered Trades';
+    } else {
+        box.style.display = 'none';
+        btn.textContent = 'Show Filtered Trades';
+    }
+}
 
 // Init — force reset dropdowns (browsers aggressively cache select values)
 document.getElementById('mode').value = 'single';
