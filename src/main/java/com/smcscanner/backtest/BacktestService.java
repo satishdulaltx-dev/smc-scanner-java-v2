@@ -359,12 +359,20 @@ public class BacktestService {
                             .collect(Collectors.toList());
                     double pegPrevClose = htfSlice.isEmpty() ? 0.0
                             : htfSlice.get(htfSlice.size() - 1).getClose();
+                    // Gate: require news sentiment aligned with gap direction
+                    // (bullish news for gap-up, bearish for gap-down = earnings catalyst).
+                    // This filters out macro/tariff selloff gaps that aren't earnings-driven.
+                    final long pegScanTs = dayBars.get(end - 1).getTimestamp();
+                    NewsSentiment pegSentiment = newsService.getSentimentAt(ticker, pegScanTs);
                     if (!isOpenWindow || pegSession.size() < 3 || pegPrevClose <= 0) {
                         bSetups = List.of();
                     } else {
                         PowerEarningsGapDetector.PEGSignal peg =
                                 pegDetector.detect(pegSession, htfSlice, pegPrevClose, dailyAtr);
-                        if (peg.detected()) {
+                        // Require aligned news — earnings catalyst is what makes PEGs reliable
+                        boolean newsAligned = ("long".equals(peg.direction()) && pegSentiment.isBullish())
+                                || ("short".equals(peg.direction()) && pegSentiment.isBearish());
+                        if (peg.detected() && newsAligned) {
                             bSetups = List.of(TradeSetup.builder()
                                     .ticker(ticker).direction(peg.direction())
                                     .entry(peg.entry()).stopLoss(peg.stopLoss()).takeProfit(peg.takeProfit())
