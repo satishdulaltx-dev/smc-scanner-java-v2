@@ -672,7 +672,7 @@ public class BacktestService {
                         : entry * (1 - pnlPct / 100.0);
                 double holdDays = 1.0; // most intraday setups resolve within 1 trading day
                 OptionsFlowAnalyzer.BacktestOptionsEstimate optEst =
-                        optionsAnalyzer.estimateBacktestOptionsPnl(entry, exitPrice, dir, holdDays, setup.getAtr());
+                        optionsAnalyzer.estimateBacktestOptionsPnl(entry, exitPrice, dir, holdDays, setup.getAtr(), contracts);
                 double scaledPnlPerContract = round2(optEst.pnlPerContract() * contracts);
 
                 trades.add(new TradeResult(ticker, dir, entry, sl, tp, outcome, pnlPct,

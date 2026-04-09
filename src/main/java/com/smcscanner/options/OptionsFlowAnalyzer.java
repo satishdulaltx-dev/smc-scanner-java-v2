@@ -354,7 +354,7 @@ public class OptionsFlowAnalyzer {
      */
     public BacktestOptionsEstimate estimateBacktestOptionsPnl(
             double entry, double exitPrice, String direction,
-            double holdDays, double dailyAtr) {
+            double holdDays, double dailyAtr, int contracts) {
 
         // Estimate typical ATM premium: ~0.5× daily ATR for a 10-DTE option
         // This is derived from: premium ≈ ATR × sqrt(DTE/252) × some vol factor
@@ -377,9 +377,39 @@ public class OptionsFlowAnalyzer {
                 estimatedPremium, delta, gamma, -thetaDaily, underlyingMove, holdDays);
 
         // Backtests should pay a realistic spread/slippage cost on option entry/exit.
-        double entryFill = estimatedPremium * (1.0 + BACKTEST_ENTRY_SLIPPAGE_BPS / 10_000.0) + BACKTEST_MIN_FILL_HAIRCUT;
+        // Cheap contracts and multi-lot fills should get materially worse prices than liquid 1-lot fills.
+        double entrySlipBps = BACKTEST_ENTRY_SLIPPAGE_BPS;
+        double exitSlipBps = BACKTEST_EXIT_SLIPPAGE_BPS;
+        double fillHaircut = BACKTEST_MIN_FILL_HAIRCUT;
+
+        if (estimatedPremium < 1.0) {
+            entrySlipBps += 45.0;
+            exitSlipBps += 65.0;
+            fillHaircut += 0.05;
+        } else if (estimatedPremium < 2.5) {
+            entrySlipBps += 20.0;
+            exitSlipBps += 30.0;
+            fillHaircut += 0.02;
+        } else if (estimatedPremium < 5.0) {
+            entrySlipBps += 10.0;
+            exitSlipBps += 15.0;
+            fillHaircut += 0.01;
+        }
+
+        if (contracts > 1) {
+            double contractPenaltyBps = (contracts - 1) * 8.0;
+            entrySlipBps += contractPenaltyBps;
+            exitSlipBps += contractPenaltyBps * 1.25;
+            fillHaircut += (contracts - 1) * 0.01;
+        }
+
+        if (holdDays > 1.5) {
+            exitSlipBps += 10.0;
+        }
+
+        double entryFill = estimatedPremium * (1.0 + entrySlipBps / 10_000.0) + fillHaircut;
         double exitFill = Math.max(0.01,
-                exitPremium * (1.0 - BACKTEST_EXIT_SLIPPAGE_BPS / 10_000.0) - BACKTEST_MIN_FILL_HAIRCUT);
+                exitPremium * (1.0 - exitSlipBps / 10_000.0) - fillHaircut);
 
         double pnlPerContract = (exitFill - entryFill) * 100;
         double pnlPct = entryFill > 0
