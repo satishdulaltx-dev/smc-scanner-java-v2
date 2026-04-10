@@ -156,8 +156,8 @@
     },
     {
       "ticker": "MSFT",
-      "strategyType": "vsqueeze",
-      "minConfidence": 70,
+      "strategyType": "smc",
+      "minConfidence": 78,
       "minFvgPct": 0.0004,
       "dispAtrMult": 1.2,
       "slAtrMult": 1.0,
@@ -165,7 +165,7 @@
       "intradayRsGate": true,
       "skip": false,
       "skipReason": null,
-      "note": "Apr 2026 deep strategy scan: switched smc→vsqueeze. Pre-deploy test (old smc profile + vsqueeze override + tp=2.0) gave 3/5 (30d 3T 66.7%, 60d 3T 66.7%, 365d 21T 60%). Post-deploy verified tp must stay at 2.0 — lowering to 1.5 caused trade count to jump 3T→5T with WR dropping from 66%→50%. FVG filter (minFvgPct=0.0004, dispAtrMult=1.2) is the binding constraint. MSFT needs wide 2:1 TP to capture the full squeeze expansion. intradayRsGate=true retained."
+      "note": "Apr 2026 deep strategy scan: reverted to smc. vsqueeze as native profile strategy generates different (worse) signals than vsqueeze-via-API-override — likely a different signal pipeline when strategy is native vs override. smc gives 1/5 (365d 19T 61.1% ✓). All strategies fail at 90/180d — MSFT in difficult tariff-recession regime. SMC at mc=78 with FVG filters (minFvgPct=0.0004, dispAtrMult=1.2) is the cleanest setup, tp=2:1 captures full institutional displacement moves. intradayRsGate=true retained."
     },
     {
       "ticker": "MSTR",
