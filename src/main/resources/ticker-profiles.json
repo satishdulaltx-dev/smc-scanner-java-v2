@@ -215,11 +215,12 @@
     },
     {
       "ticker": "PLTR",
-      "strategyType": "scalp",
-      "minConfidence": 68,
-      "slAtrMult": 0.3,
-      "tpRrRatio": 0.75,
-      "note": "Apr 2026 Bollinger Scalp sweep (180d, Hybrid Trail 1.5R): best combo mc=68 sl=0.3 tp=0.75 → 21T 71.4%WR $591 opt P&L. Switched smc→scalp. PLTR's high retail participation + AI sentiment creates frequent Bollinger squeeze setups. Tight sl=0.3 ATR works because PLTR mean-reverts quickly; tp=0.75R banks fast momentum moves."
+      "strategyType": "smc",
+      "minConfidence": 62,
+      "minFvgPct": 0.0006,
+      "dispAtrMult": 1.3,
+      "maxConfidence": 84,
+      "note": "Apr 2026 SMC confirmed best for PLTR. Full scalp comparison showed SMC in SCALP mode $908 > Bollinger Scalp $591 — PLTR's intraday FVG sweeps are stronger entries than Bollinger compression. Retained previous settings: mc=62, minFvgPct=0.0006, dispAtrMult=1.3, maxConf=84 (85+ bucket was bad, 75-84 bucket 66.7%WR excellent)."
     },
     {
       "ticker": "PYPL",
@@ -319,11 +320,14 @@
     },
     {
       "ticker": "TSLA",
-      "strategyType": "scalp",
-      "minConfidence": 68,
-      "slAtrMult": 0.6,
-      "tpRrRatio": 0.75,
-      "note": "Apr 2026 Bollinger Scalp sweep (180d, Hybrid Trail 1.5R): best combo mc=68 sl=0.6 tp=0.75 → 13T 69.2%WR $2062 opt P&L. Switched vwap→scalp. TSLA's extreme intraday volatility creates perfect Bollinger squeeze+reclaim entries. Wide sl=0.6 ATR needed for EV momentum stops; tp=0.75R locks in fast moves before mean-reversion."
+      "strategyType": "vwap",
+      "minConfidence": 74,
+      "maxConfidence": 84,
+      "minFvgPct": 0.001,
+      "dispAtrMult": 1.6,
+      "slAtrMult": 1.0,
+      "tpRrRatio": 1.0,
+      "note": "Apr 2026 VWAP confirmed best for TSLA. Full scalp sweep showed VWAP in SCALP mode $2397 > Bollinger Scalp $2062 — TSLA's intraday VWAP magnets are stronger than Bollinger compression entries. Retained from previous: mc=74 maxConf=84, minFvgPct=0.001, dispAtrMult=1.6, sl=1.0 ATR, tp=1.0 for fast exit on volatile tape."
     },
     {
       "ticker": "UBER",
