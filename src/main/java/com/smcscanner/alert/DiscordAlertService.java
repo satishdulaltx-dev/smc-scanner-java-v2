@@ -49,8 +49,10 @@ public class DiscordAlertService {
 
     public boolean sendSetupAlert(TradeSetup s, NewsSentiment sentiment, MarketContext context,
                                    EarningsCalendar.EarningsCheck earningsCheck) {
-        String url = config.getDiscordScalpWebhookUrl(); // intraday scalp alerts → scalp channel
-        if (url==null||url.isBlank()) { log.warn("No Discord scalp webhook URL"); return false; }
+        // Route to the correct channel based on strategy type
+        boolean isScalp = "scalp".equals(s.getVolatility());
+        String url = isScalp ? config.getDiscordScalpWebhookUrl() : config.getDiscordWebhookUrl();
+        if (url==null||url.isBlank()) { log.warn("No Discord webhook URL for strategy={}", s.getVolatility()); return false; }
         return postEmbeds(url, List.of(buildEmbed(s, sentiment, context, earningsCheck)));
     }
 
