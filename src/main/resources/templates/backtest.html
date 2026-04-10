@@ -128,7 +128,7 @@
         .trade-meta .meta-box { background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:10px; }
         .trade-meta .meta-lbl { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.7px; }
         .trade-meta .meta-val { font-size:14px; font-weight:700; margin-top:4px; }
-        .drill-chart-wrap { position:relative; height:420px; }
+        .drill-chart-wrap { position:relative; height:460px; }
         #trade-chart { width:100%; height:100%; }
     </style>
 </head>
@@ -743,7 +743,6 @@ function dismissTradeModal(e) {
 
 function drawTradeChart(data, trade) {
     const bars = data.bars || [];
-    const bb = data.bb || [];
     const container = document.getElementById('trade-chart');
     container.innerHTML = '';
 
@@ -753,135 +752,112 @@ function drawTradeChart(data, trade) {
     }
 
     if (!bars.length) {
-        container.innerHTML = `<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px">No historical 5m bars returned for this trade window.</div>`;
+        container.innerHTML = `<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px">No historical bars for this trade window.</div>`;
         return;
     }
 
     const lwc = window.LightweightCharts;
     if (!lwc || typeof lwc.createChart !== 'function') {
-        container.innerHTML = `<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--red);font-size:13px">Candlestick library failed to load.</div>`;
+        container.innerHTML = `<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--red);font-size:13px">Chart library failed to load.</div>`;
         return;
     }
+
+    const isWin = ['WIN','TRAIL_WIN'].includes(trade.outcome);
+    const isLoss = ['LOSS','TRAIL_LOSS'].includes(trade.outcome);
+    const outcomeColor = isWin ? '#3fb950' : isLoss ? '#f85149' : '#8b949e';
 
     tradeChart = lwc.createChart(container, {
         width: container.clientWidth || 1000,
         height: container.clientHeight || 420,
         layout: {
-            background: { type: 'solid', color: '#161b22' },
+            background: { type: 'solid', color: '#0d1117' },
             textColor: '#8b949e',
             fontSize: 11
         },
         grid: {
-            vertLines: { color: '#21262d' },
-            horzLines: { color: '#21262d' }
+            vertLines: { color: '#161b22' },
+            horzLines: { color: '#161b22' }
         },
         crosshair: { mode: lwc.CrosshairMode.Normal },
-        rightPriceScale: {
-            borderColor: '#30363d'
-        },
-        timeScale: {
-            borderColor: '#30363d',
-            timeVisible: true,
-            secondsVisible: false
-        }
+        rightPriceScale: { borderColor: '#21262d', minimumWidth: 64 },
+        timeScale: { borderColor: '#21262d', timeVisible: true, secondsVisible: false, barSpacing: 10 }
     });
 
+    // Candles
     tradeCandleSeries = tradeChart.addCandlestickSeries({
-        upColor: '#3fb950',
-        downColor: '#f85149',
-        borderUpColor: '#3fb950',
-        borderDownColor: '#f85149',
-        wickUpColor: '#3fb950',
-        wickDownColor: '#f85149'
+        upColor: '#3fb950', downColor: '#f85149',
+        borderUpColor: '#3fb950', borderDownColor: '#f85149',
+        wickUpColor: '#4d9460', wickDownColor: '#b54040'
     });
+
+    // Volume — subtle, 15% height at bottom
     tradeVolumeSeries = tradeChart.addHistogramSeries({
         priceFormat: { type: 'volume' },
         priceScaleId: 'volume'
     });
-    const bbUpperSeries = tradeChart.addLineSeries({
-        color: 'rgba(248,81,73,0.85)',
-        lineWidth: 1,
-        priceLineVisible: false,
-        lastValueVisible: false
-    });
-    const bbMidSeries = tradeChart.addLineSeries({
-        color: 'rgba(88,166,255,0.95)',
-        lineWidth: 1,
-        priceLineVisible: false,
-        lastValueVisible: false
-    });
-    const bbLowerSeries = tradeChart.addLineSeries({
-        color: 'rgba(63,185,80,0.85)',
-        lineWidth: 1,
-        priceLineVisible: false,
-        lastValueVisible: false
-    });
-    tradeChart.priceScale('volume').applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } });
+    tradeChart.priceScale('volume').applyOptions({ scaleMargins: { top: 0.88, bottom: 0 } });
 
     tradeCandleSeries.setData(bars.map(b => ({
-        time: b.time,
-        open: b.open,
-        high: b.high,
-        low: b.low,
-        close: b.close
+        time: b.time, open: b.open, high: b.high, low: b.low, close: b.close
     })));
     tradeVolumeSeries.setData(bars.map(b => ({
-        time: b.time,
-        value: b.volume,
-        color: b.close >= b.open ? 'rgba(63,185,80,0.3)' : 'rgba(248,81,73,0.3)'
+        time: b.time, value: b.volume,
+        color: b.close >= b.open ? 'rgba(63,185,80,0.18)' : 'rgba(248,81,73,0.18)'
     })));
-    bbUpperSeries.setData(bb.map(p => ({ time: p.time, value: p.upper })));
-    bbMidSeries.setData(bb.map(p => ({ time: p.time, value: p.mid })));
-    bbLowerSeries.setData(bb.map(p => ({ time: p.time, value: p.lower })));
 
+    // Price levels
     const exitPrice = trade.dir === 'long'
         ? trade.entry * (1 + trade.pnl_pct / 100)
         : trade.entry * (1 - trade.pnl_pct / 100);
 
-    const markers = [
+    tradeCandleSeries.createPriceLine({
+        price: Number(trade.entry), color: '#58a6ff',
+        lineWidth: 2, lineStyle: lwc.LineStyle.Dashed,
+        axisLabelVisible: true, title: 'Entry'
+    });
+    tradeCandleSeries.createPriceLine({
+        price: Number(trade.sl), color: '#f85149',
+        lineWidth: 1, lineStyle: lwc.LineStyle.Dotted,
+        axisLabelVisible: true, title: 'SL'
+    });
+    tradeCandleSeries.createPriceLine({
+        price: Number(trade.tp), color: '#d29922',
+        lineWidth: 1, lineStyle: lwc.LineStyle.Dotted,
+        axisLabelVisible: true, title: 'TP'
+    });
+    // Exit price line (actual result)
+    tradeCandleSeries.createPriceLine({
+        price: Number(exitPrice.toFixed(2)), color: outcomeColor,
+        lineWidth: 1, lineStyle: lwc.LineStyle.Solid,
+        axisLabelVisible: true, title: `Exit (${trade.outcome})`
+    });
+
+    // Entry / exit markers
+    const entryTs = Math.floor(trade.entry_ts / 1000);
+    const exitTs  = Math.floor((trade.exit_ts || trade.entry_ts) / 1000);
+    tradeCandleSeries.setMarkers([
         {
-            time: Math.floor(trade.entry_ts / 1000),
+            time: entryTs,
             position: trade.dir === 'long' ? 'belowBar' : 'aboveBar',
-            color: '#3fb950',
-            shape: trade.dir === 'long' ? 'arrowUp' : 'arrowDown',
-            text: `Entry $${Number(trade.entry).toFixed(2)}`
+            color: '#58a6ff', shape: trade.dir === 'long' ? 'arrowUp' : 'arrowDown',
+            text: `IN $${Number(trade.entry).toFixed(2)}`
         },
         {
-            time: Math.floor((trade.exit_ts || trade.entry_ts) / 1000),
+            time: exitTs,
             position: trade.dir === 'long' ? 'aboveBar' : 'belowBar',
-            color: '#f85149',
-            shape: trade.dir === 'long' ? 'arrowDown' : 'arrowUp',
-            text: `Exit $${Number(exitPrice).toFixed(2)}`
+            color: outcomeColor, shape: trade.dir === 'long' ? 'arrowDown' : 'arrowUp',
+            text: `OUT $${Number(exitPrice).toFixed(2)}`
         }
-    ];
-    tradeCandleSeries.setMarkers(markers);
+    ]);
 
-    tradeCandleSeries.createPriceLine({
-        price: Number(trade.entry),
-        color: '#3fb950',
-        lineWidth: 2,
-        lineStyle: lwc.LineStyle.Dashed,
-        axisLabelVisible: true,
-        title: 'Entry'
-    });
-    tradeCandleSeries.createPriceLine({
-        price: Number(trade.sl),
-        color: '#f85149',
-        lineWidth: 1,
-        lineStyle: lwc.LineStyle.Dotted,
-        axisLabelVisible: true,
-        title: 'SL'
-    });
-    tradeCandleSeries.createPriceLine({
-        price: Number(trade.tp),
-        color: '#d29922',
-        lineWidth: 1,
-        lineStyle: lwc.LineStyle.Dotted,
-        axisLabelVisible: true,
-        title: 'TP'
-    });
+    // Zoom: show ±8 bars around entry..exit, centered
+    const barTimes = bars.map(b => b.time);
+    const entryIdx = barTimes.findIndex(t => t >= entryTs);
+    const exitIdx  = barTimes.findLastIndex(t => t <= exitTs);
+    const from = Math.max(0, (entryIdx >= 0 ? entryIdx : 0) - 8);
+    const to   = Math.min(bars.length - 1, (exitIdx >= 0 ? exitIdx : bars.length - 1) + 6);
+    tradeChart.timeScale().setVisibleLogicalRange({ from, to });
 
-    tradeChart.timeScale().fitContent();
     tradeResizeHandler = new ResizeObserver(entries => {
         if (tradeChart) tradeChart.applyOptions({ width: entries[0].contentRect.width });
     });

@@ -557,8 +557,8 @@ public class DashboardController {
             @org.springframework.web.bind.annotation.RequestParam long entryTs,
             @org.springframework.web.bind.annotation.RequestParam(required = false) Long exitTs) {
         long actualExitTs = (exitTs != null && exitTs > 0) ? exitTs : entryTs;
-        long fromTs = Math.max(0L, entryTs - (90L * 60_000L));
-        long toTs = actualExitTs + (90L * 60_000L);
+        long fromTs = Math.max(0L, entryTs - (40L * 60_000L));   // 40 min context before entry
+        long toTs = actualExitTs + (25L * 60_000L);               // 25 min after exit
         List<OHLCV> bars = polygon.getBarsBetween(ticker, "5m", fromTs, toTs, 500);
         List<Map<String,Object>> candles = new ArrayList<>();
         for (OHLCV b : bars) {
