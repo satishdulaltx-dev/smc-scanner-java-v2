@@ -132,16 +132,14 @@
     {
       "ticker": "META",
       "strategyType": "smc",
-      "minConfidence": 78,
+      "minConfidence": 70,
       "maxConfidence": 84,
-      "minFvgPct": 0.0007,
-      "dispAtrMult": 1.5,
       "slAtrMult": 1.0,
       "tpRrRatio": 1.5,
       "intradayRsGate": true,
       "skip": false,
       "skipReason": null,
-      "note": "Apr 2026 optimize loop (90d): SMC mc=78 sl=1.0 tp=1.5 → 5T 100%WR $642. Previous VWAP gave 0%WR 1T ($-158). META switched to SMC — FVG+OB sweeps on a mega-cap that makes large intraday displacement moves on AI/earnings narrative. sl=1.0 ATR (wide for displacement moves), tp=1.5 R:R. intradayRsGate=true retained to filter market-correlated noise."
+      "note": "Apr 2026 optimize loop → deep scan: SMC strategy confirmed (5T 100%WR@90d in optimizer). Lowered mc=78→70 and removed minFvgPct/dispAtrMult filters — mc=78 with heavy filters generated 0 trades at 30-180d windows (too restrictive). mc=70 without extra filters generates more signals. maxConf=84 caps exhausted entries. META makes large intraday FVG+OB sweeps on AI/earnings catalysts. intradayRsGate=true retained."
     },
     {
       "ticker": "NET",
@@ -160,12 +158,14 @@
       "ticker": "MSFT",
       "strategyType": "vsqueeze",
       "minConfidence": 70,
+      "minFvgPct": 0.0004,
+      "dispAtrMult": 1.2,
       "slAtrMult": 1.0,
       "tpRrRatio": 1.5,
       "intradayRsGate": true,
       "skip": false,
       "skipReason": null,
-      "note": "Apr 2026 deep strategy scan: switched smc→vsqueeze. Full 5-timeframe matrix: vsqueeze 3/5 (30d 3T 66.7%, 60d 3T 66.7%, 365d 21T 60%). smc was 1/5 (only 365d). MSFT makes tight squeeze-then-breakout moves intraday — institutional mega-cap builds up pressure before ripping. Breakout was 2/5. vsqueeze captures the compression-then-expansion edge better. sl=1.0 ATR, tp=1.5 R:R. intradayRsGate=true retained."
+      "note": "Apr 2026 deep strategy scan: switched smc→vsqueeze. Pre-deploy scan: vsqueeze 3/5 (30d 3T 66.7%, 60d 3T 66.7%, 365d 21T 60%). smc was 1/5. Post-deploy fix: restored minFvgPct=0.0004 and dispAtrMult=1.2 as quality gates — removing them doubled trade count with halved WR. MSFT squeeze-then-breakout captures institutional pressure buildup; FVG filters keep only clean signals. intradayRsGate=true retained."
     },
     {
       "ticker": "MSTR",
