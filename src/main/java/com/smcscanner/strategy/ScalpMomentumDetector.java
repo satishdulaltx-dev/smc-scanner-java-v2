@@ -45,7 +45,7 @@ public class ScalpMomentumDetector {
 
         OHLCV last = sessionBars.get(sessionBars.size() - 1);
         LocalTime now = Instant.ofEpochMilli(last.getTimestamp()).atZone(ET).toLocalTime();
-        if (now.isBefore(LocalTime.of(9, 35)) || !now.isBefore(LocalTime.of(11, 30))) return result;
+        if (now.isBefore(LocalTime.of(9, 35)) || !now.isBefore(LocalTime.of(15, 30))) return result;
 
         double atr = Math.max(computeAtr(sessionBars), last.getClose() * 0.0015);
 
