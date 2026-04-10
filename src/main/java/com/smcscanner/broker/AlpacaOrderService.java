@@ -940,6 +940,61 @@ public class AlpacaOrderService {
     }
 
     /**
+     * Recover a position that was found in Alpaca but not in the tracker or trade log.
+     * Fetches daily ATR for the underlying and constructs reasonable SL/TP levels from
+     * the current price so the trailing-stop system can manage the position going forward.
+     *
+     * Uses 1.5 ATR stop, 3.0 ATR TP (2:1 R:R) from current underlying close.
+     * If the position is already tracked, returns the existing record unchanged.
+     */
+    public TrackedPosition tryRecoverPositionIntoTracker(String occSymbol, String underlying,
+                                                         String direction, double fillPrice) {
+        if (trackedPositions.containsKey(underlying)) return trackedPositions.get(underlying);
+
+        List<OHLCV> dailyBars = polygon.getBars(underlying, "day", 20);
+        if (dailyBars == null || dailyBars.size() < 5) {
+            log.warn("AUTO_RECOVER {}: not enough daily bars to estimate SL/TP", underlying);
+            return null;
+        }
+
+        double currentPrice = dailyBars.get(dailyBars.size() - 1).getClose();
+        double atr = computeAtrFromBars(dailyBars, 14);
+        if (atr <= 0) return null;
+
+        boolean isLong = "long".equals(direction);
+        double sl = round2(isLong ? currentPrice - atr * 1.5 : currentPrice + atr * 1.5);
+        double tp = round2(isLong ? currentPrice + atr * 3.0 : currentPrice - atr * 3.0);
+
+        TrackedPosition recovered = new TrackedPosition(
+                underlying, direction, currentPrice, sl, tp,
+                null,
+                encodeHybridState(sl, false, false, null),
+                currentPrice, 0, occSymbol, System.currentTimeMillis());
+        putTrackedPosition(underlying, recovered);
+        log.info("AUTO_RECOVER {}: reconstructed tracking entry={} sl={} tp={} atr={} (1.5R/3R from current price)",
+                underlying, String.format("%.2f", currentPrice), String.format("%.2f", sl),
+                String.format("%.2f", tp), String.format("%.2f", atr));
+        return recovered;
+    }
+
+    private double computeAtrFromBars(List<OHLCV> bars, int period) {
+        int p = Math.min(period, bars.size() - 1);
+        if (p < 1) return 0.0;
+        double sum = 0;
+        for (int i = bars.size() - p; i < bars.size(); i++) {
+            OHLCV curr = bars.get(i);
+            OHLCV prev = bars.get(i - 1);
+            double tr = Math.max(curr.getHigh() - curr.getLow(),
+                    Math.max(Math.abs(curr.getHigh() - prev.getClose()),
+                             Math.abs(curr.getLow() - prev.getClose())));
+            sum += tr;
+        }
+        return sum / p;
+    }
+
+    private static double round2(double v) { return Math.round(v * 100.0) / 100.0; }
+
+    /**
      * Compute ATR from 5-minute bars (14-period ATR).
      */
     private double computeAtr5m(List<OHLCV> bars) {

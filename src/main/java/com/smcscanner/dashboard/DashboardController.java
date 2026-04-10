@@ -822,19 +822,29 @@ public class DashboardController {
             Map<String, Object> buyOrder = recoverFilledBuyOrderForOption(brokerOrders, symbol);
             if (buyOrder == null) continue;
 
+            String inferredDirection = inferDirectionFromOcc(symbol);
+            double fillPx = 0.0;
+            try { fillPx = Double.parseDouble(String.valueOf(buyOrder.getOrDefault("filled_avg_price", "0"))); } catch (Exception ignored) {}
+
+            // Attempt to reconstruct SL/TP from current underlying ATR so the
+            // trailing-stop system can manage the position going forward.
+            var recovered = alpaca.tryRecoverPositionIntoTracker(symbol, underlying, inferredDirection, fillPx);
+
             pos.put("tracked", true);
             pos.put("tracked_underlying", underlying);
-            pos.put("tracked_direction", inferDirectionFromOcc(symbol));
+            pos.put("tracked_direction", inferredDirection);
             pos.put("tracked_options_contract", symbol);
-            pos.put("tracked_entry", null);
-            pos.put("tracked_stop_loss", null);
-            pos.put("tracked_take_profit", null);
-            pos.put("tracked_peak_close", null);
-            pos.put("tracked_reversal_count", null);
+            pos.put("tracked_entry",       recovered != null ? recovered.entry()      : null);
+            pos.put("tracked_stop_loss",   recovered != null ? recovered.stopLoss()   : null);
+            pos.put("tracked_take_profit", recovered != null ? recovered.takeProfit() : null);
+            pos.put("tracked_peak_close",  recovered != null ? recovered.peakClose()  : null);
+            pos.put("tracked_reversal_count", 0);
             pos.put("tracked_entry_fill_price", buyOrder.get("filled_avg_price"));
             pos.put("tracked_order_time", buyOrder.get("created_at"));
-            pos.put("tracked_trail_label", "Recovered from Alpaca");
-            pos.put("tracked_trail_method", "Broker fill found, but original scanner TP/SL was not recoverable");
+            pos.put("tracked_trail_label", recovered != null ? "Recovered from Alpaca" : "Recovered from Alpaca");
+            pos.put("tracked_trail_method", recovered != null
+                    ? "TP/SL estimated from current ATR (1.5R stop / 3R target)"
+                    : "Broker fill found, but underlying data unavailable for TP/SL estimation");
         }
         return ResponseEntity.ok(positions);
     }

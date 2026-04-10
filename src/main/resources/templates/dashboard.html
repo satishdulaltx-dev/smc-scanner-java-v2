@@ -537,7 +537,7 @@ async function loadAlpacaPositions() {
                     ? `<div style="display:flex;flex-direction:column;gap:2px;font-size:11px;line-height:1.35;">
                             <span><span style="color:var(--muted);">Underlying:</span> <span style="font-family:monospace;">${p.tracked_underlying || '—'}</span></span>
                             <span><span style="color:var(--muted);">Dir:</span> ${String(p.tracked_direction || '—').toUpperCase()}</span></span>
-                            <span><span style="color:var(--muted);">Entry:</span> <span style="font-family:monospace;">$${parseFloat(p.tracked_entry).toFixed(2)}</span></span>
+                            <span><span style="color:var(--muted);">Entry:</span> <span style="font-family:monospace;">$${parseFloat(p.tracked_entry).toFixed(2)}${p.tracked_trail_label === 'Recovered from Alpaca' ? ' <span style="color:var(--yellow);font-size:10px;">(est)</span>' : ''}</span></span>
                             <span><span style="color:var(--muted);">SL:</span> <span style="font-family:monospace;color:var(--red);">$${parseFloat(p.tracked_stop_loss).toFixed(2)}</span></span>
                             <span><span style="color:var(--muted);">TP:</span> <span style="font-family:monospace;color:var(--green);">$${parseFloat(p.tracked_take_profit).toFixed(2)}</span></span>
                             <span><span style="color:var(--muted);">Peak:</span> <span style="font-family:monospace;">$${parseFloat(p.tracked_peak_close || p.tracked_entry).toFixed(2)}</span></span>
