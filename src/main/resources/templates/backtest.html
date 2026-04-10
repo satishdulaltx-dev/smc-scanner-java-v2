@@ -8,6 +8,7 @@
     <meta http-equiv="Expires" content="0"/>
     <title>SD Scanner — Backtest</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
     <style>
         :root {
             --bg:#0d1117; --surface:#161b22; --border:#30363d;
@@ -128,6 +129,7 @@
         .trade-meta .meta-lbl { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.7px; }
         .trade-meta .meta-val { font-size:14px; font-weight:700; margin-top:4px; }
         .drill-chart-wrap { position:relative; height:420px; }
+        #trade-chart { width:100%; height:100%; }
     </style>
 </head>
 <body>
@@ -337,13 +339,13 @@
             <button class="modal-close" onclick="closeTradeModal()">Close</button>
         </div>
         <div class="trade-meta" id="trade-meta"></div>
-        <div class="drill-chart-wrap"><canvas id="trade-chart"></canvas></div>
+        <div class="drill-chart-wrap"><div id="trade-chart"></div></div>
     </div>
 </div>
 
 <script>
 let equityChart = null, distChart = null;
-let tradeChart = null;
+let tradeChart = null, tradeCandleSeries = null, tradeResizeHandler = null;
 const FILTERED_OUTCOMES = new Set([
     'NEWS_FILTERED','CTX_FILTERED','QUALITY_FILTERED','MULTI_FILTERED',
     '15M_FILTERED','CORR_FILTERED','REGIME_FILTERED','OVEREXTENDED_FILTERED',
@@ -725,79 +727,108 @@ function dismissTradeModal(e) {
 
 function drawTradeChart(data, trade) {
     const bars = data.bars || [];
-    const ctx = document.getElementById('trade-chart').getContext('2d');
-    const labels = bars.map(b => {
-        const dt = new Date(b.time * 1000);
-        return dt.toLocaleString('en-US', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', hour12:false });
+    const container = document.getElementById('trade-chart');
+    container.innerHTML = '';
+
+    if (tradeResizeHandler) {
+        window.removeEventListener('resize', tradeResizeHandler);
+        tradeResizeHandler = null;
+    }
+
+    tradeChart = LightweightCharts.createChart(container, {
+        width: container.clientWidth || 1000,
+        height: container.clientHeight || 420,
+        layout: {
+            background: { color: '#161b22' },
+            textColor: '#e6edf3'
+        },
+        grid: {
+            vertLines: { color: 'rgba(139,148,158,.12)' },
+            horzLines: { color: 'rgba(139,148,158,.12)' }
+        },
+        rightPriceScale: {
+            borderColor: '#30363d'
+        },
+        timeScale: {
+            borderColor: '#30363d',
+            timeVisible: true,
+            secondsVisible: false
+        },
+        crosshair: {
+            vertLine: { color: '#58a6ff', width: 1, style: 2 },
+            horzLine: { color: '#58a6ff', width: 1, style: 2 }
+        }
     });
-    const closes = bars.map(b => b.close);
-    const entryIdx = bars.findIndex(b => b.time * 1000 === trade.entry_ts);
-    const exitIdx = bars.findIndex(b => b.time * 1000 === trade.exit_ts);
+
+    tradeCandleSeries = tradeChart.addCandlestickSeries({
+        upColor: '#3fb950',
+        downColor: '#f85149',
+        borderUpColor: '#3fb950',
+        borderDownColor: '#f85149',
+        wickUpColor: '#3fb950',
+        wickDownColor: '#f85149'
+    });
+    tradeCandleSeries.setData(bars.map(b => ({
+        time: b.time,
+        open: b.open,
+        high: b.high,
+        low: b.low,
+        close: b.close
+    })));
+
     const exitPrice = trade.dir === 'long'
         ? trade.entry * (1 + trade.pnl_pct / 100)
         : trade.entry * (1 - trade.pnl_pct / 100);
-    const entryPoints = bars.map((b, i) => i === entryIdx ? trade.entry : null);
-    const exitPoints = bars.map((b, i) => i === exitIdx ? exitPrice : null);
 
-    if (tradeChart) tradeChart.destroy();
-    tradeChart = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels,
-            datasets: [
-                {
-                    label: 'Close',
-                    data: closes,
-                    borderColor: '#58a6ff',
-                    backgroundColor: 'rgba(88,166,255,.12)',
-                    borderWidth: 2,
-                    tension: 0.15,
-                    pointRadius: 0
-                },
-                {
-                    label: 'Entry',
-                    data: entryPoints,
-                    borderColor: '#3fb950',
-                    backgroundColor: '#3fb950',
-                    pointRadius: 6,
-                    pointHoverRadius: 7,
-                    showLine: false
-                },
-                {
-                    label: 'Exit',
-                    data: exitPoints,
-                    borderColor: '#f85149',
-                    backgroundColor: '#f85149',
-                    pointRadius: 6,
-                    pointHoverRadius: 7,
-                    showLine: false
-                }
-            ]
+    tradeCandleSeries.setMarkers([
+        {
+            time: Math.floor(trade.entry_ts / 1000),
+            position: trade.dir === 'long' ? 'belowBar' : 'aboveBar',
+            color: '#3fb950',
+            shape: trade.dir === 'long' ? 'arrowUp' : 'arrowDown',
+            text: `Entry $${Number(trade.entry).toFixed(2)}`
         },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
-            plugins: {
-                legend: { labels: { color: '#e6edf3' } },
-                tooltip: {
-                    callbacks: {
-                        label: (ctx) => `${ctx.dataset.label}: $${Number(ctx.parsed.y).toFixed(2)}`
-                    }
-                }
-            },
-            scales: {
-                x: {
-                    ticks: { color: '#8b949e', maxTicksLimit: 10 },
-                    grid: { color: 'rgba(139,148,158,.12)' }
-                },
-                y: {
-                    ticks: { color: '#8b949e', callback: (v) => '$' + Number(v).toFixed(2) },
-                    grid: { color: 'rgba(139,148,158,.12)' }
-                }
-            }
+        {
+            time: Math.floor((trade.exit_ts || trade.entry_ts) / 1000),
+            position: trade.dir === 'long' ? 'aboveBar' : 'belowBar',
+            color: '#f85149',
+            shape: trade.dir === 'long' ? 'arrowDown' : 'arrowUp',
+            text: `Exit $${Number(exitPrice).toFixed(2)}`
         }
+    ]);
+
+    tradeCandleSeries.createPriceLine({
+        price: Number(trade.entry),
+        color: '#3fb950',
+        lineWidth: 2,
+        lineStyle: LightweightCharts.LineStyle.Dashed,
+        axisLabelVisible: true,
+        title: 'Entry'
     });
+    tradeCandleSeries.createPriceLine({
+        price: Number(trade.sl),
+        color: '#f85149',
+        lineWidth: 1,
+        lineStyle: LightweightCharts.LineStyle.Dotted,
+        axisLabelVisible: true,
+        title: 'SL'
+    });
+    tradeCandleSeries.createPriceLine({
+        price: Number(trade.tp),
+        color: '#d29922',
+        lineWidth: 1,
+        lineStyle: LightweightCharts.LineStyle.Dotted,
+        axisLabelVisible: true,
+        title: 'TP'
+    });
+
+    tradeChart.timeScale().fitContent();
+    tradeResizeHandler = () => {
+        if (tradeChart) {
+            tradeChart.applyOptions({ width: container.clientWidth || 1000, height: container.clientHeight || 420 });
+        }
+    };
+    window.addEventListener('resize', tradeResizeHandler);
 }
 
 function renderBatch(results, days) {
