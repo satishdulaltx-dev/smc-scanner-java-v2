@@ -2,7 +2,7 @@
   "profiles": [
     {
       "ticker": "AAPL",
-      "strategyType": "smc",
+      "strategyType": "vwap",
       "minConfidence": 70,
       "maxConfidence": 84,
       "slAtrMult": 1.0,
@@ -10,7 +10,7 @@
       "intradayRsGate": true,
       "skip": false,
       "skipReason": null,
-      "note": "Apr 2026 deep research: switched breakout→SMC. Multi-timeframe analysis: smc 180d=24T 67%WR $365, 365d=51T 69%WR $917. Breakout only $168 at 365d. SMC dominates every window on AAPL — institutional VWAP-anchored stock creates clean FVG+OB sweeps around key levels. sl=1.0 ATR (wider for FVG sweeps vs tight ORB), tp=1.5 for better R:R. Optimizer missed smc due to Phase1 sl=0.5 bias."
+      "note": "Apr 2026 deep strategy scan: switched smc→vwap. Full 5-timeframe matrix: vwap 5/5 (30d 6T 66.7%, 60d 8T 75%, 90d 10T 70%, 180d 17T 64.7%, 365d 35T 60%). smc was 0/5 — 180d showed 0T. VWAP is the clear winner: AAPL is VWAP-magnet mega-cap, large-fund benchmarked execution means pullbacks to VWAP get absorbed reliably. sl=1.0 ATR retained for volatility, tp=1.5 R:R."
     },
     {
       "ticker": "ABNB",
@@ -26,11 +26,11 @@
     },
     {
       "ticker": "AMD",
+      "strategyType": "breakout",
       "minConfidence": 78,
-      "minFvgPct": 0.001,
-      "dispAtrMult": 1.5,
       "slAtrMult": 1.0,
-      "note": "365d optimizer: SMC mc=78 sl=1.0 → 5t 100%WR +3.43% exp $1793 opt P&L. Wider stop (1.0 ATR) avoids premature stops on semiconductor volatility."
+      "tpRrRatio": 1.5,
+      "note": "Apr 2026 deep strategy scan: switched smc→breakout. breakout 3/5 timeframes (60d 3T 66.7%, 90d 3T 66.7%, 180d 11T 63.6%); smc was 2/5. AMD makes strong opening range breakout moves on high-volume semiconductor news days. ORB at 9:30 captures institutional momentum as funds reposition on AMD AI/data-center pipeline updates. sl=1.0 ATR for semiconductor volatility."
     },
     {
       "ticker": "AMZN",
@@ -67,10 +67,11 @@
     {
       "ticker": "CRWD",
       "strategyType": "vwap",
-      "minConfidence": 62,
+      "minConfidence": 78,
       "maxConfidence": 84,
-      "tpRrRatio": 1.25,
-      "note": "Apr 2026 backtest matrix: VWAP dominates on CRWD — 90d: 17T 64.7%WR $1652 vs SMC 18T 61.1% $1168 (+$484). CRWD makes clean VWAP mean-reversion moves intraday due to high institutional float. maxConf=84 retained (reversed-confidence pattern still applies). minConf=62 captures early setups."
+      "slAtrMult": 0.4,
+      "tpRrRatio": 1.5,
+      "note": "Apr 2026 optimize loop (90d): VWAP mc=78 sl=0.4 tp=1.5 → 6T 83.3%WR $1655. Previous mc=62 was 58.8%WR. Tighter minConf=78 filters noise while keeping VWAP reversion edge. slAtrMult=0.4 for quick mean-reversion stops (vs 1.0 trend). maxConf=84 retained."
     },
     {
       "ticker": "DDOG",
@@ -130,17 +131,17 @@
     },
     {
       "ticker": "META",
-      "strategyType": "vwap",
+      "strategyType": "smc",
       "minConfidence": 78,
       "maxConfidence": 84,
       "minFvgPct": 0.0007,
       "dispAtrMult": 1.5,
       "slAtrMult": 1.0,
-      "tpRrRatio": 1.25,
+      "tpRrRatio": 1.5,
       "intradayRsGate": true,
       "skip": false,
       "skipReason": null,
-      "note": "Apr 2026 backtest matrix: VWAP crushes KeyLevel on META — 90d: VWAP 2T 100%WR $299 vs KeyLevel 1T 0% -$158 (+$457 swing). META is a VWAP-magnet mega-cap; large-cap tech funds use VWAP as benchmark for execution so pullbacks to VWAP get absorbed quickly. minConf lowered 80→78 to generate more trades while maxConf=84 caps exhausted entries."
+      "note": "Apr 2026 optimize loop (90d): SMC mc=78 sl=1.0 tp=1.5 → 5T 100%WR $642. Previous VWAP gave 0%WR 1T ($-158). META switched to SMC — FVG+OB sweeps on a mega-cap that makes large intraday displacement moves on AI/earnings narrative. sl=1.0 ATR (wide for displacement moves), tp=1.5 R:R. intradayRsGate=true retained to filter market-correlated noise."
     },
     {
       "ticker": "NET",
@@ -157,16 +158,14 @@
     },
     {
       "ticker": "MSFT",
-      "strategyType": "smc",
-      "minConfidence": 78,
-      "minFvgPct": 0.0004,
-      "dispAtrMult": 1.2,
+      "strategyType": "vsqueeze",
+      "minConfidence": 70,
       "slAtrMult": 1.0,
-      "tpRrRatio": 2.0,
+      "tpRrRatio": 1.5,
       "intradayRsGate": true,
       "skip": false,
       "skipReason": null,
-      "note": "365d optimizer: SMC mc=78 sl=1.0 tp=2:1 → 17t 64.7%WR +0.69% exp $3428 opt P&L. Wider stop (1.0 ATR) + higher bar (78) filters noise. Top 8 combos all sl=1.0 — MSFT needs room to breathe. DO NOT SKIP."
+      "note": "Apr 2026 deep strategy scan: switched smc→vsqueeze. Full 5-timeframe matrix: vsqueeze 3/5 (30d 3T 66.7%, 60d 3T 66.7%, 365d 21T 60%). smc was 1/5 (only 365d). MSFT makes tight squeeze-then-breakout moves intraday — institutional mega-cap builds up pressure before ripping. Breakout was 2/5. vsqueeze captures the compression-then-expansion edge better. sl=1.0 ATR, tp=1.5 R:R. intradayRsGate=true retained."
     },
     {
       "ticker": "MSTR",
@@ -280,12 +279,12 @@
     },
     {
       "ticker": "SMCI",
-      "strategyType": "vwap",
+      "strategyType": "keylevel",
       "minConfidence": 70,
       "maxConfidence": 84,
       "slAtrMult": 1.0,
       "tpRrRatio": 1.5,
-      "note": "Apr 2026 deep research: switched keylevel→vwap. Multi-timeframe analysis: vwap 180d=22T 64%WR $120 vs keylevel $15, 365d=39T 62%WR $48. SMCI has 94.8% retail long float — strong VWAP mean-reversion behaviour intraday as institutional players accumulate/distribute at VWAP. sl=1.0 ATR for SMCI's volatile AI-server headline moves, tp=1.5 for better R:R than previous 1:1."
+      "note": "Apr 2026 deep strategy scan: switched vwap→keylevel. Full 10-strategy×5-timeframe matrix: keylevel is only strategy with any passing window (90d 10T 60%). All other strategies 0/5. SMCI is in news-driven regime (accounting controversy, delisting risk) — technical patterns dominated by macro. keylevel still captures key S/R bounces even in volatile regime. Revisit when SMCI stabilizes. sl=1.0 ATR for AI-server headline volatility, tp=1.5 R:R."
     },
     {
       "ticker": "SNAP",
@@ -307,14 +306,14 @@
     },
     {
       "ticker": "SPY",
-      "strategyType": "smc",
+      "strategyType": "breakout",
       "minConfidence": 70,
       "maxConfidence": 84,
       "slAtrMult": 1.0,
       "tpRrRatio": 1.5,
       "skip": false,
       "skipReason": null,
-      "note": "Apr 2026 90d frequency retune: SMC mc=70 sl=1.0 tp=1.5 → 19T 61.1%WR +0.16%exp $1084 opt P&L. Previous BREAKOUT mc=70 gave same 13T but far lower opt P&L ($434 vs $1084). SMC finds more intraday FVG sweeps on SPY across the full day vs ORB which only fires at open. $1084 opt P&L reflects SPY options liquidity multiplier. sl=1.0 ATR needed for SPY's wide intraday range."
+      "note": "Apr 2026 deep strategy scan: switched smc→breakout. Full 5-timeframe scan showed breakout 2/5 best available (180d 11T 63.6%, 365d 18T 55.6%); all other strategies 0-2/5. SPY VWAP and SMC both 0-1/5 in current volatile tariff-driven market. Breakout captures opening range momentum on index — SPY makes strong directional moves at open driven by macro/futures gap fills. sl=1.0 ATR for SPY's wide intraday range, tp=1.5 R:R."
     },
     {
       "ticker": "SQ",
