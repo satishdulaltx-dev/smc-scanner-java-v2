@@ -230,6 +230,24 @@ public class ScannerService {
                         List<OHLCV> sp = client.getBars("SPY", "5m", 100);
                         if (sp != null) spyBars5m = sp;
                     } catch (Exception e) { log.debug("{} SPY 5m fetch error: {}", ticker, e.getMessage()); }
+
+                    // ── Gate 1: VOLATILE regime — ATR has spiked, BB patterns break down ──
+                    if (regime == MarketRegimeDetector.Regime.VOLATILE) {
+                        setTs(ticker, "idle", null, 0, "⚠️ VOLATILE regime — scalp edge suppressed");
+                        return;
+                    }
+                    // ── Gate 2: SPY extreme intraday move — news-driven tape, no edge ──
+                    if (spyBars5m.size() >= 10) {
+                        double spyOpen    = spyBars5m.get(0).getOpen();
+                        double spyCurrent = spyBars5m.get(spyBars5m.size() - 1).getClose();
+                        double spyMove    = spyOpen > 0 ? Math.abs(spyCurrent - spyOpen) / spyOpen : 0;
+                        if (spyMove > 0.018) {
+                            setTs(ticker, "idle", null, 0,
+                                    String.format("⚠️ SPY ±%.1f%% intraday — news tape, scalp suppressed", spyMove * 100));
+                            return;
+                        }
+                    }
+
                     setups = scalpMomentum.detect(bars, spyBars5m, ticker, dailyAtr);
                     phaseMsg = setups.isEmpty() ? "Waiting for Bollinger reclaim or squeeze break..." : "";
                 } else if ("vwap".equals(strategyType)) {
@@ -285,11 +303,18 @@ public class ScannerService {
                             yield fr.setups();
                         }
                         case "scalp" -> {
+                            // Same gates as primary scalp path
+                            if (regime == MarketRegimeDetector.Regime.VOLATILE) { yield List.of(); }
                             List<OHLCV> spyBars5m = List.of();
                             try {
                                 List<OHLCV> sp = client.getBars("SPY", "5m", 100);
                                 if (sp != null) spyBars5m = sp;
                             } catch (Exception e) { log.debug("{} SPY 5m fetch error: {}", ticker, e.getMessage()); }
+                            if (spyBars5m.size() >= 10) {
+                                double spyOpen = spyBars5m.get(0).getOpen();
+                                double spyCur  = spyBars5m.get(spyBars5m.size() - 1).getClose();
+                                if (spyOpen > 0 && Math.abs(spyCur - spyOpen) / spyOpen > 0.018) { yield List.of(); }
+                            }
                             yield scalpMomentum.detect(bars, spyBars5m, ticker, dailyAtr);
                         }
                         case "keylevel" -> keyLevel.detect(bars, dailyBars, ticker, dailyAtr, profile);

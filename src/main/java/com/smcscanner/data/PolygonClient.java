@@ -143,6 +143,76 @@ public class PolygonClient {
         } catch (Exception e) { log.error("Polygon error {}: {}", ticker, e.getMessage()); return new ArrayList<>(); }
     }
 
+    // ── Microstructure data ───────────────────────────────────────────────────
+
+    /**
+     * Last NBBO quote for a stock — bid/ask with sizes.
+     * Used for order-flow imbalance in the scalp detector.
+     * Returns null on error or if data is unavailable.
+     */
+    public record NbboSnapshot(double bidPrice, double bidSize, double askPrice, double askSize) {
+        /** 0 = all asks (sellers stacked), 1 = all bids (buyers stacked), 0.5 = neutral */
+        public double imbalance() {
+            double total = bidSize + askSize;
+            return total > 0 ? bidSize / total : 0.5;
+        }
+    }
+
+    public NbboSnapshot getNbbo(String ticker) {
+        String apiKey = config.getPolygonApiKey();
+        if (apiKey == null || apiKey.isBlank()) return null;
+        try {
+            String url = String.format(
+                    "https://api.polygon.io/v2/last/nbbo/%s?apiKey=%s", ticker, apiKey);
+            try (Response resp = http.newCall(new Request.Builder().url(url).build()).execute()) {
+                if (!resp.isSuccessful() || resp.body() == null) return null;
+                JsonNode result = mapper.readTree(resp.body().string()).path("results");
+                if (result.isMissingNode()) return null;
+                return new NbboSnapshot(
+                        result.path("p").asDouble(0),   // bid price
+                        result.path("s").asDouble(0),   // bid size (lots of 100)
+                        result.path("P").asDouble(0),   // ask price
+                        result.path("S").asDouble(0));  // ask size (lots of 100)
+            }
+        } catch (Exception e) {
+            log.debug("NBBO error {}: {}", ticker, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Recent trades for large-print / sweep detection.
+     * Returns up to {@code limit} trades sorted newest-first.
+     * timestampNs is nanoseconds epoch; size is shares.
+     */
+    public record TradeRecord(long timestampNs, double price, double size) {}
+
+    public List<TradeRecord> getRecentTrades(String ticker, int limit) {
+        String apiKey = config.getPolygonApiKey();
+        if (apiKey == null || apiKey.isBlank()) return List.of();
+        try {
+            String url = String.format(
+                    "https://api.polygon.io/v3/trades/%s?limit=%d&order=desc&apiKey=%s",
+                    ticker, Math.min(limit, 50000), apiKey);
+            try (Response resp = http.newCall(new Request.Builder().url(url).build()).execute()) {
+                if (!resp.isSuccessful() || resp.body() == null) return List.of();
+                JsonNode results = mapper.readTree(resp.body().string()).path("results");
+                if (!results.isArray()) return List.of();
+                List<TradeRecord> trades = new ArrayList<>();
+                for (JsonNode t : results) {
+                    trades.add(new TradeRecord(
+                            t.path("participant_timestamp").asLong(0),
+                            t.path("price").asDouble(0),
+                            t.path("size").asDouble(0)));
+                }
+                return trades;
+            }
+        } catch (Exception e) {
+            log.debug("Trades error {}: {}", ticker, e.getMessage());
+            return List.of();
+        }
+    }
+
     private List<OHLCV> fetchPolygonRange(String ticker, String[] tf, int limit, long fromEpochMs, long toEpochMs) {
         String apiKey = config.getPolygonApiKey();
         if (apiKey == null || apiKey.isBlank()) { log.warn("POLYGON_API_KEY not set for {}", ticker); return new ArrayList<>(); }
