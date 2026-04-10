@@ -339,6 +339,7 @@
             <button class="modal-close" onclick="closeTradeModal()">Close</button>
         </div>
         <div class="trade-meta" id="trade-meta"></div>
+        <div id="trade-reason" style="margin:0 18px 12px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:rgba(88,166,255,.06);font-size:12px;color:var(--text);line-height:1.45;display:none"></div>
         <div class="drill-chart-wrap"><div id="trade-chart"></div></div>
     </div>
 </div>
@@ -711,6 +712,17 @@ async function openTradeChart(serializedTrade) {
         <div class="meta-box"><div class="meta-lbl">P&L</div><div class="meta-val">${t.pnl_pct >= 0 ? '+' : ''}${Number(t.pnl_pct).toFixed(2)}%</div></div>
         <div class="meta-box"><div class="meta-lbl">Confidence</div><div class="meta-val">${t.confidence}/100</div></div>
     `;
+    const reasonBox = document.getElementById('trade-reason');
+    if (t.factor_breakdown) {
+        const title = t.factor_breakdown.startsWith('bb-bounce') ? 'Bollinger bounce trigger'
+                    : t.factor_breakdown.startsWith('bb-break') ? 'Bollinger break trigger'
+                    : 'Setup trigger';
+        reasonBox.innerHTML = `<strong style="display:block;margin-bottom:4px;color:#58a6ff">${title}</strong>${t.factor_breakdown}`;
+        reasonBox.style.display = 'block';
+    } else {
+        reasonBox.style.display = 'none';
+        reasonBox.innerHTML = '';
+    }
     document.getElementById('trade-modal').classList.add('show');
     const resp = await fetch(`/api/backtest/trade-chart?ticker=${encodeURIComponent(t.ticker)}&entryTs=${t.entry_ts}&exitTs=${t.exit_ts || t.entry_ts}`);
     const data = await resp.json();
@@ -731,6 +743,7 @@ function dismissTradeModal(e) {
 
 function drawTradeChart(data, trade) {
     const bars = data.bars || [];
+    const bb = data.bb || [];
     const container = document.getElementById('trade-chart');
     container.innerHTML = '';
 
@@ -785,6 +798,24 @@ function drawTradeChart(data, trade) {
         priceFormat: { type: 'volume' },
         priceScaleId: 'volume'
     });
+    const bbUpperSeries = tradeChart.addLineSeries({
+        color: 'rgba(248,81,73,0.85)',
+        lineWidth: 1,
+        priceLineVisible: false,
+        lastValueVisible: false
+    });
+    const bbMidSeries = tradeChart.addLineSeries({
+        color: 'rgba(88,166,255,0.95)',
+        lineWidth: 1,
+        priceLineVisible: false,
+        lastValueVisible: false
+    });
+    const bbLowerSeries = tradeChart.addLineSeries({
+        color: 'rgba(63,185,80,0.85)',
+        lineWidth: 1,
+        priceLineVisible: false,
+        lastValueVisible: false
+    });
     tradeChart.priceScale('volume').applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } });
 
     tradeCandleSeries.setData(bars.map(b => ({
@@ -799,6 +830,9 @@ function drawTradeChart(data, trade) {
         value: b.volume,
         color: b.close >= b.open ? 'rgba(63,185,80,0.3)' : 'rgba(248,81,73,0.3)'
     })));
+    bbUpperSeries.setData(bb.map(p => ({ time: p.time, value: p.upper })));
+    bbMidSeries.setData(bb.map(p => ({ time: p.time, value: p.mid })));
+    bbLowerSeries.setData(bb.map(p => ({ time: p.time, value: p.lower })));
 
     const exitPrice = trade.dir === 'long'
         ? trade.entry * (1 + trade.pnl_pct / 100)

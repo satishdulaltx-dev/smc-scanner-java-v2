@@ -502,6 +502,7 @@ public class DashboardController {
                 m.put("sl", t.sl()); m.put("tp", t.tp());
                 m.put("outcome", t.outcome()); m.put("pnl_pct", t.pnlPct());
                 m.put("confidence", t.confidence()); m.put("atr", t.atr());
+                if (t.factorBreakdown() != null) m.put("factor_breakdown", t.factorBreakdown());
                 if (t.newsAdjustment() != 0) m.put("news_adj",   t.newsAdjustment());
                 if (t.newsLabel() != null)   m.put("news_label", t.newsLabel());
                 if (t.ctxAdjustment() != 0)      m.put("ctx_adj",     t.ctxAdjustment());
@@ -547,11 +548,32 @@ public class DashboardController {
             c.put("volume", b.getVolume());
             candles.add(c);
         }
+        List<Map<String,Object>> bb = new ArrayList<>();
+        int period = 20;
+        double mult = 2.0;
+        for (int i = period - 1; i < bars.size(); i++) {
+            double sum = 0.0;
+            for (int j = i - period + 1; j <= i; j++) sum += bars.get(j).getClose();
+            double mid = sum / period;
+            double var = 0.0;
+            for (int j = i - period + 1; j <= i; j++) {
+                double diff = bars.get(j).getClose() - mid;
+                var += diff * diff;
+            }
+            double sd = Math.sqrt(var / period);
+            Map<String,Object> p = new LinkedHashMap<>();
+            p.put("time", bars.get(i).getTimestamp() / 1000L);
+            p.put("mid", mid);
+            p.put("upper", mid + mult * sd);
+            p.put("lower", mid - mult * sd);
+            bb.add(p);
+        }
         return ResponseEntity.ok(Map.of(
                 "ticker", ticker,
                 "entry_ts", entryTs,
                 "exit_ts", actualExitTs,
-                "bars", candles
+                "bars", candles,
+                "bb", bb
         ));
     }
 
