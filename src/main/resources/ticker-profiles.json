@@ -161,11 +161,11 @@
       "minFvgPct": 0.0004,
       "dispAtrMult": 1.2,
       "slAtrMult": 1.0,
-      "tpRrRatio": 1.5,
+      "tpRrRatio": 2.0,
       "intradayRsGate": true,
       "skip": false,
       "skipReason": null,
-      "note": "Apr 2026 deep strategy scan: switched smc→vsqueeze. Pre-deploy scan: vsqueeze 3/5 (30d 3T 66.7%, 60d 3T 66.7%, 365d 21T 60%). smc was 1/5. Post-deploy fix: restored minFvgPct=0.0004 and dispAtrMult=1.2 as quality gates — removing them doubled trade count with halved WR. MSFT squeeze-then-breakout captures institutional pressure buildup; FVG filters keep only clean signals. intradayRsGate=true retained."
+      "note": "Apr 2026 deep strategy scan: switched smc→vsqueeze. Pre-deploy test (old smc profile + vsqueeze override + tp=2.0) gave 3/5 (30d 3T 66.7%, 60d 3T 66.7%, 365d 21T 60%). Post-deploy verified tp must stay at 2.0 — lowering to 1.5 caused trade count to jump 3T→5T with WR dropping from 66%→50%. FVG filter (minFvgPct=0.0004, dispAtrMult=1.2) is the binding constraint. MSFT needs wide 2:1 TP to capture the full squeeze expansion. intradayRsGate=true retained."
     },
     {
       "ticker": "MSTR",
