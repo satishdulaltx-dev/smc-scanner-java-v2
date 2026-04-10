@@ -225,8 +225,13 @@ public class ScannerService {
                     log.debug("{} TIME_ROUTE: ts={} → strategy={}", ticker, lastBarTs, strategyType);
                 }
                 if ("scalp".equals(strategyType)) {
-                    setups = scalpMomentum.detect(bars, ticker, dailyAtr);
-                    phaseMsg = setups.isEmpty() ? "Waiting for momentum impulse + volume burst..." : "";
+                    List<OHLCV> spyBars5m = List.of();
+                    try {
+                        List<OHLCV> sp = client.getBars("SPY", "5m", 100);
+                        if (sp != null) spyBars5m = sp;
+                    } catch (Exception e) { log.debug("{} SPY 5m fetch error: {}", ticker, e.getMessage()); }
+                    setups = scalpMomentum.detect(bars, spyBars5m, ticker, dailyAtr);
+                    phaseMsg = setups.isEmpty() ? "Waiting for Bollinger reclaim or squeeze break..." : "";
                 } else if ("vwap".equals(strategyType)) {
                     setups = vwap.detect(bars, ticker, dailyAtr);
                     phaseMsg = setups.isEmpty() ? "Waiting for VWAP reversion..." : "";
@@ -279,7 +284,14 @@ public class ScannerService {
                             SetupDetector.DetectResult fr = setupDetector.detectSetups(bars, htfBias, ticker, false, dailyAtr);
                             yield fr.setups();
                         }
-                        case "scalp" -> scalpMomentum.detect(bars, ticker, dailyAtr);
+                        case "scalp" -> {
+                            List<OHLCV> spyBars5m = List.of();
+                            try {
+                                List<OHLCV> sp = client.getBars("SPY", "5m", 100);
+                                if (sp != null) spyBars5m = sp;
+                            } catch (Exception e) { log.debug("{} SPY 5m fetch error: {}", ticker, e.getMessage()); }
+                            yield scalpMomentum.detect(bars, spyBars5m, ticker, dailyAtr);
+                        }
                         case "keylevel" -> keyLevel.detect(bars, dailyBars, ticker, dailyAtr, profile);
                         case "vsqueeze" -> vSqueeze.detect(bars, ticker, dailyAtr);
                         default -> List.of();
@@ -1151,7 +1163,7 @@ public class ScannerService {
         cur.removeIf(x->s.getTicker().equals(x.get("ticker")));
         double rr=Math.abs(s.getStopLoss()-s.getEntry())>0?Math.round(Math.abs(s.getTakeProfit()-s.getEntry())/Math.abs(s.getStopLoss()-s.getEntry())*10)/10.0:0;
         String reasons = isCrypto(s.getTicker())             ? "Momentum+Volume"
-                       : "scalp".equals(s.getVolatility())    ? "Momentum Impulse"
+                       : "scalp".equals(s.getVolatility())    ? "Bollinger Bounce/Break"
                        : "normal".equals(s.getVolatility())   ? "VWAP Reversion"
                        : "high".equals(s.getVolatility())     ? "ORB Breakout"
                        : "keylevel".equals(s.getVolatility()) ? "Key Level Rejection"

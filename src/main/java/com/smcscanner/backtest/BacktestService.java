@@ -155,6 +155,8 @@ public class BacktestService {
         boolean needsSpy5m = preProfile.isIntradayRsGate()
                 || "idiv".equals(preProfile.getStrategyType())
                 || "idiv".equals(strategyOverride)
+                || "scalp".equals(preProfile.getStrategyType())
+                || "scalp".equals(strategyOverride)
                 || "gap".equals(preProfile.getStrategyType())
                 || "gap".equals(strategyOverride);
         List<OHLCV> spy5mBars = needsSpy5m
@@ -267,7 +269,7 @@ public class BacktestService {
                                   || "gammapin".equals(stratType);
             // Minimum bars before we start checking each strategy
             int minBars = "breakout".equals(stratType)  ? 8
-                        : "scalp".equals(stratType)     ? 8
+                        : "scalp".equals(stratType)     ? 22
                         : "vwap".equals(stratType)      ? 12
                         : "keylevel".equals(stratType)  ? 20
                         : "gap".equals(stratType)       ? 20
@@ -305,7 +307,11 @@ public class BacktestService {
                         : regimeDetector.detectForBacktest(window);
                 List<TradeSetup> bSetups;
                 if ("scalp".equals(effectiveStrat)) {
-                    bSetups = scalpDetector.detect(window, ticker, dailyAtr);
+                    List<OHLCV> spySlice = spy5mByDate.getOrDefault(date, List.of()).stream()
+                            .filter(this::isRegularSessionBar)
+                            .filter(b -> b.getTimestamp() <= barEpochMs)
+                            .collect(Collectors.toList());
+                    bSetups = scalpDetector.detect(window, spySlice, ticker, dailyAtr);
                 } else if ("vwap".equals(effectiveStrat)) {
                     bSetups = vwapDetector.detect(window, ticker, dailyAtr);
                 } else if ("breakout".equals(effectiveStrat)) {
@@ -431,7 +437,13 @@ public class BacktestService {
                     String fallbackStrat = regimeDetector.suggestStrategy(btRegime, effectiveStrat);
                     if (fallbackStrat != null && !fallbackStrat.equals(effectiveStrat)) {
                         bSetups = switch (fallbackStrat) {
-                            case "scalp" -> scalpDetector.detect(window, ticker, dailyAtr);
+                            case "scalp" -> {
+                                List<OHLCV> spySlice = spy5mByDate.getOrDefault(date, List.of()).stream()
+                                        .filter(this::isRegularSessionBar)
+                                        .filter(b -> b.getTimestamp() <= barEpochMs)
+                                        .collect(Collectors.toList());
+                                yield scalpDetector.detect(window, spySlice, ticker, dailyAtr);
+                            }
                             case "smc" -> {
                                 SetupDetector.DetectResult fr = setupDetector.detectSetups(
                                         window, htfBias, ticker, false, dailyAtr, true);

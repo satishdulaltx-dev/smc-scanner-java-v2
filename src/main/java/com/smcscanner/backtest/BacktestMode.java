@@ -5,8 +5,8 @@ package com.smcscanner.backtest;
  * how long positions are held before timing out.
  */
 public enum BacktestMode {
-    /** 5m bars, momentum scalp setups, max ~15 min hold (3 bars) */
-    SCALP(3, "Scalp (15m max)"),
+    /** 5m bars, Bollinger scalp setups, let runners work with a bounded intraday backstop */
+    SCALP(24, "Scalp (dynamic hold)"),
 
     /** 5m bars, intraday setups, max ~4h hold (48 bars) */
     INTRADAY(48, "Intraday (5m)"),

@@ -590,13 +590,15 @@ public class AlpacaOrderService {
                 continue;
             }
 
-            // ── Scalp time exit: force-close after 15 minutes ────────────────
-            // Options bleed theta on every tick — never hold a scalp trade past 15 min.
-            // This is only the fail-safe. Profitable scalp trades should usually resolve
-            // well before the hard timeout via TP, BE, or trail.
+            // ── Scalp fail-safe: only kill stale options, not runners ───────
+            // Strong scalp winners should be allowed to keep trailing. We only
+            // force-close when the trade is still stale after enough time has
+            // passed and the position never developed.
             long heldMinutes = (nowMs - tp.entryEpochMs()) / 60_000L;
-            if (heldMinutes >= 15 && tp.optionsContract() != null && !tp.optionsContract().isBlank()) {
-                log.warn("SCALP_TIMEOUT: {} held {}min ≥ 15min — force-closing options to stop theta bleed",
+            if (heldMinutes >= 30
+                    && tp.optionsContract() != null && !tp.optionsContract().isBlank()
+                    && Math.abs(tp.peakClose() - tp.entry()) < Math.abs(tp.entry() - tp.stopLoss()) * 0.35) {
+                log.warn("SCALP_STALE_TIMEOUT: {} held {}min with weak progress — force-closing options",
                         symbol, heldMinutes);
                 closeOptionsPosition(symbol, tp.optionsContract());
                 removeTrackedPosition(symbol);
