@@ -463,7 +463,7 @@ public class DashboardController {
             override.setTicker(sym);
             override.setStrategyType(strategy != null && !strategy.isBlank() ? strategy : orig.getStrategyType());
             override.setMinConfidence(mc != null ? mc : (orig.getMinConfidence() != null ? orig.getMinConfidence() : 70));
-            override.setSlAtrMult(sl != null ? sl : (orig.getSlAtrMult() != null ? orig.getSlAtrMult() : 0.4));
+            override.setSlAtrMult(sl != null ? sl : orig.resolveSlAtrMult());
             override.setTpRrRatio(tp != null ? tp : (orig.getTpRrRatio() != null ? orig.getTpRrRatio() : 1.0));
             override.setSkip(false);
             override.setMinFvgPct(orig.getMinFvgPct());
