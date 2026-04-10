@@ -90,6 +90,9 @@ public class AlpacaOrderService {
     private static final double SCALP_TRAIL_R      = 0.90; // scalp arms trail after first push
     private static final double SCALP_TRAIL_NORMAL = 0.35; // tighter trail for fast momentum
     private static final double SCALP_TRAIL_REVERSAL = 0.18;
+    // Options P&L thresholds — trigger BE/trail based on dollar profit regardless of underlying R
+    private static final double OPTIONS_PNL_BE_THRESHOLD    = 75.0;  // $75 unrealized → move SL to breakeven
+    private static final double OPTIONS_PNL_TRAIL_THRESHOLD = 150.0; // $150 unrealized → arm ATR trail
 
     // Config defaults (overridden by env vars)
     private static final double DEFAULT_MAX_POSITION = 500.0;   // max $ per trade
@@ -568,10 +571,16 @@ public class AlpacaOrderService {
             return;
         }
 
-        // Build set of currently held symbols
+        // Build set of currently held symbols + options P&L map
         Set<String> heldSymbols = new HashSet<>();
+        Map<String, Double> optionsPnlMap = new HashMap<>();
         for (Map<String, Object> pos : positions) {
-            heldSymbols.add((String) pos.get("symbol"));
+            String posSymbol = (String) pos.get("symbol");
+            heldSymbols.add(posSymbol);
+            try {
+                double pl = Double.parseDouble((String) pos.getOrDefault("unrealized_pl", "0"));
+                optionsPnlMap.put(posSymbol, pl);
+            } catch (Exception ignored) {}
         }
 
         // Check each tracked position using candle closes
@@ -607,7 +616,8 @@ public class AlpacaOrderService {
             }
 
             try {
-                processTrailingForSymbol(symbol, tp);
+                double optionsPnl = optionsPnlMap.getOrDefault(checkSymbol, 0.0);
+                processTrailingForSymbol(symbol, tp, optionsPnl);
             } catch (Exception ex) {
                 log.error("TRAIL: Error processing {} — {}", symbol, ex.getMessage());
             }
@@ -623,7 +633,7 @@ public class AlpacaOrderService {
      * - Hard floor: original SL — never go backwards
      * - Only activates when trade is in profit (trail > entry for longs)
      */
-    private void processTrailingForSymbol(String symbol, TrackedPosition tp) {
+    private void processTrailingForSymbol(String symbol, TrackedPosition tp, double optionsPnlDollars) {
         // Fetch last 20 confirmed 5m bars from Polygon
         List<OHLCV> bars = polygon.getBars(symbol, "5m", 20);
         if (bars.size() < 3) {
@@ -658,6 +668,24 @@ public class AlpacaOrderService {
                 : tp.entry() - risk * (scalpManaged ? SCALP_TRAIL_R : HYBRID_TRAIL_R);
         boolean breakEvenArmed = hybrid.breakEvenArmed();
         boolean trailArmed = hybrid.trailArmed();
+
+        // ── Options P&L override: arm BE/trail based on dollar profit, not just underlying R ──
+        // Underlying price moves slowly but options P&L can spike fast. Without this,
+        // a $355 options gain can sit with the original SL because the underlying hasn't
+        // reached the 1R / 1.5R threshold in price terms yet.
+        boolean isOptionsPosition = tp.optionsContract() != null && !tp.optionsContract().isBlank();
+        if (isOptionsPosition && optionsPnlDollars > 0) {
+            if (!breakEvenArmed && optionsPnlDollars >= OPTIONS_PNL_BE_THRESHOLD) {
+                breakEvenArmed = true;
+                log.info("TRAIL OPTIONS_PNL_BE {}: unrealized P&L=${} >= ${}  — arming breakeven (underlying R not yet reached)",
+                        symbol, String.format("%.2f", optionsPnlDollars), OPTIONS_PNL_BE_THRESHOLD);
+            }
+            if (!trailArmed && optionsPnlDollars >= OPTIONS_PNL_TRAIL_THRESHOLD) {
+                trailArmed = true;
+                log.info("TRAIL OPTIONS_PNL_TRAIL {}: unrealized P&L=${} >= ${} — arming ATR trail (underlying R not yet reached)",
+                        symbol, String.format("%.2f", optionsPnlDollars), OPTIONS_PNL_TRAIL_THRESHOLD);
+            }
+        }
 
         // ── 1. Update peak close ──────────────────────────────────────────────
         double newPeak = tp.peakClose();
@@ -704,8 +732,6 @@ public class AlpacaOrderService {
         double targetStop = isLong
                 ? newPeak - atr * atrMult
                 : newPeak + atr * atrMult;
-
-        boolean isOptionsPosition = tp.optionsContract() != null && !tp.optionsContract().isBlank();
 
         // ── 4. Pre-trail hard take profit (matches hybrid backtest) ───────────────
         if (!trailArmed) {
