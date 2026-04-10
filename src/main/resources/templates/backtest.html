@@ -8,7 +8,7 @@
     <meta http-equiv="Expires" content="0"/>
     <title>SD Scanner — Backtest</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
     <style>
         :root {
             --bg:#0d1117; --surface:#161b22; --border:#30363d;
@@ -345,7 +345,7 @@
 
 <script>
 let equityChart = null, distChart = null;
-let tradeChart = null, tradeCandleSeries = null, tradeResizeHandler = null;
+let tradeChart = null, tradeCandleSeries = null, tradeVolumeSeries = null, tradeResizeHandler = null;
 const FILTERED_OUTCOMES = new Set([
     'NEWS_FILTERED','CTX_FILTERED','QUALITY_FILTERED','MULTI_FILTERED',
     '15M_FILTERED','CORR_FILTERED','REGIME_FILTERED','OVEREXTENDED_FILTERED',
@@ -719,6 +719,10 @@ async function openTradeChart(serializedTrade) {
 
 function closeTradeModal() {
     document.getElementById('trade-modal').classList.remove('show');
+    if (tradeResizeHandler && typeof tradeResizeHandler.disconnect === 'function') {
+        tradeResizeHandler.disconnect();
+        tradeResizeHandler = null;
+    }
 }
 
 function dismissTradeModal(e) {
@@ -730,8 +734,8 @@ function drawTradeChart(data, trade) {
     const container = document.getElementById('trade-chart');
     container.innerHTML = '';
 
-    if (tradeResizeHandler) {
-        window.removeEventListener('resize', tradeResizeHandler);
+    if (tradeResizeHandler && typeof tradeResizeHandler.disconnect === 'function') {
+        tradeResizeHandler.disconnect();
         tradeResizeHandler = null;
     }
 
@@ -750,13 +754,15 @@ function drawTradeChart(data, trade) {
         width: container.clientWidth || 1000,
         height: container.clientHeight || 420,
         layout: {
-            background: { color: '#161b22' },
-            textColor: '#e6edf3'
+            background: { type: 'solid', color: '#161b22' },
+            textColor: '#8b949e',
+            fontSize: 11
         },
         grid: {
-            vertLines: { color: 'rgba(139,148,158,.12)' },
-            horzLines: { color: 'rgba(139,148,158,.12)' }
+            vertLines: { color: '#21262d' },
+            horzLines: { color: '#21262d' }
         },
+        crosshair: { mode: lwc.CrosshairMode.Normal },
         rightPriceScale: {
             borderColor: '#30363d'
         },
@@ -764,23 +770,10 @@ function drawTradeChart(data, trade) {
             borderColor: '#30363d',
             timeVisible: true,
             secondsVisible: false
-        },
-        crosshair: {
-            vertLine: { color: '#58a6ff', width: 1, style: 2 },
-            horzLine: { color: '#58a6ff', width: 1, style: 2 }
         }
     });
 
-    tradeCandleSeries = typeof tradeChart.addCandlestickSeries === 'function'
-        ? tradeChart.addCandlestickSeries({
-            upColor: '#3fb950',
-            downColor: '#f85149',
-            borderUpColor: '#3fb950',
-            borderDownColor: '#f85149',
-            wickUpColor: '#3fb950',
-            wickDownColor: '#f85149'
-        })
-        : tradeChart.addSeries(lwc.CandlestickSeries, {
+    tradeCandleSeries = tradeChart.addCandlestickSeries({
         upColor: '#3fb950',
         downColor: '#f85149',
         borderUpColor: '#3fb950',
@@ -788,12 +781,23 @@ function drawTradeChart(data, trade) {
         wickUpColor: '#3fb950',
         wickDownColor: '#f85149'
     });
+    tradeVolumeSeries = tradeChart.addHistogramSeries({
+        priceFormat: { type: 'volume' },
+        priceScaleId: 'volume'
+    });
+    tradeChart.priceScale('volume').applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } });
+
     tradeCandleSeries.setData(bars.map(b => ({
         time: b.time,
         open: b.open,
         high: b.high,
         low: b.low,
         close: b.close
+    })));
+    tradeVolumeSeries.setData(bars.map(b => ({
+        time: b.time,
+        value: b.volume,
+        color: b.close >= b.open ? 'rgba(63,185,80,0.3)' : 'rgba(248,81,73,0.3)'
     })));
 
     const exitPrice = trade.dir === 'long'
@@ -816,11 +820,7 @@ function drawTradeChart(data, trade) {
             text: `Exit $${Number(exitPrice).toFixed(2)}`
         }
     ];
-    if (typeof tradeCandleSeries.setMarkers === 'function') {
-        tradeCandleSeries.setMarkers(markers);
-    } else if (typeof lwc.createSeriesMarkers === 'function') {
-        lwc.createSeriesMarkers(tradeCandleSeries, markers);
-    }
+    tradeCandleSeries.setMarkers(markers);
 
     tradeCandleSeries.createPriceLine({
         price: Number(trade.entry),
@@ -848,12 +848,10 @@ function drawTradeChart(data, trade) {
     });
 
     tradeChart.timeScale().fitContent();
-    tradeResizeHandler = () => {
-        if (tradeChart) {
-            tradeChart.applyOptions({ width: container.clientWidth || 1000, height: container.clientHeight || 420 });
-        }
-    };
-    window.addEventListener('resize', tradeResizeHandler);
+    tradeResizeHandler = new ResizeObserver(entries => {
+        if (tradeChart) tradeChart.applyOptions({ width: entries[0].contentRect.width });
+    });
+    tradeResizeHandler.observe(container);
 }
 
 function renderBatch(results, days) {
