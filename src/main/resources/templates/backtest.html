@@ -735,7 +735,18 @@ function drawTradeChart(data, trade) {
         tradeResizeHandler = null;
     }
 
-    tradeChart = LightweightCharts.createChart(container, {
+    if (!bars.length) {
+        container.innerHTML = `<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:13px">No historical 5m bars returned for this trade window.</div>`;
+        return;
+    }
+
+    const lwc = window.LightweightCharts;
+    if (!lwc || typeof lwc.createChart !== 'function') {
+        container.innerHTML = `<div style="height:100%;display:flex;align-items:center;justify-content:center;color:var(--red);font-size:13px">Candlestick library failed to load.</div>`;
+        return;
+    }
+
+    tradeChart = lwc.createChart(container, {
         width: container.clientWidth || 1000,
         height: container.clientHeight || 420,
         layout: {
@@ -760,7 +771,16 @@ function drawTradeChart(data, trade) {
         }
     });
 
-    tradeCandleSeries = tradeChart.addCandlestickSeries({
+    tradeCandleSeries = typeof tradeChart.addCandlestickSeries === 'function'
+        ? tradeChart.addCandlestickSeries({
+            upColor: '#3fb950',
+            downColor: '#f85149',
+            borderUpColor: '#3fb950',
+            borderDownColor: '#f85149',
+            wickUpColor: '#3fb950',
+            wickDownColor: '#f85149'
+        })
+        : tradeChart.addSeries(lwc.CandlestickSeries, {
         upColor: '#3fb950',
         downColor: '#f85149',
         borderUpColor: '#3fb950',
@@ -780,7 +800,7 @@ function drawTradeChart(data, trade) {
         ? trade.entry * (1 + trade.pnl_pct / 100)
         : trade.entry * (1 - trade.pnl_pct / 100);
 
-    tradeCandleSeries.setMarkers([
+    const markers = [
         {
             time: Math.floor(trade.entry_ts / 1000),
             position: trade.dir === 'long' ? 'belowBar' : 'aboveBar',
@@ -795,13 +815,18 @@ function drawTradeChart(data, trade) {
             shape: trade.dir === 'long' ? 'arrowDown' : 'arrowUp',
             text: `Exit $${Number(exitPrice).toFixed(2)}`
         }
-    ]);
+    ];
+    if (typeof tradeCandleSeries.setMarkers === 'function') {
+        tradeCandleSeries.setMarkers(markers);
+    } else if (typeof lwc.createSeriesMarkers === 'function') {
+        lwc.createSeriesMarkers(tradeCandleSeries, markers);
+    }
 
     tradeCandleSeries.createPriceLine({
         price: Number(trade.entry),
         color: '#3fb950',
         lineWidth: 2,
-        lineStyle: LightweightCharts.LineStyle.Dashed,
+        lineStyle: lwc.LineStyle.Dashed,
         axisLabelVisible: true,
         title: 'Entry'
     });
@@ -809,7 +834,7 @@ function drawTradeChart(data, trade) {
         price: Number(trade.sl),
         color: '#f85149',
         lineWidth: 1,
-        lineStyle: LightweightCharts.LineStyle.Dotted,
+        lineStyle: lwc.LineStyle.Dotted,
         axisLabelVisible: true,
         title: 'SL'
     });
@@ -817,7 +842,7 @@ function drawTradeChart(data, trade) {
         price: Number(trade.tp),
         color: '#d29922',
         lineWidth: 1,
-        lineStyle: LightweightCharts.LineStyle.Dotted,
+        lineStyle: lwc.LineStyle.Dotted,
         axisLabelVisible: true,
         title: 'TP'
     });
