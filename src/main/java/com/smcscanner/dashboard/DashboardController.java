@@ -450,11 +450,32 @@ public class DashboardController {
             @org.springframework.web.bind.annotation.RequestParam(defaultValue="90")  int days,
             @org.springframework.web.bind.annotation.RequestParam(defaultValue="ALL") String mode,
             @org.springframework.web.bind.annotation.RequestParam(defaultValue="CLASSIC") String exitStyle,
-            @org.springframework.web.bind.annotation.RequestParam(required=false)      String strategy) {
+            @org.springframework.web.bind.annotation.RequestParam(required=false)      String strategy,
+            @org.springframework.web.bind.annotation.RequestParam(required=false)      Integer mc,
+            @org.springframework.web.bind.annotation.RequestParam(required=false)      Double  sl,
+            @org.springframework.web.bind.annotation.RequestParam(required=false)      Double  tp) {
+        String sym = ticker.toUpperCase();
+        // Apply inline param overrides for sweep testing (bypasses saved profile)
+        com.smcscanner.model.TickerProfile savedProfile = null;
+        if (mc != null || sl != null || tp != null) {
+            com.smcscanner.model.TickerProfile orig = config.getTickerProfile(sym);
+            com.smcscanner.model.TickerProfile override = new com.smcscanner.model.TickerProfile();
+            override.setTicker(sym);
+            override.setStrategyType(strategy != null && !strategy.isBlank() ? strategy : orig.getStrategyType());
+            override.setMinConfidence(mc != null ? mc : (orig.getMinConfidence() != null ? orig.getMinConfidence() : 70));
+            override.setSlAtrMult(sl != null ? sl : (orig.getSlAtrMult() != null ? orig.getSlAtrMult() : 0.4));
+            override.setTpRrRatio(tp != null ? tp : (orig.getTpRrRatio() != null ? orig.getTpRrRatio() : 1.0));
+            override.setSkip(false);
+            override.setMinFvgPct(orig.getMinFvgPct());
+            override.setDispAtrMult(orig.getDispAtrMult());
+            override.setMinVolMult(orig.getMinVolMult());
+            override.setIntradayRsGate(orig.isIntradayRsGate() ? Boolean.TRUE : null);
+            savedProfile = config.setProfileOverride(sym, override);
+        }
         try {
             var btMode = com.smcscanner.backtest.BacktestMode.fromString(mode);
             var btExit = BacktestExitStyle.fromString(exitStyle);
-            var result = backtestService.run(ticker.toUpperCase(), days, btMode,
+            var result = backtestService.run(sym, days, btMode,
                     (strategy != null && !strategy.isBlank()) ? strategy : null, btExit);
             Map<String,Object> resp = new LinkedHashMap<>();
             resp.put("ticker",        result.ticker);
@@ -524,6 +545,8 @@ public class DashboardController {
         } catch (Exception e) {
             log.error("Backtest error: {}", e.getMessage());
             return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        } finally {
+            if (savedProfile != null) config.restoreProfile(sym, savedProfile);
         }
     }
 
