@@ -116,6 +116,18 @@
 
         /* Footer */
         .footer { text-align:center; padding:16px; color:var(--muted); font-size:11px; border-top:1px solid var(--border); margin-top:16px; }
+        .modal-backdrop { position:fixed; inset:0; background:rgba(0,0,0,.72); display:none; align-items:center; justify-content:center; z-index:1000; }
+        .modal-backdrop.show { display:flex; }
+        .modal-card { width:min(1100px,96vw); max-height:90vh; overflow:auto; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px; box-shadow:0 20px 80px rgba(0,0,0,.45); }
+        .modal-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:14px; }
+        .modal-title { font-size:16px; font-weight:700; color:var(--text); }
+        .modal-sub { font-size:11px; color:var(--muted); margin-top:4px; }
+        .modal-close { background:transparent; color:var(--muted); border:1px solid var(--border); border-radius:6px; padding:6px 10px; cursor:pointer; }
+        .trade-meta { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:8px; margin-bottom:12px; }
+        .trade-meta .meta-box { background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:10px; }
+        .trade-meta .meta-lbl { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.7px; }
+        .trade-meta .meta-val { font-size:14px; font-weight:700; margin-top:4px; }
+        .drill-chart-wrap { position:relative; height:420px; }
     </style>
 </head>
 <body>
@@ -315,8 +327,23 @@
 
 <div class="footer">SD Scanner — Backtest Engine · Intraday 5m replay · Same logic as live alerts · Real-time Polygon data</div>
 
+<div class="modal-backdrop" id="trade-modal" onclick="dismissTradeModal(event)">
+    <div class="modal-card">
+        <div class="modal-head">
+            <div>
+                <div class="modal-title" id="trade-modal-title">Trade Drill-Down</div>
+                <div class="modal-sub" id="trade-modal-sub">Exact historical entry/exit view</div>
+            </div>
+            <button class="modal-close" onclick="closeTradeModal()">Close</button>
+        </div>
+        <div class="trade-meta" id="trade-meta"></div>
+        <div class="drill-chart-wrap"><canvas id="trade-chart"></canvas></div>
+    </div>
+</div>
+
 <script>
 let equityChart = null, distChart = null;
+let tradeChart = null;
 const FILTERED_OUTCOMES = new Set([
     'NEWS_FILTERED','CTX_FILTERED','QUALITY_FILTERED','MULTI_FILTERED',
     '15M_FILTERED','CORR_FILTERED','REGIME_FILTERED','OVEREXTENDED_FILTERED',
@@ -594,7 +621,6 @@ function renderSingle(d) {
         const isQualityFiltered = t.outcome === 'QUALITY_FILTERED';
         const isMultiFiltered   = t.outcome === 'MULTI_FILTERED';
         const isFiltered        = FILTERED_SET.has(t.outcome);
-        const tvUrl = `https://www.tradingview.com/chart/?symbol=${tvTicker}&interval=5`;
         const confColor = t.confidence >= 80 ? 'var(--green)' : t.confidence >= 65 ? 'var(--yellow)' : 'var(--muted)';
         const rowClass  = isMultiFiltered   ? 'multi-filtered-row'
                         : isQualityFiltered ? 'quality-filtered-row'
@@ -655,7 +681,7 @@ function renderSingle(d) {
         return dateSep + `
         <tr class="${rowClass}">
             <td style="color:var(--muted)">${tradeNum}</td>
-            <td><a href="${tvUrl}" target="_blank" style="color:var(--blue);text-decoration:none;font-size:11px;font-family:monospace" title="View 5m chart on TradingView">${t.entry_time || '—'}</a></td>
+            <td><a href="#" onclick='openTradeChart(${JSON.stringify(JSON.stringify({ ...t, ticker }))}); return false;' style="color:var(--blue);text-decoration:none;font-size:11px;font-family:monospace" title="View exact historical entry / exit">${t.entry_time || '—'}</a></td>
             <td style="font-size:11px;font-family:monospace;color:var(--muted)">${isFiltered ? '—' : (t.exit_time || '—')}</td>
             <td class="${t.dir === 'long' ? 'dir-long' : 'dir-short'}">${t.dir === 'long' ? '▲ LONG' : '▼ SHORT'}</td>
             <td>$${t.entry.toFixed(2)}</td>
@@ -669,6 +695,109 @@ function renderSingle(d) {
             <td style="color:${confColor};font-size:11px">${t.confidence}/100${newsTag}${ctxTag}${qualTag}</td>
         </tr>`;
     }).join('');
+}
+
+async function openTradeChart(serializedTrade) {
+    const t = JSON.parse(serializedTrade);
+    document.getElementById('trade-modal-title').textContent = `${t.ticker} ${t.dir === 'long' ? 'LONG' : 'SHORT'} · ${t.outcome}`;
+    document.getElementById('trade-modal-sub').textContent = `${t.entry_time || '—'} → ${t.exit_time || '—'} · exact 5m bars from Polygon`;
+    document.getElementById('trade-meta').innerHTML = `
+        <div class="meta-box"><div class="meta-lbl">Entry</div><div class="meta-val">$${Number(t.entry).toFixed(2)}</div></div>
+        <div class="meta-box"><div class="meta-lbl">Stop</div><div class="meta-val">$${Number(t.sl).toFixed(2)}</div></div>
+        <div class="meta-box"><div class="meta-lbl">Target</div><div class="meta-val">$${Number(t.tp).toFixed(2)}</div></div>
+        <div class="meta-box"><div class="meta-lbl">Outcome</div><div class="meta-val">${t.outcome}</div></div>
+        <div class="meta-box"><div class="meta-lbl">P&L</div><div class="meta-val">${t.pnl_pct >= 0 ? '+' : ''}${Number(t.pnl_pct).toFixed(2)}%</div></div>
+        <div class="meta-box"><div class="meta-lbl">Confidence</div><div class="meta-val">${t.confidence}/100</div></div>
+    `;
+    document.getElementById('trade-modal').classList.add('show');
+    const resp = await fetch(`/api/backtest/trade-chart?ticker=${encodeURIComponent(t.ticker)}&entryTs=${t.entry_ts}&exitTs=${t.exit_ts || t.entry_ts}`);
+    const data = await resp.json();
+    drawTradeChart(data, t);
+}
+
+function closeTradeModal() {
+    document.getElementById('trade-modal').classList.remove('show');
+}
+
+function dismissTradeModal(e) {
+    if (e.target.id === 'trade-modal') closeTradeModal();
+}
+
+function drawTradeChart(data, trade) {
+    const bars = data.bars || [];
+    const ctx = document.getElementById('trade-chart').getContext('2d');
+    const labels = bars.map(b => {
+        const dt = new Date(b.time * 1000);
+        return dt.toLocaleString('en-US', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', hour12:false });
+    });
+    const closes = bars.map(b => b.close);
+    const entryIdx = bars.findIndex(b => b.time * 1000 === trade.entry_ts);
+    const exitIdx = bars.findIndex(b => b.time * 1000 === trade.exit_ts);
+    const exitPrice = trade.dir === 'long'
+        ? trade.entry * (1 + trade.pnl_pct / 100)
+        : trade.entry * (1 - trade.pnl_pct / 100);
+    const entryPoints = bars.map((b, i) => i === entryIdx ? trade.entry : null);
+    const exitPoints = bars.map((b, i) => i === exitIdx ? exitPrice : null);
+
+    if (tradeChart) tradeChart.destroy();
+    tradeChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [
+                {
+                    label: 'Close',
+                    data: closes,
+                    borderColor: '#58a6ff',
+                    backgroundColor: 'rgba(88,166,255,.12)',
+                    borderWidth: 2,
+                    tension: 0.15,
+                    pointRadius: 0
+                },
+                {
+                    label: 'Entry',
+                    data: entryPoints,
+                    borderColor: '#3fb950',
+                    backgroundColor: '#3fb950',
+                    pointRadius: 6,
+                    pointHoverRadius: 7,
+                    showLine: false
+                },
+                {
+                    label: 'Exit',
+                    data: exitPoints,
+                    borderColor: '#f85149',
+                    backgroundColor: '#f85149',
+                    pointRadius: 6,
+                    pointHoverRadius: 7,
+                    showLine: false
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { labels: { color: '#e6edf3' } },
+                tooltip: {
+                    callbacks: {
+                        label: (ctx) => `${ctx.dataset.label}: $${Number(ctx.parsed.y).toFixed(2)}`
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    ticks: { color: '#8b949e', maxTicksLimit: 10 },
+                    grid: { color: 'rgba(139,148,158,.12)' }
+                },
+                y: {
+                    ticks: { color: '#8b949e', callback: (v) => '$' + Number(v).toFixed(2) },
+                    grid: { color: 'rgba(139,148,158,.12)' }
+                }
+            }
+        }
+    });
 }
 
 function renderBatch(results, days) {

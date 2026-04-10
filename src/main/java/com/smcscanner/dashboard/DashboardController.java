@@ -497,6 +497,7 @@ public class DashboardController {
             List<Map<String,Object>> tradeList = result.trades.stream().map(t -> {
                 Map<String,Object> m = new LinkedHashMap<>();
                 m.put("entry_time", t.entryTime()); m.put("exit_time", t.exitTime());
+                m.put("entry_ts", t.entryEpochMs()); m.put("exit_ts", t.exitEpochMs());
                 m.put("dir", t.direction()); m.put("entry", t.entry());
                 m.put("sl", t.sl()); m.put("tp", t.tp());
                 m.put("outcome", t.outcome()); m.put("pnl_pct", t.pnlPct());
@@ -523,6 +524,35 @@ public class DashboardController {
             log.error("Backtest error: {}", e.getMessage());
             return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
         }
+    }
+
+    @GetMapping("/api/backtest/trade-chart")
+    @ResponseBody
+    public ResponseEntity<Map<String,Object>> apiBacktestTradeChart(
+            @org.springframework.web.bind.annotation.RequestParam String ticker,
+            @org.springframework.web.bind.annotation.RequestParam long entryTs,
+            @org.springframework.web.bind.annotation.RequestParam(required = false) Long exitTs) {
+        long actualExitTs = (exitTs != null && exitTs > 0) ? exitTs : entryTs;
+        long fromTs = Math.max(0L, entryTs - (90L * 60_000L));
+        long toTs = actualExitTs + (90L * 60_000L);
+        List<OHLCV> bars = polygon.getBarsBetween(ticker, "5m", fromTs, toTs, 500);
+        List<Map<String,Object>> candles = new ArrayList<>();
+        for (OHLCV b : bars) {
+            Map<String,Object> c = new LinkedHashMap<>();
+            c.put("time", b.getTimestamp() / 1000L);
+            c.put("open", b.getOpen());
+            c.put("high", b.getHigh());
+            c.put("low", b.getLow());
+            c.put("close", b.getClose());
+            c.put("volume", b.getVolume());
+            candles.add(c);
+        }
+        return ResponseEntity.ok(Map.of(
+                "ticker", ticker,
+                "entry_ts", entryTs,
+                "exit_ts", actualExitTs,
+                "bars", candles
+        ));
     }
 
     /** GET /api/research - run watchlist research and summarize strategy/failure patterns. */

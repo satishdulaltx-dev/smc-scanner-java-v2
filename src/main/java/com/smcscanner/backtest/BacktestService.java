@@ -787,6 +787,7 @@ public class BacktestService {
                             setup.getEntry(), setup.getStopLoss(), setup.getTakeProfit(),
                             filteredOutcome, 0.0,
                             toDateTime(dayBars.get(end - 1).getTimestamp()), toDateTime(dayBars.get(end - 1).getTimestamp()),
+                            dayBars.get(end - 1).getTimestamp(), dayBars.get(end - 1).getTimestamp(),
                             adjConf, setup.getAtr(), newsAdj, sentiment.label(), ctxAdj, context.rsLabel(),
                             qualityAdj, filteredLabel,
                             0, 0, 0, 0, 0)); // no options P&L or contracts for filtered trades
@@ -801,6 +802,7 @@ public class BacktestService {
                             setup.getEntry(), setup.getStopLoss(), setup.getTakeProfit(),
                             "CONF_CAP_FILTERED", 0.0,
                             toDateTime(dayBars.get(end - 1).getTimestamp()), toDateTime(dayBars.get(end - 1).getTimestamp()),
+                            dayBars.get(end - 1).getTimestamp(), dayBars.get(end - 1).getTimestamp(),
                             adjConf, setup.getAtr(), newsAdj, sentiment.label(), ctxAdj, context.rsLabel(),
                             qualityAdj, "CONF_CAP",
                             0, 0, 0, 0, 0));
@@ -958,6 +960,7 @@ public class BacktestService {
 
                 trades.add(new TradeResult(ticker, dir, entry, sl, tp, outcome, pnlPct,
                         entryTime, exitTime != null ? exitTime : entryTime,
+                        entryEpochMs, resolveExitEpochMs(fwdBars, exitTime, entryEpochMs),
                         adjConf, setup.getAtr(), newsAdj, sentiment.label(),
                         ctxAdj, buildContextLabel(context),
                         qualityAdj, qualityLabel,
@@ -1310,6 +1313,13 @@ public class BacktestService {
     private String toDateTime(long epochMs) {
         return Instant.ofEpochMilli(epochMs).atZone(ET).format(DT_FMT) + " ET";
     }
+    private long resolveExitEpochMs(List<OHLCV> fwdBars, String exitTime, long fallbackEpochMs) {
+        if (fwdBars == null || fwdBars.isEmpty() || exitTime == null || exitTime.isBlank()) return fallbackEpochMs;
+        for (OHLCV bar : fwdBars) {
+            if (toDateTime(bar.getTimestamp()).equals(exitTime)) return bar.getTimestamp();
+        }
+        return fwdBars.get(fwdBars.size() - 1).getTimestamp();
+    }
     private double round2(double v) { return Math.round(v * 100.0) / 100.0; }
 
     /** Compact context label for the trade log (e.g. "RS+2.4% | VIX 28.1 volatile"). */
@@ -1338,6 +1348,7 @@ public class BacktestService {
     public record TradeResult(String ticker, String direction, double entry, double sl, double tp,
                                String outcome, double pnlPct,
                                String entryTime, String exitTime,
+                               long entryEpochMs, long exitEpochMs,
                                int confidence, double atr,
                                int newsAdjustment,    // signed delta from news        (e.g. -8)
                                String newsLabel,      // e.g. "🔴 Strong bearish news"

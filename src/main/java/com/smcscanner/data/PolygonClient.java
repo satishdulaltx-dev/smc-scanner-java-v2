@@ -11,6 +11,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -86,6 +87,17 @@ public class PolygonClient {
         return fetchPolygon(ticker, tf, limit, lookbackDays);
     }
 
+    /** Fetch bars within an explicit historical timestamp range. */
+    public List<OHLCV> getBarsBetween(String ticker, String timeframe, long fromEpochMs, long toEpochMs, int limit) {
+        if (ticker.startsWith("X:")) {
+            return getKrakenBars(ticker, timeframe, limit).stream()
+                    .filter(b -> b.getTimestamp() >= fromEpochMs && b.getTimestamp() <= toEpochMs)
+                    .toList();
+        }
+        String[] tf = TF_MAP.getOrDefault(timeframe.toLowerCase(), new String[]{"5", "minute"});
+        return fetchPolygonRange(ticker, tf, limit, fromEpochMs, toEpochMs);
+    }
+
     private List<OHLCV> getPolygonBars(String ticker, String timeframe, int limit) {
         String[] tf   = TF_MAP.getOrDefault(timeframe.toLowerCase(), new String[]{"5", "minute"});
         // Lookback window: daily uses 2x limit to ensure enough trading days; hourly=7d; minute=1d
@@ -129,5 +141,42 @@ public class PolygonClient {
             java.util.Collections.reverse(bars); // restore chronological order
             return bars;
         } catch (Exception e) { log.error("Polygon error {}: {}", ticker, e.getMessage()); return new ArrayList<>(); }
+    }
+
+    private List<OHLCV> fetchPolygonRange(String ticker, String[] tf, int limit, long fromEpochMs, long toEpochMs) {
+        String apiKey = config.getPolygonApiKey();
+        if (apiKey == null || apiKey.isBlank()) { log.warn("POLYGON_API_KEY not set for {}", ticker); return new ArrayList<>(); }
+        String from = Instant.ofEpochMilli(fromEpochMs).atZone(ZoneOffset.UTC).toLocalDate().format(DateTimeFormatter.ISO_LOCAL_DATE);
+        String to   = Instant.ofEpochMilli(toEpochMs).atZone(ZoneOffset.UTC).toLocalDate().format(DateTimeFormatter.ISO_LOCAL_DATE);
+        String url = String.format(
+                "https://api.polygon.io/v2/aggs/ticker/%s/range/%s/%s/%s/%s?adjusted=true&sort=asc&limit=50000&apiKey=%s",
+                ticker, tf[0], tf[1], from, to, apiKey);
+        List<OHLCV> bars = new ArrayList<>();
+        int maxPages = 10;
+        try {
+            while (url != null && maxPages-- > 0 && bars.size() < limit) {
+                String fetchUrl = url.contains("apiKey=") ? url : url + "&apiKey=" + apiKey;
+                try (Response resp = http.newCall(new Request.Builder().url(fetchUrl).build()).execute()) {
+                    if (!resp.isSuccessful() || resp.body() == null) break;
+                    JsonNode root = mapper.readTree(resp.body().string());
+                    JsonNode results = root.get("results");
+                    if (results == null || !results.isArray() || results.size() == 0) break;
+                    for (JsonNode bar : results) {
+                        long ts = bar.get("t").asLong();
+                        if (ts < fromEpochMs || ts > toEpochMs) continue;
+                        bars.add(OHLCV.builder().timestamp(ts)
+                                .open(bar.get("o").asDouble()).high(bar.get("h").asDouble())
+                                .low(bar.get("l").asDouble()).close(bar.get("c").asDouble())
+                                .volume(bar.get("v").asDouble()).build());
+                    }
+                    JsonNode nextUrl = root.get("next_url");
+                    url = (nextUrl != null && !nextUrl.isNull()) ? nextUrl.asText() : null;
+                }
+            }
+            return bars;
+        } catch (Exception e) {
+            log.error("Polygon range error {}: {}", ticker, e.getMessage());
+            return new ArrayList<>();
+        }
     }
 }
