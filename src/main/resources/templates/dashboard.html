@@ -3,7 +3,6 @@
 <head>
     <meta charset="UTF-8"/>
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <meta http-equiv="refresh" content="8"/>
     <title>SD Scanner</title>
     <style>
         :root {
@@ -118,26 +117,6 @@
         .adaptive-add input:focus { outline:none; border-color:var(--blue); }
         .adaptive-empty { color:var(--muted); font-size:12px; padding:12px 0; }
 
-        /* ── Quick Links panel ── */
-        .quicklinks-panel { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:16px 20px; margin-bottom:24px; }
-        .quicklinks-panel .ql-title { font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:14px; display:flex; align-items:center; gap:8px; }
-        .ql-groups { display:flex; gap:32px; flex-wrap:wrap; }
-        .ql-group { display:flex; flex-direction:column; gap:6px; }
-        .ql-group-label { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.8px; margin-bottom:4px; }
-        .ql-row { display:flex; align-items:center; gap:8px; }
-        .ql-link { color:var(--blue); font-size:12px; font-weight:500; text-decoration:none; font-family:'Segoe UI Mono', monospace; background:rgba(88,166,255,.08); padding:3px 10px; border-radius:5px; border:1px solid rgba(88,166,255,.18); transition:background .15s; white-space:nowrap; }
-        .ql-link:hover { background:rgba(88,166,255,.18); }
-        .ql-link.api { color:#e36209; background:rgba(227,98,9,.08); border-color:rgba(227,98,9,.2); }
-        .ql-link.api:hover { background:rgba(227,98,9,.18); }
-        .ql-link.post { color:var(--purple); background:rgba(188,140,255,.08); border-color:rgba(188,140,255,.2); }
-        .ql-link.post:hover { background:rgba(188,140,255,.18); }
-        .ql-desc { font-size:11px; color:var(--muted); }
-        .ql-copy { background:transparent; border:1px solid var(--border); color:var(--muted); font-size:10px; padding:2px 7px; border-radius:4px; cursor:pointer; transition:border-color .1s, color .1s; }
-        .ql-copy:hover { border-color:var(--muted); color:var(--text); }
-        .ql-copy.copied { border-color:var(--green); color:var(--green); }
-        .ql-method { font-size:9px; font-weight:700; padding:2px 5px; border-radius:3px; letter-spacing:.5px; }
-        .method-get  { background:rgba(63,185,80,.15); color:var(--green); }
-        .method-post { background:rgba(188,140,255,.15); color:var(--purple); }
     </style>
 </head>
 <body>
@@ -176,15 +155,6 @@ function getDashboardToken() {
 function postHeaders() {
     const t = getDashboardToken();
     return t ? { 'X-Dashboard-Token': t } : {};
-}
-
-function qlCopy(btn, path) {
-    const base = window.location.origin;
-    navigator.clipboard.writeText(base + path).then(() => {
-        btn.textContent = '✓ copied';
-        btn.classList.add('copied');
-        setTimeout(() => { btn.textContent = 'copy'; btn.classList.remove('copied'); }, 2000);
-    });
 }
 
 function sendEodDiscord() {
@@ -239,81 +209,6 @@ function sendEodDiscord() {
 
 <!-- Body -->
 <div class="body">
-
-    <!-- Quick Links -->
-    <div class="quicklinks-panel">
-        <div class="ql-title">🔗 Quick Links &amp; API Reference</div>
-        <div class="ql-groups">
-
-            <!-- Pages -->
-            <div class="ql-group">
-                <div class="ql-group-label">Pages</div>
-                <div class="ql-row">
-                    <a href="/" class="ql-link">/ Dashboard</a>
-                    <span class="ql-desc">Live watchlist &amp; setups</span>
-                </div>
-                <div class="ql-row">
-                    <a href="/analyze" class="ql-link">/analyze</a>
-                    <span class="ql-desc">Deep ticker analysis (click any card)</span>
-                </div>
-                <div class="ql-row">
-                    <a href="/backtest" class="ql-link" target="_blank">/backtest</a>
-                    <span class="ql-desc">Historical strategy replay</span>
-                </div>
-                <div class="ql-row">
-                    <a href="/eod" class="ql-link" target="_blank">/eod</a>
-                    <span class="ql-desc">End-of-day report</span>
-                </div>
-            </div>
-
-            <!-- GET APIs -->
-            <div class="ql-group">
-                <div class="ql-group-label">GET APIs</div>
-                <div class="ql-row">
-                    <span class="ql-method method-get">GET</span>
-                    <a href="/api/status" class="ql-link api" target="_blank">/api/status</a>
-                    <button class="ql-copy" onclick="qlCopy(this,'/api/status')">copy</button>
-                    <span class="ql-desc">Scanner status JSON</span>
-                </div>
-                <div class="ql-row">
-                    <span class="ql-method method-get">GET</span>
-                    <a href="/api/backtest?ticker=AAPL&amp;days=90" class="ql-link api" target="_blank">/api/backtest?ticker=AAPL&amp;days=90</a>
-                    <button class="ql-copy" onclick="qlCopy(this,'/api/backtest?ticker=AAPL&days=90')">copy</button>
-                    <span class="ql-desc">Run backtest (change ticker/days)</span>
-                </div>
-                <div class="ql-row">
-                    <span class="ql-method method-get">GET</span>
-                    <a href="/api/adaptive" class="ql-link api" target="_blank">/api/adaptive</a>
-                    <button class="ql-copy" onclick="qlCopy(this,'/api/adaptive')">copy</button>
-                    <span class="ql-desc">Streak state per ticker</span>
-                </div>
-            </div>
-
-            <!-- POST APIs -->
-            <div class="ql-group">
-                <div class="ql-group-label">POST APIs</div>
-                <div class="ql-row">
-                    <span class="ql-method method-post">POST</span>
-                    <span class="ql-link post">/api/send-eod-discord</span>
-                    <button class="ql-copy" onclick="qlCopy(this,'/api/send-eod-discord')">copy</button>
-                    <span class="ql-desc">Push EOD report to Discord</span>
-                </div>
-                <div class="ql-row">
-                    <span class="ql-method method-post">POST</span>
-                    <span class="ql-link post">/api/adaptive/outcome?ticker=AAPL&amp;outcome=loss</span>
-                    <button class="ql-copy" onclick="qlCopy(this,'/api/adaptive/outcome?ticker=AAPL&outcome=loss')">copy</button>
-                    <span class="ql-desc">Record trade outcome manually</span>
-                </div>
-                <div class="ql-row">
-                    <span class="ql-method method-post">POST</span>
-                    <span class="ql-link post">/api/adaptive/reset?ticker=AAPL</span>
-                    <button class="ql-copy" onclick="qlCopy(this,'/api/adaptive/reset?ticker=AAPL')">copy</button>
-                    <span class="ql-desc">Clear streak history for ticker</span>
-                </div>
-            </div>
-
-        </div>
-    </div>
 
     <!-- Watchlist grid -->
     <div class="section-title">
@@ -729,7 +624,7 @@ setInterval(loadAlpacaPositions, 60000);
 
 <!-- Footer -->
 <div class="footer">
-    Last refresh: <span th:text="${lastScan}">—</span> — auto-refresh every 8s
+    Live panels update in place — no full-page auto-refresh
 </div>
 
 </body>
