@@ -26,11 +26,11 @@
     },
     {
       "ticker": "AMD",
-      "strategyType": "breakout",
-      "minConfidence": 78,
-      "slAtrMult": 1.0,
-      "tpRrRatio": 1.5,
-      "note": "Apr 2026 deep strategy scan: switched smc→breakout. breakout 3/5 timeframes (60d 3T 66.7%, 90d 3T 66.7%, 180d 11T 63.6%); smc was 2/5. AMD makes strong opening range breakout moves on high-volume semiconductor news days. ORB at 9:30 captures institutional momentum as funds reposition on AMD AI/data-center pipeline updates. sl=1.0 ATR for semiconductor volatility."
+      "strategyType": "scalp",
+      "minConfidence": 68,
+      "slAtrMult": 0.4,
+      "tpRrRatio": 1.0,
+      "note": "Apr 2026 Bollinger Scalp sweep (180d, Hybrid Trail 1.5R): best combo mc=68 sl=0.4 tp=1.0 → 12T 83.3%WR $1543 opt P&L. Switched breakout→scalp. AMD's AI/semiconductor momentum creates tight Bollinger squeezes before explosive directional moves. 83.3% WR is the highest of any scalp ticker — very high-quality setup occurrence."
     },
     {
       "ticker": "AMZN",
@@ -55,14 +55,13 @@
     },
     {
       "ticker": "COIN",
-      "strategyType": "keylevel",
-      "minConfidence": 70,
-      "maxConfidence": 84,
-      "slAtrMult": 0.5,
-      "tpRrRatio": 1.0,
+      "strategyType": "scalp",
+      "minConfidence": 68,
+      "slAtrMult": 0.6,
+      "tpRrRatio": 0.75,
       "skip": false,
       "skipReason": null,
-      "note": "Apr 2026 scalp retune: KEYLEVEL 365d best — 19T 61.1%WR $1940 (vs vsqueeze $1858, idiv $1705). COIN reacts violently to key S/R levels because BTC-proxy momentum amplifies level breaks. Scalp config: tpRrRatio=1.0 for fast 1:1 exit, slAtrMult=0.5 to give room for crypto volatility. 90d was an anomaly (0 trades) — 365d and 180d both confirm the edge."
+      "note": "Apr 2026 Bollinger Scalp sweep (180d, Hybrid Trail 1.5R): best combo mc=68 sl=0.6 tp=0.75 → 38T 70.3%WR $2509 opt P&L. Switched keylevel→scalp. BTC-proxy volatility makes COIN ideal for Bollinger squeeze+reclaim scalp entries. Wide sl=0.6 ATR handles crypto spikes, tight tp=0.75R banks fast moves."
     },
     {
       "ticker": "CRWD",
@@ -156,16 +155,13 @@
     },
     {
       "ticker": "MSFT",
-      "strategyType": "smc",
-      "minConfidence": 78,
-      "minFvgPct": 0.0004,
-      "dispAtrMult": 1.2,
-      "slAtrMult": 1.0,
-      "tpRrRatio": 2.0,
-      "intradayRsGate": true,
+      "strategyType": "scalp",
+      "minConfidence": 80,
+      "slAtrMult": 0.4,
+      "tpRrRatio": 1.25,
       "skip": false,
       "skipReason": null,
-      "note": "Apr 2026 deep strategy scan: reverted to smc. vsqueeze as native profile strategy generates different (worse) signals than vsqueeze-via-API-override — likely a different signal pipeline when strategy is native vs override. smc gives 1/5 (365d 19T 61.1% ✓). All strategies fail at 90/180d — MSFT in difficult tariff-recession regime. SMC at mc=78 with FVG filters (minFvgPct=0.0004, dispAtrMult=1.2) is the cleanest setup, tp=2:1 captures full institutional displacement moves. intradayRsGate=true retained."
+      "note": "Apr 2026 Bollinger Scalp sweep (180d, Hybrid Trail 1.5R): best combo mc=80 sl=0.4 tp=1.25 → 14T 69.2%WR $351 opt P&L. Switched smc→scalp. SMC failed at 90/180d in tariff-recession regime — Bollinger Scalp captures short-term volatility contraction/release better. High mc=80 threshold ensures only top-quality setups, tight sl=0.4 ATR for mega-cap."
     },
     {
       "ticker": "MSTR",
@@ -219,12 +215,11 @@
     },
     {
       "ticker": "PLTR",
-      "minConfidence": 62,
-      "minFvgPct": 0.0006,
-      "dispAtrMult": 1.3,
-      "strategyType": "smc",
-      "note": "Switched breakout→SMC Mar 2026: 0 signals on ORB. PLTR has strong intraday SMC sweeps. Relaxed thresholds. maxConf=84 Mar 2026: 85+ bucket 16.7% WR/-0.84% (over-extended late entries); 75-84 bucket 66.7% WR/+1.47% — only take the earlier entries.",
-      "maxConfidence": 84
+      "strategyType": "scalp",
+      "minConfidence": 68,
+      "slAtrMult": 0.3,
+      "tpRrRatio": 0.75,
+      "note": "Apr 2026 Bollinger Scalp sweep (180d, Hybrid Trail 1.5R): best combo mc=68 sl=0.3 tp=0.75 → 21T 71.4%WR $591 opt P&L. Switched smc→scalp. PLTR's high retail participation + AI sentiment creates frequent Bollinger squeeze setups. Tight sl=0.3 ATR works because PLTR mean-reverts quickly; tp=0.75R banks fast momentum moves."
     },
     {
       "ticker": "PYPL",
@@ -324,14 +319,11 @@
     },
     {
       "ticker": "TSLA",
-      "strategyType": "vwap",
-      "minConfidence": 74,
-      "maxConfidence": 84,
-      "minFvgPct": 0.001,
-      "dispAtrMult": 1.6,
-      "slAtrMult": 1.0,
-      "tpRrRatio": 1.0,
-      "note": "Apr 2026 backtest matrix: VWAP beats SMC on TSLA — 90d: VWAP 7T 71.4%WR $1306 vs SMC 7T 57.1% $1206 (+$100, +14%WR). TSLA's intraday VWAP magnets are well-documented — institutional algos accumulate/distribute at VWAP on high-volume EV/macro days. maxConf=84, tpRrRatio=1.0 retained for fast target on volatile tape."
+      "strategyType": "scalp",
+      "minConfidence": 68,
+      "slAtrMult": 0.6,
+      "tpRrRatio": 0.75,
+      "note": "Apr 2026 Bollinger Scalp sweep (180d, Hybrid Trail 1.5R): best combo mc=68 sl=0.6 tp=0.75 → 13T 69.2%WR $2062 opt P&L. Switched vwap→scalp. TSLA's extreme intraday volatility creates perfect Bollinger squeeze+reclaim entries. Wide sl=0.6 ATR needed for EV momentum stops; tp=0.75R locks in fast moves before mean-reversion."
     },
     {
       "ticker": "UBER",
