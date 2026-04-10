@@ -45,7 +45,7 @@ public class ScalpMomentumDetector {
 
         OHLCV last = sessionBars.get(sessionBars.size() - 1);
         LocalTime now = Instant.ofEpochMilli(last.getTimestamp()).atZone(ET).toLocalTime();
-        if (now.isBefore(LocalTime.of(9, 35)) || !now.isBefore(LocalTime.of(15, 30))) return result;
+        if (now.isBefore(LocalTime.of(9, 35)) || !now.isBefore(LocalTime.of(11, 30))) return result;
 
         double atr = Math.max(computeAtr(sessionBars), last.getClose() * 0.0015);
 
@@ -81,6 +81,8 @@ public class ScalpMomentumDetector {
         int closeNearLowCount = 0;
         int rangeExpansionCount = 0;
         int volumeExpansionCount = 0;
+        int strongBullCount = 0;
+        int strongBearCount = 0;
         for (OHLCV bar : sequence) {
             double range = Math.max(0.0001, bar.getHigh() - bar.getLow());
             double bodyPct = Math.abs(bar.getClose() - bar.getOpen()) / range;
@@ -92,7 +94,26 @@ public class ScalpMomentumDetector {
             if ((bar.getClose() - bar.getLow()) <= range * 0.25) closeNearLowCount++;
             if (rangeRatio >= 1.15 && bodyPct >= 0.45) rangeExpansionCount++;
             if (volRatio >= 1.25) volumeExpansionCount++;
+            if (bar.getClose() > bar.getOpen() && bodyPct >= 0.55 && rangeRatio >= 1.20) strongBullCount++;
+            if (bar.getClose() < bar.getOpen() && bodyPct >= 0.55 && rangeRatio >= 1.20) strongBearCount++;
         }
+
+        OHLCV prev2 = sequence.get(sequence.size() - 2);
+        OHLCV prev3 = sequence.get(sequence.size() - 3);
+        double lastBodyPct = Math.abs(last.getClose() - last.getOpen()) / Math.max(0.0001, last.getHigh() - last.getLow());
+        double prev2BodyPct = Math.abs(prev2.getClose() - prev2.getOpen()) / Math.max(0.0001, prev2.getHigh() - prev2.getLow());
+        boolean lastStrongBull = last.getClose() > last.getOpen() && lastBodyPct >= 0.55;
+        boolean lastStrongBear = last.getClose() < last.getOpen() && lastBodyPct >= 0.55;
+        boolean prev2StrongBull = prev2.getClose() > prev2.getOpen() && prev2BodyPct >= 0.55;
+        boolean prev2StrongBear = prev2.getClose() < prev2.getOpen() && prev2BodyPct >= 0.55;
+        boolean consecutiveBullImpulse = prev2StrongBull && lastStrongBull
+                && prev2.getClose() >= prev2.getHigh() - (prev2.getHigh() - prev2.getLow()) * 0.25
+                && last.getClose() >= last.getHigh() - (last.getHigh() - last.getLow()) * 0.25;
+        boolean consecutiveBearImpulse = prev2StrongBear && lastStrongBear
+                && prev2.getClose() <= prev2.getLow() + (prev2.getHigh() - prev2.getLow()) * 0.25
+                && last.getClose() <= last.getLow() + (last.getHigh() - last.getLow()) * 0.25;
+        boolean recentOpposingLong = prev3.getClose() < prev3.getOpen() && prev3BodyPct(prev3) >= 0.45;
+        boolean recentOpposingShort = prev3.getClose() > prev3.getOpen() && prev3BodyPct(prev3) >= 0.45;
 
         boolean closesStackedUp = last.getClose() > sequence.get(sequence.size() - 2).getClose()
                 && sequence.get(sequence.size() - 2).getClose() >= sequence.get(sequence.size() - 3).getClose();
@@ -106,25 +127,31 @@ public class ScalpMomentumDetector {
         boolean notTooExtended = vwapDistance <= extensionCap;
 
         boolean longImpulse = greenCount >= 3
+                && strongBullCount >= 2
                 && closeNearHighCount >= 2
                 && rangeExpansionCount >= 2
                 && volumeExpansionCount >= 2
+                && consecutiveBullImpulse
                 && closesStackedUp
                 && cumulativeUpMove >= strongImpulseMove
                 && volumeTrendUp
                 && vwapAlignedLong
                 && baseBreakLong
+                && !recentOpposingLong
                 && notTooExtended;
 
         boolean shortImpulse = redCount >= 3
+                && strongBearCount >= 2
                 && closeNearLowCount >= 2
                 && rangeExpansionCount >= 2
                 && volumeExpansionCount >= 2
+                && consecutiveBearImpulse
                 && closesStackedDown
                 && cumulativeDownMove >= strongImpulseMove
                 && volumeTrendUp
                 && vwapAlignedShort
                 && baseBreakShort
+                && !recentOpposingShort
                 && notTooExtended;
 
         if (!longImpulse && !shortImpulse) return result;
@@ -149,10 +176,11 @@ public class ScalpMomentumDetector {
         confidence = Math.min(90, confidence);
 
         ZonedDateTime signalTs = Instant.ofEpochMilli(last.getTimestamp()).atZone(ET);
-        String factors = String.format("seq %s%d/%d | vol x%.1f | move %.2f ATR | VWAP %s | open %.1f ATR",
+        String factors = String.format("seq %s%d/%d strong=%d | vol x%.1f | move %.2f ATR | VWAP %s | open %.1f ATR",
                 isLong ? "g" : "r",
                 isLong ? greenCount : redCount,
                 sequence.size(),
+                isLong ? strongBullCount : strongBearCount,
                 sequenceAvgVol / Math.max(avgVol, 1.0),
                 Math.max(cumulativeUpMove, cumulativeDownMove) / Math.max(atr, 0.01),
                 isLong ? "above" : "below",
@@ -204,6 +232,10 @@ public class ScalpMomentumDetector {
             vol += b.getVolume();
         }
         return vol > 0 ? pv / vol : bars.get(Math.max(0, Math.min(endIdxInclusive, bars.size() - 1))).getClose();
+    }
+
+    private double prev3BodyPct(OHLCV bar) {
+        return Math.abs(bar.getClose() - bar.getOpen()) / Math.max(0.0001, bar.getHigh() - bar.getLow());
     }
 
     private double r4(double v) {
