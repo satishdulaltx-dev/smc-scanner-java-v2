@@ -8,9 +8,9 @@
       "slAtrMult": 1.0,
       "tpRrRatio": 1.5,
       "intradayRsGate": true,
-      "skip": false,
-      "skipReason": null,
-      "note": "Apr 2026 deep strategy scan: switched smc→vwap. Full 5-timeframe matrix: vwap 5/5 (30d 6T 66.7%, 60d 8T 75%, 90d 10T 70%, 180d 17T 64.7%, 365d 35T 60%). smc was 0/5 — 180d showed 0T. VWAP is the clear winner: AAPL is VWAP-magnet mega-cap, large-fund benchmarked execution means pullbacks to VWAP get absorbed reliably. sl=1.0 ATR retained for volatility, tp=1.5 R:R."
+      "skip": true,
+      "skipReason": "Apr 2026 HYBRID backtest: all 4 strategies negative (best vwap -$189, smc -$384). AAPL avg move 0.57-0.85% on $200+ stock = small dollar move vs options premium cost. Structurally not viable for intraday options in current mega-cap low-vol regime.",
+      "note": "Apr 2026 deep strategy scan: switched smc→vwap. Full 5-timeframe matrix: vwap 5/5. AAPL is VWAP-magnet mega-cap but options cost exceeds move size in current regime."
     },
     {
       "ticker": "ABNB",
@@ -38,9 +38,9 @@
       "minConfidence": 70,
       "slAtrMult": 0.4,
       "tpRrRatio": 2.0,
-      "skip": false,
-      "skipReason": null,
-      "note": "Apr 2026 optimizer rank#1 (180d): KEYLEVEL mc=70 sl=0.4 tp=2:1 → 13t 55.6%WR +0.58%exp $1055. Previous SMC was outside top 19 — KEYLEVEL dominates all combos for AMZN. E-commerce stock reacts better to key levels than FVG sweeps."
+      "skip": true,
+      "skipReason": "Apr 2026 HYBRID backtest: all 4 strategies negative (best breakout -$56, keylevel -$58). AMZN moves are too steady/gradual for intraday options edge — no strategy generates positive P&L on HYBRID exits.",
+      "note": "Apr 2026 optimizer rank#1 (180d): KEYLEVEL mc=70 sl=0.4 tp=2:1. Skipped after HYBRID validation showed all strategies negative."
     },
     {
       "ticker": "BA",
@@ -129,7 +129,9 @@
       "minConfidence": 78,
       "slAtrMult": 1.0,
       "tpRrRatio": 1.5,
-      "note": "Apr 2026 90d optimizer rank#1: SMC mc=78 sl=1.0 tp=1.5 → 9T 55.6%WR +1.28%exp. 90d is naturally thin for MARA — BTC halving cycle means quiet periods. Confirmed by 180d: 27T 74.1%WR. Keep mc=78 sl=1.0 (BTC volatility needs wide stop). tp=1.5 unchanged. SMC is the only strategy with positive expectancy on MARA — all others go negative at mc<78."
+      "skip": true,
+      "skipReason": "Apr 2026 HYBRID backtest: all 4 strategies negative (best keylevel -$130, smc -$228). High WR (74-76%) but options P&L negative — MARA's BTC-driven moves are too erratic for options premium recovery on HYBRID exits. Small underlying price (~$15) limits options dollar gains.",
+      "note": "Apr 2026 90d optimizer rank#1: SMC mc=78 sl=1.0 tp=1.5. Skipped after HYBRID validation showed all strategies negative despite 74%+ WR."
     },
     {
       "ticker": "META",
@@ -164,10 +166,10 @@
       "dispAtrMult": 1.2,
       "slAtrMult": 1.0,
       "tpRrRatio": 2.0,
-      "intradayRsGate": true,
+      "intradayRsGate": false,
       "skip": false,
       "skipReason": null,
-      "note": "Apr 2026 SMC confirmed best for MSFT. LIVE_PARITY scalp sweep: scalp $253 at 40% WR (unreliable) vs SMC SCALP mode $221 — scalp is marginally higher P&L but 40% WR is not tradeable. SMC at mc=78 with FVG filters is cleaner. Reverted from scalp Apr 2026. All strategies weaker at 90/180d due to tariff-recession regime; use 365d for MSFT evaluation."
+      "note": "Apr 2026 HYBRID backtest: SMC ALL-mode $595 (8T 62.5%WR) — 0 trades in SCALP mode because regime+RS gates block most MSFT signals in tariff-recession period. Removed intradayRsGate to allow signal generation. SMC mc=78 with FVG filters (minFvgPct=0.0004, dispAtrMult=1.2), tp=2:1 captures full institutional displacement moves."
     },
     {
       "ticker": "MSTR",
@@ -182,11 +184,12 @@
     },
     {
       "ticker": "NFLX",
-      "minConfidence": 63,
-      "minFvgPct": 0.0005,
-      "dispAtrMult": 1.4,
-      "note": "Fast-moving large-cap — 1 trade 30d on defaults. Relaxed to catch more sweep+FVG setups. maxConf=84 Mar 2026: 85+ bucket 22.2% WR/-0.37% (over-extended late entries); 75-84 bucket 75% WR/+0.65% — earlier entries clearly better.",
-      "maxConfidence": 84
+      "strategyType": "vwap",
+      "minConfidence": 65,
+      "maxConfidence": 84,
+      "slAtrMult": 1.0,
+      "tpRrRatio": 1.25,
+      "note": "Apr 2026 HYBRID strategy sweep: switched smc→vwap. VWAP -$3 vs SMC -$140 — vwap is near-breakeven at 180d, smc bleeds badly. NFLX is a large-cap VWAP-magnet: large funds benchmark to VWAP on streaming/content news days. mc=65, tp=1.25R for faster exit on volatile moves, sl=1.0 ATR. Revisit in 90d."
     },
     {
       "ticker": "NIO",
@@ -203,8 +206,8 @@
       "maxConfidence": 84,
       "slAtrMult": 0.4,
       "tpRrRatio": 1.0,
-      "intradayRsGate": true,
-      "note": "Apr 2026 optimizer rank#3 best eligible (180d): SMC mc=78 sl=0.4 tp=1:1 → 15t 66.7%WR +0.30%exp $1729. Rank 1 (VWAP 1t) and Rank 2 (KEYLEVEL 4t) not eligible. Changed sl 1.0→0.4 and tp 1.25→1:1. minConf 75→78 tightens entry quality."
+      "intradayRsGate": false,
+      "note": "Apr 2026 HYBRID backtest: SMC ALL-mode $81 (3T 66.7%WR) — 0 trades in SCALP mode, RS gate too restrictive. Removed intradayRsGate. Very thin sample (3 trades), keep on watchlist but low confidence. SMC mc=78 sl=0.4 tp=1:1."
     },
     {
       "ticker": "PANW",
@@ -248,7 +251,9 @@
       "minFvgPct": 0.001,
       "slAtrMult": 1.0,
       "tpRrRatio": 1.0,
-      "note": "Apr 2026 outside-research retune: RIOT stays on SMC as a BTC-beta name, but use a stricter bar than MARA because the business is noisier and more headline-sensitive. Raised minConf 78→80 and added maxConf=84 to avoid late/exhausted crypto-sympathy entries while keeping the 1:1 target and 1.0 ATR stop."
+      "skip": true,
+      "skipReason": "Apr 2026 HYBRID backtest: -$22, only 5 trades. Too thin to trade reliably. BTC-beta miner with erratic gaps — similar issue to MARA. Small underlying price limits options dollar gains.",
+      "note": "Apr 2026 retune: SMC mc=80 maxConf=84. Skipped after HYBRID validation — too few trades and negative options P&L."
     },
     {
       "ticker": "RIVN",
@@ -286,7 +291,9 @@
       "maxConfidence": 84,
       "slAtrMult": 1.0,
       "tpRrRatio": 1.5,
-      "note": "Apr 2026 deep strategy scan: switched vwap→keylevel. Full 10-strategy×5-timeframe matrix: keylevel is only strategy with any passing window (90d 10T 60%). All other strategies 0/5. SMCI is in news-driven regime (accounting controversy, delisting risk) — technical patterns dominated by macro. keylevel still captures key S/R bounces even in volatile regime. Revisit when SMCI stabilizes. sl=1.0 ATR for AI-server headline volatility, tp=1.5 R:R."
+      "skip": true,
+      "skipReason": "Apr 2026 HYBRID backtest: all 4 strategies negative (best vwap -$69, keylevel -$108). SMCI in accounting/delisting headline regime — technical patterns dominated by news gaps. No intraday edge on HYBRID exits.",
+      "note": "Apr 2026 deep strategy scan: keylevel only strategy with any passing window (90d 10T 60%). Skipped after HYBRID validation confirmed all strategies negative in current regime."
     },
     {
       "ticker": "SNAP",
@@ -308,14 +315,14 @@
     },
     {
       "ticker": "SPY",
-      "strategyType": "breakout",
+      "strategyType": "smc",
       "minConfidence": 70,
       "maxConfidence": 84,
       "slAtrMult": 1.0,
       "tpRrRatio": 1.5,
       "skip": false,
       "skipReason": null,
-      "note": "Apr 2026 deep strategy scan: switched smc→breakout. Full 5-timeframe scan showed breakout 2/5 best available (180d 11T 63.6%, 365d 18T 55.6%); all other strategies 0-2/5. SPY VWAP and SMC both 0-1/5 in current volatile tariff-driven market. Breakout captures opening range momentum on index — SPY makes strong directional moves at open driven by macro/futures gap fills. sl=1.0 ATR for SPY's wide intraday range, tp=1.5 R:R."
+      "note": "Apr 2026 HYBRID backtest switch: smc $212 > breakout -$107 > keylevel -$175 > vwap -$327. SMC 78.6% WR on SPY at 180d HYBRID — FVG sweeps on index are driven by futures/macro imbalances that create clean institutional order flow. Switched from breakout Apr 2026. sl=1.0 ATR for SPY's wide intraday range, tp=1.5 R:R."
     },
     {
       "ticker": "SQ",
