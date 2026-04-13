@@ -702,13 +702,13 @@ public class DashboardController {
 
     // ── Live trade log endpoints ─────────────────────────────────────────────
 
-    /** GET /api/trades/today — today's live trade alerts. */
+    /** GET /api/trades/today — trades closed today with realized outcomes. */
     @GetMapping("/api/trades/today")
     @ResponseBody
     public ResponseEntity<Map<String,Object>> todayTrades() {
         liveLog.resolveOpenTrades();
         String today = ZonedDateTime.now(ET).format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
-        return ResponseEntity.ok(liveLog.getDailySummary(today));
+        return ResponseEntity.ok(liveLog.getResolvedSummaryForDate(today));
     }
 
     /** GET /api/trades/history — all live trades ever recorded. */

@@ -167,7 +167,52 @@ public class LiveTradeLog {
     public List<Map<String, Object>> getTodayTrades() {
         ensureTradeHistoryAvailable();
         backfillBrokerResolvedPnL();
-        return getTradesForDate(ZonedDateTime.now(ET).format(DATE_FMT));
+        return getResolvedTradesForDate(ZonedDateTime.now(ET).format(DATE_FMT));
+    }
+
+    /** Get realized trades that closed on a specific ET date (yyyy-MM-dd). */
+    public List<Map<String, Object>> getResolvedTradesForDate(String date) {
+        ensureTradeHistoryAvailable();
+        synchronized (trades) {
+            return trades.stream()
+                    .filter(t -> isRealizedOutcome(String.valueOf(t.get("outcome"))))
+                    .filter(t -> date.equals(resolveDateEt(t)))
+                    .sorted(Comparator.comparingLong(this::resolveTimestamp).reversed())
+                    .collect(Collectors.toList());
+        }
+    }
+
+    /** Summary for realized trades that closed on a specific ET date (yyyy-MM-dd). */
+    public Map<String, Object> getResolvedSummaryForDate(String date) {
+        ensureTradeHistoryAvailable();
+        List<Map<String, Object>> dayTrades = getResolvedTradesForDate(date);
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("date", date);
+        summary.put("totalAlerts", dayTrades.size());
+
+        long wins = dayTrades.stream().filter(t -> "WIN".equals(t.get("outcome"))).count();
+        long losses = dayTrades.stream().filter(t -> "LOSS".equals(t.get("outcome"))).count();
+        long beStops = dayTrades.stream().filter(t -> "BE_STOP".equals(t.get("outcome"))).count();
+        long resolved = wins + losses + beStops;
+
+        summary.put("wins", wins);
+        summary.put("losses", losses);
+        summary.put("beStops", beStops);
+        summary.put("notFilled", 0);
+        summary.put("open", 0);
+        summary.put("resolved", resolved);
+        summary.put("winRate", resolved > 0 ? Math.round(wins * 100.0 / (wins + losses) * 10) / 10.0 : 0);
+
+        double totalPnl = dayTrades.stream()
+                .mapToDouble(t -> toDouble(t.get("pnlPct")))
+                .sum();
+        summary.put("totalPnlPct", Math.round(totalPnl * 100) / 100.0);
+        double totalPnlAmount = dayTrades.stream()
+                .mapToDouble(t -> toDouble(t.get("pnlAmount")))
+                .sum();
+        summary.put("totalPnlAmount", Math.round(totalPnlAmount * 100) / 100.0);
+        summary.put("trades", dayTrades);
+        return summary;
     }
 
     /** Get all trades (for full history report). */
@@ -647,6 +692,27 @@ public class LiveTradeLog {
 
     private boolean isRealizedOutcome(String outcome) {
         return "WIN".equals(outcome) || "LOSS".equals(outcome) || "BE_STOP".equals(outcome) || "TIMEOUT".equals(outcome);
+    }
+
+    private long resolveTimestamp(Map<String, Object> trade) {
+        Object resolvedAt = trade.get("resolvedAt");
+        if (resolvedAt instanceof Number n) return n.longValue();
+        if (resolvedAt != null) {
+            try {
+                return Long.parseLong(String.valueOf(resolvedAt));
+            } catch (Exception ignored) {
+                return parseEpoch(String.valueOf(resolvedAt));
+            }
+        }
+        Object brokerExitAt = trade.get("brokerExitAt");
+        if (brokerExitAt != null) return parseEpoch(String.valueOf(brokerExitAt));
+        return ((Number) trade.getOrDefault("timestamp", 0L)).longValue();
+    }
+
+    private String resolveDateEt(Map<String, Object> trade) {
+        long ts = resolveTimestamp(trade);
+        if (ts <= 0) return String.valueOf(trade.getOrDefault("date", ""));
+        return Instant.ofEpochMilli(ts).atZone(ET).format(DATE_FMT);
     }
 
     private boolean markNotFilledIfNeeded(Map<String, Object> trade,

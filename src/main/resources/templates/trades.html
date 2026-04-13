@@ -101,8 +101,8 @@
         <span id="resolve-msg" style="font-size:11px;color:var(--muted);align-self:flex-end"></span>
     </div>
 
-    <!-- Today's trades -->
-    <div class="section-title">📅 Today's Trades</div>
+    <!-- Today's realized trades -->
+    <div class="section-title">📅 Today's Closed Trades</div>
     <div id="today-section"><div class="spinner">Loading...</div></div>
 
     <!-- Full history -->
@@ -146,7 +146,7 @@ async function loadCumulative() {
 async function loadToday() {
     const d = await fetch('/api/trades/today').then(r=>r.json()).catch(()=>null);
     if (!d || !d.trades || d.trades.length === 0) {
-        document.getElementById('today-section').innerHTML = '<div style="color:var(--muted);padding:16px">No trades recorded today yet.</div>';
+        document.getElementById('today-section').innerHTML = '<div style="color:var(--muted);padding:16px">No broker-closed trades recorded today yet.</div>';
         return;
     }
     document.getElementById('today-section').innerHTML = buildTable(d.trades, d);
