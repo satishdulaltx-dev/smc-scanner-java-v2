@@ -53,14 +53,29 @@
     },
     {
       "ticker": "BA",
-      "skip": true,
-      "skipReason": "0% WR 90d (3 trades, 2 losses + 1 BE). Aerospace — moves on defense contracts/FAA news, not technical patterns.",
-      "strategyType": "breakout"
+      "strategyType": "smc",
+      "minConfidence": 70,
+      "maxConfidence": 84,
+      "slAtrMult": 1.0,
+      "tpRrRatio": 1.5,
+      "skip": false,
+      "note": "Apr 2026 full sweep: smc 5/5 timeframes intraday (87T 61%WR $1760 at 365d), swing 3/3 ($1630), scalp 4/5. Was wrongly skipped on 3 bad trades in one 90d window. Aerospace moves DO follow SMC patterns — the original test was too small a sample.",
+      "scalp":    { "skip": false, "strategyType": "scalp", "minConfidence": 70 },
+      "intraday": { "skip": false, "strategyType": "smc",   "minConfidence": 70, "maxConfidence": 84 },
+      "swing":    { "skip": false }
     },
     {
       "ticker": "BABA",
-      "skip": true,
-      "skipReason": "0% WR 6 consecutive losses in 30d — Chinese ADR, different market hours/dynamics, SMC 5m patterns unreliable."
+      "strategyType": "smc",
+      "minConfidence": 70,
+      "maxConfidence": 84,
+      "slAtrMult": 1.0,
+      "tpRrRatio": 1.5,
+      "skip": false,
+      "note": "Apr 2026 full sweep: smc 4/5 intraday (fails 30d only — 6 consecutive losses were a bad 30d window, not structural). vwap/keylevel also 4/5. Swing 3/3 ($930). Scalp PnL tiny ($3-$172) — skip scalp.",
+      "scalp":    { "skip": true,  "skipReason": "Scalp PnL near-zero ($3-$172) — not worth options risk on Chinese ADR" },
+      "intraday": { "skip": false, "strategyType": "smc",   "minConfidence": 70, "maxConfidence": 84 },
+      "swing":    { "skip": false }
     },
     {
       "ticker": "COIN",
@@ -110,15 +125,29 @@
     },
     {
       "ticker": "GOOGL",
-      "skip": true,
-      "skipReason": "Mega-cap stable stock — SMC 5m FVG patterns unreliable (5.6% win rate over 500 days)",
       "strategyType": "vwap",
-      "note": "skip=true intentional; strategyType set for future reference if skip is lifted"
+      "minConfidence": 70,
+      "maxConfidence": 84,
+      "slAtrMult": 1.0,
+      "tpRrRatio": 1.5,
+      "skip": false,
+      "note": "Apr 2026 full sweep: passes ALL 8 strategies × ALL 5 timeframes. Best intraday: vwap 90d 82.4%WR $1470, vsqueeze 90d 84.6%WR $1363. Was wrongly skipped — SMC 5m was weak but VWAP is dominant (mega-cap VWAP-magnet). Scalp 83.3%WR 30d. Swing 76.5%WR 90d.",
+      "scalp":    { "skip": false, "strategyType": "scalp", "minConfidence": 70 },
+      "intraday": { "skip": false, "strategyType": "vwap",  "minConfidence": 70, "maxConfidence": 84 },
+      "swing":    { "skip": false }
     },
     {
       "ticker": "GS",
-      "skip": true,
-      "skipReason": "0% WR 4 losses in 30d — investment bank moves on macro/Fed news, not intraday technical patterns."
+      "strategyType": "keylevel",
+      "minConfidence": 70,
+      "maxConfidence": 84,
+      "slAtrMult": 0.5,
+      "tpRrRatio": 1.5,
+      "skip": false,
+      "note": "Apr 2026 full sweep: keylevel 3/5 (30d/60d/90d) with huge PnL ($1786/$1824/$1863 — high stock price ~$500). Fails 180d/365d — macro-regime sensitive, works in shorter windows. Was wrongly skipped on 4 bad trades. Intraday only — swing 50%WR below threshold.",
+      "scalp":    { "skip": true, "skipReason": "Only 2/5 scalp timeframes pass" },
+      "intraday": { "skip": false, "strategyType": "keylevel", "minConfidence": 70, "maxConfidence": 84 },
+      "swing":    { "skip": true, "skipReason": "50%WR at 365d — below threshold" }
     },
     {
       "ticker": "HOOD",
@@ -203,14 +232,17 @@
     },
     {
       "ticker": "MSTR",
-      "skip": true,
-      "skipReason": "Apr 2026: 0% WR (1yr backtest), -2.22% expectancy, -$1129 opt P&L. Leveraged BTC proxy — overnight BTC gaps dominate intraday price. Use MARA for crypto-proxy exposure instead.",
-      "minConfidence": 78,
-      "minFvgPct": 0.001,
+      "strategyType": "smc",
+      "minConfidence": 75,
       "maxConfidence": 89,
       "slAtrMult": 1.0,
       "tpRrRatio": 2.0,
-      "note": "365d optimizer: SMC mc=78 sl=1.0 tp=2.0 → 9t 78%WR +2.01% exp $1695 opt P&L."
+      "skip": true,
+      "skipReason": "Apr 2026 full sweep: only 2/5 timeframes pass intraday — BTC-cycle dependent. Revisit when BTC enters sustained trend.",
+      "note": "Apr 2026 full sweep: intraday only 2/5 timeframes (180d and 365d). Too BTC-cycle dependent for reliable activation. Keep skipped until BTC enters sustained trend where more windows pass.",
+      "scalp":    { "skip": true, "skipReason": "BTC gaps — too few setups" },
+      "intraday": { "skip": true, "skipReason": "Only 2/5 timeframes pass — not consistent enough across windows" },
+      "swing":    { "skip": true, "skipReason": "Swing 53.8%WR at 365d — below 55% threshold" }
     },
     {
       "ticker": "NFLX",
@@ -278,9 +310,16 @@
     },
     {
       "ticker": "QQQ",
-      "skip": true,
-      "skipReason": "12% WR 90d (8 trades). VWAP reversion on index ETF not working — QQQ trends too strongly intraday.",
-      "strategyType": "vwap"
+      "strategyType": "smc",
+      "minConfidence": 70,
+      "maxConfidence": 84,
+      "slAtrMult": 1.0,
+      "tpRrRatio": 1.5,
+      "skip": false,
+      "note": "Apr 2026 full sweep: smc intraday 365d 62.3%WR $2638. Scalp exceptionally strong — 73.5%WR 365d, 100%WR 30d. Was wrongly skipped on VWAP only — SMC is the right strategy for QQQ. 60d/90d windows thin (regime-sensitive), reliable at 30d and 180d+.",
+      "scalp":    { "skip": false, "strategyType": "scalp", "minConfidence": 70 },
+      "intraday": { "skip": false, "strategyType": "smc",   "minConfidence": 70, "maxConfidence": 84 },
+      "swing":    { "skip": false }
     },
     {
       "ticker": "RIOT",
@@ -319,9 +358,16 @@
     },
     {
       "ticker": "SHOP",
-      "skip": true,
-      "skipReason": "365d backtest 28 trades 42%WR -0.06 exp. Both confidence buckets underperform — not a reversed-confidence issue, SMC strategy has no edge on SHOP. E-commerce stock driven by earnings/macro, not intraday FVG mechanics.",
-      "note": "skip=true Mar 2026. Re-evaluate with KeyLevel or ORB strategy if SMC edge returns."
+      "strategyType": "smc",
+      "minConfidence": 70,
+      "maxConfidence": 84,
+      "slAtrMult": 1.0,
+      "tpRrRatio": 1.5,
+      "skip": false,
+      "note": "Apr 2026 full sweep: passes ALL 8 strategies × ALL 5 timeframes (5/5 intraday smc, swing 3/3). Best intraday: smc 30d 85.7%WR $404, swing 90d 77.8%WR $977. Scalp only 2/5 timeframes — not consistent enough. Was wrongly skipped on old SMC profile.",
+      "scalp":    { "skip": true,  "skipReason": "Only 2/5 timeframes pass scalp (30d and 90d only) — not consistent" },
+      "intraday": { "skip": false, "strategyType": "smc",   "minConfidence": 70, "maxConfidence": 84 },
+      "swing":    { "skip": false }
     },
     {
       "ticker": "SMCI",
@@ -392,8 +438,16 @@
     },
     {
       "ticker": "UBER",
-      "skip": true,
-      "skipReason": "0% WR 3 losses in 30d — recent regime unfavorable, no consistent intraday SMC edge detected."
+      "strategyType": "smc",
+      "minConfidence": 70,
+      "maxConfidence": 84,
+      "slAtrMult": 1.0,
+      "tpRrRatio": 1.5,
+      "skip": false,
+      "note": "Apr 2026 full sweep: intraday smc 4/5 timeframes (fails 30d only), swing 3/3. Scalp only 2/5 (90d and 180d). Was killed by 0%WR in one 30d bad window — regime artifact, not structural failure.",
+      "scalp":    { "skip": true,  "skipReason": "Only 2/5 timeframes pass scalp — not consistent" },
+      "intraday": { "skip": false, "strategyType": "smc",   "minConfidence": 70, "maxConfidence": 84 },
+      "swing":    { "skip": false }
     },
     {
       "ticker": "V",
