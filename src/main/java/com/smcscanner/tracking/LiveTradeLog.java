@@ -157,6 +157,17 @@ public class LiveTradeLog {
         return false;
     }
 
+    /**
+     * Returns true if a gap_overnight signal was already recorded today for this ticker.
+     * Survives service restarts because it reads from the persisted trade log.
+     */
+    public boolean hasOvernightFiredToday(String ticker) {
+        String today = ZonedDateTime.now(ET).format(DATE_FMT);
+        return getTradesForDate(today).stream()
+                .anyMatch(t -> ticker.equals(t.get("ticker"))
+                        && String.valueOf(t.get("strategy")).startsWith("gap_overnight"));
+    }
+
     /** Get all trades for a specific date (yyyy-MM-dd). */
     public List<Map<String, Object>> getTradesForDate(String date) {
         ensureTradeHistoryAvailable();

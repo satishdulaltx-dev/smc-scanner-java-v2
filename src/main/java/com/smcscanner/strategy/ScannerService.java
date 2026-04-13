@@ -1065,7 +1065,7 @@ public class ScannerService {
                             java.time.ZoneId.of("America/New_York")).toLocalTime();
                     boolean isPreCloseWindow = !etNowGap.isBefore(java.time.LocalTime.of(15, 30))
                             && etNowGap.isBefore(java.time.LocalTime.of(16, 0));
-                    if (isPreCloseWindow) {
+                    if (isPreCloseWindow && !liveLog.hasOvernightFiredToday(ticker)) {
                         List<OHLCV> spyBarsForGap = java.util.List.of();
                         try {
                             List<OHLCV> sp = client.getBars("SPY", "5m", 80);
@@ -1080,6 +1080,13 @@ public class ScannerService {
                                     overnightService.evaluate(ticker, sessionBars5m, tryDir, hasCat, spyGapFinal);
                             if (!gapSig.shouldHold()) continue;
 
+                            // Minimum score 70: requires at least 2 real confirmations beyond catalyst alone.
+                            // Score 60 = catalyst + close extreme only — not enough for an overnight hold.
+                            if (gapSig.gapScore() < 70) {
+                                log.debug("GAP_OVERNIGHT {} {} skipped — score {} < 70 minimum", ticker, tryDir, gapSig.gapScore());
+                                continue;
+                            }
+
                             double gapEntry = sessionBars5m.get(sessionBars5m.size() - 1).getClose();
                             double gapSl    = gapSig.suggestedSl() > 0 ? gapSig.suggestedSl()
                                     : ("long".equals(tryDir) ? gapEntry - dailyAtr : gapEntry + dailyAtr);
@@ -1091,6 +1098,10 @@ public class ScannerService {
 
                             String gapKey = "gap_overnight_" + ticker;
                             if (!dedup.isDuplicate(gapKey, tryDir, gapEntry, 60)) {
+                                // Stamp dedup immediately — before options lookup — so a failed options
+                                // call doesn't let the same ticker re-fire on the next scan cycle.
+                                dedup.markSent(gapKey, tryDir, gapEntry);
+
                                 log.info("GAP_OVERNIGHT {} {} score={} reason=[{}] entry={} sl={} tp={}",
                                         ticker, tryDir.toUpperCase(), gapSig.gapScore(), gapSig.reason(),
                                         String.format("%.2f", gapEntry), String.format("%.2f", gapSl),
@@ -1126,7 +1137,6 @@ public class ScannerService {
                                     discord.sendOvernightHoldAlert(gapNightSetup, gapSig.gapScore(), gapSig.reason());
                                     liveLog.recordTrade(gapNightSetup, "gap_overnight_" + tryDir);
                                     tracker.recordStrategySignal("gap_overnight", gapSig.gapScore());
-                                    dedup.markSent(gapKey, tryDir, gapEntry);
                                     if (alpaca.isEnabled()) alpaca.placeOrder(gapNightSetup);
                                 }
                             }
