@@ -128,18 +128,22 @@ public class LiveTradeLog {
     }
 
     /** Resolve a trade outcome (WIN/LOSS/BE_STOP/TIMEOUT). Called from API or adaptive flow. */
-    public boolean resolveTrade(String ticker, String outcome, double pnlPct) {
+    public boolean resolveTrade(String ticker, String outcome, Double pnlAmount) {
         synchronized (trades) {
             // Find most recent OPEN trade for this ticker
             for (int i = trades.size() - 1; i >= 0; i--) {
                 Map<String, Object> t = trades.get(i);
                 if (ticker.equals(t.get("ticker")) && "OPEN".equals(t.get("outcome"))) {
+                    double entry = toDouble(t.get("entry"));
+                    double resolvedAmount = pnlAmount == null ? 0.0 : pnlAmount;
+                    double resolvedPct = entry > 0 ? (resolvedAmount / entry) * 100.0 : 0.0;
                     t.put("outcome", outcome);
-                    t.put("pnlPct", pnlPct);
-                    if (!t.containsKey("pnlAmount")) t.put("pnlAmount", null);
+                    t.put("pnlPct", Math.round(resolvedPct * 100.0) / 100.0);
+                    t.put("pnlAmount", Math.round(resolvedAmount * 100.0) / 100.0);
                     t.put("resolvedAt", ZonedDateTime.now(ET).toInstant().toEpochMilli());
                     persist();
-                    log.info("Trade resolved: {} {} pnl={}%", ticker, outcome, pnlPct);
+                    log.info("Trade resolved: {} {} pnl=${}", ticker, outcome,
+                            Math.round(resolvedAmount * 100.0) / 100.0);
                     return true;
                 }
             }

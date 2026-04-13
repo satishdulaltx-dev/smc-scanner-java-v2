@@ -737,8 +737,8 @@ public class DashboardController {
     }
 
     /**
-     * POST /api/trades/resolve?ticker=AAPL&outcome=WIN&pnl=1.25
-     * Resolves an open trade. outcome: WIN, LOSS, BE_STOP, TIMEOUT.
+     * POST /api/trades/resolve?ticker=AAPL&outcome=WIN&pnl=56.00
+     * Resolves an open trade using realized dollar P&L. outcome: WIN, LOSS, BE_STOP, TIMEOUT.
      */
     @PostMapping("/api/trades/resolve")
     @ResponseBody
@@ -753,7 +753,7 @@ public class DashboardController {
         // Also record in adaptive suppressor for streak tracking
         if ("WIN".equalsIgnoreCase(outcome)) adaptive.recordWin(ticker.toUpperCase());
         else if ("LOSS".equalsIgnoreCase(outcome)) adaptive.recordLoss(ticker.toUpperCase());
-        return ResponseEntity.ok(Map.of("ticker", ticker.toUpperCase(), "outcome", outcome, "pnl", pnl));
+        return ResponseEntity.ok(Map.of("ticker", ticker.toUpperCase(), "outcome", outcome, "pnlAmount", pnl));
     }
 
     /**
