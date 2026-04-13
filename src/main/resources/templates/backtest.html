@@ -852,7 +852,12 @@ function drawTradeChart(data, trade) {
         },
         crosshair: { mode: lwc.CrosshairMode.Normal },
         rightPriceScale: { borderColor: '#21262d', minimumWidth: 64 },
-        timeScale: { borderColor: '#21262d', timeVisible: true, secondsVisible: false, barSpacing: 10 }
+        timeScale: { borderColor: '#21262d', timeVisible: true, secondsVisible: false, barSpacing: 10 },
+        localization: {
+            timeFormatter: ts => new Date(ts * 1000).toLocaleTimeString('en-US', {
+                timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hour12: false
+            })
+        }
     });
 
     // Candles

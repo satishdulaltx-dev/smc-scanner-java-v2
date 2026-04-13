@@ -96,7 +96,10 @@ public class ScannerScheduler {
         ZonedDateTime nowZdt=ZonedDateTime.now(ET);
         if (isNyseHoliday(nowZdt.toLocalDate())) return; // NYSE holiday — skip all equity scanning
         LocalTime nowET=nowZdt.toLocalTime();
-        boolean inNy=!nowET.isBefore(NY_OPEN)&&!nowET.isAfter(NY_CLOSE);
+        int dow=nowZdt.getDayOfWeek().getValue(); // 1=Mon … 7=Sun
+        // inNy is false on weekends — the per-ticker guard (!isC&&!inNy) already skips
+        // equities, while crypto (isC=true) bypasses it and scans 24/7.
+        boolean inNy=dow<6&&!nowET.isBefore(NY_OPEN)&&!nowET.isAfter(NY_CLOSE);
         state.setStatus("running");
         state.setLastScan(ZonedDateTime.now(ET).format(DateTimeFormatter.ofPattern("h:mm:ss a")));
         for (String ticker:tickers) {
