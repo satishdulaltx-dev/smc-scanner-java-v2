@@ -790,8 +790,8 @@ async function openTradeChart(serializedTrade) {
         <div class="meta-box"><div class="meta-lbl">Entry</div><div class="meta-val">$${Number(t.entry).toFixed(2)}</div></div>
         <div class="meta-box"><div class="meta-lbl">Stop</div><div class="meta-val">$${Number(t.sl).toFixed(2)}</div></div>
         <div class="meta-box"><div class="meta-lbl">Target</div><div class="meta-val">$${Number(t.tp).toFixed(2)}</div></div>
-        <div class="meta-box"><div class="meta-lbl">Outcome</div><div class="meta-val">${t.outcome}</div></div>
-        <div class="meta-box"><div class="meta-lbl">P&L</div><div class="meta-val">${t.pnl_pct >= 0 ? '+' : ''}${Number(t.pnl_pct).toFixed(2)}%</div></div>
+        <div class="meta-box"><div class="meta-lbl">Outcome</div><div class="meta-val" style="color:${t.outcome==='WIN'||t.outcome==='TRAIL_WIN'||(t.outcome==='TIMEOUT'&&t.pnl_pct>0)?'var(--green)':t.outcome==='TIMEOUT'?'var(--yellow)':'var(--red)'}">${t.outcome}${t.outcome==='TIMEOUT'?(t.pnl_pct>0?' ✓ (profitable)':' (time limit)')':''}</div></div>
+        <div class="meta-box"><div class="meta-lbl">P&L</div><div class="meta-val" style="color:${t.pnl_pct>=0?'var(--green)':'var(--red)'}">${t.pnl_pct >= 0 ? '+' : ''}${Number(t.pnl_pct).toFixed(2)}%</div></div>
         <div class="meta-box"><div class="meta-lbl">Confidence</div><div class="meta-val">${t.confidence}/100</div></div>
     `;
     const reasonBox = document.getElementById('trade-reason');
@@ -819,6 +819,11 @@ async function openTradeChart(serializedTrade) {
     if (t.ctx_label)     reasonHtml += `<div style="font-size:11px;margin-top:3px;color:#9b6dff">RS/VIX: ${t.ctx_label}</div>`;
     if (t.news_label)    reasonHtml += `<div style="font-size:11px;margin-top:3px;color:#8b949e">News: ${t.news_label}</div>`;
     if (t.quality_label) reasonHtml += `<div style="font-size:11px;margin-top:3px;color:#e36209">Quality: ${t.quality_label}</div>`;
+    reasonHtml += `<div style="font-size:10px;margin-top:6px;color:var(--muted);border-top:1px solid var(--border);padding-top:5px">⚠ Entry price includes 0.05% market-order slippage above signal bar close. Arrow marks the signal candle — entry line shows the actual fill price.</div>`;
+    if (t.outcome === 'TIMEOUT') {
+        const msg = t.pnl_pct > 0 ? '✅ TIMEOUT = hit time limit while profitable — exited with gain, not a loss.' : '⏱ TIMEOUT = hit time limit before reaching TP or SL.';
+        reasonHtml += `<div style="font-size:11px;margin-top:4px;color:${t.pnl_pct>0?'var(--green)':'var(--yellow)'}">` + msg + `</div>`;
+    }
     reasonBox.innerHTML = reasonHtml;
     reasonBox.style.display = 'block';
     document.getElementById('trade-modal').classList.add('show');
@@ -936,26 +941,40 @@ function drawTradeChart(data, trade) {
     });
 
     // Entry / exit markers
-    // Both entry markers use belowBar so arrow always appears at/near the candle
-    // regardless of whether it's a long or short — the arrow SHAPE shows direction.
-    // The price LINES (dashed) show the exact entry/exit price.
+    // Arrow snaps to the signal bar by finding the bar whose OHLC contains the
+    // entry price. Slippage (0.05%) can push the filled price slightly above/below
+    // the signal bar's high/low — we walk back to the nearest bar that fits.
     const entryTs = Math.floor(trade.entry_ts / 1000);
     const exitTs  = Math.floor((trade.exit_ts || trade.entry_ts) / 1000);
     const isLong  = trade.dir?.toLowerCase() === 'long';
+    const entryPrice = Number(trade.entry);
+
+    // Find best signal bar: prefer exact timestamp match, fallback to nearest bar
+    // whose close is within 0.2% of entry (handles slippage price mismatch)
+    const signalBar = bars.find(b => b.time === entryTs)
+        || bars.slice().reverse().find(b => b.time <= entryTs && Math.abs(b.close - entryPrice) / entryPrice < 0.002)
+        || bars.find(b => b.time === entryTs - 300) // try one 5m bar back
+        || bars.find(b => b.time >= entryTs);
+    const signalBarTime = signalBar ? signalBar.time : entryTs;
+
+    const exitBar = bars.find(b => b.time === exitTs)
+        || bars.find(b => b.time >= exitTs);
+    const exitBarTime = exitBar ? exitBar.time : exitTs;
+
     tradeCandleSeries.setMarkers([
         {
-            time: entryTs,
+            time: signalBarTime,
             position: 'belowBar',
             color: '#58a6ff',
             shape: isLong ? 'arrowUp' : 'arrowDown',
-            text: `${isLong ? '▲' : '▼'} ENTRY $${Number(trade.entry).toFixed(2)}`
+            text: `${isLong ? '▲' : '▼'} ENTRY $${entryPrice.toFixed(2)}`
         },
         {
-            time: exitTs,
+            time: exitBarTime,
             position: 'aboveBar',
             color: outcomeColor,
             shape: isLong ? 'arrowDown' : 'arrowUp',
-            text: `EXIT $${Number(exitPrice).toFixed(2)} (${trade.outcome})`
+            text: `EXIT $${Number(exitPrice).toFixed(2)}`
         }
     ]);
 
