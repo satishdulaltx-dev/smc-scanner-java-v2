@@ -164,20 +164,21 @@ public class ScalpMomentumDetector {
         String setupType   = "vwap-scalp-" + levelName;
 
         // ── Entry / SL / TP ───────────────────────────────────────────────────
+        // SL is placed just beyond the CURRENT bar's rejection wick only.
+        // Using prev bar's extreme can produce swing-size SLs on large prior candles.
+        // Max risk guard: skip if stop is more than 1.5× ATR away — not a tight scalp.
         double entry = round4(close);
         double stop, tp;
 
         if (isLong) {
-            double wickLow = Math.min(lastLo, prevLo);
-            stop = round4(wickLow - atr * 0.15);
+            stop = round4(lastLo - atr * 0.15);
             double risk = Math.abs(entry - stop);
-            if (risk <= 0) return result;
+            if (risk <= 0 || risk > atr * 1.5) return result;
             tp = round4(Math.max(tpBand, entry + risk * 1.5));
         } else {
-            double wickHigh = Math.max(lastHi, prevHi);
-            stop = round4(wickHigh + atr * 0.15);
+            stop = round4(lastHi + atr * 0.15);
             double risk = Math.abs(entry - stop);
-            if (risk <= 0) return result;
+            if (risk <= 0 || risk > atr * 1.5) return result;
             tp = round4(Math.min(tpBand, entry - risk * 1.5));
         }
 
