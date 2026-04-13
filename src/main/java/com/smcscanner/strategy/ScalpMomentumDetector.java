@@ -16,25 +16,36 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Bollinger-based scalp detector.
+ * VWAP Standard-Deviation Band Scalp Detector.
  *
- * Signal layers (all additive to confidence, none are hard blocks except the
- * base Bollinger conditions):
+ * Replaces the Bollinger Band model. Three layers must align for an entry:
  *
- *  1. Bollinger bounce / squeeze-break  — core signal (unchanged)
- *  2. Volume Profile (VP)               — prefer entries at VPOC / VAH / VAL
- *  3. Order-flow delta                  — buy/sell pressure from last 5 bars
- *  4. Bid/ask imbalance (NBBO)          — live pending-order stacking via Polygon
- *  5. Large-print sweep detection       — institutional tape prints via Polygon trades
+ *  1. REGIME  — price is on the correct side of session VWAP
+ *  2. LEVEL   — price touched a VWAP SD band (VWAP, ±1SD) and rejected it
+ *  3. TRIGGER — rejection candle at that level with volume surge
+ *
+ * Dead zone 11:30–13:30 ET is always skipped — historically low follow-through.
+ * TP targets the next VWAP SD band, giving natural 1.5–2:1 R/R on most setups.
+ *
+ * Layers 4–7 (Volume Profile, order-flow delta, NBBO, sweep) are carried
+ * forward from the prior model and adjustable confidence.
  */
 @Service
 public class ScalpMomentumDetector {
     private static final ZoneId ET = ZoneId.of("America/New_York");
-    private static final int    BB_PERIOD = 20;
-    private static final double BB_MULT   = 2.0;
 
-    private final PolygonClient            polygon;
-    private final VolumeProfileCalculator  vpCalc;
+    private static final LocalTime SESSION_OPEN    = LocalTime.of(9,  35);
+    private static final LocalTime DEAD_ZONE_START = LocalTime.of(11, 30);
+    private static final LocalTime DEAD_ZONE_END   = LocalTime.of(13, 30);
+    private static final LocalTime SESSION_CLOSE   = LocalTime.of(15, 30);
+
+    // Entry must be within this many ATR of a VWAP band to count as "at level"
+    private static final double LEVEL_TOUCH_ATR = 0.45;
+    // Minimum volume multiplier on the rejection bar
+    private static final double MIN_VOL_RATIO   = 1.4;
+
+    private final PolygonClient           polygon;
+    private final VolumeProfileCalculator vpCalc;
 
     public ScalpMomentumDetector(PolygonClient polygon, VolumeProfileCalculator vpCalc) {
         this.polygon = polygon;
@@ -47,124 +58,139 @@ public class ScalpMomentumDetector {
 
     public List<TradeSetup> detect(List<OHLCV> bars, List<OHLCV> spyBars, String ticker, double dailyAtr) {
         List<TradeSetup> result = new ArrayList<>();
-        if (bars == null || bars.size() < BB_PERIOD + 3) return result;
+        if (bars == null || bars.size() < 25) return result;
 
         List<OHLCV> sessionBars = regularSessionBarsForToday(bars);
-        if (sessionBars.size() < BB_PERIOD + 3) return result;
+        if (sessionBars.size() < 20) return result;
 
         OHLCV last = sessionBars.get(sessionBars.size() - 1);
         LocalTime now = Instant.ofEpochMilli(last.getTimestamp()).atZone(ET).toLocalTime();
-        if (now.isBefore(LocalTime.of(9, 35)) || !now.isBefore(LocalTime.of(15, 30))) return result;
 
-        int    n     = sessionBars.size();
-        OHLCV  prev  = sessionBars.get(n - 2);
+        // Active windows: morning (9:35–11:30) and afternoon (13:30–15:30)
+        boolean inMorning   = !now.isBefore(SESSION_OPEN)    && now.isBefore(DEAD_ZONE_START);
+        boolean inAfternoon = !now.isBefore(DEAD_ZONE_END)   && now.isBefore(SESSION_CLOSE);
+        if (!inMorning && !inAfternoon) return result;
 
-        double atr    = Math.max(computeAtr(sessionBars, 8), last.getClose() * 0.0012);
-        double effAtr = dailyAtr > atr * 4 ? dailyAtr : atr * 8;
-        double sessionVwap = computeSessionVwap(sessionBars, n - 1);
-        double avgVol      = averageVolume(sessionBars, n - 7, n - 2);
-        double volRatio    = last.getVolume() / Math.max(1.0, avgVol);
+        int   n    = sessionBars.size();
+        OHLCV prev = sessionBars.get(n - 2);
 
-        Bands prevBands = computeBands(sessionBars, n - 2);
-        Bands lastBands = computeBands(sessionBars, n - 1);
-        if (prevBands == null || lastBands == null) return result;
+        double atr     = Math.max(computeAtr(sessionBars, 8), last.getClose() * 0.0012);
+        double avgVol  = averageVolume(sessionBars, n - 7, n - 2);
+        double volRatio = last.getVolume() / Math.max(1.0, avgVol);
 
-        double lastPctB      = percentB(last.getClose(), lastBands);
-        double prevPctB      = percentB(prev.getClose(), prevBands);
-        double prevLowPctB   = percentB(prev.getLow(),   prevBands);
-        double prevHighPctB  = percentB(prev.getHigh(),  prevBands);
-        double bandwidth     = bandWidth(lastBands);
-        double prevBandwidth = bandWidth(prevBands);
-        double minRecentBandwidth = minRecentBandWidth(sessionBars, n - 10, n - 2);
-        boolean squeezeRecently = minRecentBandwidth > 0 && prevBandwidth <= minRecentBandwidth * 1.15;
-        boolean widthExpanding  = bandwidth > prevBandwidth * 1.08;
+        // ── VWAP Standard Deviation Bands (session-anchored) ─────────────────
+        VwapBands vb = computeVwapBands(sessionBars, n - 1);
+        if (vb == null) return result;
 
-        double  spyReturn    = intradayReturn(spyBars);
-        double  tickerReturn = intradayReturn(sessionBars);
-        double  rsLead       = tickerReturn - spyReturn;
-        boolean spyBull      = spyReturn >  0.0015;
-        boolean spyBear      = spyReturn < -0.0015;
+        double close  = last.getClose();
+        double prevLo = prev.getLow(),  lastLo = last.getLow();
+        double prevHi = prev.getHigh(), lastHi = last.getHigh();
 
-        double  lastBodyPct  = bodyPct(last);
-        double  prevBodyPct  = bodyPct(prev);
-        boolean lastGreen    = last.getClose() > last.getOpen();
-        boolean lastRed      = last.getClose() < last.getOpen();
-        boolean prevGreen    = prev.getClose() > prev.getOpen();
-        boolean prevRed      = prev.getClose() < prev.getOpen();
-        boolean closeNearHigh = (last.getHigh() - last.getClose()) <= (last.getHigh() - last.getLow()) * 0.25;
-        boolean closeNearLow  = (last.getClose() - last.getLow())  <= (last.getHigh() - last.getLow()) * 0.25;
+        // ── SPY context ───────────────────────────────────────────────────────
+        double spyReturn  = intradayReturn(spyBars);
+        double tickReturn = intradayReturn(sessionBars);
+        double rsLead     = tickReturn - spyReturn;
+        boolean spyBull   = spyReturn >  0.0015;
+        boolean spyBear   = spyReturn < -0.0015;
 
-        // ── Core Bollinger conditions (unchanged) ─────────────────────────────
-        boolean bounceLong = prevLowPctB < 0.05
-                && prev.getClose() > prevBands.lower
-                && lastGreen && prevGreen
-                && prevBodyPct >= 0.40 && lastBodyPct >= 0.50
-                && closeNearHigh
-                && last.getClose() > prev.getHigh()
-                && last.getClose() > sessionVwap
+        // ── Candle shape ──────────────────────────────────────────────────────
+        boolean lastGreen      = close > last.getOpen();
+        boolean lastRed        = close < last.getOpen();
+        double  lastBodyPct    = bodyPct(last);
+        boolean closeNearHigh  = (lastHi - close) <= (lastHi - lastLo) * 0.25;
+        boolean closeNearLow   = (close - lastLo)  <= (lastHi - lastLo) * 0.25;
+
+        // ── 5m structure: EMA slope + basic swing check ───────────────────────
+        boolean bullStructure = isBullStructure(sessionBars, n);
+        boolean bearStructure = isBearStructure(sessionBars, n);
+
+        // ── Level detection ───────────────────────────────────────────────────
+        // A "touch" = last or prev bar's wick entered within LEVEL_TOUCH_ATR of the band.
+        // "Rejection" = close is back on the correct side of the band.
+        double touch = atr * LEVEL_TOUCH_ATR;
+
+        // LONG levels (support): VWAP, VWAP+1SD (extended then pulled back)
+        boolean touchedVwapLong  = (lastLo <= vb.vwap + touch || prevLo <= vb.vwap + touch) && close > vb.vwap;
+        boolean touchedVwap1uLong = (lastLo <= vb.v1u + touch  || prevLo <= vb.v1u + touch)  && close > vb.v1u;
+
+        // SHORT levels (resistance): VWAP, VWAP-1SD
+        boolean touchedVwapShort  = (lastHi >= vb.vwap - touch || prevHi >= vb.vwap - touch) && close < vb.vwap;
+        boolean touchedVwap1dShort = (lastHi >= vb.v1d - touch  || prevHi >= vb.v1d - touch)  && close < vb.v1d;
+
+        // Pick the best level for each side
+        String longLevel; double longTpBand;
+        if (touchedVwapLong) {
+            longLevel = "vwap";  longTpBand = vb.v1u;
+        } else if (touchedVwap1uLong) {
+            longLevel = "vwap+1sd"; longTpBand = vb.v2u;
+        } else {
+            longLevel = null;    longTpBand = 0;
+        }
+
+        String shortLevel; double shortTpBand;
+        if (touchedVwapShort) {
+            shortLevel = "vwap";   shortTpBand = vb.v1d;
+        } else if (touchedVwap1dShort) {
+            shortLevel = "vwap-1sd"; shortTpBand = vb.v2d;
+        } else {
+            shortLevel = null;     shortTpBand = 0;
+        }
+
+        // ── Core setup gates ──────────────────────────────────────────────────
+        boolean setupLong = longLevel != null
+                && lastGreen && lastBodyPct >= 0.40 && closeNearHigh
+                && volRatio >= MIN_VOL_RATIO
+                && bullStructure
                 && !spyBear && rsLead > -0.002;
 
-        boolean bounceShort = prevHighPctB > 0.95
-                && prev.getClose() < prevBands.upper
-                && lastRed && prevRed
-                && prevBodyPct >= 0.40 && lastBodyPct >= 0.50
-                && closeNearLow
-                && last.getClose() < prev.getLow()
-                && last.getClose() < sessionVwap
+        boolean setupShort = shortLevel != null
+                && lastRed && lastBodyPct >= 0.40 && closeNearLow
+                && volRatio >= MIN_VOL_RATIO
+                && bearStructure
                 && !spyBull && rsLead < 0.002;
 
-        boolean breakLong = squeezeRecently && widthExpanding
-                && prevPctB > 0.60 && lastPctB > 1.0
-                && prevGreen && lastGreen
-                && prevBodyPct >= 0.45 && lastBodyPct >= 0.55
-                && closeNearHigh
-                && volRatio >= 1.25
-                && last.getClose() > sessionVwap
-                && !spyBear && rsLead >= 0.0;
+        if (!setupLong && !setupShort) return result;
 
-        boolean breakShort = squeezeRecently && widthExpanding
-                && prevPctB < 0.40 && lastPctB < 0.0
-                && prevRed && lastRed
-                && prevBodyPct >= 0.45 && lastBodyPct >= 0.55
-                && closeNearLow
-                && volRatio >= 1.25
-                && last.getClose() < sessionVwap
-                && !spyBull && rsLead <= 0.0;
-
-        boolean isLong  = bounceLong || breakLong;
-        boolean isShort = bounceShort || breakShort;
-        if (!isLong && !isShort) return result;
-
-        String setupType = bounceLong || bounceShort ? "bb-bounce" : "bb-break";
-        double entry = round4(last.getClose());
-        double stop;
-        double tp;
-        if (isLong) {
-            stop = "bb-bounce".equals(setupType)
-                    ? round4(Math.min(prev.getLow(), last.getLow()) - atr * 0.12)
-                    : round4(Math.min(lastBands.mid, prev.getLow()) - atr * 0.12);
-            double risk = Math.abs(entry - stop);
-            if (risk <= 0) return result;
-            tp = "bb-bounce".equals(setupType)
-                    ? round4(Math.max(lastBands.mid, entry + risk * 1.0))
-                    : round4(entry + Math.max(risk * 1.4, effAtr * 0.20));
+        // If both somehow trigger (very unlikely), prefer whichever has clearer structure
+        boolean isLong;
+        if (setupLong && setupShort) {
+            isLong = bullStructure && !bearStructure;
         } else {
-            stop = "bb-bounce".equals(setupType)
-                    ? round4(Math.max(prev.getHigh(), last.getHigh()) + atr * 0.12)
-                    : round4(Math.max(lastBands.mid, prev.getHigh()) + atr * 0.12);
+            isLong = setupLong;
+        }
+
+        String levelName   = isLong ? longLevel  : shortLevel;
+        double tpBand      = isLong ? longTpBand : shortTpBand;
+        String setupType   = "vwap-scalp-" + levelName;
+
+        // ── Entry / SL / TP ───────────────────────────────────────────────────
+        double entry = round4(close);
+        double stop, tp;
+
+        if (isLong) {
+            double wickLow = Math.min(lastLo, prevLo);
+            stop = round4(wickLow - atr * 0.15);
             double risk = Math.abs(entry - stop);
             if (risk <= 0) return result;
-            tp = "bb-bounce".equals(setupType)
-                    ? round4(Math.min(lastBands.mid, entry - risk * 1.0))
-                    : round4(entry - Math.max(risk * 1.4, effAtr * 0.20));
+            tp = round4(Math.max(tpBand, entry + risk * 1.5));
+        } else {
+            double wickHigh = Math.max(lastHi, prevHi);
+            stop = round4(wickHigh + atr * 0.15);
+            double risk = Math.abs(entry - stop);
+            if (risk <= 0) return result;
+            tp = round4(Math.min(tpBand, entry - risk * 1.5));
         }
 
         // ── Base confidence ───────────────────────────────────────────────────
-        int confidence = 70;
-        if ("bb-break".equals(setupType)) confidence += 6;
-        if (volRatio >= 1.6)              confidence += 5;
-        if (Math.abs(rsLead) >= 0.003)    confidence += 4;
-        if (widthExpanding && bandwidth >= minRecentBandwidth * 1.25) confidence += 4;
+        int confidence = 72;
+        if (volRatio >= 2.0)             confidence += 5;
+        else if (volRatio >= 1.6)        confidence += 3;
+        if (Math.abs(rsLead) >= 0.003)   confidence += 4;
+        if (inMorning)                   confidence += 3; // morning momentum is stronger
+        if (isLong  && isBullSwing(sessionBars, n)) confidence += 4;
+        if (!isLong && isBearSwing(sessionBars, n)) confidence += 4;
+        // Bonus for touching VWAP itself (cleaner level than SD band)
+        if ("vwap".equals(levelName))    confidence += 3;
 
         // ══════════════════════════════════════════════════════════════════════
         // LAYER 2 — Volume Profile
@@ -173,98 +199,82 @@ public class ScalpMomentumDetector {
         String vpLabel = "N/A";
         if (vp != null) {
             double vpoc = vp.getVpoc(), vah = vp.getVah(), val = vp.getVal();
-            // Nearest VP level distance in ATR units
             double nearestDist = Math.min(
                     Math.min(Math.abs(entry - vpoc), Math.abs(entry - vah)),
                     Math.abs(entry - val));
             if (nearestDist < atr * 0.4) {
-                confidence += 6;  // entry at a real institutional level
+                confidence += 6;
                 vpLabel = String.format("AT KEY VP (vpoc=%.2f vah=%.2f val=%.2f)", vpoc, vah, val);
             } else if (nearestDist < atr * 1.0) {
                 confidence += 2;
                 vpLabel = String.format("NEAR VP (vpoc=%.2f vah=%.2f val=%.2f)", vpoc, vah, val);
             } else {
-                confidence -= 4;  // entry is in dead air — no institutional backing
-                vpLabel = String.format("NO VP LEVEL (vpoc=%.2f vah=%.2f val=%.2f dist=%.2f atr)", vpoc, vah, val, nearestDist / atr);
+                confidence -= 4;
+                vpLabel = String.format("NO VP LEVEL (dist=%.2fatr)", nearestDist / atr);
             }
-            // VP directional sense: long entries should be below or at VPOC
-            if (isLong  && entry > vah + atr * 0.3) confidence -= 4;  // chasing above value
-            if (!isLong && entry < val - atr * 0.3) confidence -= 4;  // chasing below value
+            if (isLong  && entry > vah + atr * 0.3) confidence -= 4;
+            if (!isLong && entry < val - atr * 0.3) confidence -= 4;
         }
 
         // ══════════════════════════════════════════════════════════════════════
         // LAYER 3 — Order-flow delta (buy/sell pressure from last 5 bars)
-        // Close position within range × volume → directional volume estimate.
-        // deltaRatio in [-1, +1]: +1 = all buying, -1 = all selling.
         // ══════════════════════════════════════════════════════════════════════
         double deltaRatio = computeDelta(sessionBars, n - 6, n - 2);
         String deltaLabel;
         if (isLong) {
             if      (deltaRatio >  0.35) { confidence += 5; deltaLabel = String.format("BULL %+.2f ✓", deltaRatio); }
             else if (deltaRatio >  0.10) { confidence += 2; deltaLabel = String.format("MILD BULL %+.2f", deltaRatio); }
-            else if (deltaRatio < -0.35) { confidence -= 6; deltaLabel = String.format("BEAR %+.2f ✗ (conflict)", deltaRatio); }
+            else if (deltaRatio < -0.35) { confidence -= 6; deltaLabel = String.format("BEAR %+.2f ✗", deltaRatio); }
             else                         {                   deltaLabel = String.format("NEUTRAL %+.2f", deltaRatio); }
         } else {
             if      (deltaRatio < -0.35) { confidence += 5; deltaLabel = String.format("BEAR %+.2f ✓", deltaRatio); }
             else if (deltaRatio < -0.10) { confidence += 2; deltaLabel = String.format("MILD BEAR %+.2f", deltaRatio); }
-            else if (deltaRatio >  0.35) { confidence -= 6; deltaLabel = String.format("BULL %+.2f ✗ (conflict)", deltaRatio); }
+            else if (deltaRatio >  0.35) { confidence -= 6; deltaLabel = String.format("BULL %+.2f ✗", deltaRatio); }
             else                         {                   deltaLabel = String.format("NEUTRAL %+.2f", deltaRatio); }
         }
 
         // ══════════════════════════════════════════════════════════════════════
         // LAYER 4 — Bid/ask imbalance (live NBBO from Polygon)
-        // imbalance: 0 = all asks stacked, 1 = all bids stacked, 0.5 = neutral
         // ══════════════════════════════════════════════════════════════════════
-        double nbboImbalance = 0.5;
         String nbboLabel = "unavailable";
         try {
             PolygonClient.NbboSnapshot nbbo = polygon.getNbbo(ticker);
             if (nbbo != null && (nbbo.bidSize() + nbbo.askSize()) > 0) {
-                nbboImbalance = nbbo.imbalance();
+                double imbal = nbbo.imbalance();
                 if (isLong) {
-                    if      (nbboImbalance > 0.68) { confidence += 6; nbboLabel = String.format("BIDS STACKED %.0f%% ✓", nbboImbalance * 100); }
-                    else if (nbboImbalance > 0.55) { confidence += 2; nbboLabel = String.format("BID-LEAN %.0f%%", nbboImbalance * 100); }
-                    else if (nbboImbalance < 0.38) { confidence -= 4; nbboLabel = String.format("ASKS STACKED %.0f%% ✗", nbboImbalance * 100); }
-                    else                           {                   nbboLabel = String.format("NEUTRAL %.0f%%", nbboImbalance * 100); }
+                    if      (imbal > 0.68) { confidence += 6; nbboLabel = String.format("BIDS STACKED %.0f%% ✓", imbal * 100); }
+                    else if (imbal > 0.55) { confidence += 2; nbboLabel = String.format("BID-LEAN %.0f%%", imbal * 100); }
+                    else if (imbal < 0.38) { confidence -= 4; nbboLabel = String.format("ASKS STACKED %.0f%% ✗", imbal * 100); }
+                    else                   {                   nbboLabel = String.format("NEUTRAL %.0f%%", imbal * 100); }
                 } else {
-                    if      (nbboImbalance < 0.32) { confidence += 6; nbboLabel = String.format("ASKS STACKED %.0f%% ✓", nbboImbalance * 100); }
-                    else if (nbboImbalance < 0.45) { confidence += 2; nbboLabel = String.format("ASK-LEAN %.0f%%", nbboImbalance * 100); }
-                    else if (nbboImbalance > 0.62) { confidence -= 4; nbboLabel = String.format("BIDS STACKED %.0f%% ✗", nbboImbalance * 100); }
-                    else                           {                   nbboLabel = String.format("NEUTRAL %.0f%%", nbboImbalance * 100); }
+                    if      (imbal < 0.32) { confidence += 6; nbboLabel = String.format("ASKS STACKED %.0f%% ✓", imbal * 100); }
+                    else if (imbal < 0.45) { confidence += 2; nbboLabel = String.format("ASK-LEAN %.0f%%", imbal * 100); }
+                    else if (imbal > 0.62) { confidence -= 4; nbboLabel = String.format("BIDS STACKED %.0f%% ✗", imbal * 100); }
+                    else                   {                   nbboLabel = String.format("NEUTRAL %.0f%%", imbal * 100); }
                 }
             }
         } catch (Exception ignored) {}
 
         // ══════════════════════════════════════════════════════════════════════
         // LAYER 5 — Large-print / institutional sweep detection
-        // A sweep = single trade > 4× avg recent trade size in last 3 minutes.
-        // Direction inferred via tick rule (price vs prior trade).
         // ══════════════════════════════════════════════════════════════════════
         String sweepLabel = "none";
         try {
             List<PolygonClient.TradeRecord> trades = polygon.getRecentTrades(ticker, 50);
             SweepResult sweep = detectSweep(trades);
-            if (isLong && sweep.bullish()) {
-                confidence += 7;
-                sweepLabel = "BULL SWEEP ✓";
-            } else if (!isLong && sweep.bearish()) {
-                confidence += 7;
-                sweepLabel = "BEAR SWEEP ✓";
-            } else if (isLong && sweep.bearish()) {
-                confidence -= 5;
-                sweepLabel = "BEAR SWEEP ✗ (conflict)";
-            } else if (!isLong && sweep.bullish()) {
-                confidence -= 5;
-                sweepLabel = "BULL SWEEP ✗ (conflict)";
-            }
+            if      (isLong  && sweep.bullish()) { confidence += 7; sweepLabel = "BULL SWEEP ✓"; }
+            else if (!isLong && sweep.bearish()) { confidence += 7; sweepLabel = "BEAR SWEEP ✓"; }
+            else if (isLong  && sweep.bearish()) { confidence -= 5; sweepLabel = "BEAR SWEEP ✗"; }
+            else if (!isLong && sweep.bullish()) { confidence -= 5; sweepLabel = "BULL SWEEP ✗"; }
         } catch (Exception ignored) {}
 
         confidence = Math.min(95, Math.max(50, confidence));
 
         String factors = String.format(
-                "%s | %%B %.2f | BW %.3f→%.3f | vol x%.1f | RS %+.2f%% vs SPY" +
+                "%s | vol x%.1f | RS %+.2f%% | VWAP=%.2f ±1SD=[%.2f/%.2f] ±2SD=[%.2f/%.2f]" +
                 " | VP: %s | delta: %s | nbbo: %s | sweep: %s",
-                setupType, lastPctB, prevBandwidth, bandwidth, volRatio, rsLead * 100.0,
+                setupType, volRatio, rsLead * 100.0,
+                vb.vwap, vb.v1d, vb.v1u, vb.v2d, vb.v2u,
                 vpLabel, deltaLabel, nbboLabel, sweepLabel);
 
         result.add(TradeSetup.builder()
@@ -279,8 +289,8 @@ public class ScalpMomentumDetector {
                 .atr(round4(atr))
                 .hasBos(false)
                 .hasChoch(false)
-                .fvgTop(round4(lastBands.upper))
-                .fvgBottom(round4(lastBands.lower))
+                .fvgTop(round4(vb.v1u))
+                .fvgBottom(round4(vb.v1d))
                 .factorBreakdown(factors)
                 .timestamp(Instant.ofEpochMilli(last.getTimestamp()).atZone(ET).toLocalDateTime())
                 .build());
@@ -288,108 +298,157 @@ public class ScalpMomentumDetector {
         return result;
     }
 
+    // ── VWAP Standard Deviation Bands ────────────────────────────────────────
+
+    private record VwapBands(double vwap, double sd, double v1u, double v1d, double v2u, double v2d) {}
+
+    private VwapBands computeVwapBands(List<OHLCV> bars, int endIdx) {
+        int end = Math.min(endIdx, bars.size() - 1);
+        double sumPV = 0, sumV = 0, sumPV2 = 0;
+        for (int i = 0; i <= end; i++) {
+            OHLCV b = bars.get(i);
+            double tp = (b.getHigh() + b.getLow() + b.getClose()) / 3.0;
+            double v  = b.getVolume();
+            sumPV  += tp * v;
+            sumV   += v;
+            sumPV2 += tp * tp * v;
+        }
+        if (sumV <= 0) return null;
+        double vwap     = sumPV / sumV;
+        double variance = Math.max(0, (sumPV2 / sumV) - (vwap * vwap));
+        double sd       = Math.max(0.01, Math.sqrt(variance)); // floor prevents degenerate early-session values
+        return new VwapBands(vwap, sd, vwap + sd, vwap - sd, vwap + 2 * sd, vwap - 2 * sd);
+    }
+
+    // ── 5m Structure ─────────────────────────────────────────────────────────
+
+    /** Bullish structure: close above rising 5-bar EMA */
+    private boolean isBullStructure(List<OHLCV> bars, int n) {
+        if (n < 8) return false;
+        double emaNow  = computeEma(bars, n - 1, 5);
+        double emaPrev = computeEma(bars, n - 4, 5);
+        return bars.get(n - 1).getClose() > emaNow && emaNow > emaPrev;
+    }
+
+    private boolean isBearStructure(List<OHLCV> bars, int n) {
+        if (n < 8) return false;
+        double emaNow  = computeEma(bars, n - 1, 5);
+        double emaPrev = computeEma(bars, n - 4, 5);
+        return bars.get(n - 1).getClose() < emaNow && emaNow < emaPrev;
+    }
+
+    /** Stronger: last swing high > prior AND last swing low > prior (HH/HL) */
+    private boolean isBullSwing(List<OHLCV> bars, int n) {
+        return checkSwing(bars, n, true);
+    }
+
+    private boolean isBearSwing(List<OHLCV> bars, int n) {
+        return checkSwing(bars, n, false);
+    }
+
+    private boolean checkSwing(List<OHLCV> bars, int n, boolean bullish) {
+        int lookback = Math.min(n, 14);
+        int start = n - lookback;
+        List<Integer> highs = new ArrayList<>(), lows = new ArrayList<>();
+        for (int i = start + 1; i < n - 1; i++) {
+            if (bars.get(i).getHigh() > bars.get(i-1).getHigh() && bars.get(i).getHigh() > bars.get(i+1).getHigh())
+                highs.add(i);
+            if (bars.get(i).getLow() < bars.get(i-1).getLow() && bars.get(i).getLow() < bars.get(i+1).getLow())
+                lows.add(i);
+        }
+        if (highs.size() < 2 || lows.size() < 2) return false;
+        int h1 = highs.get(highs.size()-1), h2 = highs.get(highs.size()-2);
+        int l1 = lows.get(lows.size()-1),   l2 = lows.get(lows.size()-2);
+        if (bullish) return bars.get(h1).getHigh() > bars.get(h2).getHigh()
+                         && bars.get(l1).getLow()  > bars.get(l2).getLow();
+        else         return bars.get(h1).getHigh() < bars.get(h2).getHigh()
+                         && bars.get(l1).getLow()  < bars.get(l2).getLow();
+    }
+
+    private double computeEma(List<OHLCV> bars, int endIdx, int period) {
+        int end = Math.min(endIdx, bars.size() - 1);
+        int start = Math.max(0, end - period * 3);
+        double k = 2.0 / (period + 1.0);
+        double ema = bars.get(start).getClose();
+        for (int i = start + 1; i <= end; i++)
+            ema = bars.get(i).getClose() * k + ema * (1 - k);
+        return ema;
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────
 
-    /**
-     * Order-flow delta over bars [fromInclusive, toInclusive].
-     * Uses close position within candle range as a buy/sell weight.
-     * Returns value in [-1, +1]: positive = net buying pressure.
-     */
-    private double computeDelta(List<OHLCV> bars, int fromInclusive, int toInclusive) {
-        int from = Math.max(0, fromInclusive);
-        int to   = Math.min(bars.size() - 1, toInclusive);
+    private double computeDelta(List<OHLCV> bars, int from, int to) {
+        from = Math.max(0, from); to = Math.min(bars.size()-1, to);
         if (from > to) return 0.0;
-        double netDelta = 0, totalVol = 0;
+        double net = 0, vol = 0;
         for (int i = from; i <= to; i++) {
             OHLCV b = bars.get(i);
             double range = Math.max(0.0001, b.getHigh() - b.getLow());
-            double bodyPos = (b.getClose() - b.getLow()) / range;  // 0=bear close, 1=bull close
-            netDelta += (bodyPos * 2.0 - 1.0) * b.getVolume();
-            totalVol += b.getVolume();
+            net += ((b.getClose() - b.getLow()) / range * 2.0 - 1.0) * b.getVolume();
+            vol += b.getVolume();
         }
-        return totalVol > 0 ? netDelta / totalVol : 0.0;
+        return vol > 0 ? net / vol : 0.0;
     }
 
     private record SweepResult(boolean bullish, boolean bearish) {}
 
-    /**
-     * Detect large institutional prints in the last 3 minutes.
-     * A sweep = any trade > 4× avg size. Direction from tick rule (price vs prior trade).
-     */
     private SweepResult detectSweep(List<PolygonClient.TradeRecord> trades) {
         if (trades == null || trades.size() < 5) return new SweepResult(false, false);
         long cutoffNs = (System.currentTimeMillis() - 180_000L) * 1_000_000L;
         List<PolygonClient.TradeRecord> recent = trades.stream()
-                .filter(t -> t.timestampNs() > cutoffNs && t.size() > 0)
-                .toList();
+                .filter(t -> t.timestampNs() > cutoffNs && t.size() > 0).toList();
         if (recent.size() < 3) return new SweepResult(false, false);
-        double avgSize = recent.stream().mapToDouble(PolygonClient.TradeRecord::size).average().orElse(0);
-        if (avgSize < 10) return new SweepResult(false, false);
-        boolean bullSweep = false, bearSweep = false;
+        double avg = recent.stream().mapToDouble(PolygonClient.TradeRecord::size).average().orElse(0);
+        if (avg < 10) return new SweepResult(false, false);
+        boolean bull = false, bear = false;
         for (int i = 1; i < recent.size(); i++) {
-            if (recent.get(i).size() < avgSize * 4) continue;
-            // Tick rule: price >= prior trade price → buyer aggressor
-            if (recent.get(i).price() >= recent.get(i - 1).price()) bullSweep = true;
-            else                                                       bearSweep = true;
+            if (recent.get(i).size() < avg * 4) continue;
+            if (recent.get(i).price() >= recent.get(i-1).price()) bull = true;
+            else                                                    bear = true;
         }
-        return new SweepResult(bullSweep, bearSweep);
+        return new SweepResult(bull, bear);
     }
 
     private List<OHLCV> regularSessionBarsForToday(List<OHLCV> bars) {
-        OHLCV lastRaw = bars.get(bars.size() - 1);
+        OHLCV lastRaw = bars.get(bars.size()-1);
         LocalDate today = Instant.ofEpochMilli(lastRaw.getTimestamp()).atZone(ET).toLocalDate();
         List<OHLCV> result = new ArrayList<>();
         for (OHLCV bar : bars) {
-            ZonedDateTime zdt  = Instant.ofEpochMilli(bar.getTimestamp()).atZone(ET);
-            LocalTime     time = zdt.toLocalTime();
+            ZonedDateTime zdt = Instant.ofEpochMilli(bar.getTimestamp()).atZone(ET);
+            LocalTime t = zdt.toLocalTime();
             if (zdt.toLocalDate().equals(today)
-                    && !time.isBefore(LocalTime.of(9, 30))
-                    && time.isBefore(LocalTime.of(16, 0))) {
+                    && !t.isBefore(LocalTime.of(9, 30))
+                    && t.isBefore(LocalTime.of(16, 0)))
                 result.add(bar);
-            }
         }
         return result;
     }
 
     private double computeAtr(List<OHLCV> bars, int period) {
-        int p = Math.min(period, bars.size() - 1);
+        int p = Math.min(period, bars.size()-1);
         if (p <= 0) return 0.0;
         double sum = 0.0;
-        for (int i = bars.size() - p; i < bars.size(); i++) {
-            OHLCV curr = bars.get(i);
-            OHLCV prev = bars.get(i - 1);
-            double tr = Math.max(curr.getHigh() - curr.getLow(),
-                    Math.max(Math.abs(curr.getHigh() - prev.getClose()),
-                             Math.abs(curr.getLow()  - prev.getClose())));
-            sum += tr;
+        for (int i = bars.size()-p; i < bars.size(); i++) {
+            OHLCV c = bars.get(i), pv = bars.get(i-1);
+            sum += Math.max(c.getHigh()-c.getLow(),
+                   Math.max(Math.abs(c.getHigh()-pv.getClose()),
+                            Math.abs(c.getLow()-pv.getClose())));
         }
         return sum / p;
     }
 
-    private double averageVolume(List<OHLCV> bars, int fromInclusive, int toInclusive) {
-        int from = Math.max(0, fromInclusive);
-        int to   = Math.min(bars.size() - 1, toInclusive);
+    private double averageVolume(List<OHLCV> bars, int from, int to) {
+        from = Math.max(0, from); to = Math.min(bars.size()-1, to);
         if (from > to) return 1.0;
-        double sum = 0.0; int count = 0;
+        double sum = 0; int count = 0;
         for (int i = from; i <= to; i++) { sum += bars.get(i).getVolume(); count++; }
         return count > 0 ? sum / count : 1.0;
     }
 
-    private double computeSessionVwap(List<OHLCV> bars, int endIdxInclusive) {
-        double pv = 0.0, vol = 0.0;
-        for (int i = 0; i <= endIdxInclusive && i < bars.size(); i++) {
-            OHLCV b = bars.get(i);
-            double typical = (b.getHigh() + b.getLow() + b.getClose()) / 3.0;
-            pv  += typical * b.getVolume();
-            vol += b.getVolume();
-        }
-        return vol > 0 ? pv / vol : bars.get(Math.max(0, Math.min(endIdxInclusive, bars.size() - 1))).getClose();
-    }
-
     private double intradayReturn(List<OHLCV> bars) {
         if (bars == null || bars.size() < 2) return 0.0;
-        OHLCV first = bars.get(0), last = bars.get(bars.size() - 1);
-        return first.getOpen() > 0 ? (last.getClose() - first.getOpen()) / first.getOpen() : 0.0;
+        OHLCV f = bars.get(0), l = bars.get(bars.size()-1);
+        return f.getOpen() > 0 ? (l.getClose() - f.getOpen()) / f.getOpen() : 0.0;
     }
 
     private double bodyPct(OHLCV bar) {
@@ -397,37 +456,5 @@ public class ScalpMomentumDetector {
         return Math.abs(bar.getClose() - bar.getOpen()) / range;
     }
 
-    private double percentB(double price, Bands bands) {
-        double width = Math.max(0.0001, bands.upper - bands.lower);
-        return (price - bands.lower) / width;
-    }
-
-    private double bandWidth(Bands bands) {
-        return bands.mid != 0 ? (bands.upper - bands.lower) / bands.mid : 0.0;
-    }
-
-    private double minRecentBandWidth(List<OHLCV> bars, int fromInclusive, int toInclusive) {
-        double min = Double.MAX_VALUE;
-        for (int i = Math.max(BB_PERIOD - 1, fromInclusive); i <= Math.min(toInclusive, bars.size() - 1); i++) {
-            Bands b = computeBands(bars, i);
-            if (b != null) min = Math.min(min, bandWidth(b));
-        }
-        return min == Double.MAX_VALUE ? 0.0 : min;
-    }
-
-    private Bands computeBands(List<OHLCV> bars, int idx) {
-        if (idx < BB_PERIOD - 1) return null;
-        int start = idx - BB_PERIOD + 1;
-        double sum = 0.0;
-        for (int i = start; i <= idx; i++) sum += bars.get(i).getClose();
-        double mid = sum / BB_PERIOD;
-        double var = 0.0;
-        for (int i = start; i <= idx; i++) { double d = bars.get(i).getClose() - mid; var += d * d; }
-        double sd = Math.sqrt(var / BB_PERIOD);
-        return new Bands(mid, mid + BB_MULT * sd, mid - BB_MULT * sd);
-    }
-
-    private double round4(double value) { return Math.round(value * 10_000.0) / 10_000.0; }
-
-    private record Bands(double mid, double upper, double lower) {}
+    private double round4(double v) { return Math.round(v * 10_000.0) / 10_000.0; }
 }
