@@ -76,7 +76,7 @@ public class AlpacaOrderService {
                  peakClose, consecutiveReversal, optionsContract, System.currentTimeMillis());
         }
     }
-    private record HybridState(double originalStopLoss, boolean breakEvenArmed, boolean trailArmed, String brokerStopOrderId) {}
+    private record HybridState(double originalStopLoss, double originalTakeProfit, boolean breakEvenArmed, boolean trailArmed, String brokerStopOrderId) {}
     private final Map<String, TrackedPosition> trackedPositions = new ConcurrentHashMap<>();
     // Track last processed candle timestamp to avoid re-processing same candle
     private final Map<String, String> lastProcessedCandle = new ConcurrentHashMap<>();
@@ -294,7 +294,7 @@ public class AlpacaOrderService {
                     putTrackedPosition(s.getTicker(), new TrackedPosition(
                             s.getTicker(), s.getDirection(), s.getEntry(),
                             s.getStopLoss(), s.getTakeProfit(), orderId,
-                            encodeHybridState(s.getStopLoss(), false, false, null),
+                            encodeHybridState(s.getStopLoss(), s.getTakeProfit(), false, false, null),
                             s.getEntry(), 0, occSymbol, System.currentTimeMillis()));
 
                     dailyOrderCount.merge(s.getTicker(), 1, Integer::sum);
@@ -703,7 +703,7 @@ public class AlpacaOrderService {
                     putTrackedPosition(symbol, new TrackedPosition(
                             tp.symbol(), tp.direction(), tp.entry(), tp.entry(),
                             tp.takeProfit(), tp.orderId(),
-                            encodeHybridState(originalStop, true, trailArmed, hybrid.brokerStopOrderId()),
+                            encodeHybridState(originalStop, hybrid.originalTakeProfit(), true, trailArmed, hybrid.brokerStopOrderId()),
                             newPeak, tp.consecutiveReversal(), tp.optionsContract(), tp.entryEpochMs()));
                     tp = trackedPositions.getOrDefault(symbol, tp);
                 }
@@ -811,13 +811,33 @@ public class AlpacaOrderService {
                 putTrackedPosition(symbol, new TrackedPosition(
                         tp.symbol(), tp.direction(), tp.entry(), tp.stopLoss(),
                         tp.takeProfit(), tp.orderId(),
-                        encodeHybridState(originalStop, breakEvenArmed, false, hybrid.brokerStopOrderId()),
+                        encodeHybridState(originalStop, hybrid.originalTakeProfit(), breakEvenArmed, false, hybrid.brokerStopOrderId()),
                         newPeak, newReversalCount, tp.optionsContract(), tp.entryEpochMs()));
             }
             return;
         }
 
-        // ── 7. Once trail is armed, use ATR trailing only if improving ───────────
+        // ── 7. Dynamic TP: tracks SL with the same original bracket spread ─────────
+        // As SL moves up, TP moves up by the same amount — neither is a fixed number.
+        double bracketSpread = Math.abs(hybrid.originalTakeProfit() - hybrid.originalStopLoss());
+        double dynamicTp = isLong ? targetStop + bracketSpread : targetStop - bracketSpread;
+
+        // Check if price hit the dynamic TP
+        boolean tpHit = isLong ? candleClose >= dynamicTp : candleClose <= dynamicTp;
+        if (tpHit) {
+            log.info("TRAIL TP HIT {} close=${} dynamicTP=${} — closing position",
+                    symbol, String.format("%.2f", candleClose), String.format("%.2f", dynamicTp));
+            if (isOptionsPosition) {
+                closeOptionsPosition(symbol, tp.optionsContract());
+            } else {
+                closeEquityPosition(symbol);
+            }
+            removeTrackedPosition(symbol);
+            lastProcessedCandle.remove(symbol);
+            return;
+        }
+
+        // ── 8. Once trail is armed, use ATR trailing only if improving ───────────
         boolean inProfit  = isLong ? targetStop > tp.entry() : targetStop < tp.entry();
         boolean improving = isLong ? targetStop > tp.stopLoss() : targetStop < tp.stopLoss();
 
@@ -826,46 +846,48 @@ public class AlpacaOrderService {
             // The next candle check will close if underlying crosses this new level
             if (isOptionsPosition) {
                 String mode = newReversalCount >= REVERSAL_CLOSES ? "REVERSAL-TIGHT" : "NORMAL-TRAIL";
-                log.info("TRAIL ✓ {} [OPTIONS/{}] peak=${} close=${} SL: ${} → ${} ({}x ATR)",
+                log.info("TRAIL ✓ {} [OPTIONS/{}] peak=${} close=${} SL: ${} → ${} TP: ${} ({}x ATR)",
                         symbol, mode,
                         String.format("%.2f", newPeak), String.format("%.2f", candleClose),
-                        String.format("%.2f", tp.stopLoss()), String.format("%.2f", targetStop), atrMult);
+                        String.format("%.2f", tp.stopLoss()), String.format("%.2f", targetStop),
+                        String.format("%.2f", dynamicTp), atrMult);
                 putTrackedPosition(symbol, new TrackedPosition(
                         tp.symbol(), tp.direction(), tp.entry(), targetStop,
-                        tp.takeProfit(), tp.orderId(),
-                        encodeHybridState(originalStop, true, true, hybrid.brokerStopOrderId()),
+                        dynamicTp, tp.orderId(),
+                        encodeHybridState(originalStop, hybrid.originalTakeProfit(), true, true, hybrid.brokerStopOrderId()),
                         newPeak, newReversalCount, tp.optionsContract(), tp.entryEpochMs()));
                 return;
             }
             boolean updated = updateStopOrder(symbol, targetStop, isLong, hybrid.brokerStopOrderId());
             if (updated) {
                 String mode = newReversalCount >= REVERSAL_CLOSES ? "REVERSAL-TIGHT" : "NORMAL-TRAIL";
-                log.info("TRAIL ✓ {} [{}] peak=${} close=${} SL: ${} → ${} ({}x ATR)",
+                log.info("TRAIL ✓ {} [{}] peak=${} close=${} SL: ${} → ${} TP: ${} ({}x ATR)",
                         symbol, mode,
                         String.format("%.2f", newPeak),
                         String.format("%.2f", candleClose),
                         String.format("%.2f", tp.stopLoss()),
                         String.format("%.2f", targetStop),
+                        String.format("%.2f", dynamicTp),
                         atrMult);
                 putTrackedPosition(symbol, new TrackedPosition(
                         tp.symbol(), tp.direction(), tp.entry(), targetStop,
-                        tp.takeProfit(), tp.orderId(),
-                        encodeHybridState(originalStop, true, true, hybrid.brokerStopOrderId()),
+                        dynamicTp, tp.orderId(),
+                        encodeHybridState(originalStop, hybrid.originalTakeProfit(), true, true, hybrid.brokerStopOrderId()),
                         newPeak, newReversalCount, tp.optionsContract(), tp.entryEpochMs()));
                 return;
             }
         }
 
-        // No SL move — just update peak and reversal counter
-        if (newPeak != tp.peakClose() || newReversalCount != tp.consecutiveReversal()) {
+        // No SL move — just update peak, reversal counter, and dynamic TP
+        if (newPeak != tp.peakClose() || newReversalCount != tp.consecutiveReversal() || dynamicTp != tp.takeProfit()) {
             if (newReversalCount >= REVERSAL_CLOSES) {
                 log.info("TRAIL: {} reversal confirmed ({} closes) — waiting for profit zone to tighten SL",
                         symbol, newReversalCount);
             }
             putTrackedPosition(symbol, new TrackedPosition(
                     tp.symbol(), tp.direction(), tp.entry(), tp.stopLoss(),
-                    tp.takeProfit(), tp.orderId(),
-                    encodeHybridState(originalStop, true, true, hybrid.brokerStopOrderId()),
+                    dynamicTp, tp.orderId(),
+                    encodeHybridState(originalStop, hybrid.originalTakeProfit(), true, true, hybrid.brokerStopOrderId()),
                     newPeak, newReversalCount, tp.optionsContract(), tp.entryEpochMs()));
         }
     }
@@ -980,7 +1002,7 @@ public class AlpacaOrderService {
         TrackedPosition recovered = new TrackedPosition(
                 underlying, direction, currentPrice, sl, tp,
                 null,
-                encodeHybridState(sl, false, false, null),
+                encodeHybridState(sl, tp, false, false, null),
                 currentPrice, 0, occSymbol, System.currentTimeMillis());
         putTrackedPosition(underlying, recovered);
         log.info("AUTO_RECOVER {}: reconstructed tracking entry={} sl={} tp={} atr={} (1.5R/3R from current price)",
@@ -1111,9 +1133,10 @@ public class AlpacaOrderService {
     private HybridState parseHybridState(TrackedPosition tp) {
         if (tp.stopOrderId() == null || tp.stopOrderId().isBlank() || !tp.stopOrderId().startsWith("meta|")) {
             boolean breakEven = "long".equals(tp.direction()) ? tp.stopLoss() >= tp.entry() : tp.stopLoss() <= tp.entry();
-            return new HybridState(tp.stopLoss(), breakEven, false, null);
+            return new HybridState(tp.stopLoss(), tp.takeProfit(), breakEven, false, null);
         }
         double originalStop = tp.stopLoss();
+        double originalTp   = tp.takeProfit();
         boolean be = false;
         boolean trail = false;
         String brokerStopOrderId = null;
@@ -1121,6 +1144,8 @@ public class AlpacaOrderService {
         for (String part : parts) {
             if (part.startsWith("orig=")) {
                 try { originalStop = Double.parseDouble(part.substring(5)); } catch (Exception ignored) {}
+            } else if (part.startsWith("origtp=")) {
+                try { originalTp = Double.parseDouble(part.substring(7)); } catch (Exception ignored) {}
             } else if (part.startsWith("be=")) {
                 be = "1".equals(part.substring(3));
             } else if (part.startsWith("trail=")) {
@@ -1130,12 +1155,13 @@ public class AlpacaOrderService {
                 brokerStopOrderId = value.isBlank() ? null : value;
             }
         }
-        return new HybridState(originalStop, be, trail, brokerStopOrderId);
+        return new HybridState(originalStop, originalTp, be, trail, brokerStopOrderId);
     }
 
-    private String encodeHybridState(double originalStopLoss, boolean breakEvenArmed, boolean trailArmed, String brokerStopOrderId) {
+    private String encodeHybridState(double originalStopLoss, double originalTakeProfit, boolean breakEvenArmed, boolean trailArmed, String brokerStopOrderId) {
         String broker = brokerStopOrderId == null ? "" : brokerStopOrderId;
         return "meta|orig=" + String.format(Locale.US, "%.6f", originalStopLoss)
+                + "|origtp=" + String.format(Locale.US, "%.6f", originalTakeProfit)
                 + "|be=" + (breakEvenArmed ? "1" : "0")
                 + "|trail=" + (trailArmed ? "1" : "0")
                 + "|broker=" + broker;
