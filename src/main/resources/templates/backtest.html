@@ -795,16 +795,32 @@ async function openTradeChart(serializedTrade) {
         <div class="meta-box"><div class="meta-lbl">Confidence</div><div class="meta-val">${t.confidence}/100</div></div>
     `;
     const reasonBox = document.getElementById('trade-reason');
+    const dir = t.dir?.toLowerCase() === 'long' ? 'LONG' : 'SHORT';
+    const strat = (t.strategy || 'unknown').toUpperCase();
+    let reasonHtml = `<div style="margin-bottom:6px;font-size:11px;font-weight:700;color:var(--blue)">WHY THIS TRADE?</div>`;
+    reasonHtml += `<div style="margin-bottom:4px"><span style="color:var(--muted)">Direction:</span> <strong style="color:${dir==='LONG'?'var(--green)':'var(--red)'}">${dir}</strong> &nbsp;|&nbsp; <span style="color:var(--muted)">Strategy:</span> <strong>${strat}</strong> &nbsp;|&nbsp; <span style="color:var(--muted)">Confidence:</span> <strong>${t.confidence}/100</strong></div>`;
     if (t.factor_breakdown) {
-        const title = t.factor_breakdown.startsWith('bb-bounce') ? 'Bollinger bounce trigger'
-                    : t.factor_breakdown.startsWith('bb-break') ? 'Bollinger break trigger'
-                    : 'Setup trigger';
-        reasonBox.innerHTML = `<strong style="display:block;margin-bottom:4px;color:#58a6ff">${title}</strong>${t.factor_breakdown}`;
-        reasonBox.style.display = 'block';
+        // Parse the factor_breakdown string: "setupType | vol x1.4 | RS +0.05% | ..."
+        const parts = t.factor_breakdown.split(' | ');
+        const setupType = parts[0] || '';
+        const rest = parts.slice(1).join(' | ');
+        const setupLabel = setupType.startsWith('vwap-1sd-touch-long')  ? '📈 VWAP +1SD touch — bullish rejection, price reclaimed band'
+                         : setupType.startsWith('vwap-1sd-touch-short') ? '📉 VWAP −1SD touch — bearish rejection, price broke band down'
+                         : setupType.startsWith('vwap-2sd-touch-long')  ? '🚀 VWAP +2SD touch — extreme extension, mean reversion long'
+                         : setupType.startsWith('vwap-2sd-touch-short') ? '💥 VWAP −2SD touch — extreme extension, mean reversion short'
+                         : setupType.startsWith('vwap-cross-long')      ? '📈 VWAP cross up — price reclaimed VWAP with momentum'
+                         : setupType.startsWith('vwap-cross-short')     ? '📉 VWAP cross down — price lost VWAP with momentum'
+                         : setupType;
+        reasonHtml += `<div style="margin:6px 0 4px;padding:6px 8px;background:rgba(88,166,255,.08);border-radius:4px;color:var(--text)">${setupLabel}</div>`;
+        reasonHtml += `<div style="font-size:11px;color:var(--muted);margin-top:4px">${rest}</div>`;
     } else {
-        reasonBox.style.display = 'none';
-        reasonBox.innerHTML = '';
+        reasonHtml += `<div style="font-size:11px;color:var(--muted)">No detailed breakdown available for ${strat} strategy</div>`;
     }
+    if (t.ctx_label)     reasonHtml += `<div style="font-size:11px;margin-top:3px;color:#9b6dff">RS/VIX: ${t.ctx_label}</div>`;
+    if (t.news_label)    reasonHtml += `<div style="font-size:11px;margin-top:3px;color:#8b949e">News: ${t.news_label}</div>`;
+    if (t.quality_label) reasonHtml += `<div style="font-size:11px;margin-top:3px;color:#e36209">Quality: ${t.quality_label}</div>`;
+    reasonBox.innerHTML = reasonHtml;
+    reasonBox.style.display = 'block';
     document.getElementById('trade-modal').classList.add('show');
     const resp = await fetch(`/api/backtest/trade-chart?ticker=${encodeURIComponent(t.ticker)}&entryTs=${t.entry_ts}&exitTs=${t.exit_ts || t.entry_ts}`);
     const data = await resp.json();
@@ -920,20 +936,26 @@ function drawTradeChart(data, trade) {
     });
 
     // Entry / exit markers
+    // Both entry markers use belowBar so arrow always appears at/near the candle
+    // regardless of whether it's a long or short — the arrow SHAPE shows direction.
+    // The price LINES (dashed) show the exact entry/exit price.
     const entryTs = Math.floor(trade.entry_ts / 1000);
     const exitTs  = Math.floor((trade.exit_ts || trade.entry_ts) / 1000);
+    const isLong  = trade.dir?.toLowerCase() === 'long';
     tradeCandleSeries.setMarkers([
         {
             time: entryTs,
-            position: trade.dir === 'long' ? 'belowBar' : 'aboveBar',
-            color: '#58a6ff', shape: trade.dir === 'long' ? 'arrowUp' : 'arrowDown',
-            text: `IN $${Number(trade.entry).toFixed(2)}`
+            position: 'belowBar',
+            color: '#58a6ff',
+            shape: isLong ? 'arrowUp' : 'arrowDown',
+            text: `${isLong ? '▲' : '▼'} ENTRY $${Number(trade.entry).toFixed(2)}`
         },
         {
             time: exitTs,
-            position: trade.dir === 'long' ? 'aboveBar' : 'belowBar',
-            color: outcomeColor, shape: trade.dir === 'long' ? 'arrowDown' : 'arrowUp',
-            text: `OUT $${Number(exitPrice).toFixed(2)}`
+            position: 'aboveBar',
+            color: outcomeColor,
+            shape: isLong ? 'arrowDown' : 'arrowUp',
+            text: `EXIT $${Number(exitPrice).toFixed(2)} (${trade.outcome})`
         }
     ]);
 
