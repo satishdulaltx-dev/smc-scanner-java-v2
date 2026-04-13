@@ -1025,13 +1025,20 @@ public class BacktestService {
 
                 // Estimate options P&L using delta model (no historical options data available)
                 // pnlPerContract is for 1 contract; scale by conviction-sized count.
+                // Skip options model for crypto — no listed options market on X: tickers.
                 double exitPrice = "long".equals(dir)
                         ? entry * (1 + pnlPct / 100.0)
                         : entry * (1 - pnlPct / 100.0);
-                double holdDays = 1.0; // most intraday setups resolve within 1 trading day
-                OptionsFlowAnalyzer.BacktestOptionsEstimate optEst =
-                        optionsAnalyzer.estimateBacktestOptionsPnl(entry, exitPrice, dir, holdDays, setup.getAtr(), contracts);
-                double scaledPnlPerContract = round2(optEst.pnlPerContract() * contracts);
+                OptionsFlowAnalyzer.BacktestOptionsEstimate optEst;
+                double scaledPnlPerContract;
+                if (ticker.startsWith("X:")) {
+                    optEst = new OptionsFlowAnalyzer.BacktestOptionsEstimate(0, 0, 0, 0);
+                    scaledPnlPerContract = 0;
+                } else {
+                    double holdDays = 1.0; // most intraday setups resolve within 1 trading day
+                    optEst = optionsAnalyzer.estimateBacktestOptionsPnl(entry, exitPrice, dir, holdDays, setup.getAtr(), contracts);
+                    scaledPnlPerContract = round2(optEst.pnlPerContract() * contracts);
+                }
 
                 trades.add(new TradeResult(ticker, dir, effectiveStrat, entry, sl, tp, outcome, pnlPct,
                         entryTime, exitTime != null ? exitTime : entryTime,

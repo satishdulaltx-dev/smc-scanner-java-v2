@@ -1150,7 +1150,7 @@ function drawEquity(labels, data) {
             scales: {
                 x: { grid: { color: '#30363d' }, ticks: { color: '#8b949e', font: { size: 10 } } },
                 y: { grid: { color: '#30363d' }, ticks: { color: '#8b949e', font: { size: 10 },
-                    callback: v => v + '%' } }
+                    callback: v => (Math.round(v * 100) / 100) + '%' } }
             }
         }
     });
@@ -1159,7 +1159,8 @@ function drawEquity(labels, data) {
 function drawDist(wins, losses) {
     if (distChart) distChart.destroy();
     const ctx = document.getElementById('dist-chart').getContext('2d');
-    const allPnl = [...wins.map(v => ({v, c:'#3fb950'})), ...losses.map(v => ({v, c:'#f85149'}))];
+    const allPnl = [...wins.map(v => ({v: Math.round(v * 100) / 100, c:'#3fb950'})),
+                    ...losses.map(v => ({v: Math.round(v * 100) / 100, c:'#f85149'}))];
     allPnl.sort((a, b) => a.v - b.v);
     distChart = new Chart(ctx, {
         type: 'bar',
@@ -1178,7 +1179,7 @@ function drawDist(wins, losses) {
             scales: {
                 x: { grid: { color: '#30363d' }, ticks: { color: '#8b949e', font: { size: 10 } } },
                 y: { grid: { color: '#30363d' }, ticks: { color: '#8b949e', font: { size: 10 },
-                    callback: v => v + '%' } }
+                    callback: v => (Math.round(v * 100) / 100) + '%' } }
             }
         }
     });
