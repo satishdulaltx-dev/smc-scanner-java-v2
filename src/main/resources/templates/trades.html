@@ -153,11 +153,12 @@ async function loadCumulative() {
 
 async function loadToday() {
     const d = await fetch('/api/trades/today').then(r=>r.json()).catch(()=>null);
-    if (!d || !d.trades || d.trades.length === 0) {
+    const trades = (d?.trades || []).filter(isBrokerBackedTrade);
+    if (trades.length === 0) {
         document.getElementById('today-section').innerHTML = '<div style="color:var(--muted);padding:16px">No broker-closed trades recorded today yet.</div>';
         return;
     }
-    document.getElementById('today-section').innerHTML = buildTable(d.trades, d);
+    document.getElementById('today-section').innerHTML = buildTable(trades, d);
 }
 
 function isBrokerBackedTrade(t) {
