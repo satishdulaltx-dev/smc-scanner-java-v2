@@ -52,6 +52,7 @@ public class BacktestService {
     private static final double ATR_TRAIL_REVERSAL = 0.30;
     private static final int REVERSAL_CLOSES = 2;
     private static final double TRAIL_EXIT_SLIPPAGE_BPS = 5.0; // 0.05% adverse slippage on trail exits
+    private static final double ENTRY_SLIPPAGE_BPS      = 5.0; // 0.05% adverse slippage on entry fills (mirrors Alpaca market-order spread)
     private static final double HYBRID_BE_R = 1.0;
     private static final double HYBRID_TRAIL_R = 1.5;
 
@@ -814,7 +815,12 @@ public class BacktestService {
 
                 tradePlacedToday = true;
 
-                double entry = setup.getEntry();
+                // Apply entry slippage: live Alpaca market orders fill ~5 BPS worse than signal price.
+                // Long entries buy at ask (slightly above signal); short entries sell at bid (below).
+                double slippageFactor = ENTRY_SLIPPAGE_BPS / 10000.0;
+                double entry = "long".equals(setup.getDirection())
+                        ? setup.getEntry() * (1 + slippageFactor)
+                        : setup.getEntry() * (1 - slippageFactor);
                 double sl    = setup.getStopLoss();
                 double tp    = setup.getTakeProfit();
                 String dir   = setup.getDirection();
