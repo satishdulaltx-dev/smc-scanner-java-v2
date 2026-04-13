@@ -151,7 +151,6 @@ const SCALP_STRATEGIES    = new Set(['scalp']);
 const INTRADAY_STRATEGIES = new Set(['smc','vwap','breakout','keylevel','vsqueeze','vwap3d','idiv','gammapin']);
 
 function categorize(t) {
-    if (t.outcome === 'NOT_FILLED') return 'notfilled';
     const s = (t.strategy || '').toLowerCase();
     if (SCALP_STRATEGIES.has(s))    return 'scalp';
     if (INTRADAY_STRATEGIES.has(s)) return 'intraday';
@@ -162,7 +161,8 @@ function categorize(t) {
 function filterByTab(trades, cat) {
     if (cat === 'all')       return trades;
     if (cat === 'notfilled') return trades.filter(t => t.outcome === 'NOT_FILLED');
-    return trades.filter(t => categorize(t) === cat && t.outcome !== 'NOT_FILLED');
+    // Strategy tabs show all trades for that model (filled AND not-filled)
+    return trades.filter(t => categorize(t) === cat);
 }
 
 function updateTabCounts(prefix, trades) {
@@ -170,8 +170,8 @@ function updateTabCounts(prefix, trades) {
     const counts = { all: trades.length, scalp:0, intraday:0, swing:0, notfilled:0 };
     trades.forEach(t => {
         const c = categorize(t);
-        if (c === 'notfilled') counts.notfilled++;
-        else if (counts[c] !== undefined) counts[c]++;
+        if (counts[c] !== undefined) counts[c]++;
+        if (t.outcome === 'NOT_FILLED') counts.notfilled++;
     });
     cats.forEach(cat => {
         const el = document.getElementById(`tc-${prefix}-${cat}`);

@@ -115,6 +115,15 @@
         .batch-card .bt-row { display:flex; justify-content:space-between; font-size:11px; color:var(--muted); margin-top:3px; }
         .batch-card .bt-val { font-weight:600; }
 
+        /* Trade log tabs */
+        .tab-bar { display:flex; gap:4px; margin-bottom:10px; flex-wrap:wrap; }
+        .tab-btn { padding:4px 12px; border-radius:6px; font-size:11px; font-weight:600; cursor:pointer; border:1px solid var(--border); background:transparent; color:var(--muted); transition:all .15s; }
+        .tab-btn:hover { color:var(--text); border-color:var(--muted); }
+        .tab-btn.active                   { border-color:var(--blue);   color:var(--blue);   background:rgba(88,166,255,.1); }
+        .tab-btn.active[data-cat="exec"]  { border-color:var(--green);  color:var(--green);  background:rgba(63,185,80,.1); }
+        .tab-btn.active[data-cat="filt"]  { border-color:#8b949e;       color:var(--text);   background:rgba(139,148,158,.1); }
+        .tab-count { font-size:10px; opacity:.75; margin-left:3px; }
+
         /* Footer */
         .footer { text-align:center; padding:16px; color:var(--muted); font-size:11px; border-top:1px solid var(--border); margin-top:16px; }
         .modal-backdrop { position:fixed; inset:0; background:rgba(0,0,0,.72); display:none; align-items:center; justify-content:center; z-index:1000; }
@@ -284,6 +293,11 @@
                 ✓ 5m bar intraday replay — same logic as live alerts · Click entry time to view 5m chart
             </span>
         </div>
+        <div class="tab-bar" id="trade-log-tabs">
+            <button class="tab-btn active" data-cat="all"  onclick="switchTradeTab('all',this)">ALL<span class="tab-count" id="tc-all"></span></button>
+            <button class="tab-btn"        data-cat="exec" onclick="switchTradeTab('exec',this)">EXECUTED<span class="tab-count" id="tc-exec"></span></button>
+            <button class="tab-btn"        data-cat="filt" onclick="switchTradeTab('filt',this)">FILTERED<span class="tab-count" id="tc-filt"></span></button>
+        </div>
         <table>
             <thead>
                 <tr>
@@ -352,6 +366,36 @@ const FILTERED_OUTCOMES = new Set([
     '15M_FILTERED','CORR_FILTERED','REGIME_FILTERED','OVEREXTENDED_FILTERED',
     'CONFLUENCE_FILTERED','TRAP_FILTERED','CONF_CAP_FILTERED'
 ]);
+
+// ── Trade log tabs ────────────────────────────────────────────────────────
+let _allTradeRows = []; // {html, filtered} for each trade row
+
+function switchTradeTab(cat, btn) {
+    document.querySelectorAll('#trade-log-tabs .tab-btn').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    const tbody = document.getElementById('trades-tbody');
+    if (!_allTradeRows.length) return;
+    tbody.innerHTML = _allTradeRows
+        .filter(r => cat === 'all' || (cat === 'exec' ? !r.filtered : r.filtered))
+        .map(r => r.html).join('');
+    // Re-number rows after filter
+    let n = 0;
+    tbody.querySelectorAll('tr:not([data-sep])').forEach(tr => {
+        const td = tr.querySelector('td:first-child');
+        if (td && td.style.color === 'var(--muted)') td.textContent = ++n;
+    });
+}
+
+function updateTradeTabCounts(rows) {
+    const exec = rows.filter(r => !r.filtered).length;
+    const filt = rows.filter(r => r.filtered).length;
+    const all  = rows.length;
+    document.getElementById('tc-all').textContent  = all  ? ` (${all})`  : '';
+    document.getElementById('tc-exec').textContent = exec ? ` (${exec})` : '';
+    document.getElementById('tc-filt').textContent = filt ? ` (${filt})` : '';
+    // Reset to ALL tab on new results
+    switchTradeTab('all', document.querySelector('#trade-log-tabs .tab-btn[data-cat="all"]'));
+}
 function isWinOutcome(t) { return t.outcome === 'WIN' || t.outcome === 'TRAIL_WIN' || (t.outcome === 'TIMEOUT' && t.pnl_pct > 0); }
 function isLossOutcome(t) { return t.outcome === 'LOSS' || t.outcome === 'TRAIL_LOSS' || (t.outcome === 'TIMEOUT' && t.pnl_pct <= 0); }
 function isBeOutcome(t) { return t.outcome === 'BE_STOP'; }
@@ -498,6 +542,7 @@ function renderSingle(d) {
             `<div style="grid-column:1/-1;color:var(--red);padding:20px">${d.ticker}: ${d.error}</div>`;
         document.getElementById('trades-tbody').innerHTML = '';
         document.getElementById('trade-count').textContent = '0';
+        _allTradeRows = [];
         return;
     }
 
@@ -618,7 +663,7 @@ function renderSingle(d) {
     ]);
     const COL_COUNT = 13; // total columns in the table
 
-    document.getElementById('trades-tbody').innerHTML = d.trades.map((t, i) => {
+    _allTradeRows = d.trades.map((t, i) => {
         const isNewsFiltered    = t.outcome === 'NEWS_FILTERED';
         const isCtxFiltered     = t.outcome === 'CTX_FILTERED';
         const isQualityFiltered = t.outcome === 'QUALITY_FILTERED';
@@ -681,7 +726,7 @@ function renderSingle(d) {
         }
         tradeNum++;
 
-        return dateSep + `
+        const rowHtml = dateSep + `
         <tr class="${rowClass}">
             <td style="color:var(--muted)">${tradeNum}</td>
             <td><a href="#" onclick='openTradeChart(${JSON.stringify(JSON.stringify({ ...t, ticker }))}); return false;' style="color:var(--blue);text-decoration:none;font-size:11px;font-family:monospace" title="View exact historical entry / exit">${t.entry_time || '—'}</a></td>
@@ -697,7 +742,9 @@ function renderSingle(d) {
             ${optPnl !== undefined && optPnl !== null ? `<td style="font-size:11px;font-weight:600;color:${optPnl >= 0 ? 'var(--green)' : 'var(--red)'}">${optPnl >= 0 ? '+' : ''}$${optPnl.toFixed(0)}</td>` : '<td style="color:var(--muted);font-size:10px">—</td>'}
             <td style="color:${confColor};font-size:11px">${t.confidence}/100${newsTag}${ctxTag}${qualTag}</td>
         </tr>`;
-    }).join('');
+        return { html: rowHtml, filtered: isFiltered };
+    });
+    updateTradeTabCounts(_allTradeRows);
 }
 
 async function openTradeChart(serializedTrade) {
