@@ -132,7 +132,7 @@ async function loadCumulative() {
     const realizedDollarTrades = c.realizedDollarTrades || 0;
     document.getElementById('cum-stats').innerHTML = `
         <div class="stat-card"><div class="stat-label">Total Alerts</div><div class="stat-val">${c.totalAlerts||0}</div><div class="stat-sub">${c.tradingDays||0} trading days · ${c.avgTradesPerDay||0}/day avg</div></div>
-        <div class="stat-card"><div class="stat-label">Resolved Trades</div><div class="stat-val">${(c.wins||0) + (c.losses||0) + (c.beStops||0)}</div><div class="stat-sub">${c.wins||0}W / ${c.losses||0}L / ${c.beStops||0}BE</div></div>
+        <div class="stat-card"><div class="stat-label">Resolved Trades</div><div class="stat-val">${(c.wins||0) + (c.losses||0) + (c.beStops||0)}</div><div class="stat-sub">${c.wins||0}W / ${c.losses||0}L / ${c.beStops||0}BE / ${c.notFilled||0}NF</div></div>
         <div class="stat-card"><div class="stat-label">Realized P&amp;L</div><div class="stat-val" style="color:${pnlAmount>=0?'var(--green)':'var(--red)'}">${pnlAmount>=0?'+':''}$${Math.abs(pnlAmount).toFixed(2)}</div><div class="stat-sub">${realizedDollarTrades} broker-matched closes</div></div>
         <div class="stat-card"><div class="stat-label">Open / Unresolved</div><div class="stat-val" style="color:var(--yellow)">${c.open||0}</div><div class="stat-sub">awaiting outcome</div></div>
     `;
@@ -192,11 +192,16 @@ function formatEtFromTrade(t, kind) {
 
 function buildTable(trades, summary, groupByDate) {
     const badgeHtml = (outcome) => {
-        const cls = outcome==='WIN'?'badge-win':outcome==='LOSS'?'badge-loss':outcome==='OPEN'?'badge-open':'badge-be';
+        const cls = outcome==='WIN'?'badge-win'
+            : outcome==='LOSS'?'badge-loss'
+            : outcome==='OPEN'?'badge-open'
+            : outcome==='NOT_FILLED'?'badge-open'
+            :'badge-be';
         return `<span class="badge ${cls}">${outcome}</span>`;
     };
     const pnlHtml = (t) => {
         if (t.outcome === 'OPEN') return `<span class="open">—</span>`;
+        if (t.outcome === 'NOT_FILLED') return `<span class="be">— <span style="color:var(--muted);font-size:10px;">not filled</span></span>`;
         const amount = t.pnlAmount;
         const pct = t.pnlPct || 0;
         const cls = pct > 0 ? 'win' : pct < 0 ? 'loss' : 'be';

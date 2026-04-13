@@ -39,6 +39,8 @@ public class LiveTradeLog {
     private static final String FILE_PATH = resolveStoragePath("live-trades.json");
     private static final String BACKUP_FILE_PATH = FILE_PATH + ".bak";
     private static final int BROKER_REBUILD_LOOKBACK_DAYS = 30;
+    private static final long ENTRY_MATCH_LOOKBACK_MS = 10 * 60 * 1000L;
+    private static final long ENTRY_MATCH_LOOKAHEAD_MS = 2 * 60 * 60 * 1000L;
     private static final ZoneId ET = ZoneId.of("America/New_York");
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd");
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm");
@@ -207,24 +209,26 @@ public class LiveTradeLog {
         long wins = dayTrades.stream().filter(t -> "WIN".equals(t.get("outcome"))).count();
         long losses = dayTrades.stream().filter(t -> "LOSS".equals(t.get("outcome"))).count();
         long beStops = dayTrades.stream().filter(t -> "BE_STOP".equals(t.get("outcome"))).count();
+        long notFilled = dayTrades.stream().filter(t -> "NOT_FILLED".equals(t.get("outcome"))).count();
         long open = dayTrades.stream().filter(t -> "OPEN".equals(t.get("outcome"))).count();
         long resolved = wins + losses + beStops;
 
         summary.put("wins", wins);
         summary.put("losses", losses);
         summary.put("beStops", beStops);
+        summary.put("notFilled", notFilled);
         summary.put("open", open);
         summary.put("resolved", resolved);
         summary.put("winRate", resolved > 0 ? Math.round(wins * 100.0 / (wins + losses) * 10) / 10.0 : 0);
 
         // P&L
         double totalPnl = dayTrades.stream()
-                .filter(t -> !"OPEN".equals(t.get("outcome")))
+                .filter(t -> isRealizedOutcome(String.valueOf(t.get("outcome"))))
                 .mapToDouble(t -> toDouble(t.get("pnlPct")))
                 .sum();
         summary.put("totalPnlPct", Math.round(totalPnl * 100) / 100.0);
         double totalPnlAmount = dayTrades.stream()
-                .filter(t -> !"OPEN".equals(t.get("outcome")))
+                .filter(t -> isRealizedOutcome(String.valueOf(t.get("outcome"))))
                 .mapToDouble(t -> toDouble(t.get("pnlAmount")))
                 .sum();
         summary.put("totalPnlAmount", Math.round(totalPnlAmount * 100) / 100.0);
@@ -252,9 +256,10 @@ public class LiveTradeLog {
             long wins = trades.stream().filter(t -> "WIN".equals(t.get("outcome"))).count();
             long losses = trades.stream().filter(t -> "LOSS".equals(t.get("outcome"))).count();
             long beStops = trades.stream().filter(t -> "BE_STOP".equals(t.get("outcome"))).count();
+            long notFilled = trades.stream().filter(t -> "NOT_FILLED".equals(t.get("outcome"))).count();
             long open = trades.stream().filter(t -> "OPEN".equals(t.get("outcome"))).count();
             long realizedDollarTrades = trades.stream()
-                    .filter(t -> !"OPEN".equals(t.get("outcome")))
+                    .filter(t -> isRealizedOutcome(String.valueOf(t.get("outcome"))))
                     .filter(t -> {
                         Object amount = t.get("pnlAmount");
                         return amount != null && !String.valueOf(amount).isBlank();
@@ -265,18 +270,19 @@ public class LiveTradeLog {
             stats.put("wins", wins);
             stats.put("losses", losses);
             stats.put("beStops", beStops);
+            stats.put("notFilled", notFilled);
             stats.put("open", open);
             stats.put("realizedDollarTrades", realizedDollarTrades);
             stats.put("winRate", (wins + losses) > 0
                     ? Math.round(wins * 100.0 / (wins + losses) * 10) / 10.0 : 0);
 
             double totalPnl = trades.stream()
-                    .filter(t -> !"OPEN".equals(t.get("outcome")))
+                    .filter(t -> isRealizedOutcome(String.valueOf(t.get("outcome"))))
                     .mapToDouble(t -> toDouble(t.get("pnlPct")))
                     .sum();
             stats.put("totalPnlPct", Math.round(totalPnl * 100) / 100.0);
             double totalPnlAmount = trades.stream()
-                    .filter(t -> !"OPEN".equals(t.get("outcome")))
+                    .filter(t -> isRealizedOutcome(String.valueOf(t.get("outcome"))))
                     .mapToDouble(t -> toDouble(t.get("pnlAmount")))
                     .sum();
             stats.put("totalPnlAmount", Math.round(totalPnlAmount * 100) / 100.0);
@@ -311,6 +317,7 @@ public class LiveTradeLog {
         Map<String, List<Map<String, Object>>> byTicker = openTrades.stream()
                 .collect(Collectors.groupingBy(t -> (String) t.get("ticker")));
         Set<String> brokerOpenTickers = getBrokerOpenTickers();
+        Map<String, List<Map<String, Object>>> recentOrdersBySymbol = getRecentOrdersBySymbol();
         Map<String, List<Map<String, Object>>> recentFilledOrders = getRecentFilledOrdersBySymbol();
         Map<String, List<Map<String, Object>>> recentFilledOrdersByUnderlying = getRecentFilledOrdersByUnderlying(recentFilledOrders);
         Set<String> usedOrderIds = new HashSet<>();
@@ -363,7 +370,10 @@ public class LiveTradeLog {
                     }
 
                     boolean brokerStillOpen = brokerOpenTickers.contains(ticker);
-                    if (outcome == null && !brokerStillOpen) {
+                    if (!brokerStillOpen && markNotFilledIfNeeded(t, recentOrdersBySymbol)) {
+                        outcome = "NOT_FILLED";
+                        pnlPct = 0.0;
+                    } else if (outcome == null && !brokerStillOpen) {
                         boolean resolvedFromOrders = applyBrokerRealizedPnl(t, recentFilledOrders, recentFilledOrdersByUnderlying, usedOrderIds);
                         if (resolvedFromOrders) {
                             outcome = (String) t.get("outcome");
@@ -386,7 +396,9 @@ public class LiveTradeLog {
                         t.put("pnlPct", Math.round(pnlPct * 100.0) / 100.0);
                         if (!t.containsKey("pnlAmount")) t.put("pnlAmount", null);
                         t.put("resolvedAt", ZonedDateTime.now(ET).toInstant().toEpochMilli());
-                        if (t.containsKey("resolutionSource")) {
+                        if ("NOT_FILLED".equals(outcome)) {
+                            t.remove("exitPrice");
+                        } else if (t.containsKey("resolutionSource")) {
                             t.put("exitPrice", lastPrice);
                         } else {
                             t.put("exitPrice", outcome.equals("WIN") ? tp : sl);
@@ -415,6 +427,7 @@ public class LiveTradeLog {
     }
 
     private void backfillBrokerResolvedPnL() {
+        Map<String, List<Map<String, Object>>> recentOrdersBySymbol = getRecentOrdersBySymbol();
         Map<String, List<Map<String, Object>>> fillActivitiesBySymbol = getRecentFillActivitiesBySymbol();
         Map<String, List<Map<String, Object>>> filledOrdersBySymbol = getRecentFilledOrdersBySymbol();
         Map<String, List<Map<String, Object>>> filledOrdersByUnderlying = getRecentFilledOrdersByUnderlying(filledOrdersBySymbol);
@@ -428,6 +441,10 @@ public class LiveTradeLog {
                     .collect(Collectors.toList());
             for (Map<String, Object> trade : sortedTrades) {
                 if ("OPEN".equals(trade.get("outcome"))) continue;
+                if (markNotFilledIfNeeded(trade, recentOrdersBySymbol)) {
+                    changed = true;
+                    continue;
+                }
                 Object amount = trade.get("pnlAmount");
                 if (amount != null && !String.valueOf(amount).isBlank()) continue;
                 if (applyBrokerRealizedPnlFromActivities(trade, fillActivitiesBySymbol, usedActivityIds)
@@ -566,6 +583,18 @@ public class LiveTradeLog {
         }
     }
 
+    private Map<String, List<Map<String, Object>>> getRecentOrdersBySymbol() {
+        if (alpaca == null || !alpaca.isEnabled()) return Map.of();
+        try {
+            return alpaca.getOrders(BROKER_REBUILD_LOOKBACK_DAYS).stream()
+                    .peek(o -> o.put("created_at_epoch", parseEpoch(String.valueOf(o.getOrDefault("created_at", "")))))
+                    .collect(Collectors.groupingBy(o -> normalizeOptionSymbol(String.valueOf(o.getOrDefault("symbol", "")))));
+        } catch (Exception e) {
+            log.warn("Could not fetch Alpaca orders for fill-status reconciliation: {}", e.getMessage());
+            return Map.of();
+        }
+    }
+
     private Map<String, List<Map<String, Object>>> getRecentFillActivitiesBySymbol() {
         if (alpaca == null || !alpaca.isEnabled()) return Map.of();
         try {
@@ -614,6 +643,53 @@ public class LiveTradeLog {
         } catch (Exception ignored) {
             return 0.0;
         }
+    }
+
+    private boolean isRealizedOutcome(String outcome) {
+        return "WIN".equals(outcome) || "LOSS".equals(outcome) || "BE_STOP".equals(outcome) || "TIMEOUT".equals(outcome);
+    }
+
+    private boolean markNotFilledIfNeeded(Map<String, Object> trade,
+                                          Map<String, List<Map<String, Object>>> ordersBySymbol) {
+        String optionsContract = String.valueOf(trade.getOrDefault("optionsContract", ""));
+        String symbol = normalizeOptionSymbol(optionsContract);
+        if (symbol.isBlank()) return false;
+        if ("NOT_FILLED".equals(trade.get("outcome"))) return true;
+
+        List<Map<String, Object>> orders = ordersBySymbol.getOrDefault(symbol, List.of());
+        if (orders.isEmpty()) return false;
+
+        long tradeTs = ((Number) trade.getOrDefault("timestamp", 0L)).longValue();
+        Map<String, Object> entryOrder = orders.stream()
+                .filter(o -> "buy".equalsIgnoreCase(String.valueOf(o.getOrDefault("side", ""))))
+                .filter(o -> {
+                    long ts = ((Number) o.getOrDefault("created_at_epoch", 0L)).longValue();
+                    return ts >= (tradeTs - ENTRY_MATCH_LOOKBACK_MS) && ts <= (tradeTs + ENTRY_MATCH_LOOKAHEAD_MS);
+                })
+                .min(Comparator.comparingLong(o -> ((Number) o.getOrDefault("created_at_epoch", 0L)).longValue()))
+                .orElse(null);
+        if (entryOrder == null) return false;
+
+        String status = String.valueOf(entryOrder.getOrDefault("status", ""));
+        double filledQty = toDouble(entryOrder.get("filled_qty"));
+        String filledAt = String.valueOf(entryOrder.getOrDefault("filled_at", ""));
+        boolean isUnfilled = !"filled".equalsIgnoreCase(status)
+                || filledQty <= 0.0
+                || filledAt == null
+                || filledAt.isBlank()
+                || "null".equalsIgnoreCase(filledAt);
+        if (!isUnfilled) return false;
+
+        trade.put("outcome", "NOT_FILLED");
+        trade.put("pnlPct", 0.0);
+        trade.put("pnlAmount", null);
+        trade.put("resolutionSource", "ALPACA_NOT_FILLED");
+        trade.put("brokerSymbol", symbol);
+        trade.put("brokerOrderStatus", status);
+        trade.put("brokerOrderId", entryOrder.get("id"));
+        trade.put("resolvedAt", ZonedDateTime.now(ET).toInstant().toEpochMilli());
+        trade.remove("exitPrice");
+        return true;
     }
 
     private Set<String> getBrokerOpenTickers() {

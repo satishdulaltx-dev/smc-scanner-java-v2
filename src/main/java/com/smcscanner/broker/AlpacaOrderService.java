@@ -455,6 +455,7 @@ public class AlpacaOrderService {
                         o.put("symbol", n.path("symbol").asText());
                         o.put("side", n.path("side").asText());
                         o.put("qty", n.path("qty").asText());
+                        o.put("filled_qty", n.path("filled_qty").asText());
                         o.put("type", n.path("type").asText());
                         o.put("status", n.path("status").asText());
                         o.put("limit_price", n.path("limit_price").asText());
