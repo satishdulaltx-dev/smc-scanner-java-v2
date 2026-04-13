@@ -128,19 +128,27 @@ public class BacktestService {
         // ── Live-parity skip gate ─────────────────────────────────────────────
         // Enforce the same per-mode skip flags as the live scanner so that a
         // backtest never shows trades that would never fire as live alerts.
-        // Only applies when a specific mode or strategy is requested — "Profile default"
-        // (strategyOverride==null) falls through and uses the root strategyType as normal.
-        if (!ticker.startsWith("X:") && strategyOverride != null && !strategyOverride.isBlank()) {
+        if (!ticker.startsWith("X:")) {
             TickerProfile gateProfile = config.getTickerProfile(ticker);
             boolean rootSkip = gateProfile.isSkip();
-            String modeKey = switch (strategyOverride.toLowerCase()) {
-                case "scalp"                                   -> "scalp";
-                case "smc","vwap","keylevel","breakout","gap",
-                     "peg","vsqueeze","vwap3d","idiv","gammapin" -> "intraday";
-                default                                        -> null;
-            };
-            if (modeKey == null && mode == BacktestMode.SCALP) modeKey = "scalp";
-            if (modeKey == null && mode == BacktestMode.SWING) modeKey = "swing";
+            // Determine mode key: explicit BacktestMode takes priority, then strategy override
+            String modeKey;
+            if (mode == BacktestMode.SCALP) {
+                modeKey = "scalp";
+            } else if (mode == BacktestMode.SWING) {
+                modeKey = "swing";
+            } else if (mode == BacktestMode.INTRADAY) {
+                modeKey = "intraday";
+            } else if (strategyOverride != null && !strategyOverride.isBlank()) {
+                modeKey = switch (strategyOverride.toLowerCase()) {
+                    case "scalp"                                     -> "scalp";
+                    case "smc","vwap","keylevel","breakout","gap",
+                         "peg","vsqueeze","vwap3d","idiv","gammapin" -> "intraday";
+                    default                                          -> null;
+                };
+            } else {
+                modeKey = null; // ALL mode + Profile default — no mode-level gate
+            }
             if (modeKey != null) {
                 TickerProfile.ModeProfile mp = gateProfile.resolveMode(modeKey);
                 if (mp.isEffectiveSkip(rootSkip)) {
