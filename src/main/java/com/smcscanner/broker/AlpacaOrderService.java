@@ -635,16 +635,25 @@ public class AlpacaOrderService {
      * - Only activates when trade is in profit (trail > entry for longs)
      */
     private void processTrailingForSymbol(String symbol, TrackedPosition tp, double optionsPnlDollars) {
-        // Fetch last 20 confirmed 5m bars from Polygon
-        List<OHLCV> bars = polygon.getBars(symbol, "5m", 20);
+        // Determine timeframe before fetching: scalp trades trail on 1m bars, all others on 5m.
+        // Pre-check scalpManaged using stored state so we pick the right resolution upfront.
+        HybridState hybridPre = parseHybridState(tp);
+        double originalStopPre = hybridPre.originalStopLoss();
+        double riskPre = Math.abs(tp.entry() - originalStopPre);
+        if (riskPre <= 0) riskPre = Math.abs(tp.entry() - tp.stopLoss());
+        boolean isScalpPreCheck = riskPre > 0 && isScalpManaged(tp.entry(), originalStopPre, hybridPre.originalTakeProfit());
+        String barTimeframe = isScalpPreCheck ? "1m" : "5m";
+        int barCount = isScalpPreCheck ? 30 : 20; // 30×1m = 30 min of ATR context for scalp
+
+        List<OHLCV> bars = polygon.getBars(symbol, barTimeframe, barCount);
         if (bars.size() < 3) {
-            log.debug("TRAIL: {} — not enough 5m bars ({})", symbol, bars.size());
+            log.debug("TRAIL: {} — not enough {} bars ({})", symbol, barTimeframe, bars.size());
             return;
         }
 
         // Use second-to-last bar as confirmed close (last bar may still be forming)
         OHLCV confirmedBar = bars.get(bars.size() - 2);
-        String candleTs = String.valueOf(confirmedBar.getTimestamp());
+        String candleTs = barTimeframe + ":" + confirmedBar.getTimestamp();
 
         // Skip if we already processed this candle
         String lastTs = lastProcessedCandle.get(symbol);
@@ -653,14 +662,14 @@ public class AlpacaOrderService {
 
         double candleClose = confirmedBar.getClose();
         boolean isLong = "long".equals(tp.direction());
-        double atr = computeAtr5m(bars);
+        double atr = computeAtr5m(bars); // works for any timeframe — named for legacy
         if (atr <= 0) return;
-        HybridState hybrid = parseHybridState(tp);
-        double originalStop = hybrid.originalStopLoss();
+        HybridState hybrid = hybridPre;
+        double originalStop = originalStopPre;
         double risk = Math.abs(tp.entry() - originalStop);
         if (risk <= 0) risk = Math.abs(tp.entry() - tp.stopLoss());
         if (risk <= 0) return;
-        boolean scalpManaged = isScalpManaged(tp.entry(), originalStop, tp.takeProfit());
+        boolean scalpManaged = isScalpManaged(tp.entry(), originalStop, hybrid.originalTakeProfit());
         double beTrigger = isLong
                 ? tp.entry() + risk * (scalpManaged ? SCALP_BE_R : HYBRID_BE_R)
                 : tp.entry() - risk * (scalpManaged ? SCALP_BE_R : HYBRID_BE_R);
