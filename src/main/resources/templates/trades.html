@@ -112,6 +112,12 @@
 
     <!-- Today's realized trades -->
     <div class="section-title">📅 Today's Closed Broker Trades</div>
+    <div class="tab-bar" id="today-broker-tabs">
+        <button class="tab-btn active" data-cat="all"      onclick="switchTab('today-broker','all',this)">ALL<span class="tab-count" id="tc-tbroker-all"></span></button>
+        <button class="tab-btn"        data-cat="scalp"    onclick="switchTab('today-broker','scalp',this)">SCALP<span class="tab-count" id="tc-tbroker-scalp"></span></button>
+        <button class="tab-btn"        data-cat="intraday" onclick="switchTab('today-broker','intraday',this)">DAY TRADE<span class="tab-count" id="tc-tbroker-intraday"></span></button>
+        <button class="tab-btn"        data-cat="swing"    onclick="switchTab('today-broker','swing',this)">SWING<span class="tab-count" id="tc-tbroker-swing"></span></button>
+    </div>
     <div id="today-section"><div class="spinner">Loading...</div></div>
 
     <!-- Today's scanner alerts -->
@@ -127,6 +133,12 @@
 
     <!-- Broker history -->
     <div class="section-title" style="margin-top:32px">🗂️ Recent Trade History</div>
+    <div class="tab-bar" id="history-tabs">
+        <button class="tab-btn active" data-cat="all"      onclick="switchTab('history','all',this)">ALL<span class="tab-count" id="tc-history-all"></span></button>
+        <button class="tab-btn"        data-cat="scalp"    onclick="switchTab('history','scalp',this)">SCALP<span class="tab-count" id="tc-history-scalp"></span></button>
+        <button class="tab-btn"        data-cat="intraday" onclick="switchTab('history','intraday',this)">DAY TRADE<span class="tab-count" id="tc-history-intraday"></span></button>
+        <button class="tab-btn"        data-cat="swing"    onclick="switchTab('history','swing',this)">SWING<span class="tab-count" id="tc-history-swing"></span></button>
+    </div>
     <div id="history-section"><div class="spinner">Loading...</div></div>
 
     <!-- Scanner alert history -->
@@ -144,7 +156,9 @@
 
 <script>
 // ── Category state ──────────────────────────────────────────────────────────
+let _todayBroker   = [];
 let _todayAlerts   = [];
+let _brokerHistory = [];
 let _alertHistory  = [];
 
 const SCALP_STRATEGIES    = new Set(['scalp']);
@@ -154,47 +168,56 @@ function categorize(t) {
     const s = (t.strategy || '').toLowerCase();
     if (SCALP_STRATEGIES.has(s))    return 'scalp';
     if (INTRADAY_STRATEGIES.has(s)) return 'intraday';
-    if (s.startsWith('swing') || s === 'overnight_hold' || s === 'range') return 'swing';
+    if (s.startsWith('swing') || s.startsWith('gap') || s === 'overnight_hold'
+        || s === 'gap_overnight_long' || s === 'gap_overnight_short' || s === 'range') return 'swing';
     return 'other';
 }
 
 function filterByTab(trades, cat) {
     if (cat === 'all')       return trades;
     if (cat === 'notfilled') return trades.filter(t => t.outcome === 'NOT_FILLED');
-    // Strategy tabs show all trades for that model (filled AND not-filled)
     return trades.filter(t => categorize(t) === cat);
 }
 
-function updateTabCounts(prefix, trades) {
-    const cats = ['all','scalp','intraday','swing','notfilled'];
+// prefix → count id prefix; trades → array; hasFilled → show notfilled tab or not
+function updateTabCounts(prefix, trades, hasFilled) {
     const counts = { all: trades.length, scalp:0, intraday:0, swing:0, notfilled:0 };
     trades.forEach(t => {
         const c = categorize(t);
         if (counts[c] !== undefined) counts[c]++;
         if (t.outcome === 'NOT_FILLED') counts.notfilled++;
     });
-    cats.forEach(cat => {
+    ['all','scalp','intraday','swing','notfilled'].forEach(cat => {
         const el = document.getElementById(`tc-${prefix}-${cat}`);
         if (el) el.textContent = counts[cat] ? ` (${counts[cat]})` : '';
     });
 }
 
+// section → section key; maps to data store and DOM ids
+const SECTION_MAP = {
+    'today-broker':  { data: () => _todayBroker,   el: 'today-section',        grouped: false },
+    'today-alerts':  { data: () => _todayAlerts,    el: 'today-alerts-section', grouped: false, reverse: true },
+    'history':       { data: () => _brokerHistory,  el: 'history-section',      grouped: true  },
+    'alert-history': { data: () => _alertHistory,   el: 'alert-history-section',grouped: true  },
+};
+
 function switchTab(section, cat, btn) {
-    // Update active button
     const bar = document.getElementById(`${section}-tabs`);
     if (bar) bar.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     if (btn) btn.classList.add('active');
 
-    const trades = section === 'today-alerts' ? _todayAlerts : _alertHistory;
+    const cfg = SECTION_MAP[section];
+    if (!cfg) return;
+    const trades = cfg.data();
     const filtered = filterByTab(trades, cat);
-    const el = document.getElementById(`${section}-section`);
+    const el = document.getElementById(cfg.el);
     if (!el) return;
     if (filtered.length === 0) {
-        const label = cat === 'all' ? 'No alerts recorded yet.' : `No ${cat === 'notfilled' ? 'not-filled' : cat} alerts recorded yet.`;
+        const label = cat === 'notfilled' ? 'No not-filled alerts.' : cat === 'all' ? 'No trades recorded yet.' : `No ${cat} trades recorded yet.`;
         el.innerHTML = `<div style="color:var(--muted);padding:16px">${label}</div>`;
     } else {
-        const isHistory = section === 'alert-history';
-        el.innerHTML = buildTable(isHistory ? filtered : [...filtered].reverse(), null, isHistory);
+        const rows = cfg.reverse ? [...filtered].reverse() : filtered;
+        el.innerHTML = buildTable(rows, null, cfg.grouped);
     }
 }
 
@@ -234,12 +257,14 @@ async function loadCumulative() {
 
 async function loadToday() {
     const d = await fetch('/api/trades/today').then(r=>r.json()).catch(()=>null);
-    const trades = (d?.trades || []).filter(isBrokerBackedTrade);
-    if (trades.length === 0) {
+    _todayBroker = (d?.trades || []).filter(isBrokerBackedTrade);
+    updateTabCounts('tbroker', _todayBroker);
+    if (_todayBroker.length === 0) {
         document.getElementById('today-section').innerHTML = '<div style="color:var(--muted);padding:16px">No broker-closed trades recorded today yet.</div>';
         return;
     }
-    document.getElementById('today-section').innerHTML = buildTable(trades, d);
+    const activeBtn = document.querySelector('#today-broker-tabs .tab-btn.active');
+    switchTab('today-broker', activeBtn?.dataset?.cat || 'all', activeBtn);
 }
 
 function isBrokerBackedTrade(t) {
@@ -269,24 +294,29 @@ async function loadTodayAlerts() {
 async function loadHistory() {
     const d = await fetch('/api/trades/history').then(r=>r.json()).catch(()=>null);
     if (!d || !d.trades || d.trades.length === 0) {
-        document.getElementById('history-section').innerHTML = '<div style="color:var(--muted);padding:16px">No trade history recorded yet. Trades will appear here once the live scanner fires alerts.</div>';
+        document.getElementById('history-section').innerHTML = '<div style="color:var(--muted);padding:16px">No trade history recorded yet.</div>';
         document.getElementById('alert-history-section').innerHTML = '<div style="color:var(--muted);padding:16px">No scanner alert history recorded yet.</div>';
         return;
     }
-    // Sort newest first
     const sorted = [...d.trades].sort((a,b) => (b.timestamp||0) - (a.timestamp||0));
-    const brokerTrades = sorted.filter(isBrokerBackedTrade);
-    _alertHistory = sorted.filter(t => !isBrokerBackedTrade(t));
+    _brokerHistory = sorted.filter(isBrokerBackedTrade);
+    _alertHistory  = sorted.filter(t => !isBrokerBackedTrade(t));
 
-    document.getElementById('history-section').innerHTML = brokerTrades.length
-        ? buildTable(brokerTrades, null, true)
-        : '<div style="color:var(--muted);padding:16px">No broker-backed trade history recorded yet.</div>';
+    updateTabCounts('history', _brokerHistory);
+    const histBtn = document.querySelector('#history-tabs .tab-btn.active');
+    if (_brokerHistory.length) {
+        switchTab('history', histBtn?.dataset?.cat || 'all', histBtn);
+    } else {
+        document.getElementById('history-section').innerHTML = '<div style="color:var(--muted);padding:16px">No broker-backed trade history recorded yet.</div>';
+    }
 
     updateTabCounts('hist', _alertHistory);
-    // Render current active tab
-    const activeBtn = document.querySelector('#alert-history-tabs .tab-btn.active');
-    const activeCat = activeBtn?.dataset?.cat || 'all';
-    switchTab('alert-history', activeCat, activeBtn);
+    const alertBtn = document.querySelector('#alert-history-tabs .tab-btn.active');
+    if (_alertHistory.length) {
+        switchTab('alert-history', alertBtn?.dataset?.cat || 'all', alertBtn);
+    } else {
+        document.getElementById('alert-history-section').innerHTML = '<div style="color:var(--muted);padding:16px">No scanner-only alert history recorded yet.</div>';
+    }
 }
 
 function formatEtFromTrade(t, kind) {
