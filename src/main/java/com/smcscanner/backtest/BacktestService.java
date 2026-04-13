@@ -125,6 +125,32 @@ public class BacktestService {
 
     /** Run backtest with explicit exit style so classic and live-parity exits can be compared side by side. */
     public BacktestResult run(String ticker, int lookbackDays, BacktestMode mode, String strategyOverride, BacktestExitStyle exitStyle) {
+        // ── Live-parity skip gate ─────────────────────────────────────────────
+        // Enforce the same per-mode skip flags as the live scanner so that a
+        // backtest never shows trades that would never fire as live alerts.
+        // Only applies when a specific mode or strategy is requested — "Profile default"
+        // (strategyOverride==null) falls through and uses the root strategyType as normal.
+        if (!ticker.startsWith("X:") && strategyOverride != null && !strategyOverride.isBlank()) {
+            TickerProfile gateProfile = config.getTickerProfile(ticker);
+            boolean rootSkip = gateProfile.isSkip();
+            String modeKey = switch (strategyOverride.toLowerCase()) {
+                case "scalp"                                   -> "scalp";
+                case "smc","vwap","keylevel","breakout","gap",
+                     "peg","vsqueeze","vwap3d","idiv","gammapin" -> "intraday";
+                default                                        -> null;
+            };
+            if (modeKey == null && mode == BacktestMode.SCALP) modeKey = "scalp";
+            if (modeKey == null && mode == BacktestMode.SWING) modeKey = "swing";
+            if (modeKey != null) {
+                TickerProfile.ModeProfile mp = gateProfile.resolveMode(modeKey);
+                if (mp.isEffectiveSkip(rootSkip)) {
+                    String reason = mp.resolveSkipReason(gateProfile.getSkipReason());
+                    log.info("Backtest skip gate: {} {} disabled — {}", ticker, modeKey, reason);
+                    return BacktestResult.empty(ticker, ticker + " " + modeKey + " disabled: " + reason);
+                }
+            }
+        }
+
         // Fetch 5m bars for the full lookback — one API call gets it all
         List<OHLCV> allBars = client.getBarsWithLookback(ticker, "5m", 50000, lookbackDays);
         if (allBars == null || allBars.size() < 30) {
