@@ -1210,6 +1210,11 @@ public class BacktestService {
         return new ExitResult("TIMEOUT", toDateTime(lastFwd.getTimestamp()), pnlPct);
     }
 
+    /**
+     * Scalp exit: mirrors simulateHybridExit exactly but uses 1m bars for ATR
+     * (same HYBRID_BE_R=1.0, HYBRID_TRAIL_R=1.5, ATR trail, 1.5R floor, dynamic TP).
+     * Keeps full parity with live AlpacaOrderService trailing on 1m bars.
+     */
     private ExitResult simulateScalpExit(List<OHLCV> entryWindow, List<OHLCV> fwdBars,
                                          double entry, double sl, double tp, String dir) {
         if (fwdBars.isEmpty()) return null;
@@ -1217,75 +1222,86 @@ public class BacktestService {
         double risk = Math.abs(entry - sl);
         if (risk <= 0) return null;
 
-        double activeSl = sl;
-        double peakClose = entry;
-        boolean beActive = false;
+        double beLevel       = isLong ? entry + risk * HYBRID_BE_R    : entry - risk * HYBRID_BE_R;
+        double trailArmLevel = isLong ? entry + risk * HYBRID_TRAIL_R : entry - risk * HYBRID_TRAIL_R;
+        double bracketSpread = Math.abs(tp - sl);
+
+        boolean beActive    = false;
         boolean trailActive = false;
-        int reversalCount = 0;
+        double  activeSl    = sl;
+        double  peakClose   = entry;
+        int     reversalCount = 0;
+        // Use 30-bar window for 1m ATR (1m bars are ~3-5× smaller than 5m bars)
         List<OHLCV> atrWindow = new ArrayList<>(entryWindow);
 
-        for (int i = 0; i < fwdBars.size(); i++) {
-            OHLCV fb = fwdBars.get(i);
+        for (OHLCV fb : fwdBars) {
             atrWindow.add(fb);
-            if (atrWindow.size() > 20) atrWindow.remove(0);
+            if (atrWindow.size() > 30) atrWindow.remove(0);
 
             double close = fb.getClose();
-            double open = fb.getOpen();
-            double atr = computeAtr5m(atrWindow);
-            if (atr <= 0) atr = risk;
+            if (isLong && close > peakClose) peakClose = close;
+            if (!isLong && close < peakClose) peakClose = close;
 
-            boolean stopBreached = isLong ? close <= activeSl : close >= activeSl;
+            if (!beActive && (isLong ? peakClose >= beLevel : peakClose <= beLevel)) beActive = true;
+
+            // Classic TP alive until trail arms
+            if (!trailActive) {
+                boolean tpHit = isLong ? close >= tp : close <= tp;
+                if (tpHit) {
+                    double pnlPct = isLong
+                            ? round2((close - entry) / entry * 100)
+                            : round2((entry - close) / entry * 100);
+                    return new ExitResult("WIN", toDateTime(fb.getTimestamp()), pnlPct);
+                }
+            }
+
+            // Arm trail at 1.5R; floor activeSl at trailArmLevel immediately
+            if (!trailActive) {
+                if (isLong ? peakClose >= trailArmLevel : peakClose <= trailArmLevel) {
+                    trailActive = true;
+                    peakClose   = close;
+                    activeSl    = trailArmLevel; // 1.5R floor
+                }
+            }
+
+            double currentStop = trailActive ? activeSl : (beActive ? entry : sl);
+            boolean stopBreached = isLong ? close <= currentStop : close >= currentStop;
             if (stopBreached) {
                 double pnlPct = isLong
                         ? round2((close - entry) / entry * 100)
                         : round2((entry - close) / entry * 100);
-                String outcome = Math.abs(pnlPct) < 0.05 ? "BE_STOP" : (pnlPct > 0 ? "TRAIL_WIN" : "TRAIL_LOSS");
+                String outcome;
+                if (trailActive) outcome = pnlPct > 0 ? "TRAIL_WIN" : "TRAIL_LOSS";
+                else outcome = beActive ? "BE_STOP" : "LOSS";
                 return new ExitResult(outcome, toDateTime(fb.getTimestamp()), pnlPct);
             }
-
-            boolean tpHit = isLong ? close >= tp : close <= tp;
-            if (tpHit) {
-                double pnlPct = isLong
-                        ? round2((close - entry) / entry * 100)
-                        : round2((entry - close) / entry * 100);
-                return new ExitResult("WIN", toDateTime(fb.getTimestamp()), pnlPct);
-            }
-
-            if (isLong && close > peakClose) peakClose = close;
-            if (!isLong && close < peakClose) peakClose = close;
-
-            double progress = isLong ? peakClose - entry : entry - peakClose;
-            boolean weakClose = isLong ? close < open : close > open;
-
-            if (!beActive && progress >= risk * 0.60) {
-                beActive = true;
-                activeSl = entry;
-            }
-            if (!trailActive && progress >= risk * 0.90) {
-                trailActive = true;
-            }
-
-            boolean reversalClose = isLong
-                    ? close < peakClose - atr * 0.15
-                    : close > peakClose + atr * 0.15;
-            reversalCount = reversalClose ? reversalCount + 1 : 0;
 
             if (trailActive) {
-                double targetStop = isLong ? peakClose - atr * 0.35 : peakClose + atr * 0.35;
-                boolean improving = isLong ? targetStop > activeSl : targetStop < activeSl;
-                boolean inProfit = isLong ? targetStop >= entry : targetStop <= entry;
-                if (improving && inProfit) activeSl = targetStop;
-            }
+                double atr = computeAtr5m(atrWindow);
+                if (atr <= 0) atr = risk;
 
-            boolean noFollowThrough = i >= 1 && progress < risk * 0.35;
-            boolean immediateFailure = i == 0 && weakClose && progress < risk * 0.25;
-            boolean momentumStall = progress > 0 && (reversalCount >= 1 || (i >= 1 && weakClose));
-            if (immediateFailure || noFollowThrough || momentumStall) {
-                double pnlPct = isLong
-                        ? round2((close - entry) / entry * 100)
-                        : round2((entry - close) / entry * 100);
-                String outcome = Math.abs(pnlPct) < 0.05 ? "BE_STOP" : (pnlPct > 0 ? "TRAIL_WIN" : "TRAIL_LOSS");
-                return new ExitResult(outcome, toDateTime(fb.getTimestamp()), pnlPct);
+                boolean reversalClose = isLong
+                        ? close < peakClose - atr * 0.20
+                        : close > peakClose + atr * 0.20;
+                reversalCount = reversalClose ? reversalCount + 1 : 0;
+
+                double atrMult   = reversalCount >= REVERSAL_CLOSES ? ATR_TRAIL_REVERSAL : ATR_TRAIL_NORMAL;
+                double targetStop = isLong ? peakClose - atr * atrMult : peakClose + atr * atrMult;
+                // 1.5R floor — trail stop never retreats below trailArmLevel
+                if (isLong) targetStop = Math.max(targetStop, trailArmLevel);
+                else        targetStop = Math.min(targetStop, trailArmLevel);
+                boolean improving = isLong ? targetStop > activeSl : targetStop < activeSl;
+                if (improving) activeSl = targetStop;
+
+                // Dynamic TP: bracketSpread ahead of trailing SL
+                double dynamicTp    = isLong ? activeSl + bracketSpread : activeSl - bracketSpread;
+                boolean trailTpHit  = isLong ? close >= dynamicTp : close <= dynamicTp;
+                if (trailTpHit) {
+                    double pnlPct = isLong
+                            ? round2((close - entry) / entry * 100)
+                            : round2((entry - close) / entry * 100);
+                    return new ExitResult("TRAIL_WIN", toDateTime(fb.getTimestamp()), pnlPct);
+                }
             }
         }
 
