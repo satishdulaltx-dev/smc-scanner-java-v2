@@ -110,11 +110,11 @@
     <div id="today-alerts-section"><div class="spinner">Loading...</div></div>
 
     <!-- Broker history -->
-    <div class="section-title" style="margin-top:32px">🗂️ Full Trade History</div>
+    <div class="section-title" style="margin-top:32px">🗂️ Recent Trade History</div>
     <div id="history-section"><div class="spinner">Loading...</div></div>
 
     <!-- Scanner alert history -->
-    <div class="section-title" style="margin-top:32px">🧭 Scanner Alert History</div>
+    <div class="section-title" style="margin-top:32px">🧭 Recent Scanner Alert History</div>
     <div id="alert-history-section"><div class="spinner">Loading...</div></div>
 
 </div>
@@ -146,9 +146,11 @@ async function loadCumulative() {
     `;
     const storage = d.storage || {};
     const tracked = d.trackedStorage || {};
+    const historyLimit = d.historyLimit || 0;
     document.getElementById('storage-status').textContent =
         `Trade log: ${storage.path || '—'} (${storage.exists ? 'exists' : 'missing'}, ${storage.records || 0} records) · ` +
-        `Tracked positions: ${tracked.path || '—'} (${tracked.exists ? 'exists' : 'missing'}, ${tracked.trackedCount || 0} tracked)`;
+        `Tracked positions: ${tracked.path || '—'} (${tracked.exists ? 'exists' : 'missing'}, ${tracked.trackedCount || 0} tracked)` +
+        `${historyLimit ? ' · UI shows latest ' + historyLimit + ' records' : ''}`;
 }
 
 async function loadToday() {

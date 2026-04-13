@@ -718,7 +718,8 @@ public class DashboardController {
         liveLog.resolveOpenTrades();
         Map<String,Object> resp = new LinkedHashMap<>();
         resp.put("cumulative", liveLog.getCumulativeStats());
-        resp.put("trades", liveLog.getAllTrades());
+        resp.put("trades", liveLog.getRecentTradesForUi());
+        resp.put("historyLimit", liveLog.getHistoryResponseLimit());
         resp.put("storage", liveLog.getStorageInfo());
         resp.put("trackedStorage", alpaca.getTrackedStorageInfo());
         return ResponseEntity.ok(resp);

@@ -39,6 +39,8 @@ public class LiveTradeLog {
     private static final String FILE_PATH = resolveStoragePath("live-trades.json");
     private static final String BACKUP_FILE_PATH = FILE_PATH + ".bak";
     private static final int BROKER_REBUILD_LOOKBACK_DAYS = 30;
+    private static final int SCANNER_ALERT_RETENTION_DAYS = 60;
+    private static final int HISTORY_RESPONSE_LIMIT = 1000;
     private static final long ENTRY_MATCH_LOOKBACK_MS = 10 * 60 * 1000L;
     private static final long ENTRY_MATCH_LOOKAHEAD_MS = 2 * 60 * 60 * 1000L;
     private static final ZoneId ET = ZoneId.of("America/New_York");
@@ -60,6 +62,7 @@ public class LiveTradeLog {
         List<Map<String, Object>> loaded = loadPersistedTrades();
         if (!loaded.isEmpty()) {
             trades.addAll(loaded);
+            pruneScannerAlertHistory();
             log.info("Loaded {} live trade records from {}", trades.size(), FILE_PATH);
         } else {
             log.warn("Live trade log file not found at {} — starting with empty history", FILE_PATH);
@@ -77,6 +80,7 @@ public class LiveTradeLog {
             synchronized (trades) {
                 if (trades.isEmpty()) {
                     trades.addAll(loaded);
+                    pruneScannerAlertHistory();
                     log.warn("Recovered {} live trade record(s) from persisted storage on demand", loaded.size());
                 }
             }
@@ -222,6 +226,23 @@ public class LiveTradeLog {
         synchronized (trades) {
             return new ArrayList<>(trades);
         }
+    }
+
+    /** Get recent trades for history UI, capped to keep payloads fast. */
+    public List<Map<String, Object>> getRecentTradesForUi() {
+        ensureTradeHistoryAvailable();
+        backfillBrokerResolvedPnL();
+        synchronized (trades) {
+            return trades.stream()
+                    .sorted(Comparator.comparingLong((Map<String, Object> t) ->
+                            ((Number) t.getOrDefault("timestamp", 0L)).longValue()).reversed())
+                    .limit(HISTORY_RESPONSE_LIMIT)
+                    .collect(Collectors.toList());
+        }
+    }
+
+    public int getHistoryResponseLimit() {
+        return HISTORY_RESPONSE_LIMIT;
     }
 
     /** Best-effort lookup for the most recent OPEN trade matching a broker position. */
@@ -692,6 +713,30 @@ public class LiveTradeLog {
 
     private boolean isRealizedOutcome(String outcome) {
         return "WIN".equals(outcome) || "LOSS".equals(outcome) || "BE_STOP".equals(outcome) || "TIMEOUT".equals(outcome);
+    }
+
+    private boolean isBrokerBackedTrade(Map<String, Object> trade) {
+        Object amount = trade.get("pnlAmount");
+        if (amount != null && !String.valueOf(amount).isBlank()) return true;
+        String source = String.valueOf(trade.getOrDefault("resolutionSource", ""));
+        return "ALPACA_ORDERS".equals(source)
+                || "ALPACA_ACTIVITIES".equals(source)
+                || "ALPACA_BOOTSTRAP".equals(source)
+                || "ALPACA_BOOTSTRAP_ACTIVITIES".equals(source);
+    }
+
+    private void pruneScannerAlertHistory() {
+        synchronized (trades) {
+            Instant cutoff = ZonedDateTime.now(ET)
+                    .minusDays(SCANNER_ALERT_RETENTION_DAYS)
+                    .toInstant();
+            boolean removed = trades.removeIf(trade ->
+                    !isBrokerBackedTrade(trade)
+                            && Instant.ofEpochMilli(resolveTimestamp(trade)).isBefore(cutoff));
+            if (removed) {
+                log.info("Pruned scanner-only alerts older than {} days", SCANNER_ALERT_RETENTION_DAYS);
+            }
+        }
     }
 
     private long resolveTimestamp(Map<String, Object> trade) {
