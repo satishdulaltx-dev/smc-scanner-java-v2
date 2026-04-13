@@ -2,22 +2,31 @@
   "tickers": [
     "X:BTCUSD",
     "X:ETHUSD",
-    "AAPL",
+
     "AMD",
-    "AMZN",
+    "BA",
+    "BABA",
     "COIN",
     "CRWD",
-    "DDOG",
-    "MARA",
+    "GS",
+    "GOOGL",
     "META",
     "MSFT",
     "NFLX",
     "NVDA",
     "PLTR",
-    "RIOT",
-    "SMCI",
-    "SOFI",
+    "QQQ",
+    "SHOP",
     "SPY",
-    "TSLA"
+    "TSLA",
+    "UBER",
+
+    "AAPL",
+    "AMZN",
+    "DDOG",
+    "JPM",
+    "MARA",
+    "SOFI",
+    "V"
   ]
 }
