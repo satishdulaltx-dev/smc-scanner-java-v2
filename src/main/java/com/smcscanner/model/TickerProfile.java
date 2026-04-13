@@ -7,8 +7,70 @@ import java.time.ZoneId;
 /**
  * Per-ticker detection overrides loaded from ticker-profiles.json.
  * Any field left null falls back to the global default.
+ *
+ * Each ticker can have three independent trading-mode profiles:
+ *   scalp    — 5m Bollinger squeeze, quick entries (scalp Discord channel)
+ *   intraday — 5m SMC/VWAP/breakout/keylevel, same-day holds (main channel)
+ *   swing    — daily/hourly setups, multi-day holds (swing channel)
+ *
+ * Root-level {@code skip=true} disables all three modes unless a mode-specific
+ * section explicitly overrides it with {@code "skip": false}.
  */
 public class TickerProfile {
+
+    /**
+     * Per-mode override block.  Any null field inherits the parent TickerProfile value.
+     * Only fields explicitly set in the JSON override; everything else falls through.
+     */
+    public static class ModeProfile {
+        private Boolean skip;           // null = inherit parent skip
+        private String  skipReason;
+        private String  strategyType;   // null = inherit parent strategyType
+        private Integer minConfidence;
+        private Integer maxConfidence;
+        private Double  slAtrMult;
+        private Double  tpRrRatio;
+
+        public Boolean  getSkip()           { return skip; }
+        public String   getSkipReason()     { return skipReason; }
+        public String   getStrategyType()   { return strategyType; }
+        public Integer  getMinConfidence()  { return minConfidence; }
+        public Integer  getMaxConfidence()  { return maxConfidence; }
+        public Double   getSlAtrMult()      { return slAtrMult; }
+        public Double   getTpRrRatio()      { return tpRrRatio; }
+
+        public void setSkip(Boolean v)          { this.skip = v; }
+        public void setSkipReason(String v)     { this.skipReason = v; }
+        public void setStrategyType(String v)   { this.strategyType = v; }
+        public void setMinConfidence(Integer v) { this.minConfidence = v; }
+        public void setMaxConfidence(Integer v) { this.maxConfidence = v; }
+        public void setSlAtrMult(Double v)      { this.slAtrMult = v; }
+        public void setTpRrRatio(Double v)      { this.tpRrRatio = v; }
+
+        /** Effective skip: use mode value if set, else fall back to parent root skip. */
+        public boolean isEffectiveSkip(boolean parentSkip) {
+            return skip != null ? skip : parentSkip;
+        }
+        public String resolveSkipReason(String parentReason) {
+            return skipReason != null ? skipReason : parentReason;
+        }
+        public String resolveStrategy(String parentStrategy) {
+            return strategyType != null ? strategyType : parentStrategy;
+        }
+        public int resolveMinConfidence(int parentMinConf, int globalDefault) {
+            if (minConfidence != null) return minConfidence;
+            return parentMinConf > 0 ? parentMinConf : globalDefault;
+        }
+        public int resolveMaxConfidence(int parentMaxConf) {
+            return maxConfidence != null ? maxConfidence : parentMaxConf;
+        }
+        public double resolveSlAtrMult(double parentSlAtrMult) {
+            return slAtrMult != null ? slAtrMult : parentSlAtrMult;
+        }
+        public double resolveTpRrRatio(double parentTpRrRatio) {
+            return tpRrRatio != null ? tpRrRatio : parentTpRrRatio;
+        }
+    }
     private static final ZoneId    ET          = ZoneId.of("America/New_York");
     private static final LocalTime ORB_START   = LocalTime.of(9,  30);
     private static final LocalTime ORB_END     = LocalTime.of(10, 30);
@@ -49,7 +111,29 @@ public class TickerProfile {
     // This filters out noise trades in HFT-dominated stocks — the edge is in divergence from SPY.
     private Boolean intradayRsGate = null; // default false
 
+    // ── Per-mode profile overrides ────────────────────────────────────────────
+    // Each mode can independently skip this ticker and override strategy/params.
+    // Root-level skip=true disables all modes unless a mode block sets skip=false.
+    private ModeProfile scalp;    // 5m Bollinger squeeze → scalp Discord channel
+    private ModeProfile intraday; // 5m SMC/VWAP/etc same-day → main Discord channel
+    private ModeProfile swing;    // daily/hourly setups → swing Discord channel
+
     public static final TickerProfile DEFAULT = new TickerProfile();
+
+    /**
+     * Resolve the effective ModeProfile for the given mode ("scalp"|"intraday"|"swing").
+     * Returns a view object whose effective-skip and effective-params already incorporate
+     * the root-level fallbacks.  Never returns null.
+     */
+    public ModeProfile resolveMode(String mode) {
+        ModeProfile mp = switch (mode) {
+            case "scalp"    -> scalp;
+            case "intraday" -> intraday;
+            case "swing"    -> swing;
+            default         -> null;
+        };
+        return mp != null ? mp : new ModeProfile(); // empty = inherit everything from root
+    }
 
     // ── Getters ───────────────────────────────────────────────────────────────
     public String  getTicker()        { return ticker; }
@@ -122,4 +206,12 @@ public class TickerProfile {
     public void setOpenStrategy(String v)    { this.openStrategy = v; }
     public void setPrimeStrategy(String v)   { this.primeStrategy = v; }
     public void setLunchStrategy(String v)   { this.lunchStrategy = v; }
+
+    // ── Mode profile getters/setters ─────────────────────────────────────────
+    public ModeProfile getScalp()    { return scalp; }
+    public ModeProfile getIntraday() { return intraday; }
+    public ModeProfile getSwing()    { return swing; }
+    public void setScalp(ModeProfile v)    { this.scalp = v; }
+    public void setIntraday(ModeProfile v) { this.intraday = v; }
+    public void setSwing(ModeProfile v)    { this.swing = v; }
 }

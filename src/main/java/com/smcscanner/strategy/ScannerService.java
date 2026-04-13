@@ -101,14 +101,24 @@ public class ScannerService {
 
     public void scanTicker(String ticker) {
         try {
-            // Check per-ticker profile: skip if marked
+            // Check per-ticker profile: skip if ALL three modes are disabled
             com.smcscanner.model.TickerProfile profile = config.getTickerProfile(ticker);
-            if (profile.isSkip()) {
+            com.smcscanner.model.TickerProfile.ModeProfile scalpMode    = profile.resolveMode("scalp");
+            com.smcscanner.model.TickerProfile.ModeProfile intradayMode = profile.resolveMode("intraday");
+            com.smcscanner.model.TickerProfile.ModeProfile swingMode    = profile.resolveMode("swing");
+            boolean rootSkip    = profile.isSkip();
+            boolean anyActive   = !scalpMode.isEffectiveSkip(rootSkip)
+                               || !intradayMode.isEffectiveSkip(rootSkip)
+                               || !swingMode.isEffectiveSkip(rootSkip);
+            if (!anyActive) {
                 setTs(ticker,"idle",null,0,"⊘ "+profile.getSkipReason());
                 return;
             }
-            int effectiveMinConf = profile.resolveMinConfidence(config.getMinConfidence());
-            int effectiveMaxConf = profile.resolveMaxConfidence(); // per-ticker upper cap (blocks over-extended 85+ signals)
+            // Use intraday mode params as the baseline for confidence thresholds
+            int parentMinConf   = profile.resolveMinConfidence(config.getMinConfidence());
+            int parentMaxConf   = profile.resolveMaxConfidence();
+            int effectiveMinConf = intradayMode.resolveMinConfidence(parentMinConf, config.getMinConfidence());
+            int effectiveMaxConf = intradayMode.resolveMaxConfidence(parentMaxConf);
 
             setTs(ticker,"scanning",null,0,"Fetching data...");
             boolean isC=isCrypto(ticker);
@@ -905,22 +915,35 @@ public class ScannerService {
                                                     .timestamp(s.getTimestamp()).build();
                                         }
                                     }
-                                    log.info("OVERNIGHT_HOLD {} {} conf={} gapScore={} reason=[{}] sl={}",
-                                            ticker, s.getDirection().toUpperCase(), s.getConfidence(),
-                                            overnightSignal.gapScore(), overnightSignal.reason(), s.getStopLoss());
-                                    discord.sendOvernightHoldAlert(s, overnightSignal.gapScore(), overnightSignal.reason());
-                                    tracker.recordStrategySignal("overnight_hold", s.getConfidence());
+                                    if (!swingMode.isEffectiveSkip(rootSkip)) {
+                                        log.info("OVERNIGHT_HOLD {} {} conf={} gapScore={} reason=[{}] sl={}",
+                                                ticker, s.getDirection().toUpperCase(), s.getConfidence(),
+                                                overnightSignal.gapScore(), overnightSignal.reason(), s.getStopLoss());
+                                        discord.sendOvernightHoldAlert(s, overnightSignal.gapScore(), overnightSignal.reason());
+                                        tracker.recordStrategySignal("overnight_hold", s.getConfidence());
+                                    }
                                 } else {
                                     // No coiling signals → plain late-day swing reroute
-                                    log.info("LATE_DAY SWING REROUTE {} {} conf={} entry={} (overnight score={} — no hold)",
-                                            ticker, s.getDirection().toUpperCase(), s.getConfidence(),
-                                            s.getEntry(), overnightSignal.gapScore());
-                                    discord.sendSwingAlert(s);
-                                    tracker.recordStrategySignal("swing_lateday", s.getConfidence());
+                                    if (!swingMode.isEffectiveSkip(rootSkip)) {
+                                        log.info("LATE_DAY SWING REROUTE {} {} conf={} entry={} (overnight score={} — no hold)",
+                                                ticker, s.getDirection().toUpperCase(), s.getConfidence(),
+                                                s.getEntry(), overnightSignal.gapScore());
+                                        discord.sendSwingAlert(s);
+                                        tracker.recordStrategySignal("swing_lateday", s.getConfidence());
+                                    }
                                 }
                             } else {
+                                // ── Mode gate: scalp alerts suppressed if scalpMode.skip, intraday if intradayMode.skip ──
+                                boolean isScalpSetup = "scalp".equals(s.getVolatility());
+                                boolean modeAllowed  = isScalpSetup
+                                        ? !scalpMode.isEffectiveSkip(rootSkip)
+                                        : !intradayMode.isEffectiveSkip(rootSkip);
+                                if (!modeAllowed) {
+                                    log.info("ALERT SUPPRESSED {} {} conf={} — {} mode disabled for this ticker",
+                                            ticker, s.getDirection().toUpperCase(), s.getConfidence(),
+                                            isScalpSetup ? "scalp" : "intraday");
                                 // Options-only gate: suppress alert entirely if no contract found
-                                if (!s.hasOptionsData()) {
+                                } else if (!s.hasOptionsData()) {
                                     log.info("ALERT SUPPRESSED {} {} conf={} — no options contract available (options-only mode)",
                                             ticker, s.getDirection().toUpperCase(), s.getConfidence());
                                 } else {
@@ -961,7 +984,8 @@ public class ScannerService {
             }
 
             // ── Hourly consolidation swing alert (hourly + daily bars → swing channel) ──
-            if (!isC && hourlyBars != null && hourlyBars.size() >= 50
+            if (!isC && !swingMode.isEffectiveSkip(rootSkip)
+                    && hourlyBars != null && hourlyBars.size() >= 50
                     && dailyBars != null && dailyBars.size() >= 20) {
                 try {
                     List<TradeSetup> swingSetups = swingDetector.detect(hourlyBars, dailyBars, ticker, dailyAtr);
@@ -981,7 +1005,7 @@ public class ScannerService {
             }
 
             // ── Swing alert (daily bars → swing Discord channel) ────────────
-            if (!isC && dailyBars!=null && dailyBars.size()>=30) {
+            if (!isC && !swingMode.isEffectiveSkip(rootSkip) && dailyBars!=null && dailyBars.size()>=30) {
                 try {
                     SetupDetector.DetectResult sr=setupDetector.detectSetups(dailyBars,htfBias,ticker,false,dailyAtr,true);
                     if (!sr.setups().isEmpty()) {
@@ -1013,7 +1037,7 @@ public class ScannerService {
             // ── Range detection (neutral/spreads → swing channel) ─────────────
             // Only run when no directional intraday setup was found — range and
             // directional signals are mutually exclusive for the same ticker.
-            if (!isC && setups.isEmpty() && dailyBars != null && dailyBars.size() >= 20 && bars.size() >= 50) {
+            if (!isC && !swingMode.isEffectiveSkip(rootSkip) && setups.isEmpty() && dailyBars != null && dailyBars.size() >= 20 && bars.size() >= 50) {
                 try {
                     List<TradeSetup> rangeSetups = rangeDetector.detect(bars, dailyBars, ticker, dailyAtr);
                     if (!rangeSetups.isEmpty()) {
