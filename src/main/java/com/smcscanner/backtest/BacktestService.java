@@ -795,7 +795,7 @@ public class BacktestService {
                                            : qualityAdj < 0 ? "QUALITY_FILTERED"
                                            :                   "CTX_FILTERED";
                     String filteredLabel = buildFilterLabel(sentiment.label(), context.rsLabel(), qualityLabel);
-                    trades.add(new TradeResult(ticker, setup.getDirection(),
+                    trades.add(new TradeResult(ticker, setup.getDirection(), effectiveStrat,
                             setup.getEntry(), setup.getStopLoss(), setup.getTakeProfit(),
                             filteredOutcome, 0.0,
                             toDateTime(dayBars.get(end - 1).getTimestamp()), toDateTime(dayBars.get(end - 1).getTimestamp()),
@@ -811,7 +811,7 @@ public class BacktestService {
                 // Over-extended gate: skip signals above per-ticker maxConfidence
                 // Reverses the reversed-confidence pattern (PLTR/SOFI/NFLX: 85+ underperforms 75-84)
                 if (adjConf > effectiveMaxConf) {
-                    trades.add(new TradeResult(ticker, setup.getDirection(),
+                    trades.add(new TradeResult(ticker, setup.getDirection(), effectiveStrat,
                             setup.getEntry(), setup.getStopLoss(), setup.getTakeProfit(),
                             "CONF_CAP_FILTERED", 0.0,
                             toDateTime(dayBars.get(end - 1).getTimestamp()), toDateTime(dayBars.get(end - 1).getTimestamp()),
@@ -972,7 +972,7 @@ public class BacktestService {
                         optionsAnalyzer.estimateBacktestOptionsPnl(entry, exitPrice, dir, holdDays, setup.getAtr(), contracts);
                 double scaledPnlPerContract = round2(optEst.pnlPerContract() * contracts);
 
-                trades.add(new TradeResult(ticker, dir, entry, sl, tp, outcome, pnlPct,
+                trades.add(new TradeResult(ticker, dir, effectiveStrat, entry, sl, tp, outcome, pnlPct,
                         entryTime, exitTime != null ? exitTime : entryTime,
                         entryEpochMs, resolveExitEpochMs(fwdBars, exitTime, entryEpochMs),
                         setup.getFactorBreakdown(),
@@ -1360,7 +1360,7 @@ public class BacktestService {
 
     // ── Result types ──────────────────────────────────────────────────────────
 
-    public record TradeResult(String ticker, String direction, double entry, double sl, double tp,
+    public record TradeResult(String ticker, String direction, String strategy, double entry, double sl, double tp,
                                String outcome, double pnlPct,
                                String entryTime, String exitTime,
                                long entryEpochMs, long exitEpochMs,

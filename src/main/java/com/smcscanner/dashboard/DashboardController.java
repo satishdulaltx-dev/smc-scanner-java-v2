@@ -519,7 +519,7 @@ public class DashboardController {
                 Map<String,Object> m = new LinkedHashMap<>();
                 m.put("entry_time", t.entryTime()); m.put("exit_time", t.exitTime());
                 m.put("entry_ts", t.entryEpochMs()); m.put("exit_ts", t.exitEpochMs());
-                m.put("dir", t.direction()); m.put("entry", t.entry());
+                m.put("dir", t.direction()); m.put("strategy", t.strategy()); m.put("entry", t.entry());
                 m.put("sl", t.sl()); m.put("tp", t.tp());
                 m.put("outcome", t.outcome()); m.put("pnl_pct", t.pnlPct());
                 m.put("confidence", t.confidence()); m.put("atr", t.atr());
