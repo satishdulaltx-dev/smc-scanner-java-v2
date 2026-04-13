@@ -411,6 +411,25 @@ public class DashboardController {
         }).collect(Collectors.toList());
     }
 
+    /**
+     * GET /api/profiles/enabled?mode=scalp|intraday|swing
+     * Returns ticker symbols from the watchlist where the given mode is NOT skipped.
+     * Used by the batch backtest to auto-filter disabled tickers per mode.
+     */
+    @GetMapping("/api/profiles/enabled")
+    @ResponseBody
+    public List<String> enabledTickersForMode(
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "scalp") String mode) {
+        List<String> watchlist = config.loadWatchlist();
+        return watchlist.stream()
+                .filter(t -> {
+                    com.smcscanner.model.TickerProfile p = config.getTickerProfile(t);
+                    com.smcscanner.model.TickerProfile.ModeProfile mp = p.resolveMode(mode);
+                    return !mp.isEffectiveSkip(p.isSkip());
+                })
+                .collect(Collectors.toList());
+    }
+
     /** GET /backtest - serve backtest UI page (no-cache to prevent stale dropdown state) */
     @GetMapping("/backtest")
     public String backtestPage(Model model, jakarta.servlet.http.HttpServletResponse response) {

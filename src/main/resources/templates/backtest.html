@@ -523,15 +523,25 @@ function renderOptimize(d) {
 }
 
 async function runBatch() {
-    // Always fetch live watchlist from server — stays in sync with watchlist.json automatically
-    // /api/watchlist returns [{ticker, status, ...}, ...] — extract ticker strings, exclude crypto
-    const wlResp = await fetch('/api/watchlist').then(r => r.json()).catch(() => []);
-    const tickers = (Array.isArray(wlResp) ? wlResp : [])
-        .map(t => t.ticker).filter(t => t && !t.startsWith('X:'));
-    if (tickers.length === 0) { alert('Could not load watchlist'); return; }
     const days  = document.getElementById('days').value;
     const stratMode = document.getElementById('strategy-mode').value;
     const stratTypeBatch = document.getElementById('strategy-type').value;
+
+    // If a specific mode is selected (SCALP/INTRADAY/SWING), fetch only tickers enabled for that mode.
+    // For ALL/OPTIONS (no mode-level skip flags), fall back to the full watchlist.
+    const modeKey = { SCALP: 'scalp', INTRADAY: 'intraday', SWING: 'swing' }[stratMode];
+    let tickers;
+    if (modeKey) {
+        // Use /api/profiles/enabled to get only tickers where this mode's skip=false
+        tickers = await fetch(`/api/profiles/enabled?mode=${modeKey}`).then(r => r.json()).catch(() => []);
+        if (tickers.length === 0) { alert(`No tickers enabled for ${stratMode} mode`); return; }
+    } else {
+        // ALL / OPTIONS — use full watchlist, exclude crypto
+        const wlResp = await fetch('/api/watchlist').then(r => r.json()).catch(() => []);
+        tickers = (Array.isArray(wlResp) ? wlResp : [])
+            .map(t => t.ticker).filter(t => t && !t.startsWith('X:'));
+        if (tickers.length === 0) { alert('Could not load watchlist'); return; }
+    }
     const exitStyle = document.getElementById('exit-style').value;
     const stratParamBatch = stratTypeBatch ? `&strategy=${stratTypeBatch}` : '';
     const exitParamBatch = `&exitStyle=${exitStyle}`;

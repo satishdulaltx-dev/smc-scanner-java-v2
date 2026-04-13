@@ -171,6 +171,12 @@ public class ScannerConfig {
         profilesLoaded = true;
     }
 
+    /** Returns all loaded TickerProfile entries (key = ticker symbol). */
+    public Map<String, TickerProfile> getAllProfiles() {
+        if (!profilesLoaded) loadTickerProfiles();
+        return Collections.unmodifiableMap(profileCache);
+    }
+
     public List<String> loadWatchlist() {
         try {
             ObjectMapper mapper = new ObjectMapper();
