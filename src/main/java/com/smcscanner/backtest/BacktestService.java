@@ -19,6 +19,7 @@ import com.smcscanner.strategy.GammaPinDetector;
 import com.smcscanner.strategy.IndexDivergenceDetector;
 import com.smcscanner.strategy.KeyLevelStrategyDetector;
 import com.smcscanner.strategy.MarketRegimeDetector;
+import com.smcscanner.strategy.MultiTimeframeAnalyzer;
 import com.smcscanner.strategy.OvernightMomentumService;
 import com.smcscanner.strategy.PivotPointService;
 import com.smcscanner.strategy.PowerEarningsGapDetector;
@@ -77,6 +78,7 @@ public class BacktestService {
     private final PressureService          pressureService;
     private final OvernightMomentumService overnightService;
     private final PowerEarningsGapDetector pegDetector;
+    private final MultiTimeframeAnalyzer   mtf;
 
     public BacktestService(PolygonClient client, AtrCalculator atrCalc, SetupDetector setupDetector,
                            VwapStrategyDetector vwapDetector, BreakoutStrategyDetector breakoutDetector,
@@ -91,7 +93,8 @@ public class BacktestService {
                            TechnicalIndicators techIndicators,
                            MarketRegimeDetector regimeDetector, PivotPointService pivotService,
                            PressureService pressureService, OvernightMomentumService overnightService,
-                           PowerEarningsGapDetector pegDetector) {
+                           PowerEarningsGapDetector pegDetector,
+                           MultiTimeframeAnalyzer mtf) {
         this.client = client; this.atrCalc = atrCalc; this.setupDetector = setupDetector;
         this.vwapDetector = vwapDetector; this.breakoutDetector = breakoutDetector; this.scalpDetector = scalpDetector;
         this.gapDetector = gapDetector;
@@ -103,7 +106,7 @@ public class BacktestService {
         this.config = config; this.optionsAnalyzer = optionsAnalyzer; this.techIndicators = techIndicators;
         this.regimeDetector = regimeDetector; this.pivotService = pivotService;
         this.pressureService = pressureService; this.overnightService = overnightService;
-        this.pegDetector = pegDetector;
+        this.pegDetector = pegDetector; this.mtf = mtf;
     }
 
     public BacktestResult run(String ticker, int lookbackDays) {
@@ -140,10 +143,16 @@ public class BacktestService {
         // have enough history even when backtesting 180+ days into the past
         List<OHLCV> dailyBars = client.getBars(ticker, "1d", 450);
 
-        // Fetch 15m bars for the full backtest period — used to compute 15m trend
-        // bias at each entry point, mirroring the live scanner's alignment check.
+        // Fetch 15m bars for the full backtest period — used for 15m alignment check
+        // and fractal anchor squeeze detection (mirrors live ScannerService).
         List<OHLCV> all15mBars = ticker.startsWith("X:") ? List.of()
                 : client.getBarsWithLookback(ticker, "15m", 10000, lookbackDays + 5);
+
+        // Fetch hourly bars — used to compute HTF bias via structure analysis,
+        // matching live ScannerService which calls mtf.getHtfBias(hourlyBars).
+        // Daily bars are kept only for ATR + keylevel history (not bias).
+        List<OHLCV> allHourlyBars = ticker.startsWith("X:") ? List.of()
+                : client.getBarsWithLookback(ticker, "60m", 3000, lookbackDays + 10);
 
         // Pre-fetch SPY and VIX bars once for market context computation.
         // getContextAt() slices these in-memory per trade — no extra API calls.
@@ -213,42 +222,15 @@ public class BacktestService {
                     double[] da = atrCalc.computeAtr(htfSlice, Math.min(14, htfSlice.size()-1));
                     for (int i = da.length-1; i >= 0; i--) { if (da[i] > 0) { dailyAtr = da[i]; break; } }
                 }
-                if (htfSlice.size() >= 20) {
-                    double sma  = htfSlice.subList(htfSlice.size()-20, htfSlice.size())
-                            .stream().mapToDouble(OHLCV::getClose).average().orElse(0);
-                    double last = htfSlice.get(htfSlice.size()-1).getClose();
-
-                    // Primary signal: price vs SMA20 — tightened neutral band to ±0.2%
-                    // (was ±0.5%, which left most SNAP-like trending periods as "neutral"
-                    //  and allowed counter-trend SMC setups to pass through)
-                    htfBias = last > sma * 1.002 ? "bullish"
-                            : last < sma * 0.998 ? "bearish"
-                            : "neutral";
-
-                    // Secondary signal: 5-day momentum breaks ties on neutral SMA
-                    // If price moved > 3% in 5 days the trend is already clear regardless
-                    // of SMA lag. This catches early-stage trends before SMA catches up.
-                    if ("neutral".equals(htfBias) && htfSlice.size() >= 5) {
-                        double prev5 = htfSlice.get(htfSlice.size() - 5).getClose();
-                        double mom   = (last - prev5) / prev5;
-                        if      (mom >  0.03) htfBias = "bullish";
-                        else if (mom < -0.03) htfBias = "bearish";
-                    }
-                }
-
-                // HTF staleness gate — mirrors live ScannerService logic
-                // If daily price moved > 1.5× dailyATR against bias in last 10 bars,
-                // bias is stale (regime flipped). Degrade to neutral so HTF_CONFLICT
-                // doesn't block counter-trend setups aligned with the new direction.
-                if (!"neutral".equals(htfBias) && dailyAtr > 0 && htfSlice.size() >= 5) {
-                    int staleWindow = Math.min(10, htfSlice.size());
-                    double priceMove = htfSlice.get(htfSlice.size() - 1).getClose()
-                                     - htfSlice.get(htfSlice.size() - staleWindow).getOpen();
-                    boolean staleUp   = "bearish".equals(htfBias) && priceMove >  dailyAtr * 1.5;
-                    boolean staleDown = "bullish".equals(htfBias) && priceMove < -dailyAtr * 1.5;
-                    if (staleUp || staleDown) {
-                        htfBias = "neutral";
-                    }
+                // HTF bias via hourly structure analysis — matches live ScannerService
+                // which calls mtf.getHtfBias(hourlyBars) using swing/BOS detection.
+                // Previously used daily SMA20 which diverged from live on intraday reversals.
+                if (!allHourlyBars.isEmpty()) {
+                    long cutoffH = date.atStartOfDay(ET).toInstant().toEpochMilli();
+                    List<OHLCV> hourlySlice = allHourlyBars.stream()
+                            .filter(b -> b.getTimestamp() < cutoffH)
+                            .collect(Collectors.toList());
+                    htfBias = mtf.getHtfBias(hourlySlice);
                 }
             }
 
@@ -825,7 +807,9 @@ public class BacktestService {
                 }
 
                 // ── 1 contract per trade ──
-                int contracts = 1;
+                // Conviction-scaled contracts — mirrors live ScannerService (lines 781-784)
+                // 90+ → 3, 82-89 → 2, <82 → 1 (same thresholds as live)
+                int contracts = adjConf >= 90 ? 3 : adjConf >= 82 ? 2 : 1;
                 log.debug("{} CONVICTION: conf={} → {} contract(s)", ticker, adjConf, contracts);
 
                 tradePlacedToday = true;
