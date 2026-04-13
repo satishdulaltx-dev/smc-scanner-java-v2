@@ -26,11 +26,11 @@
     },
     {
       "ticker": "AMD",
-      "strategyType": "scalp",
-      "minConfidence": 68,
-      "slAtrMult": 0.4,
-      "tpRrRatio": 1.0,
-      "note": "Apr 2026 Bollinger Scalp sweep (180d, Hybrid Trail 1.5R): best combo mc=68 sl=0.4 tp=1.0 → 12T 83.3%WR $1543 opt P&L. Switched breakout→scalp. AMD's AI/semiconductor momentum creates tight Bollinger squeezes before explosive directional moves. 83.3% WR is the highest of any scalp ticker — very high-quality setup occurrence."
+      "strategyType": "breakout",
+      "minConfidence": 78,
+      "slAtrMult": 1.0,
+      "tpRrRatio": 1.5,
+      "note": "Apr 2026 deep strategy scan: breakout confirmed best. Full LIVE_PARITY scalp sweep: breakout SCALP mode $1513 > Bollinger Scalp $986 — ORB captures AMD's semiconductor momentum moves better than Bollinger squeeze. Reverted from scalp Apr 2026 after live-parity comparison. mc=78, sl=1.0 ATR for semiconductor volatility, tp=1.5 R:R."
     },
     {
       "ticker": "AMZN",
@@ -55,13 +55,14 @@
     },
     {
       "ticker": "COIN",
-      "strategyType": "scalp",
-      "minConfidence": 68,
-      "slAtrMult": 0.6,
-      "tpRrRatio": 0.75,
+      "strategyType": "keylevel",
+      "minConfidence": 70,
+      "maxConfidence": 84,
+      "slAtrMult": 0.5,
+      "tpRrRatio": 1.0,
       "skip": false,
       "skipReason": null,
-      "note": "Apr 2026 Bollinger Scalp sweep (180d, Hybrid Trail 1.5R): best combo mc=68 sl=0.6 tp=0.75 → 38T 70.3%WR $2509 opt P&L. Switched keylevel→scalp. BTC-proxy volatility makes COIN ideal for Bollinger squeeze+reclaim scalp entries. Wide sl=0.6 ATR handles crypto spikes, tight tp=0.75R banks fast moves."
+      "note": "Apr 2026 keylevel confirmed best. Full LIVE_PARITY scalp sweep: keylevel SCALP mode $2093 > Bollinger Scalp $784 — COIN reacts more reliably to key S/R levels than Bollinger compressions. Reverted from scalp Apr 2026 after live-parity comparison. mc=70, sl=0.5 ATR for crypto volatility, tp=1.0 R:R fast exit."
     },
     {
       "ticker": "CRWD",
@@ -155,13 +156,16 @@
     },
     {
       "ticker": "MSFT",
-      "strategyType": "scalp",
-      "minConfidence": 80,
-      "slAtrMult": 0.4,
-      "tpRrRatio": 1.25,
+      "strategyType": "smc",
+      "minConfidence": 78,
+      "minFvgPct": 0.0004,
+      "dispAtrMult": 1.2,
+      "slAtrMult": 1.0,
+      "tpRrRatio": 2.0,
+      "intradayRsGate": true,
       "skip": false,
       "skipReason": null,
-      "note": "Apr 2026 Bollinger Scalp sweep (180d, Hybrid Trail 1.5R): best combo mc=80 sl=0.4 tp=1.25 → 14T 69.2%WR $351 opt P&L. Switched smc→scalp. SMC failed at 90/180d in tariff-recession regime — Bollinger Scalp captures short-term volatility contraction/release better. High mc=80 threshold ensures only top-quality setups, tight sl=0.4 ATR for mega-cap."
+      "note": "Apr 2026 SMC confirmed best for MSFT. LIVE_PARITY scalp sweep: scalp $253 at 40% WR (unreliable) vs SMC SCALP mode $221 — scalp is marginally higher P&L but 40% WR is not tradeable. SMC at mc=78 with FVG filters is cleaner. Reverted from scalp Apr 2026. All strategies weaker at 90/180d due to tariff-recession regime; use 365d for MSFT evaluation."
     },
     {
       "ticker": "MSTR",
