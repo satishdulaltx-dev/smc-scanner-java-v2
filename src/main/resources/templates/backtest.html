@@ -302,6 +302,7 @@
             <thead>
                 <tr>
                     <th>#</th><th>ENTRY TIME (ET)</th><th>EXIT TIME (ET)</th><th>DIR</th>
+                    <th>STRATEGY</th>
                     <th>ENTRY</th><th>STOP LOSS</th><th>TAKE PROFIT</th><th>OUTCOME</th><th>P&L %</th>
                     <th>OPT ENTRY</th><th>OPT EXIT</th><th>OPT P&L</th>
                     <th>CONF</th>
@@ -366,6 +367,28 @@ const FILTERED_OUTCOMES = new Set([
     '15M_FILTERED','CORR_FILTERED','REGIME_FILTERED','OVEREXTENDED_FILTERED',
     'CONFLUENCE_FILTERED','TRAP_FILTERED','CONF_CAP_FILTERED'
 ]);
+
+// ── Strategy label with model badge ──────────────────────────────────────
+const SCALP_STRATS    = new Set(['scalp']);
+const INTRADAY_STRATS = new Set(['smc','vwap','breakout','keylevel','vsqueeze','vwap3d','idiv','gammapin']);
+function strategyLabel(strat) {
+    if (!strat) return '<span style="color:var(--muted);font-size:11px">—</span>';
+    const s = strat.toLowerCase();
+    let modelColor, modelLabel;
+    if (SCALP_STRATS.has(s)) {
+        modelColor = 'var(--orange)'; modelLabel = 'SCALP';
+    } else if (INTRADAY_STRATS.has(s)) {
+        modelColor = 'var(--green)';  modelLabel = 'DAY';
+    } else if (s.startsWith('swing') || s === 'overnight_hold' || s === 'range' || s.startsWith('gap')) {
+        modelColor = 'var(--purple)'; modelLabel = 'SWING';
+    } else {
+        modelColor = 'var(--muted)';  modelLabel = '';
+    }
+    const badge = modelLabel
+        ? `<span style="font-size:9px;font-weight:700;color:${modelColor};border:1px solid ${modelColor};border-radius:3px;padding:1px 4px;margin-right:4px;opacity:.85">${modelLabel}</span>`
+        : '';
+    return `<span style="font-size:11px;font-family:monospace">${badge}${s}</span>`;
+}
 
 // ── Trade log tabs ────────────────────────────────────────────────────────
 let _allTradeRows = []; // {html, filtered} for each trade row
@@ -661,7 +684,7 @@ function renderSingle(d) {
         '15M_FILTERED','CORR_FILTERED','REGIME_FILTERED','OVEREXTENDED_FILTERED',
         'CONFLUENCE_FILTERED','TRAP_FILTERED','CONF_CAP_FILTERED'
     ]);
-    const COL_COUNT = 13; // total columns in the table
+    const COL_COUNT = 14; // total columns in the table
 
     _allTradeRows = d.trades.map((t, i) => {
         const isNewsFiltered    = t.outcome === 'NEWS_FILTERED';
@@ -726,12 +749,14 @@ function renderSingle(d) {
         }
         tradeNum++;
 
+        const stratLabel = strategyLabel(t.strategy);
         const rowHtml = dateSep + `
         <tr class="${rowClass}">
             <td style="color:var(--muted)">${tradeNum}</td>
             <td><a href="#" onclick='openTradeChart(${JSON.stringify(JSON.stringify({ ...t, ticker }))}); return false;' style="color:var(--blue);text-decoration:none;font-size:11px;font-family:monospace" title="View exact historical entry / exit">${t.entry_time || '—'}</a></td>
             <td style="font-size:11px;font-family:monospace;color:var(--muted)">${isFiltered ? '—' : (t.exit_time || '—')}</td>
             <td class="${t.dir === 'long' ? 'dir-long' : 'dir-short'}">${t.dir === 'long' ? '▲ LONG' : '▼ SHORT'}</td>
+            <td>${stratLabel}</td>
             <td>$${t.entry.toFixed(2)}</td>
             <td style="color:var(--red)">$${t.sl.toFixed(2)}</td>
             <td style="color:var(--green)">$${t.tp.toFixed(2)}</td>
