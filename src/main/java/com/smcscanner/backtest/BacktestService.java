@@ -179,6 +179,21 @@ public class BacktestService {
             spy5mByDate.computeIfAbsent(d, k -> new ArrayList<>()).add(bar);
         }
 
+        // Fetch 1m bars for scalp strategies — needed to match live (which trails on 1m).
+        // Capped at 90 days: 90d × 6.5h × 60min = ~35k bars/ticker, safe for Railway.
+        // Falls back to 5m fwdBars for dates outside this 90d window.
+        boolean needsScalp1m = !ticker.startsWith("X:")
+                && ("scalp".equals(preProfile.getStrategyType()) || "scalp".equals(strategyOverride));
+        int scalp1mLookback = Math.min(lookbackDays, 90);
+        List<OHLCV> all1mBars = needsScalp1m
+                ? client.getBarsWithLookback(ticker, "1m", 100_000, scalp1mLookback)
+                : List.of();
+        TreeMap<LocalDate, List<OHLCV>> byDate1m = new TreeMap<>();
+        for (OHLCV bar : all1mBars) {
+            LocalDate d = Instant.ofEpochMilli(bar.getTimestamp()).atZone(ET).toLocalDate();
+            byDate1m.computeIfAbsent(d, k -> new ArrayList<>()).add(bar);
+        }
+
         // Pre-fetch correlated asset 15m bars for COIN/MARA (→BTC) and AMD/SMCI (→NVDA).
         // Mirrors live ScannerService cross-asset correlation check.
         String corrAssetTicker = null;
@@ -928,12 +943,34 @@ public class BacktestService {
                 }
 
                 boolean scalpManaged = mode == BacktestMode.SCALP || "scalp".equals(setup.getVolatility());
+
+                // For scalp: use 1m forward bars when available (matches live 1m trailing).
+                // Falls back to 5m when 1m data isn't loaded (non-scalp runs or dates > 90d ago).
+                List<OHLCV> fwdBarsForExit = fwdBars;
+                List<OHLCV> windowForExit  = window;
+                if (scalpManaged && byDate1m.containsKey(date)) {
+                    List<OHLCV> day1mBars = byDate1m.get(date);
+                    fwdBarsForExit = day1mBars.stream()
+                            .filter(b -> b.getTimestamp() > entryEpochMs)
+                            .filter(b -> { LocalTime t = Instant.ofEpochMilli(b.getTimestamp()).atZone(ET).toLocalTime();
+                                          return !t.isBefore(LocalTime.of(9, 30)) && t.isBefore(LocalTime.of(16, 0)); })
+                            .collect(Collectors.toList());
+                    List<OHLCV> pre1m = day1mBars.stream()
+                            .filter(b -> b.getTimestamp() <= entryEpochMs)
+                            .collect(Collectors.toList());
+                    if (!pre1m.isEmpty()) {
+                        int wStart = Math.max(0, pre1m.size() - 30);
+                        windowForExit = pre1m.subList(wStart, pre1m.size());
+                    }
+                    if (fwdBarsForExit.isEmpty()) fwdBarsForExit = fwdBars; // fallback
+                }
+
                 ExitResult exit = switch (exitStyle) {
                     case LIVE_PARITY -> scalpManaged
-                            ? simulateScalpExit(window, fwdBars, entry, sl, tp, dir)
+                            ? simulateScalpExit(windowForExit, fwdBarsForExit, entry, sl, tp, dir)
                             : simulateLiveParityExit(window, fwdBars, entry, sl, tp, dir);
                     case HYBRID -> scalpManaged
-                            ? simulateScalpExit(window, fwdBars, entry, sl, tp, dir)
+                            ? simulateScalpExit(windowForExit, fwdBarsForExit, entry, sl, tp, dir)
                             : simulateHybridExit(window, fwdBars, entry, sl, tp, dir);
                     case CLASSIC -> simulateClassicExit(fwdBars, entry, sl, tp, dir);
                 };
