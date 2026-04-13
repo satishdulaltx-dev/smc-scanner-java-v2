@@ -129,11 +129,11 @@ async function loadCumulative() {
     if (!d) return;
     const c = d.cumulative || {};
     const pnlAmount = c.totalPnlAmount || 0;
-    const pnlPct = c.totalPnlPct || 0;
+    const realizedDollarTrades = c.realizedDollarTrades || 0;
     document.getElementById('cum-stats').innerHTML = `
         <div class="stat-card"><div class="stat-label">Total Alerts</div><div class="stat-val">${c.totalAlerts||0}</div><div class="stat-sub">${c.tradingDays||0} trading days · ${c.avgTradesPerDay||0}/day avg</div></div>
         <div class="stat-card"><div class="stat-label">Resolved Trades</div><div class="stat-val">${(c.wins||0) + (c.losses||0) + (c.beStops||0)}</div><div class="stat-sub">${c.wins||0}W / ${c.losses||0}L / ${c.beStops||0}BE</div></div>
-        <div class="stat-card"><div class="stat-label">Realized P&amp;L</div><div class="stat-val" style="color:${pnlAmount>=0?'var(--green)':'var(--red)'}">${pnlAmount>=0?'+':''}$${Math.abs(pnlAmount).toFixed(2)}</div><div class="stat-sub">${pnlPct>=0?'+':''}${pnlPct}% on resolved trades</div></div>
+        <div class="stat-card"><div class="stat-label">Realized P&amp;L</div><div class="stat-val" style="color:${pnlAmount>=0?'var(--green)':'var(--red)'}">${pnlAmount>=0?'+':''}$${Math.abs(pnlAmount).toFixed(2)}</div><div class="stat-sub">${realizedDollarTrades} broker-matched closes</div></div>
         <div class="stat-card"><div class="stat-label">Open / Unresolved</div><div class="stat-val" style="color:var(--yellow)">${c.open||0}</div><div class="stat-sub">awaiting outcome</div></div>
     `;
     const storage = d.storage || {};
@@ -204,8 +204,7 @@ function buildTable(trades, summary, groupByDate) {
             const num = parseFloat(amount || 0);
             return `<span class="${cls}">${num>=0?'+':''}$${Math.abs(num).toFixed(2)}</span>`;
         }
-        const fallbackAmount = parseFloat(pct) * parseFloat(t.entry || 0) / 100;
-        return `<span class="${cls}">${fallbackAmount>=0?'+':''}$${Math.abs(fallbackAmount).toFixed(2)} <span style="color:var(--muted);font-size:10px;">est</span></span>`;
+        return `<span class="be">— <span style="color:var(--muted);font-size:10px;">no broker fill</span></span>`;
     };
 
     let lastDate = '';

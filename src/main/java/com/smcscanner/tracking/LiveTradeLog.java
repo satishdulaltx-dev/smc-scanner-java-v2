@@ -253,12 +253,20 @@ public class LiveTradeLog {
             long losses = trades.stream().filter(t -> "LOSS".equals(t.get("outcome"))).count();
             long beStops = trades.stream().filter(t -> "BE_STOP".equals(t.get("outcome"))).count();
             long open = trades.stream().filter(t -> "OPEN".equals(t.get("outcome"))).count();
+            long realizedDollarTrades = trades.stream()
+                    .filter(t -> !"OPEN".equals(t.get("outcome")))
+                    .filter(t -> {
+                        Object amount = t.get("pnlAmount");
+                        return amount != null && !String.valueOf(amount).isBlank();
+                    })
+                    .count();
 
             stats.put("totalAlerts", total);
             stats.put("wins", wins);
             stats.put("losses", losses);
             stats.put("beStops", beStops);
             stats.put("open", open);
+            stats.put("realizedDollarTrades", realizedDollarTrades);
             stats.put("winRate", (wins + losses) > 0
                     ? Math.round(wins * 100.0 / (wins + losses) * 10) / 10.0 : 0);
 
