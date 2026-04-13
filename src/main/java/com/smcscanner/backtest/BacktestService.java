@@ -1118,7 +1118,8 @@ public class BacktestService {
                 if (!isLong && peakClose <= trailArmLevel) trailActive = true;
                 if (trailActive) {
                     peakClose = close;
-                    activeSl = beActive ? entry : sl;
+                    // Floor at 1.5R — once trail arms, minimum exit is always 1.5R profit
+                    activeSl = trailArmLevel;
                 }
             }
 
@@ -1145,9 +1146,11 @@ public class BacktestService {
 
                 double atrMult = reversalCount >= REVERSAL_CLOSES ? ATR_TRAIL_REVERSAL : ATR_TRAIL_NORMAL;
                 double targetStop = isLong ? peakClose - atr * atrMult : peakClose + atr * atrMult;
+                // Enforce 1.5R floor — trail stop never retreats below trailArmLevel
+                if (isLong) targetStop = Math.max(targetStop, trailArmLevel);
+                else         targetStop = Math.min(targetStop, trailArmLevel);
                 boolean improving = isLong ? targetStop > activeSl : targetStop < activeSl;
-                boolean protectsAtLeastBe = isLong ? targetStop >= entry : targetStop <= entry;
-                if (improving && protectsAtLeastBe) activeSl = targetStop;
+                if (improving) activeSl = targetStop;
             }
         }
 

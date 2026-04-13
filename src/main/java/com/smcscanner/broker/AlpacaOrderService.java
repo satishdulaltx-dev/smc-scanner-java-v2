@@ -734,6 +734,17 @@ public class AlpacaOrderService {
                 ? newPeak - atr * atrMult
                 : newPeak + atr * atrMult;
 
+        // ── 3b. Enforce 1.5R floor once trail is armed ────────────────────────
+        // Once trail arms, the stop must never retreat below the 1.5R profit level.
+        // This guarantees that if SL is hit after trail arms, the exit is ≥ 1.5R profit.
+        if (trailArmed) {
+            if (isLong) {
+                targetStop = Math.max(targetStop, trailTrigger);
+            } else {
+                targetStop = Math.min(targetStop, trailTrigger);
+            }
+        }
+
         // ── 4. Pre-trail hard take profit (matches hybrid backtest) ───────────────
         if (!trailArmed) {
             boolean tpHit = isLong
