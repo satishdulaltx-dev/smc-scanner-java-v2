@@ -80,6 +80,8 @@
       "maxConfidence": 82,
       "slAtrMult": 1.0,
       "tpRrRatio": 1.0,
+      "skip": true,
+      "skipReason": "Apr 2026: skipped after full strategy sweep. All 6 strategies negative on LIVE_PARITY 180d — best was keylevel -$196. 42% WR, avg win $24 vs avg loss $26, no edge. DDOG moves are AI-sentiment driven, not technically clean enough for intraday options.",
       "note": "Apr 2026 outside-research retune: keep DDOG on VWAP, but tighten execution because the sample is still thin and AI-driven reactions can overshoot. Raised minConf 68→70, lowered maxConf 84→82 to avoid exhausted extension entries, and trimmed TP 1.25→1.0 so the setup banks the first clean mean-reversion move instead of waiting for a larger stretch."
     },
     {
@@ -300,8 +302,8 @@
       "maxConfidence": 84,
       "slAtrMult": 1.0,
       "tpRrRatio": 1.0,
-      "skip": false,
-      "skipReason": null,
+      "skip": true,
+      "skipReason": "Apr 2026: skipped after full strategy sweep. All 6 strategies negative on LIVE_PARITY 180d — best was vwap -$303 at 80% WR. Root cause: SOFI ~$13 stock, avg win move 0.85% = ~$0.11/share. Options premium (~$10-15) cannot be overcome by such small moves regardless of WR. Not viable for options trading until price >$20.",
       "note": "Apr 2026 90d frequency retune: VWAP mc=62 sl=1.0 tp=1:1 → 20T 70%WR +0.89%exp. Previous BREAKOUT mc=78 gave only 3 trades in 90d. VWAP mc=62 gives 20 trades (6.7x more) with same WR tier. SOFI is rate-sensitive with intraday VWAP reversion behaviour. sl=1.0 ATR handles SOFI beta=2.11 volatility. Switched from breakout to vwap for frequency."
     },
     {
