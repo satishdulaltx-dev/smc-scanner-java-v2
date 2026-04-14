@@ -120,10 +120,38 @@ public class ScannerService {
             int effectiveMinConf = intradayMode.resolveMinConfidence(parentMinConf, config.getMinConfidence());
             int effectiveMaxConf = intradayMode.resolveMaxConfidence(parentMaxConf);
 
+            // ── Intraday-only skip gate ───────────────────────────────────────
+            // If the root profile is skip=true and ONLY the swing sub-profile is
+            // active, this ticker should never send an intraday alert.
+            boolean onlySwingActive = !scalpMode.isEffectiveSkip(rootSkip)  == false
+                                   && !intradayMode.isEffectiveSkip(rootSkip) == false
+                                   && !swingMode.isEffectiveSkip(rootSkip);
+            if (rootSkip && onlySwingActive) {
+                // Swing alerts are handled by the dedicated swing scanner, not here.
+                setTs(ticker, "idle", null, 0, "⊘ Swing-only ticker — no intraday alert");
+                return;
+            }
+
             setTs(ticker,"scanning",null,0,"Fetching data...");
             boolean isC=isCrypto(ticker);
             List<OHLCV> bars=client.getBars(ticker,"5m",100);
             if (bars==null||bars.size()<20) { setTs(ticker,"idle",null,0,"No data"); return; }
+
+            // ── Strip incomplete (open) bar ───────────────────────────────────
+            // Polygon's /v2/aggs returns the CURRENT incomplete bar as the last
+            // result. Acting on a partial bar (e.g. 2 min into the 9:30 candle)
+            // generates false "setups" on noise — the bar has no close, no
+            // confirmed structure. Drop it if the bar hasn't closed yet.
+            if (!isC && !bars.isEmpty()) {
+                long lastBarOpenMs = bars.get(bars.size()-1).getTimestamp();
+                long barCloseMs    = lastBarOpenMs + 5L * 60 * 1000;
+                if (System.currentTimeMillis() < barCloseMs) {
+                    bars = new java.util.ArrayList<>(bars.subList(0, bars.size()-1));
+                    log.debug("{} INCOMPLETE_BAR_STRIP: dropped open bar t={}",
+                            ticker, java.time.Instant.ofEpochMilli(lastBarOpenMs));
+                }
+            }
+            if (bars.size() < 20) { setTs(ticker,"idle",null,0,"Waiting for bars..."); return; }
 
             // ── Market regime detection (live: 15-min cache per ticker) ───────
             // LOW_LIQUIDITY (RVOL < 0.8) gates out the scan entirely — signals on
