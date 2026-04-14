@@ -53,8 +53,8 @@ public class BacktestService {
     private static final int REVERSAL_CLOSES = 2;
     private static final double TRAIL_EXIT_SLIPPAGE_BPS = 5.0; // 0.05% adverse slippage on trail exits
     private static final double ENTRY_SLIPPAGE_BPS      = 5.0; // 0.05% adverse slippage on entry fills (mirrors Alpaca market-order spread)
-    private static final double HYBRID_BE_R = 1.0;
-    private static final double HYBRID_TRAIL_R = 1.5;
+    private static final double HYBRID_BE_R = 0.3;    // move SL to breakeven at 0.3R profit
+    private static final double HYBRID_TRAIL_R = 0.5; // activate trailing stop at 0.5R profit
 
     private final PolygonClient            client;
     private final AtrCalculator            atrCalc;
@@ -465,7 +465,9 @@ public class BacktestService {
                 // ── Regime-based fallback — mirrors live ScannerService ────────
                 // Gap strategy is time-sensitive: only valid at the 9:30 AM open.
                 // Fallback would generate SMC/keylevel setups at 3 PM under the "gap" umbrella — wrong.
-                if (bSetups.isEmpty() && !ticker.startsWith("X:") && !"gap".equals(effectiveStrat) && !"peg".equals(effectiveStrat)) {
+                // Only fall back when strategy is the default "smc" — explicit profile strategies
+                // (vwap, breakout, keylevel, etc.) must not be silently replaced by the regime fallback.
+                if (bSetups.isEmpty() && "smc".equals(effectiveStrat) && !ticker.startsWith("X:") && !"gap".equals(effectiveStrat) && !"peg".equals(effectiveStrat)) {
                     String fallbackStrat = regimeDetector.suggestStrategy(btRegime, effectiveStrat);
                     if (fallbackStrat != null && !fallbackStrat.equals(effectiveStrat)) {
                         bSetups = switch (fallbackStrat) {

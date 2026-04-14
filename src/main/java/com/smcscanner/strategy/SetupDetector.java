@@ -133,8 +133,10 @@ public class SetupDetector {
             return new DetectResult(List.of(),state);
         }
 
-        // Use daily ATR for meaningful TP/SL; fall back to 4x 5m ATR if daily not available
-        double targetAtr = dailyAtr > curAtr * 2 ? dailyAtr : curAtr * 4;
+        // Use intraday ATR (4× 5m bar ATR) for TP/SL — daily ATR produces off-screen stops
+        // that the hybrid trail can never activate on intraday SMC trades (e.g. META $33 stop
+        // requires $50 profit before trail fires). Intraday ATR keeps stops visible and R:R real.
+        double targetAtr = curAtr * 4;
         double sl,tp;
         // SL sizing: default 0.4 ATR for SMC, overridden by slAtrMult for fat-tail stocks (TSLA, SMCI)
         // TP ratio always uses profile tpRrRatio (default 1.5:1).
