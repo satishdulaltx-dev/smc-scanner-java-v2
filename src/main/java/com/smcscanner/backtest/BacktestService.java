@@ -53,8 +53,8 @@ public class BacktestService {
     private static final int REVERSAL_CLOSES = 2;
     private static final double TRAIL_EXIT_SLIPPAGE_BPS = 5.0; // 0.05% adverse slippage on trail exits
     private static final double ENTRY_SLIPPAGE_BPS      = 5.0; // 0.05% adverse slippage on entry fills (mirrors Alpaca market-order spread)
-    private static final double HYBRID_BE_R = 0.3;    // move SL to breakeven at 0.3R profit
-    private static final double HYBRID_TRAIL_R = 0.5; // activate trailing stop at 0.5R profit
+    private static final double HYBRID_BE_R = 1.0;    // move SL to breakeven at 1.0R profit
+    private static final double HYBRID_TRAIL_R = 1.5; // activate trailing stop at 1.5R profit
 
     private final PolygonClient            client;
     private final AtrCalculator            atrCalc;
