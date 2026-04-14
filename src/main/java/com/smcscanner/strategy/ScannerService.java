@@ -656,7 +656,17 @@ public class ScannerService {
                         deadZoneAdj = -15;
                         log.info("{} DEAD_ZONE_PENALTY: hour={} ET adj={}", ticker, etHour, deadZoneAdj);
                     }
-                    // After 3:30 PM ET — not enough time for intraday, route to swing
+                    // 3:00-3:30 PM ET: hard block. Losses peak in this window — MMs
+                    // position for close, spreads widen, false breakouts spike.
+                    // 3:30-4:00 PM ET: keep for overnight routing (lateDay=true path below).
+                    if (etHour == 15 && etNow.getMinute() < 30) {
+                        log.info("{} MID_AFTERNOON_BLOCK: {}:{} ET — 3:00-3:30 intraday window blocked",
+                                ticker, etHour, String.format("%02d", etNow.getMinute()));
+                        setTs(ticker, "idle", null, 0, "⊘ 3-3:30pm window blocked");
+                        removeSetup(ticker);
+                        return;
+                    }
+                    // After 3:30 PM ET — route to overnight/swing channel instead of intraday
                     if (etHour >= 16 || (etHour == 15 && etNow.getMinute() >= 30)) {
                         lateDay = true;
                     }

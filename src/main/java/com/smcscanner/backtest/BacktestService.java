@@ -818,15 +818,15 @@ public class BacktestService {
                     if (entryHour == 11 || entryHour == 13) deadZoneAdj = -15;
                 }
 
-                // ── Late-day filter (after 3:30 PM ET → skip intraday entry) ──
-                // Live routes these to swing channel instead of taking intraday.
-                // In backtest: skip the entry entirely to match live behaviour.
+                // ── Late-day filter (3:00 PM ET → skip intraday entry) ──────────
+                // 18% of losses are 3:00-3:30 PM entries. MMs position for close in
+                // this window — spreads widen, false breakouts spike, no time for TP.
                 // Exception: gap strategy entries ARE intentionally at 3:30-3:55 PM.
                 if (!ticker.startsWith("X:") && !"gap".equals(effectiveStrat) && !"peg".equals(effectiveStrat)) {
                     LocalTime entryLt = Instant.ofEpochMilli(entryEpochMs).atZone(ET).toLocalTime();
-                    if (entryLt.getHour() >= 16 || (entryLt.getHour() == 15 && entryLt.getMinute() >= 30)) {
-                        log.debug("{} LATE_DAY_SKIP: entry at {} — matches live swing reroute", ticker, entryLt);
-                        break; // done for today — live wouldn't take this as intraday
+                    if (entryLt.getHour() >= 15) {
+                        log.debug("{} LATE_DAY_SKIP: entry at {} — 3pm+ intraday blocked", ticker, entryLt);
+                        break; // done for today
                     }
                 }
 
