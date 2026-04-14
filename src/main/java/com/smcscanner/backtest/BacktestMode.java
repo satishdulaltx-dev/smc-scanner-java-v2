@@ -17,8 +17,8 @@ public enum BacktestMode {
     /** Same as intraday but focuses on options P&L metrics */
     OPTIONS(48, "Options (5m + options P&L)"),
 
-    /** Legacy: no mode filter, uses all forward bars (default) */
-    ALL(Integer.MAX_VALUE, "All");
+    /** Combined: runs scalp + intraday + swing independently and merges results */
+    ALL(Integer.MAX_VALUE, "All (scalp + intraday + swing)");
 
     private final int maxForwardBars;
     private final String label;

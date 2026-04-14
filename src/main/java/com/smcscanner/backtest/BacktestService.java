@@ -125,6 +125,15 @@ public class BacktestService {
 
     /** Run backtest with explicit exit style so classic and live-parity exits can be compared side by side. */
     public BacktestResult run(String ticker, int lookbackDays, BacktestMode mode, String strategyOverride, BacktestExitStyle exitStyle) {
+        // ── ALL mode = scalp + intraday + swing combined ───────────────────────
+        // Each tier runs independently with its own sub-profile (strategy, minConf,
+        // SL/TP params). Trades from all 3 tiers are merged and sorted by entry time.
+        // This matches live: ScannerService fires scalp, intraday, and swing signals
+        // independently — you can take a scalp AND an intraday trade on the same day.
+        if (mode == BacktestMode.ALL && (strategyOverride == null || strategyOverride.isBlank())) {
+            return runCombinedAll(ticker, lookbackDays, exitStyle);
+        }
+
         // ── Live-parity skip gate ─────────────────────────────────────────────
         // Enforce the same per-mode skip flags as the live scanner so that a
         // backtest never shows trades that would never fire as live alerts.
@@ -216,8 +225,11 @@ public class BacktestService {
         // Fetch 1m bars for scalp strategies — needed to match live (which trails on 1m).
         // Capped at 90 days: 90d × 6.5h × 60min = ~35k bars/ticker, safe for Railway.
         // Falls back to 5m fwdBars for dates outside this 90d window.
+        // Also fetch 1m bars when SCALP mode uses a scalp sub-profile strategy
+        String scalpSubStrat = preProfile.resolveMode("scalp").resolveStrategy(preProfile.getStrategyType());
         boolean needsScalp1m = !ticker.startsWith("X:")
-                && ("scalp".equals(preProfile.getStrategyType()) || "scalp".equals(strategyOverride));
+                && ("scalp".equals(preProfile.getStrategyType()) || "scalp".equals(strategyOverride)
+                    || (mode == BacktestMode.SCALP && "scalp".equals(scalpSubStrat)));
         int scalp1mLookback = Math.min(lookbackDays, 90);
         List<OHLCV> all1mBars = needsScalp1m
                 ? client.getBarsWithLookback(ticker, "1m", 100_000, scalp1mLookback)
@@ -286,8 +298,22 @@ public class BacktestService {
 
             // Slide through day's bars — detect first valid setup
             TickerProfile bp = config.getTickerProfile(ticker);
-            String stratType = (strategyOverride != null && !strategyOverride.isBlank())
-                    ? strategyOverride : bp.getStrategyType();
+            // Resolve strategy type: sub-profile overrides root for explicit modes.
+            // SCALP mode → scalp sub-profile strategyType (e.g. "scalp")
+            // INTRADAY   → intraday sub-profile strategyType (e.g. "smc" or "vwap")
+            // SWING      → swing sub-profile strategyType
+            String stratType;
+            if (strategyOverride != null && !strategyOverride.isBlank()) {
+                stratType = strategyOverride;
+            } else if (mode == BacktestMode.SCALP) {
+                stratType = bp.resolveMode("scalp").resolveStrategy(bp.getStrategyType());
+            } else if (mode == BacktestMode.INTRADAY) {
+                stratType = bp.resolveMode("intraday").resolveStrategy(bp.getStrategyType());
+            } else if (mode == BacktestMode.SWING) {
+                stratType = bp.resolveMode("swing").resolveStrategy(bp.getStrategyType());
+            } else {
+                stratType = bp.getStrategyType();
+            }
             // Session strategies skip pre-market windows in the loop below
             boolean isSessionStrat = "breakout".equals(stratType)
                                   || "scalp".equals(stratType)
@@ -628,7 +654,18 @@ public class BacktestService {
                 }
 
                 TickerProfile bp2 = config.getTickerProfile(ticker);
-                int effectiveMinConf = bp2.resolveMinConfidence(config.getMinConfidence());
+                // Sub-profile minConf: scalp/intraday/swing sub-profiles override root.
+                int rootMinConf = bp2.resolveMinConfidence(config.getMinConfidence());
+                int effectiveMinConf;
+                if (mode == BacktestMode.SCALP) {
+                    effectiveMinConf = bp2.resolveMode("scalp").resolveMinConfidence(rootMinConf, config.getMinConfidence());
+                } else if (mode == BacktestMode.INTRADAY) {
+                    effectiveMinConf = bp2.resolveMode("intraday").resolveMinConfidence(rootMinConf, config.getMinConfidence());
+                } else if (mode == BacktestMode.SWING) {
+                    effectiveMinConf = bp2.resolveMode("swing").resolveMinConfidence(rootMinConf, config.getMinConfidence());
+                } else {
+                    effectiveMinConf = rootMinConf;
+                }
                 int effectiveMaxConf = bp2.resolveMaxConfidence(); // upper cap for reversed-pattern tickers
 
                 // News: 48h window ending at entry timestamp
@@ -1587,5 +1624,31 @@ public class BacktestService {
         public static BacktestResult empty(String t, String error) {
             return new BacktestResult(t, List.of(), 0, error, BacktestMode.ALL);
         }
+    }
+
+    /**
+     * Run scalp + intraday + swing as three independent sub-backtests and merge results.
+     * Each tier uses its own sub-profile (strategy type, minConf, SL/TP params).
+     * Mirrors live ScannerService: scalp, intraday, and swing signals fire independently —
+     * you can have both a scalp trade and an intraday trade on the same ticker in the same day.
+     */
+    private BacktestResult runCombinedAll(String ticker, int lookbackDays, BacktestExitStyle exitStyle) {
+        BacktestResult scalpResult   = run(ticker, lookbackDays, BacktestMode.SCALP,    null, exitStyle);
+        BacktestResult intradayResult = run(ticker, lookbackDays, BacktestMode.INTRADAY, null, exitStyle);
+        BacktestResult swingResult   = run(ticker, lookbackDays, BacktestMode.SWING,    null, exitStyle);
+
+        // Merge all trades sorted by entry timestamp
+        List<TradeResult> merged = new ArrayList<>();
+        merged.addAll(scalpResult.trades);
+        merged.addAll(intradayResult.trades);
+        merged.addAll(swingResult.trades);
+        merged.sort(Comparator.comparingLong(TradeResult::entryEpochMs));
+
+        log.info("Backtest {} ({} days, ALL combined): scalp={} intraday={} swing={} → merged={}",
+                ticker, lookbackDays,
+                scalpResult.trades.size(), intradayResult.trades.size(),
+                swingResult.trades.size(), merged.size());
+
+        return BacktestResult.of(ticker, merged, lookbackDays, BacktestMode.ALL);
     }
 }
