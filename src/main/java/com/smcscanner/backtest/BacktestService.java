@@ -1631,20 +1631,63 @@ public class BacktestService {
      * Each tier uses its own sub-profile (strategy type, minConf, SL/TP params).
      * Mirrors live ScannerService: scalp, intraday, and swing signals fire independently —
      * you can have both a scalp trade and an intraday trade on the same ticker in the same day.
+     *
+     * Deduplication: if two tiers use the exact same strategy and fire on the same day
+     * at the same entry price, only keep the one with the widest hold window (swing > intraday > scalp).
+     * This prevents triple-counting when scalp/intraday/swing all map to "smc".
      */
     private BacktestResult runCombinedAll(String ticker, int lookbackDays, BacktestExitStyle exitStyle) {
+        TickerProfile bp = config.getTickerProfile(ticker);
+        String scalpStrat   = bp.resolveMode("scalp").resolveStrategy(bp.getStrategyType());
+        String intradayStrat = bp.resolveMode("intraday").resolveStrategy(bp.getStrategyType());
+        String swingStrat   = bp.resolveMode("swing").resolveStrategy(bp.getStrategyType());
+
         BacktestResult scalpResult   = run(ticker, lookbackDays, BacktestMode.SCALP,    null, exitStyle);
         BacktestResult intradayResult = run(ticker, lookbackDays, BacktestMode.INTRADAY, null, exitStyle);
         BacktestResult swingResult   = run(ticker, lookbackDays, BacktestMode.SWING,    null, exitStyle);
 
-        // Merge all trades sorted by entry timestamp
+        // Merge: swing > intraday > scalp priority when strategies are identical.
+        // Use entryEpochMs bucketed to the same 5-min bar (within 5 min = same signal).
+        // Key = date string (MM/dd) + strategy + direction — if two tiers share all three,
+        // only the wider-hold-window tier is kept.
         List<TradeResult> merged = new ArrayList<>();
-        merged.addAll(scalpResult.trades);
-        merged.addAll(intradayResult.trades);
+        // Add swing unconditionally — widest window, highest quality exit
         merged.addAll(swingResult.trades);
+
+        // Track which (date, strategy, direction) slots swing already claimed
+        Set<String> swingClaimed = new HashSet<>();
+        for (TradeResult t : swingResult.trades) {
+            if (!isFilteredOutcome(t)) {
+                String date = t.entryTime() != null ? t.entryTime().split(" ")[0] : "";
+                swingClaimed.add(date + "|" + t.strategy() + "|" + t.direction());
+            }
+        }
+
+        // Add intraday only if a different strategy OR swing didn't already claim that slot
+        Set<String> intradayClaimed = new HashSet<>(swingClaimed);
+        for (TradeResult t : intradayResult.trades) {
+            if (isFilteredOutcome(t)) { merged.add(t); continue; }
+            String date = t.entryTime() != null ? t.entryTime().split(" ")[0] : "";
+            String key  = date + "|" + t.strategy() + "|" + t.direction();
+            // If intraday and swing use same strategy, swing already covers this day
+            if (intradayStrat.equals(swingStrat) && swingClaimed.contains(key)) continue;
+            merged.add(t);
+            intradayClaimed.add(key);
+        }
+
+        // Add scalp only if it uses a distinct strategy OR neither swing nor intraday claimed the slot
+        for (TradeResult t : scalpResult.trades) {
+            if (isFilteredOutcome(t)) { merged.add(t); continue; }
+            String date = t.entryTime() != null ? t.entryTime().split(" ")[0] : "";
+            String key  = date + "|" + t.strategy() + "|" + t.direction();
+            if (scalpStrat.equals(swingStrat)    && swingClaimed.contains(key))    continue;
+            if (scalpStrat.equals(intradayStrat) && intradayClaimed.contains(key)) continue;
+            merged.add(t);
+        }
+
         merged.sort(Comparator.comparingLong(TradeResult::entryEpochMs));
 
-        log.info("Backtest {} ({} days, ALL combined): scalp={} intraday={} swing={} → merged={}",
+        log.info("Backtest {} ({} days, ALL combined): scalp={} intraday={} swing={} → merged={} (deduped by same-strat-same-day)",
                 ticker, lookbackDays,
                 scalpResult.trades.size(), intradayResult.trades.size(),
                 swingResult.trades.size(), merged.size());
