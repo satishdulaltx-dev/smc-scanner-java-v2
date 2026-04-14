@@ -790,7 +790,7 @@ async function openTradeChart(serializedTrade) {
         <div class="meta-box"><div class="meta-lbl">Entry</div><div class="meta-val">$${Number(t.entry).toFixed(2)}</div></div>
         <div class="meta-box"><div class="meta-lbl">Stop</div><div class="meta-val">$${Number(t.sl).toFixed(2)}</div></div>
         <div class="meta-box"><div class="meta-lbl">Target</div><div class="meta-val">$${Number(t.tp).toFixed(2)}</div></div>
-        <div class="meta-box"><div class="meta-lbl">Outcome</div><div class="meta-val" style="color:${t.outcome==='WIN'||t.outcome==='TRAIL_WIN'||(t.outcome==='TIMEOUT'&&t.pnl_pct>0)?'var(--green)':t.outcome==='TIMEOUT'?'var(--yellow)':'var(--red)'}">${t.outcome}${t.outcome==='TIMEOUT'?(t.pnl_pct>0?' ✓ (profitable)':' (time limit)')':''}</div></div>
+        <div class="meta-box"><div class="meta-lbl">Outcome</div><div class="meta-val" style="color:${t.outcome==='WIN'||t.outcome==='TRAIL_WIN'||(t.outcome==='TIMEOUT'&&t.pnl_pct>0)?'var(--green)':t.outcome==='TIMEOUT'?'var(--yellow)':'var(--red)'}">${t.outcome}${t.outcome==='TIMEOUT'?(t.pnl_pct>0?' ✓ (profitable)':' (time limit)'):''}</div></div>
         <div class="meta-box"><div class="meta-lbl">P&L</div><div class="meta-val" style="color:${t.pnl_pct>=0?'var(--green)':'var(--red)'}">${t.pnl_pct >= 0 ? '+' : ''}${Number(t.pnl_pct).toFixed(2)}%</div></div>
         <div class="meta-box"><div class="meta-lbl">Confidence</div><div class="meta-val">${t.confidence}/100</div></div>
     `;
