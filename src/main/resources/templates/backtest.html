@@ -448,7 +448,7 @@ async function loadTickers() {
 
 function toggleMode() {
     const single = document.getElementById('mode').value === 'single';
-    document.getElementById('ticker-ctrl').style.display = single ? '' : 'none';
+    document.getElementById('ticker-ctrl').style.display = single ? 'flex' : 'none';
 }
 function checkDaysWarning() {
     const days = parseInt(document.getElementById('days').value);
