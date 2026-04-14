@@ -219,7 +219,7 @@
     <div class="ctrl-group">
         <label>Exit Model</label>
         <select id="exit-style" autocomplete="off">
-            <option value="HYBRID" selected>Hybrid Trail After 1.5R ✓</option>
+            <option value="HYBRID" selected>Hybrid Trail After 0.5R ✓</option>
             <option value="LIVE_PARITY">Live Parity Trail</option>
             <option value="CLASSIC">Classic TP / SL</option>
         </select>
@@ -397,7 +397,7 @@ function switchTradeTab(cat, btn) {
     document.querySelectorAll('#trade-log-tabs .tab-btn').forEach(b => b.classList.remove('active'));
     if (btn) btn.classList.add('active');
     const tbody = document.getElementById('trades-tbody');
-    if (!_allTradeRows.length) return;
+    if (!_allTradeRows.length) { tbody.innerHTML = ''; return; }
     tbody.innerHTML = _allTradeRows
         .filter(r => cat === 'all' || (cat === 'exec' ? !r.filtered : r.filtered))
         .map(r => r.html).join('');
