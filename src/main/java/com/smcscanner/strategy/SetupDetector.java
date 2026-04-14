@@ -133,19 +133,20 @@ public class SetupDetector {
             return new DetectResult(List.of(),state);
         }
 
-        // Use intraday ATR (4× 5m bar ATR) for TP/SL — daily ATR produces off-screen stops
-        // that the hybrid trail can never activate on intraday SMC trades (e.g. META $33 stop
-        // requires $50 profit before trail fires). Intraday ATR keeps stops visible and R:R real.
-        double targetAtr = curAtr * 4;
-        double sl,tp;
-        // SL sizing: default 0.4 ATR for SMC, overridden by slAtrMult for fat-tail stocks (TSLA, SMCI)
-        // TP ratio always uses profile tpRrRatio (default 1.5:1).
-        // Previous 0.8:1 compression for wide stops was cutting winners short on high-beta names.
-        double slMult = profile.resolveSlAtrMult() > 0.5 ? profile.resolveSlAtrMult() : 0.4;
+        // SL at structural FVG invalidation zone (not a random ATR multiplier).
+        // Long: FVG bottom is the support — if price closes below it, the setup is dead.
+        // Short: FVG top is the resistance — if price closes above it, the setup is dead.
+        // Buffer = 0.15 ATR so minor wicks don't stop us out.
+        // TP = entry + risk * tpRrRatio (R:R off the structural SL, not an ATR target).
+        double sl, tp;
         double tpRatio = profile.resolveTpRrRatio();
-        double tpMult = slMult * tpRatio;
-        if ("long".equals(state.getDirection())) { sl=r4(entry-targetAtr*slMult); tp=r4(entry+targetAtr*tpMult); }
-        else                                     { sl=r4(entry+targetAtr*slMult); tp=r4(entry-targetAtr*tpMult); }
+        if ("long".equals(state.getDirection())) {
+            sl = r4(state.getFvgBottom() - curAtr * 0.15);
+            tp = r4(entry + (entry - sl) * tpRatio);
+        } else {
+            sl = r4(state.getFvgTop() + curAtr * 0.15);
+            tp = r4(entry - (sl - entry) * tpRatio);
+        }
 
         TradeSetup setup=TradeSetup.builder().ticker(ticker).direction(state.getDirection())
             .entry(entry).stopLoss(sl).takeProfit(tp).confidence(conf).session(session).volatility(vol)
