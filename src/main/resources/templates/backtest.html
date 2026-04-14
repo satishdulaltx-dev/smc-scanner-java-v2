@@ -294,9 +294,11 @@
             </span>
         </div>
         <div class="tab-bar" id="trade-log-tabs">
-            <button class="tab-btn active" data-cat="all"  onclick="switchTradeTab('all',this)">ALL<span class="tab-count" id="tc-all"></span></button>
-            <button class="tab-btn"        data-cat="exec" onclick="switchTradeTab('exec',this)">EXECUTED<span class="tab-count" id="tc-exec"></span></button>
-            <button class="tab-btn"        data-cat="filt" onclick="switchTradeTab('filt',this)">FILTERED<span class="tab-count" id="tc-filt"></span></button>
+            <button class="tab-btn active" data-cat="all"   onclick="switchTradeTab('all',this)">ALL<span class="tab-count" id="tc-all"></span></button>
+            <button class="tab-btn"        data-cat="exec"  onclick="switchTradeTab('exec',this)">EXECUTED<span class="tab-count" id="tc-exec"></span></button>
+            <button class="tab-btn"        data-cat="win"   onclick="switchTradeTab('win',this)" style="color:var(--green)">WINS<span class="tab-count" id="tc-win"></span></button>
+            <button class="tab-btn"        data-cat="loss"  onclick="switchTradeTab('loss',this)" style="color:var(--red)">LOSSES<span class="tab-count" id="tc-loss"></span></button>
+            <button class="tab-btn"        data-cat="filt"  onclick="switchTradeTab('filt',this)">FILTERED<span class="tab-count" id="tc-filt"></span></button>
         </div>
         <table>
             <thead>
@@ -311,6 +313,9 @@
             <tbody id="trades-tbody"></tbody>
         </table>
     </div>
+
+    <!-- Loss Pattern Analysis — rendered by renderLossAnalysis() -->
+    <div id="loss-analysis" style="display:none; padding:0 0 24px"></div>
 </div>
 
 <!-- Batch results -->
@@ -320,12 +325,20 @@
             WATCHLIST BACKTEST RESULTS
             <span style="color:var(--muted); font-size:10px; margin-left:8px;">CLICK A CARD TO DRILL IN</span>
         </span>
-        <button onclick="toggleFilteredBox()" style="background:rgba(139,148,158,.1);border:1px solid var(--border);color:var(--muted);font-size:11px;padding:4px 10px;border-radius:4px;cursor:pointer;" id="filtered-toggle-btn">
-            Show Filtered Trades
-        </button>
+        <div style="display:flex;gap:8px">
+            <button onclick="toggleLossBreakdown()" style="background:rgba(248,81,73,.1);border:1px solid rgba(248,81,73,.3);color:#f85149;font-size:11px;padding:4px 10px;border-radius:4px;cursor:pointer;" id="loss-breakdown-btn">
+                Loss Breakdown
+            </button>
+            <button onclick="toggleFilteredBox()" style="background:rgba(139,148,158,.1);border:1px solid var(--border);color:var(--muted);font-size:11px;padding:4px 10px;border-radius:4px;cursor:pointer;" id="filtered-toggle-btn">
+                Show Filtered Trades
+            </button>
+        </div>
     </div>
     <div class="batch-summary" id="batch-summary"></div>
     <div class="batch-grid" id="batch-grid"></div>
+    <!-- Loss breakdown across all tickers — hidden by default -->
+    <div id="batch-loss-box" style="display:none; padding:0 24px 16px;"></div>
+
     <!-- Filtered trades breakdown — hidden by default -->
     <div id="filtered-box" style="display:none; padding:0 24px 16px;">
         <div style="border:1px solid var(--border);border-radius:8px;padding:16px;background:var(--surface);">
@@ -399,7 +412,14 @@ function switchTradeTab(cat, btn) {
     const tbody = document.getElementById('trades-tbody');
     if (!_allTradeRows.length) { tbody.innerHTML = ''; return; }
     tbody.innerHTML = _allTradeRows
-        .filter(r => cat === 'all' || (cat === 'exec' ? !r.filtered : r.filtered))
+        .filter(r => {
+            if (cat === 'all')  return true;
+            if (cat === 'exec') return !r.filtered;
+            if (cat === 'filt') return r.filtered;
+            if (cat === 'win')  return !r.filtered && r.win;
+            if (cat === 'loss') return !r.filtered && r.loss;
+            return true;
+        })
         .map(r => r.html).join('');
     // Re-number rows after filter
     let n = 0;
@@ -412,12 +432,284 @@ function switchTradeTab(cat, btn) {
 function updateTradeTabCounts(rows) {
     const exec = rows.filter(r => !r.filtered).length;
     const filt = rows.filter(r => r.filtered).length;
+    const wins = rows.filter(r => !r.filtered && r.win).length;
+    const loss = rows.filter(r => !r.filtered && r.loss).length;
     const all  = rows.length;
     document.getElementById('tc-all').textContent  = all  ? ` (${all})`  : '';
     document.getElementById('tc-exec').textContent = exec ? ` (${exec})` : '';
+    document.getElementById('tc-win').textContent  = wins ? ` (${wins})` : '';
+    document.getElementById('tc-loss').textContent = loss ? ` (${loss})` : '';
     document.getElementById('tc-filt').textContent = filt ? ` (${filt})` : '';
     // Reset to ALL tab on new results
     switchTradeTab('all', document.querySelector('#trade-log-tabs .tab-btn[data-cat="all"]'));
+}
+
+// ── Loss Pattern Analysis ────────────────────────────────────────────────────
+function renderLossAnalysis(trades) {
+    const el = document.getElementById('loss-analysis');
+    const losses = trades.filter(isLossOutcome);
+    if (losses.length === 0) { el.style.display = 'none'; return; }
+
+    const executed = trades.filter(t => !FILTERED_OUTCOMES.has(t.outcome));
+    const wins     = executed.filter(isWinOutcome);
+
+    // ── By hour ──────────────────────────────────────────────────────────────
+    const byHour = {};
+    losses.forEach(t => {
+        const h = t.entry_time ? parseInt(t.entry_time.split(' ')[1]?.split(':')[0] || '9') : 9;
+        if (!byHour[h]) byHour[h] = { losses: 0, wins: 0, pnl: 0 };
+        byHour[h].losses++;
+        byHour[h].pnl += t.pnl_pct;
+    });
+    executed.filter(isWinOutcome).forEach(t => {
+        const h = t.entry_time ? parseInt(t.entry_time.split(' ')[1]?.split(':')[0] || '9') : 9;
+        if (!byHour[h]) byHour[h] = { losses: 0, wins: 0, pnl: 0 };
+        byHour[h].wins++;
+    });
+    const hourLabels = ['9am','10am','11am','12pm','1pm','2pm','3pm'];
+    const hourKeys   = [9, 10, 11, 12, 13, 14, 15];
+    const hourHtml = hourKeys.map((h, i) => {
+        const d = byHour[h] || { losses: 0, wins: 0, pnl: 0 };
+        const total = d.losses + d.wins;
+        const lossWr = total > 0 ? Math.round(d.losses * 100 / total) : 0;
+        const col = lossWr >= 60 ? 'var(--red)' : lossWr >= 40 ? 'var(--yellow)' : 'var(--green)';
+        const barH = Math.round((d.losses / Math.max(...hourKeys.map(k => (byHour[k]||{losses:0}).losses), 1)) * 40);
+        return `<div style="display:flex;flex-direction:column;align-items:center;gap:3px;min-width:36px">
+            <div style="font-size:10px;color:${col};font-weight:700">${d.losses>0?d.losses:''}</div>
+            <div style="width:24px;height:${Math.max(barH,2)}px;background:${d.losses>0?'rgba(248,81,73,0.7)':'rgba(139,148,158,0.2)'};border-radius:2px;align-self:flex-end"></div>
+            <div style="font-size:9px;color:var(--muted)">${hourLabels[i]}</div>
+            <div style="font-size:9px;color:${col}">${total>0?lossWr+'%L':''}</div>
+        </div>`;
+    }).join('');
+
+    // ── By direction ─────────────────────────────────────────────────────────
+    const longLoss  = losses.filter(t => t.dir === 'long');
+    const shortLoss = losses.filter(t => t.dir === 'short');
+    const longWin   = wins.filter(t => t.dir === 'long');
+    const shortWin  = wins.filter(t => t.dir === 'short');
+    const longWr    = (longLoss.length + longWin.length) > 0 ? Math.round(longWin.length * 100 / (longLoss.length + longWin.length)) : 0;
+    const shortWr   = (shortLoss.length + shortWin.length) > 0 ? Math.round(shortWin.length * 100 / (shortLoss.length + shortWin.length)) : 0;
+    const avgLongLoss  = longLoss.length  > 0 ? longLoss.reduce((s,t)=>s+t.pnl_pct,0)/longLoss.length   : 0;
+    const avgShortLoss = shortLoss.length > 0 ? shortLoss.reduce((s,t)=>s+t.pnl_pct,0)/shortLoss.length : 0;
+
+    // ── By strategy ──────────────────────────────────────────────────────────
+    const byStrat = {};
+    losses.forEach(t => {
+        const s = t.strategy || 'smc';
+        if (!byStrat[s]) byStrat[s] = { losses: 0, wins: 0, pnl: 0 };
+        byStrat[s].losses++; byStrat[s].pnl += t.pnl_pct;
+    });
+    wins.forEach(t => {
+        const s = t.strategy || 'smc';
+        if (!byStrat[s]) byStrat[s] = { losses: 0, wins: 0, pnl: 0 };
+        byStrat[s].wins++;
+    });
+    const stratHtml = Object.entries(byStrat)
+        .sort((a,b) => b[1].losses - a[1].losses)
+        .map(([s, d]) => {
+            const total = d.losses + d.wins;
+            const lossRate = total > 0 ? Math.round(d.losses * 100 / total) : 0;
+            const col = lossRate >= 60 ? 'var(--red)' : lossRate >= 40 ? 'var(--yellow)' : 'var(--green)';
+            const avgLoss = d.losses > 0 ? (d.pnl / d.losses).toFixed(2) : '0.00';
+            return `<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 8px;border-radius:4px;background:rgba(139,148,158,0.07)">
+                <span style="font-size:11px;color:var(--text);text-transform:uppercase;font-weight:600">${strategyLabel(s)}</span>
+                <span style="font-size:11px;color:${col}">${d.losses}L / ${d.wins}W &nbsp;<strong>${lossRate}% loss rate</strong></span>
+                <span style="font-size:11px;color:var(--red)">${avgLoss}% avg loss</span>
+            </div>`;
+        }).join('');
+
+    // ── By day of week ────────────────────────────────────────────────────────
+    const DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    const byDow = {};
+    losses.forEach(t => {
+        if (!t.entry_ts) return;
+        const dow = new Date(t.entry_ts).getDay();
+        if (!byDow[dow]) byDow[dow] = { losses: 0, wins: 0 };
+        byDow[dow].losses++;
+    });
+    wins.forEach(t => {
+        if (!t.entry_ts) return;
+        const dow = new Date(t.entry_ts).getDay();
+        if (!byDow[dow]) byDow[dow] = { losses: 0, wins: 0 };
+        byDow[dow].wins++;
+    });
+    const dowHtml = [1,2,3,4,5].map(d => {
+        const data = byDow[d] || { losses: 0, wins: 0 };
+        const total = data.losses + data.wins;
+        const lossRate = total > 0 ? Math.round(data.losses * 100 / total) : 0;
+        const col = lossRate >= 55 ? 'var(--red)' : lossRate >= 40 ? 'var(--yellow)' : 'var(--green)';
+        return `<div style="display:flex;flex-direction:column;align-items:center;gap:2px">
+            <div style="font-size:10px;color:var(--muted)">${DOW[d]}</div>
+            <div style="font-size:12px;font-weight:700;color:${col}">${data.losses}</div>
+            <div style="font-size:9px;color:var(--muted)">${total>0?lossRate+'%L':'-'}</div>
+        </div>`;
+    }).join('');
+
+    // ── By exit type ─────────────────────────────────────────────────────────
+    const exitTypes = {};
+    losses.forEach(t => {
+        const k = t.outcome;
+        exitTypes[k] = (exitTypes[k] || 0) + 1;
+    });
+    const exitHtml = Object.entries(exitTypes)
+        .sort((a,b) => b[1]-a[1])
+        .map(([k,n]) => `<span style="background:rgba(248,81,73,0.12);border:1px solid rgba(248,81,73,0.25);border-radius:4px;padding:2px 8px;font-size:11px;color:#f85149">${k}: ${n}</span>`)
+        .join(' ');
+
+    // ── Worst 10 trades ───────────────────────────────────────────────────────
+    const worst = [...losses].sort((a,b) => a.pnl_pct - b.pnl_pct).slice(0, 10);
+    const worstHtml = worst.map((t,i) => {
+        const ticker = document.getElementById('ticker')?.value || t.ticker || '?';
+        return `<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:4px;background:rgba(248,81,73,0.05);border:1px solid rgba(248,81,73,0.12)">
+            <span style="font-size:10px;color:var(--muted);min-width:16px">#${i+1}</span>
+            <span style="font-size:11px;font-family:monospace;color:var(--muted);min-width:90px">${t.entry_time||'—'}</span>
+            <span class="${t.dir==='long'?'dir-long':'dir-short'}" style="font-size:10px;min-width:50px">${t.dir==='long'?'▲ LONG':'▼ SHORT'}</span>
+            <span style="font-size:10px;color:var(--muted);min-width:55px">${strategyLabel(t.strategy)}</span>
+            <span style="font-size:11px;font-weight:700;color:var(--red)">${t.pnl_pct.toFixed(2)}%</span>
+            <span style="font-size:10px;color:var(--muted)">conf:${t.confidence}</span>
+            <a href="#" onclick='openTradeChart(${JSON.stringify(JSON.stringify({...t, ticker}))}); return false;' style="font-size:10px;color:var(--blue);text-decoration:none">view chart</a>
+        </div>`;
+    }).join('');
+
+    // ── Common loss signatures ────────────────────────────────────────────────
+    const longLossRate  = longLoss.length  + longWin.length  > 0 ? Math.round(longLoss.length  * 100 / (longLoss.length  + longWin.length))  : 0;
+    const shortLossRate = shortLoss.length + shortWin.length > 0 ? Math.round(shortLoss.length * 100 / (shortLoss.length + shortWin.length)) : 0;
+    const worstHour = hourKeys.reduce((best, h) => (byHour[h]?.losses||0) > (byHour[best]?.losses||0) ? h : best, 9);
+    const worstDow  = [1,2,3,4,5].reduce((best, d) => (byDow[d]?.losses||0) > (byDow[best]?.losses||0) ? d : best, 1);
+    const insights = [];
+    if (longLossRate > 55)  insights.push(`⚠ LONG trades lose ${longLossRate}% of the time — consider raising long minConf or reducing long exposure`);
+    if (shortLossRate > 55) insights.push(`⚠ SHORT trades lose ${shortLossRate}% of the time — consider raising short minConf`);
+    if ((byHour[worstHour]?.losses||0) > losses.length * 0.3) insights.push(`⚠ ${hourLabels[hourKeys.indexOf(worstHour)]} accounts for ${Math.round((byHour[worstHour].losses/losses.length)*100)}% of all losses — dead zone filter may help`);
+    if (byDow[worstDow] && byDow[worstDow].losses > losses.length * 0.3) insights.push(`⚠ ${DOW[worstDow]} has the most losses (${byDow[worstDow].losses}) — consider skipping or reducing size on ${DOW[worstDow]}`);
+    if (insights.length === 0) insights.push('✓ No dominant loss pattern detected — losses are distributed across time/direction');
+
+    el.style.display = 'block';
+    el.innerHTML = `
+    <div style="border:1px solid rgba(248,81,73,0.3);border-radius:8px;margin:0;background:rgba(248,81,73,0.04);">
+        <div style="padding:12px 16px;border-bottom:1px solid rgba(248,81,73,0.15);display:flex;align-items:center;justify-content:space-between">
+            <span style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#f85149">Loss Pattern Analysis — ${losses.length} losing trades</span>
+            <div style="display:flex;gap:16px">
+                <span style="font-size:11px;color:var(--muted)">Long: <strong style="color:${longLossRate>=55?'var(--red)':'var(--green)'}">${longLossRate}% loss rate</strong> (avg ${avgLongLoss.toFixed(2)}%)</span>
+                <span style="font-size:11px;color:var(--muted)">Short: <strong style="color:${shortLossRate>=55?'var(--red)':'var(--green)'}">${shortLossRate}% loss rate</strong> (avg ${avgShortLoss.toFixed(2)}%)</span>
+            </div>
+        </div>
+        <div style="padding:12px 16px;display:grid;grid-template-columns:1fr 1fr;gap:16px">
+            <!-- Left column -->
+            <div style="display:flex;flex-direction:column;gap:12px">
+                <div>
+                    <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">Loss by Hour</div>
+                    <div style="display:flex;gap:6px;align-items:flex-end;height:68px;">${hourHtml}</div>
+                </div>
+                <div>
+                    <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">Loss by Day of Week</div>
+                    <div style="display:flex;gap:12px">${dowHtml}</div>
+                </div>
+                <div>
+                    <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">Exit Types</div>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap">${exitHtml}</div>
+                </div>
+            </div>
+            <!-- Right column -->
+            <div style="display:flex;flex-direction:column;gap:12px">
+                <div>
+                    <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">Loss by Strategy</div>
+                    <div style="display:flex;flex-direction:column;gap:4px">${stratHtml}</div>
+                </div>
+            </div>
+        </div>
+        <!-- Insights -->
+        <div style="padding:8px 16px;border-top:1px solid rgba(248,81,73,0.15);display:flex;flex-direction:column;gap:4px">
+            ${insights.map(s => `<div style="font-size:11px;color:${s.startsWith('⚠')?'#e3a000':'var(--green)'}">${s}</div>`).join('')}
+        </div>
+        <!-- Worst trades -->
+        <div style="padding:12px 16px;border-top:1px solid rgba(248,81,73,0.15)">
+            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-bottom:8px">Worst 10 Trades</div>
+            <div style="display:flex;flex-direction:column;gap:4px">${worstHtml}</div>
+        </div>
+    </div>`;
+}
+
+// ── Batch loss breakdown across all tickers ──────────────────────────────────
+let _batchLossData = [];
+function toggleLossBreakdown() {
+    const box = document.getElementById('batch-loss-box');
+    const btn = document.getElementById('loss-breakdown-btn');
+    if (box.style.display !== 'none') {
+        box.style.display = 'none';
+        btn.textContent = 'Loss Breakdown';
+        return;
+    }
+    if (!_batchLossData.length) { box.style.display = 'none'; return; }
+
+    // Collect all losing trades across all tickers
+    const allLosses = [];
+    _batchLossData.forEach(d => {
+        if (!d || !d.trades) return;
+        d.trades.filter(isLossOutcome).forEach(t => allLosses.push({ ...t, ticker: d.ticker }));
+    });
+    allLosses.sort((a,b) => a.pnl_pct - b.pnl_pct); // worst first
+
+    // Grouped by ticker
+    const byTicker = {};
+    allLosses.forEach(t => {
+        if (!byTicker[t.ticker]) byTicker[t.ticker] = { count: 0, pnl: 0 };
+        byTicker[t.ticker].count++;
+        byTicker[t.ticker].pnl += t.pnl_pct;
+    });
+    const tickerRows = Object.entries(byTicker)
+        .sort((a,b) => b[1].count - a[1].count)
+        .map(([tk, d]) => `<span style="display:inline-flex;align-items:center;gap:6px;background:rgba(248,81,73,0.1);border:1px solid rgba(248,81,73,0.2);border-radius:4px;padding:3px 8px;font-size:11px">
+            <strong style="color:var(--text)">${tk}</strong>
+            <span style="color:var(--red)">${d.count} loss</span>
+            <span style="color:var(--red)">${d.pnl.toFixed(1)}%</span>
+        </span>`).join('');
+
+    const tradeRows = allLosses.slice(0, 30).map((t, i) => `
+        <tr style="background:rgba(248,81,73,0.04)">
+            <td style="color:var(--muted);padding:4px 8px;font-size:11px">${i+1}</td>
+            <td style="padding:4px 8px;font-size:11px;font-weight:700;color:var(--text)">${t.ticker}</td>
+            <td style="padding:4px 8px;font-size:11px;font-family:monospace;color:var(--muted)">${t.entry_time||'—'}</td>
+            <td style="padding:4px 8px" class="${t.dir==='long'?'dir-long':'dir-short'}">${t.dir==='long'?'▲ L':'▼ S'}</td>
+            <td style="padding:4px 8px;font-size:10px;color:var(--muted)">${strategyLabel(t.strategy)}</td>
+            <td style="padding:4px 8px;font-size:11px;font-weight:700;color:var(--red)">${t.pnl_pct.toFixed(2)}%</td>
+            <td style="padding:4px 8px"><span class="loss-badge">${t.outcome}</span></td>
+            <td style="padding:4px 8px;font-size:10px;color:var(--muted)">${t.confidence}/100</td>
+            <td style="padding:4px 8px"><a href="#" onclick='openBatchLossChart(${JSON.stringify(JSON.stringify(t))}); return false;' style="font-size:10px;color:var(--blue);text-decoration:none">chart</a></td>
+        </tr>`).join('');
+
+    box.innerHTML = `<div style="border:1px solid rgba(248,81,73,0.3);border-radius:8px;padding:16px;background:rgba(248,81,73,0.04);">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#f85149;margin-bottom:12px">
+            Loss Breakdown — ${allLosses.length} losing trades across all tickers
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">${tickerRows}</div>
+        <div style="font-size:10px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.6px">Worst 30 Trades (click chart to drill in)</div>
+        <table style="width:100%;border-collapse:collapse">
+            <thead><tr style="border-bottom:1px solid var(--border)">
+                <th style="padding:4px 8px;font-size:10px;color:var(--muted);text-align:left">#</th>
+                <th style="padding:4px 8px;font-size:10px;color:var(--muted);text-align:left">TICKER</th>
+                <th style="padding:4px 8px;font-size:10px;color:var(--muted);text-align:left">ENTRY</th>
+                <th style="padding:4px 8px;font-size:10px;color:var(--muted);text-align:left">DIR</th>
+                <th style="padding:4px 8px;font-size:10px;color:var(--muted);text-align:left">STRAT</th>
+                <th style="padding:4px 8px;font-size:10px;color:var(--muted);text-align:left">P&L</th>
+                <th style="padding:4px 8px;font-size:10px;color:var(--muted);text-align:left">EXIT</th>
+                <th style="padding:4px 8px;font-size:10px;color:var(--muted);text-align:left">CONF</th>
+                <th style="padding:4px 8px;font-size:10px;color:var(--muted);text-align:left"></th>
+            </tr></thead>
+            <tbody>${tradeRows}</tbody>
+        </table>
+    </div>`;
+    box.style.display = 'block';
+    btn.textContent = 'Hide Loss Breakdown';
+}
+
+function openBatchLossChart(serialized) {
+    const t = JSON.parse(serialized);
+    // Temporarily set ticker select so openTradeChart resolves it
+    const sel = document.getElementById('ticker');
+    const prev = sel?.value;
+    if (sel) sel.value = t.ticker;
+    openTradeChart(JSON.stringify(t));
+    if (sel && prev) setTimeout(() => { sel.value = prev; }, 100);
 }
 function isWinOutcome(t) { return t.outcome === 'WIN' || t.outcome === 'TRAIL_WIN' || (t.outcome === 'TIMEOUT' && t.pnl_pct > 0); }
 function isLossOutcome(t) { return t.outcome === 'LOSS' || t.outcome === 'TRAIL_LOSS' || (t.outcome === 'TIMEOUT' && t.pnl_pct <= 0); }
@@ -777,9 +1069,10 @@ function renderSingle(d) {
             ${optPnl !== undefined && optPnl !== null ? `<td style="font-size:11px;font-weight:600;color:${optPnl >= 0 ? 'var(--green)' : 'var(--red)'}">${optPnl >= 0 ? '+' : ''}$${optPnl.toFixed(0)}</td>` : '<td style="color:var(--muted);font-size:10px">—</td>'}
             <td style="color:${confColor};font-size:11px">${t.confidence}/100${newsTag}${ctxTag}${qualTag}</td>
         </tr>`;
-        return { html: rowHtml, filtered: isFiltered };
+        return { html: rowHtml, filtered: isFiltered, win: isWinOutcome(t), loss: isLossOutcome(t) };
     });
     updateTradeTabCounts(_allTradeRows);
+    renderLossAnalysis(d.trades);
 }
 
 async function openTradeChart(serializedTrade) {
@@ -994,6 +1287,9 @@ function drawTradeChart(data, trade) {
 
 function renderBatch(results, days) {
     show('batch-results');
+    _batchLossData = results; // store for loss breakdown panel
+    document.getElementById('batch-loss-box').style.display = 'none';
+    document.getElementById('loss-breakdown-btn').textContent = 'Loss Breakdown';
     results.sort((a, b) => b.expectancy - a.expectancy);
 
     // ── Aggregate stats ───────────────────────────────────────────────────────
