@@ -133,20 +133,12 @@ public class SetupDetector {
             return new DetectResult(List.of(),state);
         }
 
-        // SL at structural FVG invalidation zone (not a random ATR multiplier).
-        // Long: FVG bottom is the support — if price closes below it, the setup is dead.
-        // Short: FVG top is the resistance — if price closes above it, the setup is dead.
-        // Buffer = 0.15 ATR so minor wicks don't stop us out.
-        // TP = entry + risk * tpRrRatio (R:R off the structural SL, not an ATR target).
+        double targetAtr = curAtr * 4;
         double sl, tp;
+        double slMult  = profile.resolveSlAtrMult() > 0 ? profile.resolveSlAtrMult() : 0.4;
         double tpRatio = profile.resolveTpRrRatio();
-        if ("long".equals(state.getDirection())) {
-            sl = r4(state.getFvgBottom() - curAtr * 0.15);
-            tp = r4(entry + (entry - sl) * tpRatio);
-        } else {
-            sl = r4(state.getFvgTop() + curAtr * 0.15);
-            tp = r4(entry - (sl - entry) * tpRatio);
-        }
+        if ("long".equals(state.getDirection()))  { sl=r4(entry-targetAtr*slMult); tp=r4(entry+targetAtr*slMult*tpRatio); }
+        else                                       { sl=r4(entry+targetAtr*slMult); tp=r4(entry-targetAtr*slMult*tpRatio); }
 
         TradeSetup setup=TradeSetup.builder().ticker(ticker).direction(state.getDirection())
             .entry(entry).stopLoss(sl).takeProfit(tp).confidence(conf).session(session).volatility(vol)
