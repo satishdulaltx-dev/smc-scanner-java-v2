@@ -154,25 +154,12 @@ public class SetupDetector {
             return new DetectResult(List.of(),state);
         }
 
-        // ── FVG-anchored SL (Fix: replaced ATR*4 formula) ────────────────────
-        // SL is placed just outside the FVG zone — the natural invalidation level.
-        // A SHORT setup is invalid if price closes ABOVE the FVG top.
-        // A LONG setup is invalid if price closes BELOW the FVG bottom.
-        // Small ATR buffer (0.3×) absorbs wick noise without widening to meaningless levels.
-        // TP is then entry ± risk × tpRrRatio — giving a proper R:R from a tight, logical SL.
-        // Old formula (ATR*4*slMult) produced SL distances 5-10× larger than the actual
-        // invalidation level, degrading R:R to sub-1:1 on 66% of trades.
-        double tpRatio = profile.resolveTpRrRatio();
+        double targetAtr = curAtr * 4;
         double sl, tp;
-        if ("long".equals(state.getDirection())) {
-            sl = r4(state.getFvgBottom() - curAtr * 0.3);
-            double risk = Math.max(entry - sl, curAtr * 0.1); // floor: never zero-risk
-            tp = r4(entry + risk * tpRatio);
-        } else {
-            sl = r4(state.getFvgTop() + curAtr * 0.3);
-            double risk = Math.max(sl - entry, curAtr * 0.1);
-            tp = r4(entry - risk * tpRatio);
-        }
+        double slMult  = profile.resolveSlAtrMult() > 0 ? profile.resolveSlAtrMult() : 0.4;
+        double tpRatio = profile.resolveTpRrRatio();
+        if ("long".equals(state.getDirection()))  { sl=r4(entry-targetAtr*slMult); tp=r4(entry+targetAtr*slMult*tpRatio); }
+        else                                       { sl=r4(entry+targetAtr*slMult); tp=r4(entry-targetAtr*slMult*tpRatio); }
 
         TradeSetup setup=TradeSetup.builder().ticker(ticker).direction(state.getDirection())
             .entry(entry).stopLoss(sl).takeProfit(tp).confidence(conf).session(session).volatility(vol)

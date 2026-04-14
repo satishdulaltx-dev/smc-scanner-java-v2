@@ -457,24 +457,29 @@ public class ScannerService {
                     }
                 }
 
-                // ── VOLATILE regime SL widening ──────────────────────────────
-                // In chaotic conditions ATR expands; a normal SL gets clipped almost
-                // immediately. Widen by slExpansionFactor (1.5×) so the trade has
-                // room to breathe. Pairs with VOLATILE regimeStratAdj penalty below.
+                // ── VOLATILE regime SL+TP widening (R:R preserved) ───────────
+                // In chaotic conditions ATR expands; a normal SL gets clipped quickly.
+                // Widen SL by slExpansionFactor (1.5×) for breathing room.
+                // CRITICAL: also scale TP by same factor to preserve R:R.
+                // Old code only widened SL → converted 1.5:1 trades to sub-1:1 in
+                // volatile regimes (e.g. April 2026 tariff market = 66% sub-1:1 R:R).
                 if (regime == MarketRegimeDetector.Regime.VOLATILE && !isC) {
                     double slFactor = regimeDetector.slExpansionFactor(regime);
                     double entry   = s.getEntry();
                     double slDist  = Math.abs(s.getStopLoss() - entry) * slFactor;
+                    double tpDist  = Math.abs(s.getTakeProfit() - entry) * slFactor; // preserve R:R
                     double newSl   = "long".equals(s.getDirection()) ? entry - slDist : entry + slDist;
+                    double newTp   = "long".equals(s.getDirection()) ? entry + tpDist : entry - tpDist;
                     newSl = Math.round(newSl * 10000.0) / 10000.0;
+                    newTp = Math.round(newTp * 10000.0) / 10000.0;
                     s = TradeSetup.builder()
                             .ticker(s.getTicker()).direction(s.getDirection())
-                            .entry(s.getEntry()).stopLoss(newSl).takeProfit(s.getTakeProfit())
+                            .entry(s.getEntry()).stopLoss(newSl).takeProfit(newTp)
                             .confidence(s.getConfidence()).session(s.getSession()).volatility(s.getVolatility())
                             .atr(s.getAtr()).hasBos(s.isHasBos()).hasChoch(s.isHasChoch())
                             .fvgTop(s.getFvgTop()).fvgBottom(s.getFvgBottom()).timestamp(s.getTimestamp())
                             .build();
-                    log.info("{} VOLATILE_SL: widened {}\u00d7 newSl={}", ticker, slFactor, newSl);
+                    log.info("{} VOLATILE_SL_TP: widened {}× newSl={} newTp={}", ticker, slFactor, newSl, newTp);
                 }
 
                 // ── 15m alignment check ───────────────────────────────────────

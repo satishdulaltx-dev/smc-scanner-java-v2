@@ -535,15 +535,23 @@ public class BacktestService {
                 TradeSetup setup = bSetups.get(0);
 
                 // ── VOLATILE regime SL widening — mirrors live ScannerService ─
+                // Root cause of 66% sub-1:1 R:R: SL was widened by slFactor but TP
+                // was left unchanged, converting 1.5:1 trades to <1:1 in volatile
+                // regimes (e.g. April 2026 tariff market). Fix: scale TP by same factor
+                // so R:R is preserved. Wider SL + proportionally wider TP = same R:R,
+                // just more room for the trade to develop in choppy conditions.
                 if (btRegime == MarketRegimeDetector.Regime.VOLATILE && !ticker.startsWith("X:")) {
                     double slFactor = regimeDetector.slExpansionFactor(btRegime);
                     double btEntry  = setup.getEntry();
                     double slDist   = Math.abs(setup.getStopLoss() - btEntry) * slFactor;
+                    double tpDist   = Math.abs(setup.getTakeProfit() - btEntry) * slFactor; // preserve R:R
                     double newSl    = "long".equals(setup.getDirection()) ? btEntry - slDist : btEntry + slDist;
+                    double newTp    = "long".equals(setup.getDirection()) ? btEntry + tpDist : btEntry - tpDist;
                     newSl = Math.round(newSl * 10000.0) / 10000.0;
+                    newTp = Math.round(newTp * 10000.0) / 10000.0;
                     setup = TradeSetup.builder()
                             .ticker(setup.getTicker()).direction(setup.getDirection())
-                            .entry(setup.getEntry()).stopLoss(newSl).takeProfit(setup.getTakeProfit())
+                            .entry(setup.getEntry()).stopLoss(newSl).takeProfit(newTp)
                             .confidence(setup.getConfidence()).session(setup.getSession()).volatility(setup.getVolatility())
                             .atr(setup.getAtr()).hasBos(setup.isHasBos()).hasChoch(setup.isHasChoch())
                             .fvgTop(setup.getFvgTop()).fvgBottom(setup.getFvgBottom()).timestamp(setup.getTimestamp())
