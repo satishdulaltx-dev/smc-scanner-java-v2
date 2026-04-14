@@ -1166,7 +1166,6 @@ public class BacktestService {
         double activeSl = sl;
         double peakClose = entry;
         int reversalCount = 0;
-        double bracketSpread = Math.abs(tp - sl); // spread preserved as both SL and TP trail
         List<OHLCV> atrWindow = new ArrayList<>(entryWindow);
 
         for (OHLCV fb : fwdBars) {
@@ -1233,15 +1232,6 @@ public class BacktestService {
                 boolean improving = isLong ? targetStop > activeSl : targetStop < activeSl;
                 if (improving) activeSl = targetStop;
 
-                // Dynamic TP: always bracketSpread ahead of the trailing SL
-                double dynamicTp = isLong ? activeSl + bracketSpread : activeSl - bracketSpread;
-                boolean trailTpHit = isLong ? close >= dynamicTp : close <= dynamicTp;
-                if (trailTpHit) {
-                    double pnlPct = isLong
-                            ? round2((close - entry) / entry * 100)
-                            : round2((entry - close) / entry * 100);
-                    return new ExitResult("TRAIL_WIN", toDateTime(fb.getTimestamp()), pnlPct);
-                }
             }
         }
 
@@ -1267,7 +1257,6 @@ public class BacktestService {
 
         double beLevel       = isLong ? entry + risk * HYBRID_BE_R    : entry - risk * HYBRID_BE_R;
         double trailArmLevel = isLong ? entry + risk * HYBRID_TRAIL_R : entry - risk * HYBRID_TRAIL_R;
-        double bracketSpread = Math.abs(tp - sl);
 
         boolean beActive    = false;
         boolean trailActive = false;
@@ -1336,15 +1325,6 @@ public class BacktestService {
                 boolean improving = isLong ? targetStop > activeSl : targetStop < activeSl;
                 if (improving) activeSl = targetStop;
 
-                // Dynamic TP: bracketSpread ahead of trailing SL
-                double dynamicTp    = isLong ? activeSl + bracketSpread : activeSl - bracketSpread;
-                boolean trailTpHit  = isLong ? close >= dynamicTp : close <= dynamicTp;
-                if (trailTpHit) {
-                    double pnlPct = isLong
-                            ? round2((close - entry) / entry * 100)
-                            : round2((entry - close) / entry * 100);
-                    return new ExitResult("TRAIL_WIN", toDateTime(fb.getTimestamp()), pnlPct);
-                }
             }
         }
 
