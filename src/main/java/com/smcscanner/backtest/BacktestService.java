@@ -355,8 +355,21 @@ public class BacktestService {
                     if (lastZdt.toLocalTime().isBefore(LocalTime.of(9, 30))) continue;
                 }
                 List<OHLCV> window = dayBars.subList(0, end);
-                // Resolve effective strategy: time-routing overrides base stratType per bar
                 long barEpochMs = dayBars.get(end - 1).getTimestamp();
+
+                // ── Per-ticker dead zone hard block ───────────────────────────
+                // skipHours is set per-ticker in ticker-profiles.json based on
+                // observed loss-by-hour from backtest loss analysis. Never global.
+                // Unlike the soft deadZoneAdj (-15), this skips the bar entirely —
+                // the loop continues so signals in later hours can still fire.
+                if (!ticker.startsWith("X:") && bp.isSkipHour(
+                        Instant.ofEpochMilli(barEpochMs).atZone(ET).toLocalTime().getHour())) {
+                    log.trace("{} SKIP_HOUR_BLOCK: bar at {}", ticker,
+                            Instant.ofEpochMilli(barEpochMs).atZone(ET).toLocalTime());
+                    continue;
+                }
+
+                // Resolve effective strategy: time-routing overrides base stratType per bar
                 String effectiveStrat = (strategyOverride == null || strategyOverride.isBlank()) && bp.hasTimeRouting()
                         ? bp.resolveStrategyForTime(barEpochMs)
                         : stratType;

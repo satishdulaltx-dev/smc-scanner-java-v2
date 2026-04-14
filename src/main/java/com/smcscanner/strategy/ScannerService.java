@@ -603,6 +603,17 @@ public class ScannerService {
                     }
                 }
 
+                // ── Per-ticker dead zone hard block ───────────────────────────────
+                // skipHours set per-ticker in ticker-profiles.json from backtest loss data.
+                // Hard skip — signal silently suppressed for this scan cycle.
+                if (!isC && profile.isSkipHour(
+                        java.time.ZonedDateTime.now(java.time.ZoneId.of("America/New_York")).toLocalTime().getHour())) {
+                    log.info("{} SKIP_HOUR_BLOCK: ticker has this hour blocked in profile", ticker);
+                    setTs(ticker, "idle", null, 0, "⊘ Blocked hour — no entry this window");
+                    removeSetup(ticker);
+                    return;
+                }
+
                 // ── Time-of-day soft penalty (was hard block) ─────────────────────
                 // 11:xx AM and 1:xx PM ET have lower WR. Now -15 instead of hard kill.
                 // Strong setups (VWAP rubber-band, high-conf SMC) can still fire at lunch.

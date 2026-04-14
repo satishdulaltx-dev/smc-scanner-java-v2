@@ -394,9 +394,10 @@
       "maxConfidence": 84,
       "slAtrMult": 1.0,
       "tpRrRatio": 1.0,
+      "skipHours": [11, 12],
       "skip": true,
       "skipReason": "Apr 2026: skipped after full strategy sweep. All 6 strategies negative on LIVE_PARITY 180d — best was vwap -$303 at 80% WR. Root cause: SOFI ~$13 stock, avg win move 0.85% = ~$0.11/share. Options premium (~$10-15) cannot be overcome by such small moves regardless of WR. Not viable for options trading until price >$20.",
-      "note": "Apr 2026 90d frequency retune: VWAP mc=62 sl=1.0 tp=1:1 → 20T 70%WR +0.89%exp.",
+      "note": "Apr 2026 90d: skipHours=[11,12] added — loss analysis showed 11am=100% loss rate (3/3), 12pm=75% loss rate (12/16). Other hours unaffected.",
       "scalp":    { "skip": false, "strategyType": "scalp", "minConfidence": 72, "note": "Apr 2026 VWAP scalp validation: 56.7% WR +0.36% exp on 31 trades — stock now $15-17, edge confirmed" },
       "intraday": { "skip": true,  "skipReason": "Options P&L structurally negative — stock too cheap" },
       "swing":    { "skip": false, "strategyType": "vwap", "minConfidence": 62 }
