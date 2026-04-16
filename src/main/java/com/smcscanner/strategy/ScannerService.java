@@ -258,75 +258,119 @@ public class ScannerService {
             List<TradeSetup> setups; String phaseMsg;
             if (isC) { setups=crypto.detectCryptoSetup(bars,ticker); phaseMsg=setups.isEmpty()?"Waiting for breakout + volume spike...":""; }
             else {
-                String strategyType = profile.hasTimeRouting()
+                // ── Multi-strategy dispatch ─────────────────────────────────────
+                // Run ALL strategy types from active sub-profiles simultaneously.
+                // Previously a single strategyType was time-routed (scalp OR keylevel),
+                // meaning tickers like COIN never ran their intraday strategy alongside
+                // their scalp strategy. Now each active sub-profile contributes its own
+                // strategy type; the highest-confidence setup across all wins.
+                java.util.Set<String> stratTypes = new java.util.LinkedHashSet<>();
+                // Add scalp sub-profile strategy if that mode is active
+                if (!scalpMode.isEffectiveSkip(rootSkip)) {
+                    String st = scalpMode.getStrategyType();
+                    if (st != null) stratTypes.add(st);
+                }
+                // Add intraday sub-profile strategy if that mode is active
+                if (!intradayMode.isEffectiveSkip(rootSkip)) {
+                    String st = intradayMode.getStrategyType();
+                    if (st != null) stratTypes.add(st);
+                }
+                // Always include root/time-routed strategy as fallback
+                String rootStratType = profile.hasTimeRouting()
                         ? profile.resolveStrategyForTime(lastBarTs)
                         : profile.getStrategyType();
-                if (profile.hasTimeRouting()) {
-                    log.debug("{} TIME_ROUTE: ts={} → strategy={}", ticker, lastBarTs, strategyType);
+                stratTypes.add(rootStratType);
+
+                if (stratTypes.size() > 1) {
+                    log.debug("{} MULTI_STRAT: running {} strategies: {}", ticker, stratTypes.size(), stratTypes);
+                } else if (profile.hasTimeRouting()) {
+                    log.debug("{} TIME_ROUTE: ts={} → strategy={}", ticker, lastBarTs, rootStratType);
                 }
-                if ("scalp".equals(strategyType)) {
-                    List<OHLCV> spyBars5m = List.of();
+
+                // Pre-fetch SPY 5m bars once if scalp or idiv is in the strategy set
+                List<OHLCV> spyBars5m = List.of();
+                if (stratTypes.contains("scalp") || stratTypes.contains("idiv")) {
                     try {
                         List<OHLCV> sp = client.getBars("SPY", "5m", 100);
                         if (sp != null) spyBars5m = sp;
                     } catch (Exception e) { log.debug("{} SPY 5m fetch error: {}", ticker, e.getMessage()); }
+                }
 
-                    // ── Gate 1: VOLATILE regime — ATR has spiked, BB patterns break down ──
+                // Evaluate scalp gates — only suppress scalp, never abort other strategies
+                boolean scalpSuppressed = false;
+                String  scalpSuppressMsg = null;
+                if (stratTypes.contains("scalp")) {
                     if (regime == MarketRegimeDetector.Regime.VOLATILE) {
-                        setTs(ticker, "idle", null, 0, "⚠️ VOLATILE regime — scalp edge suppressed");
-                        return;
-                    }
-                    // ── Gate 2: SPY extreme intraday move — news-driven tape, no edge ──
-                    if (spyBars5m.size() >= 10) {
+                        scalpSuppressed = true;
+                        scalpSuppressMsg = "VOLATILE regime — scalp edge suppressed";
+                    } else if (spyBars5m.size() >= 10) {
                         double spyOpen    = spyBars5m.get(0).getOpen();
                         double spyCurrent = spyBars5m.get(spyBars5m.size() - 1).getClose();
                         double spyMove    = spyOpen > 0 ? Math.abs(spyCurrent - spyOpen) / spyOpen : 0;
                         if (spyMove > 0.018) {
-                            setTs(ticker, "idle", null, 0,
-                                    String.format("⚠️ SPY ±%.1f%% intraday — news tape, scalp suppressed", spyMove * 100));
-                            return;
+                            scalpSuppressed = true;
+                            scalpSuppressMsg = String.format("SPY ±%.1f%% intraday — news tape, scalp suppressed", spyMove * 100);
                         }
                     }
+                    if (scalpSuppressed)
+                        log.debug("{} ⚠️ {} — scalp skipped, continuing with other strategies", ticker, scalpSuppressMsg);
+                }
 
-                    setups = scalpMomentum.detect(bars, spyBars5m, ticker, dailyAtr);
-                    phaseMsg = setups.isEmpty() ? "Waiting for Bollinger reclaim or squeeze break..." : "";
-                } else if ("vwap".equals(strategyType)) {
-                    setups = vwap.detect(bars, ticker, dailyAtr);
-                    phaseMsg = setups.isEmpty() ? "Waiting for VWAP reversion..." : "";
-                } else if ("breakout".equals(strategyType)) {
-                    setups = breakout.detect(bars, ticker, dailyAtr);
-                    phaseMsg = setups.isEmpty() ? "Waiting for ORB breakout..." : "";
-                } else if ("keylevel".equals(strategyType)) {
-                    setups = keyLevel.detect(bars, dailyBars, ticker, dailyAtr, profile);
-                    phaseMsg = setups.isEmpty() ? "Waiting for key level rejection..." : "";
-                } else if ("vsqueeze".equals(strategyType)) {
-                    setups = vSqueeze.detect(bars, ticker, dailyAtr);
-                    phaseMsg = setups.isEmpty() ? "Watching for volatility squeeze release..." : "";
-                } else if ("vwap3d".equals(strategyType)) {
-                    List<OHLCV> multiDayBars = bars;
-                    try {
-                        List<OHLCV> wider = client.getBars(ticker, "5m", 300); // ~3 trading days
-                        if (wider != null && wider.size() >= 30) multiDayBars = wider;
-                    } catch (Exception e) { log.debug("{} 3dVWAP fetch error: {}", ticker, e.getMessage()); }
-                    setups = vwap3d.detect(multiDayBars, ticker, dailyAtr);
-                    phaseMsg = setups.isEmpty() ? "Watching for 3-day VWAP reversion..." : "";
-                } else if ("idiv".equals(strategyType)) {
-                    List<OHLCV> spyBars5m = List.of();
-                    try {
-                        List<OHLCV> sp = client.getBars("SPY", "5m", 100);
-                        if (sp != null) spyBars5m = sp;
-                    } catch (Exception e) { log.debug("{} SPY 5m fetch error: {}", ticker, e.getMessage()); }
-                    setups = indexDiv.detect(bars, spyBars5m, ticker, dailyAtr);
-                    phaseMsg = setups.isEmpty() ? "Watching for SPY/AAPL divergence..." : "";
-                } else if ("gammapin".equals(strategyType)) {
-                    setups = gammaPin.detect(bars, ticker, dailyAtr);
-                    phaseMsg = setups.isEmpty() ? "Watching for gamma pin convergence..." : "";
-                } else if ("cap_reversal".equals(strategyType)) {
-                    setups = capReversal.detect(bars, ticker, dailyAtr);
-                    phaseMsg = setups.isEmpty() ? "Watching for capitulation waterfall + reversal..." : "";
-                } else {
-                    SetupDetector.DetectResult r=setupDetector.detectSetups(bars,htfBias,ticker,false,dailyAtr);
-                    setups=r.setups(); phaseMsg=r.state().phaseMsg();
+                // Run every configured strategy; collect all setups
+                List<TradeSetup> allSetups = new ArrayList<>();
+                phaseMsg = "";
+                for (String strat : stratTypes) {
+                    if ("scalp".equals(strat) && scalpSuppressed) continue;
+                    List<TradeSetup> stratSetups;
+                    if ("scalp".equals(strat)) {
+                        stratSetups = scalpMomentum.detect(bars, spyBars5m, ticker, dailyAtr);
+                        if (stratSetups.isEmpty() && phaseMsg.isEmpty()) phaseMsg = "Waiting for Bollinger reclaim or squeeze break...";
+                    } else if ("vwap".equals(strat)) {
+                        stratSetups = vwap.detect(bars, ticker, dailyAtr);
+                        if (stratSetups.isEmpty() && phaseMsg.isEmpty()) phaseMsg = "Waiting for VWAP reversion...";
+                    } else if ("breakout".equals(strat)) {
+                        stratSetups = breakout.detect(bars, ticker, dailyAtr);
+                        if (stratSetups.isEmpty() && phaseMsg.isEmpty()) phaseMsg = "Waiting for ORB breakout...";
+                    } else if ("keylevel".equals(strat)) {
+                        stratSetups = keyLevel.detect(bars, dailyBars, ticker, dailyAtr, profile);
+                        if (stratSetups.isEmpty() && phaseMsg.isEmpty()) phaseMsg = "Waiting for key level rejection...";
+                    } else if ("vsqueeze".equals(strat)) {
+                        stratSetups = vSqueeze.detect(bars, ticker, dailyAtr);
+                        if (stratSetups.isEmpty() && phaseMsg.isEmpty()) phaseMsg = "Watching for volatility squeeze release...";
+                    } else if ("vwap3d".equals(strat)) {
+                        List<OHLCV> multiDayBars = bars;
+                        try {
+                            List<OHLCV> wider = client.getBars(ticker, "5m", 300); // ~3 trading days
+                            if (wider != null && wider.size() >= 30) multiDayBars = wider;
+                        } catch (Exception e) { log.debug("{} 3dVWAP fetch error: {}", ticker, e.getMessage()); }
+                        stratSetups = vwap3d.detect(multiDayBars, ticker, dailyAtr);
+                        if (stratSetups.isEmpty() && phaseMsg.isEmpty()) phaseMsg = "Watching for 3-day VWAP reversion...";
+                    } else if ("idiv".equals(strat)) {
+                        stratSetups = indexDiv.detect(bars, spyBars5m, ticker, dailyAtr);
+                        if (stratSetups.isEmpty() && phaseMsg.isEmpty()) phaseMsg = "Watching for SPY/AAPL divergence...";
+                    } else if ("gammapin".equals(strat)) {
+                        stratSetups = gammaPin.detect(bars, ticker, dailyAtr);
+                        if (stratSetups.isEmpty() && phaseMsg.isEmpty()) phaseMsg = "Watching for gamma pin convergence...";
+                    } else if ("cap_reversal".equals(strat)) {
+                        stratSetups = capReversal.detect(bars, ticker, dailyAtr);
+                        if (stratSetups.isEmpty() && phaseMsg.isEmpty()) phaseMsg = "Watching for capitulation waterfall + reversal...";
+                    } else {
+                        // smc (default)
+                        SetupDetector.DetectResult r = setupDetector.detectSetups(bars, htfBias, ticker, false, dailyAtr);
+                        stratSetups = r.setups();
+                        if (stratSetups.isEmpty() && phaseMsg.isEmpty()) phaseMsg = r.state().phaseMsg();
+                    }
+                    allSetups.addAll(stratSetups);
+                }
+                // Pick highest-confidence setup across all strategies
+                allSetups.sort(java.util.Comparator.comparingInt(TradeSetup::getConfidence).reversed());
+                setups = allSetups.isEmpty() ? List.of() : List.of(allSetups.get(0));
+
+                // If scalp was the only active strategy and it was suppressed, report it
+                if (setups.isEmpty() && scalpSuppressed
+                        && stratTypes.stream().allMatch(s -> "scalp".equals(s))) {
+                    setTs(ticker, "idle", null, 0, "⚠️ " + scalpSuppressMsg);
+                    return;
                 }
             }
 

@@ -214,11 +214,13 @@ public class BacktestService {
 
         // Pre-fetch SPY 5m bars for intraday RS gate (only if this ticker uses it)
         TickerProfile preProfile = config.getTickerProfile(ticker);
+        String scalpSubStratForSpy = preProfile.resolveMode("scalp").resolveStrategy(preProfile.getStrategyType());
         boolean needsSpy5m = preProfile.isIntradayRsGate()
                 || "idiv".equals(preProfile.getStrategyType())
                 || "idiv".equals(strategyOverride)
                 || "scalp".equals(preProfile.getStrategyType())
                 || "scalp".equals(strategyOverride)
+                || "scalp".equals(scalpSubStratForSpy)  // sub-profile uses scalp (e.g. COIN)
                 || "gap".equals(preProfile.getStrategyType())
                 || "gap".equals(strategyOverride);
         List<OHLCV> spy5mBars = needsSpy5m
