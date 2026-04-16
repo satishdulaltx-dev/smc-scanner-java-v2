@@ -17,6 +17,7 @@ public class SetupDetector {
     private static final Logger log = LoggerFactory.getLogger(SetupDetector.class);
     private static final int    SWEEP_LOOKBACK = 80, FVG_WINDOW = 12, RETEST_WINDOW = 25;
     private static final double DISP_ATR_MULT  = 1.3, MIN_FVG_PCT = 0.0004, MIN_VOL_MULT = 1.5; // global defaults — per-ticker overrides in ticker-profiles.json
+    private static final double MAX_ENTRY_DISTANCE_ATR = 2.5;
 
     private final ScannerConfig config;
     private final AtrCalculator atrCalc;
@@ -69,14 +70,6 @@ public class SetupDetector {
             return new DetectResult(List.of(),state);
         }
 
-        // Staleness check: retest must be recent (within last 20 bars)
-        int barsAgoRetest = bars.size() - 1 - state.getRetestBar();
-        if (barsAgoRetest > 20) {
-            log.debug("{} filtered: STALE_RETEST retest was {} bars ago", ticker, barsAgoRetest);
-            state.setPhase(SetupPhase.IDLE);
-            return new DetectResult(List.of(),state);
-        }
-
         // ── Cross-day FVG guard (Fix: blocks yesterday FVG at today's open) ──────
         // The state machine scans 80 bars back, which spans multiple sessions.
         // A sweep+FVG from yesterday afternoon can "retest" on today's opening bar —
@@ -100,7 +93,7 @@ public class SetupDetector {
 
         // Price proximity: current price must be within 3 ATRs of FVG zone
         double fvgMidCheck = (state.getFvgTop() + state.getFvgBottom()) / 2.0;
-        if (Math.abs(lastClose - fvgMidCheck) > curAtr * 3.0) {
+        if (Math.abs(lastClose - fvgMidCheck) > curAtr * MAX_ENTRY_DISTANCE_ATR) {
             log.debug("{} filtered: PRICE_FAR_FROM_FVG price={} fvgMid={} dist={} atr={}", ticker,
                 String.format("%.2f", lastClose), String.format("%.2f", fvgMidCheck),
                 String.format("%.2f", Math.abs(lastClose - fvgMidCheck)), String.format("%.2f", curAtr));
@@ -134,6 +127,11 @@ public class SetupDetector {
             return new DetectResult(List.of(),state);
         }
 
+        if (!hasCleanRetest(bars, state)) {
+            log.debug("{} filtered: WEAK_RETEST close quality did not confirm {}", ticker, state.getDirection());
+            return new DetectResult(List.of(), state);
+        }
+
         int conf=scoring.scoreSetup(true,true,true,true,hasStructure,peakVol>avgVol*MIN_VOL_MULT);
         if (conf<config.getMinConfidence()) {
             log.debug("{} filtered: LOW_CONF conf={} min={}", ticker, conf, config.getMinConfidence());
@@ -161,9 +159,36 @@ public class SetupDetector {
         if ("long".equals(state.getDirection()))  { sl=r4(entry-targetAtr*slMult); tp=r4(entry+targetAtr*slMult*tpRatio); }
         else                                       { sl=r4(entry+targetAtr*slMult); tp=r4(entry-targetAtr*slMult*tpRatio); }
 
+        // ── SMC signal breakdown (shown in "WHY THIS TRADE?" panel) ────────────
+        // Format: "smc-{dir} | sweep=BEAR(N bars back) | disp=2.4×ATR | FVG=[top/bot] | retest=X% | BOS=✓/✗ CHOCH=✓/✗ | vol=X×avg"
+        int n = bars.size();
+        String sweepDir  = "long".equals(state.getDirection()) ? "BULL" : "BEAR";
+        int    sweepBarsBack = state.getSweepBar() >= 0 ? (n - 1 - state.getSweepBar()) : -1;
+        double dispRange = 0, dispAtrRatio = 0;
+        if (state.getDisplacementBar() >= 0 && state.getDisplacementBar() < n) {
+            OHLCV db = bars.get(state.getDisplacementBar());
+            dispRange    = db.getHigh() - db.getLow();
+            dispAtrRatio = curAtr > 0 ? dispRange / curAtr : 0;
+        }
+        double retestClosePos = 0;
+        if (state.getRetestBar() >= 0 && state.getRetestBar() < n) {
+            OHLCV rb    = bars.get(state.getRetestBar());
+            double range = Math.max(0.0001, rb.getHigh() - rb.getLow());
+            retestClosePos = (rb.getClose() - rb.getLow()) / range * 100.0;
+        }
+        double volRatio = avgVol > 0 ? peakVol / avgVol : 0;
+        String smcBreakdown = String.format(
+                "smc-%s | sweep=%s(%d bars back) | disp=%.1f×ATR | FVG=[%.2f/%.2f] | retest=%.0f%% | BOS=%s CHOCH=%s | vol=%.1f×avg",
+                state.getDirection(), sweepDir, sweepBarsBack,
+                dispAtrRatio, state.getFvgTop(), state.getFvgBottom(),
+                retestClosePos,
+                str[0] ? "✓" : "✗", str[1] ? "✓" : "✗",
+                volRatio);
+
         TradeSetup setup=TradeSetup.builder().ticker(ticker).direction(state.getDirection())
             .entry(entry).stopLoss(sl).takeProfit(tp).confidence(conf).session(session).volatility(vol)
             .atr(r4(curAtr)).hasBos(str[0]).hasChoch(str[1]).fvgTop(r4(state.getFvgTop())).fvgBottom(r4(state.getFvgBottom()))
+            .factorBreakdown(smcBreakdown)
             .timestamp(LocalDateTime.now()).build();
         return new DetectResult(List.of(setup),state);
     }
@@ -244,6 +269,17 @@ public class SetupDetector {
             }
         }
         return -1;
+    }
+    private boolean hasCleanRetest(List<OHLCV> bars, SMCState state) {
+        if (state.getRetestBar() < 0 || state.getRetestBar() >= bars.size()) return false;
+        OHLCV retest = bars.get(state.getRetestBar());
+        double range = Math.max(0.0001, retest.getHigh() - retest.getLow());
+        double closePos = (retest.getClose() - retest.getLow()) / range;
+        double mid = (state.getFvgTop() + state.getFvgBottom()) / 2.0;
+        if ("long".equals(state.getDirection())) {
+            return retest.getClose() >= mid && closePos >= 0.35;
+        }
+        return retest.getClose() <= mid && closePos <= 0.65;
     }
     private boolean[] detectStructure(List<OHLCV> bars) {
         try {

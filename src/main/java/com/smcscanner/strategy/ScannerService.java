@@ -818,11 +818,16 @@ public class ScannerService {
                 // ── Attribution string (factor breakdown) ──────────────────────
                 // Tells trader EXACTLY why confidence is what it is.
                 // Every factor that moved conf > ±2 is shown.
-                String factorBreakdown = buildFactorBreakdown(
+                // Prepend raw SMC signals (set by SetupDetector) so they survive this rebuild.
+                String adjBreakdown = buildFactorBreakdown(
                         newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj,
                         bias15mAdj, vixBoost, s.getConfidence(),
                         sma200Adj, rsiAdj, candleAdj, volAdj, regimeStratAdj, pivotAdj,
                         trapAdj, exhaustionAdj, confluenceVetoAdj);
+                String smcSignals = s.getFactorBreakdown(); // raw SMC signals from SetupDetector
+                String factorBreakdown = (smcSignals != null && smcSignals.startsWith("smc-"))
+                        ? smcSignals + "\nadj: " + adjBreakdown
+                        : adjBreakdown;
 
                 // ── Conviction tier (suggested contract size) ─────────────────
                 // Based on final adjusted confidence — scales exposure to signal quality.

@@ -1093,19 +1093,41 @@ async function openTradeChart(serializedTrade) {
     let reasonHtml = `<div style="margin-bottom:6px;font-size:11px;font-weight:700;color:var(--blue)">WHY THIS TRADE?</div>`;
     reasonHtml += `<div style="margin-bottom:4px"><span style="color:var(--muted)">Direction:</span> <strong style="color:${dir==='LONG'?'var(--green)':'var(--red)'}">${dir}</strong> &nbsp;|&nbsp; <span style="color:var(--muted)">Strategy:</span> <strong>${strat}</strong> &nbsp;|&nbsp; <span style="color:var(--muted)">Confidence:</span> <strong>${t.confidence}/100</strong></div>`;
     if (t.factor_breakdown) {
-        // Parse the factor_breakdown string: "setupType | vol x1.4 | RS +0.05% | ..."
-        const parts = t.factor_breakdown.split(' | ');
+        // Support two-line SMC format: "smc-short | sweep=... | ...\nadj: news -8 | ..."
+        const lines = t.factor_breakdown.split('\n');
+        const primaryLine = lines[0] || '';
+        const adjLine     = lines.length > 1 ? lines.slice(1).join(' ') : null;
+
+        // Parse the primary line: "setupType | detail1 | detail2 | ..."
+        const parts = primaryLine.split(' | ');
         const setupType = parts[0] || '';
         const rest = parts.slice(1).join(' | ');
-        const setupLabel = setupType.startsWith('vwap-1sd-touch-long')  ? '📈 VWAP +1SD touch — bullish rejection, price reclaimed band'
-                         : setupType.startsWith('vwap-1sd-touch-short') ? '📉 VWAP −1SD touch — bearish rejection, price broke band down'
-                         : setupType.startsWith('vwap-2sd-touch-long')  ? '🚀 VWAP +2SD touch — extreme extension, mean reversion long'
-                         : setupType.startsWith('vwap-2sd-touch-short') ? '💥 VWAP −2SD touch — extreme extension, mean reversion short'
-                         : setupType.startsWith('vwap-cross-long')      ? '📈 VWAP cross up — price reclaimed VWAP with momentum'
-                         : setupType.startsWith('vwap-cross-short')     ? '📉 VWAP cross down — price lost VWAP with momentum'
+
+        const setupLabel = setupType === 'smc-long'                       ? '📈 SMC Long — bullish liquidity sweep, displacement + FVG retest'
+                         : setupType === 'smc-short'                      ? '📉 SMC Short — bearish liquidity sweep, displacement + FVG retest'
+                         : setupType.startsWith('vwap-1sd-touch-long')   ? '📈 VWAP +1SD touch — bullish rejection, price reclaimed band'
+                         : setupType.startsWith('vwap-1sd-touch-short')  ? '📉 VWAP −1SD touch — bearish rejection, price broke band down'
+                         : setupType.startsWith('vwap-2sd-touch-long')   ? '🚀 VWAP +2SD touch — extreme extension, mean reversion long'
+                         : setupType.startsWith('vwap-2sd-touch-short')  ? '💥 VWAP −2SD touch — extreme extension, mean reversion short'
+                         : setupType.startsWith('vwap-cross-long')       ? '📈 VWAP cross up — price reclaimed VWAP with momentum'
+                         : setupType.startsWith('vwap-cross-short')      ? '📉 VWAP cross down — price lost VWAP with momentum'
                          : setupType;
+
+        // Colour-code SMC signal fields: BOS=✓ green, BOS=✗ red; highlight FVG zone
+        const coloredRest = rest
+            .replace(/BOS=✓/g,  '<span style="color:var(--green)">BOS=✓</span>')
+            .replace(/BOS=✗/g,  '<span style="color:var(--red)">BOS=✗</span>')
+            .replace(/CHOCH=✓/g,'<span style="color:var(--green)">CHOCH=✓</span>')
+            .replace(/CHOCH=✗/g,'<span style="color:var(--red)">CHOCH=✗</span>')
+            .replace(/(FVG=\[[^\]]+\])/g, '<span style="color:#e3a008">$1</span>')
+            .replace(/(sweep=[A-Z]+\([^)]+\))/g, '<span style="color:#9b6dff">$1</span>');
+
         reasonHtml += `<div style="margin:6px 0 4px;padding:6px 8px;background:rgba(88,166,255,.08);border-radius:4px;color:var(--text)">${setupLabel}</div>`;
-        reasonHtml += `<div style="font-size:11px;color:var(--muted);margin-top:4px">${rest}</div>`;
+        reasonHtml += `<div style="font-size:11px;color:var(--muted);margin-top:4px">${coloredRest}</div>`;
+        if (adjLine) {
+            const adjText = adjLine.replace(/^adj:\s*/, '');
+            reasonHtml += `<div style="font-size:11px;color:var(--muted);margin-top:3px;border-top:1px solid var(--border);padding-top:3px">Adjustments: ${adjText}</div>`;
+        }
     } else {
         reasonHtml += `<div style="font-size:11px;color:var(--muted)">No detailed breakdown available for ${strat} strategy</div>`;
     }
