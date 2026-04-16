@@ -359,11 +359,15 @@ public class BacktestService {
             }
             boolean tradePlacedToday = false;
             for (int end = minBars; end <= dayBars.size() && !tradePlacedToday; end++) {
-                // ALL equity strategies: skip pre-market bars — options don't trade before 9:30 ET
+                // ALL equity strategies: skip pre-market and stop at regular session close.
+                // Without the after-hours break, session-based detectors (keylevel, vwap, etc.)
+                // keep re-evaluating on stale RTH data as after-hours bars extend the window —
+                // this can produce incorrect SL/TP values using distant historical levels.
                 if (!ticker.startsWith("X:")) {
-                    ZonedDateTime lastZdt = Instant.ofEpochMilli(
-                        dayBars.get(end-1).getTimestamp()).atZone(ET);
-                    if (lastZdt.toLocalTime().isBefore(LocalTime.of(9, 30))) continue;
+                    LocalTime barTime = Instant.ofEpochMilli(
+                        dayBars.get(end-1).getTimestamp()).atZone(ET).toLocalTime();
+                    if (barTime.isBefore(LocalTime.of(9, 30))) continue;
+                    if (!barTime.isBefore(LocalTime.of(16, 0))) break; // stop at RTH close
                 }
                 List<OHLCV> window = dayBars.subList(0, end);
                 long barEpochMs = dayBars.get(end - 1).getTimestamp();
