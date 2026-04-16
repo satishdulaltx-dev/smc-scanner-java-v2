@@ -422,40 +422,50 @@ public class LiveTradeLog {
                     String outcome = null;
                     double pnlPct = 0.0;
 
-                    if (isLong) {
-                        if (sessionLow <= sl) {
-                            outcome = "LOSS";
-                            pnlPct = (sl - entry) / entry * 100.0;
-                        } else if (sessionHigh >= tp) {
-                            outcome = "WIN";
-                            pnlPct = (tp - entry) / entry * 100.0;
-                        } else {
-                            // Still holding — mark with current P&L
-                            pnlPct = (lastPrice - entry) / entry * 100.0;
-                        }
-                    } else { // short
-                        if (sessionHigh >= sl) {
-                            outcome = "LOSS";
-                            pnlPct = (entry - sl) / entry * 100.0;
-                        } else if (sessionLow <= tp) {
-                            outcome = "WIN";
-                            pnlPct = (entry - tp) / entry * 100.0;
-                        } else {
-                            // Still holding — mark with current P&L
-                            pnlPct = (entry - lastPrice) / entry * 100.0;
-                        }
-                    }
-
+                    // ── Broker data takes priority (ground truth for options P&L) ──────────
+                    // Check broker FIRST. If the actual options position was closed at a loss,
+                    // we must record LOSS even if the underlying stock later hit the TP price.
+                    // Stock-price check is only used as a fallback when no broker match exists.
                     boolean brokerStillOpen = brokerOpenTickers.contains(ticker);
                     if (!brokerStillOpen && markNotFilledIfNeeded(t, recentOrdersBySymbol)) {
                         outcome = "NOT_FILLED";
                         pnlPct = 0.0;
-                    } else if (outcome == null && !brokerStillOpen) {
+                    } else if (!brokerStillOpen) {
                         boolean resolvedFromOrders = applyBrokerRealizedPnl(t, recentFilledOrders, recentFilledOrdersByUnderlying, usedOrderIds);
                         if (resolvedFromOrders) {
                             outcome = (String) t.get("outcome");
                             pnlPct = ((Number) t.getOrDefault("pnlPct", 0.0)).doubleValue();
-                        } else {
+                        }
+                    }
+
+                    // ── Stock-price fallback (used only when broker data is unavailable) ────
+                    if (outcome == null) {
+                        if (isLong) {
+                            if (sessionLow <= sl) {
+                                outcome = "LOSS";
+                                pnlPct = (sl - entry) / entry * 100.0;
+                            } else if (sessionHigh >= tp) {
+                                outcome = "WIN";
+                                pnlPct = (tp - entry) / entry * 100.0;
+                            } else {
+                                // Still holding — mark with current P&L
+                                pnlPct = (lastPrice - entry) / entry * 100.0;
+                            }
+                        } else { // short
+                            if (sessionHigh >= sl) {
+                                outcome = "LOSS";
+                                pnlPct = (entry - sl) / entry * 100.0;
+                            } else if (sessionLow <= tp) {
+                                outcome = "WIN";
+                                pnlPct = (entry - tp) / entry * 100.0;
+                            } else {
+                                // Still holding — mark with current P&L
+                                pnlPct = (entry - lastPrice) / entry * 100.0;
+                            }
+                        }
+
+                        // Broker closed it but no P&L data — classify by stock price direction
+                        if (outcome == null && !brokerStillOpen) {
                             if (Math.abs(pnlPct) < 0.10) {
                                 outcome = "BE_STOP";
                                 pnlPct = 0.0;
@@ -554,7 +564,7 @@ public class LiveTradeLog {
             if (usedActivityIds.contains(activityId)) continue;
             String side = String.valueOf(activity.getOrDefault("side", ""));
             long ts = ((Number) activity.getOrDefault("transaction_time_epoch", 0L)).longValue();
-            if ("buy".equalsIgnoreCase(side) && ts >= tradeTs - 7_200_000L) {
+            if ("buy".equalsIgnoreCase(side) && ts >= tradeTs - 7_200_000L && ts <= tradeTs + 7_200_000L) {
                 if (buy == null || ts < ((Number) buy.getOrDefault("transaction_time_epoch", 0L)).longValue()) {
                     buy = activity;
                 }
@@ -613,7 +623,7 @@ public class LiveTradeLog {
             if (usedOrderIds.contains(orderId)) continue;
             String side = String.valueOf(order.getOrDefault("side", ""));
             long ts = ((Number) order.getOrDefault("created_at_epoch", 0L)).longValue();
-            if ("buy".equalsIgnoreCase(side) && ts >= tradeTs - 7_200_000L) {
+            if ("buy".equalsIgnoreCase(side) && ts >= tradeTs - 7_200_000L && ts <= tradeTs + 7_200_000L) {
                 if (buyOrder == null || ts < ((Number) buyOrder.getOrDefault("created_at_epoch", 0L)).longValue()) {
                     buyOrder = order;
                 }

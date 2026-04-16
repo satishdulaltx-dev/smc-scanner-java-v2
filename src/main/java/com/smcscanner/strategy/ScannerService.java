@@ -1187,10 +1187,12 @@ public class ScannerService {
                                 } catch (Exception e) { log.debug("{} gap overnight options: {}", ticker, e.getMessage()); }
 
                                 TradeSetup gapNightSetup = gapBuilder.build();
+                                // Always record + track — ensures hasOvernightFiredToday() blocks re-fires
+                                // on service restart even when options data is unavailable.
+                                liveLog.recordTrade(gapNightSetup, "gap_overnight_" + tryDir);
+                                tracker.recordStrategySignal("gap_overnight", gapSig.gapScore());
                                 if (gapNightSetup.hasOptionsData()) {
                                     discord.sendOvernightHoldAlert(gapNightSetup, gapSig.gapScore(), gapSig.reason());
-                                    liveLog.recordTrade(gapNightSetup, "gap_overnight_" + tryDir);
-                                    tracker.recordStrategySignal("gap_overnight", gapSig.gapScore());
                                     if (alpaca.isEnabled()) alpaca.placeOrder(gapNightSetup);
                                 }
                             }
