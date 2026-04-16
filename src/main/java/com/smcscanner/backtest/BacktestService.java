@@ -1105,7 +1105,29 @@ public class BacktestService {
                     scaledPnlPerContract = round2(optEst.pnlPerContract() * contracts);
                 }
 
-                trades.add(new TradeResult(ticker, dir, effectiveStrat, entry, sl, tp, outcome, pnlPct,
+                // Override outcome to reflect actual options P&L direction.
+                // The trader holds options, not stock — if options lose money the trade is a LOSS
+                // regardless of whether the underlying hit TP (e.g. slippage/theta ate the gain).
+                String finalOutcome = outcome;
+                double finalPnlPct  = pnlPct;
+                if (!ticker.startsWith("X:") && !"BE_STOP".equals(outcome)
+                        && !outcome.endsWith("_FILTERED") && optEst.pnlPerContract() != 0) {
+                    double rawOptPnl = optEst.pnlPerContract();
+                    boolean stockWin  = "WIN".equals(outcome)  || "TRAIL_WIN".equals(outcome);
+                    boolean stockLoss = "LOSS".equals(outcome) || "TRAIL_LOSS".equals(outcome);
+                    if (rawOptPnl < 0 && stockWin) {
+                        finalOutcome = "LOSS";
+                        finalPnlPct  = round2(optEst.optionsPnlPct());
+                    } else if (rawOptPnl > 0 && stockLoss) {
+                        finalOutcome = "WIN";
+                        finalPnlPct  = round2(optEst.optionsPnlPct());
+                    } else if ("TIMEOUT".equals(outcome)) {
+                        // TIMEOUT win/loss classification comes from pnlPct sign — sync with options
+                        finalPnlPct = round2(optEst.optionsPnlPct());
+                    }
+                }
+
+                trades.add(new TradeResult(ticker, dir, effectiveStrat, entry, sl, tp, finalOutcome, finalPnlPct,
                         entryTime, exitTime != null ? exitTime : entryTime,
                         entryEpochMs, resolveExitEpochMs(fwdBars, exitTime, entryEpochMs),
                         setup.getFactorBreakdown(),
