@@ -140,9 +140,16 @@ public class BreakoutStrategyDetector {
                 if (rr >= 1.2) {
                     int confidence = 70;
                     if (last.getVolume() > avgVol * 2.5)  confidence += 5;
-                    if (orbWidth < atr * 0.8)             confidence += 5;  // tight ORB = explosive
-                    if (wideOrb)                          confidence -= 10; // wide ORB = likely faded
-                    if (sessionRvol >= 1.5)               confidence += 5;  // RVOL-confirmed breakout
+                    if (orbWidth < atr * 0.8)             confidence += 5;
+                    if (wideOrb)                          confidence -= 10;
+                    if (sessionRvol >= 1.5)               confidence += 5;
+
+                    String orbSize = orbWidth < atr * 0.8 ? "tight" : wideOrb ? "wide" : "normal";
+                    String factors = String.format(
+                            "breakout-long | ORB=[%.2f/%.2f] | width=$%.2f(%s)" +
+                            " | vol=%.1f×avg | RVOL=%.1f | R:R=%.1f",
+                            orbLow, orbHigh, orbWidth, orbSize,
+                            last.getVolume() / Math.max(avgVol, 1), sessionRvol, rr);
 
                     result.add(TradeSetup.builder()
                             .ticker(ticker)
@@ -158,6 +165,7 @@ public class BreakoutStrategyDetector {
                             .hasChoch(false)
                             .fvgTop(r4(orbHigh))
                             .fvgBottom(r4(orbLow))
+                            .factorBreakdown(factors)
                             .timestamp(LocalDateTime.now())
                             .build());
                     return result;
@@ -185,9 +193,16 @@ public class BreakoutStrategyDetector {
                 if (rr >= 1.2) {
                     int confidence = 70;
                     if (last.getVolume() > avgVol * 2.5)  confidence += 5;
-                    if (orbWidth < atr * 0.8)             confidence += 5;  // tight ORB = explosive
-                    if (wideOrb)                          confidence -= 10; // wide ORB = likely faded
-                    if (sessionRvol >= 1.5)               confidence += 5;  // RVOL-confirmed breakout
+                    if (orbWidth < atr * 0.8)             confidence += 5;
+                    if (wideOrb)                          confidence -= 10;
+                    if (sessionRvol >= 1.5)               confidence += 5;
+
+                    String orbSize = orbWidth < atr * 0.8 ? "tight" : wideOrb ? "wide" : "normal";
+                    String factors = String.format(
+                            "breakout-short | ORB=[%.2f/%.2f] | width=$%.2f(%s)" +
+                            " | vol=%.1f×avg | RVOL=%.1f | R:R=%.1f",
+                            orbLow, orbHigh, orbWidth, orbSize,
+                            last.getVolume() / Math.max(avgVol, 1), sessionRvol, rr);
 
                     result.add(TradeSetup.builder()
                             .ticker(ticker)
@@ -203,6 +218,7 @@ public class BreakoutStrategyDetector {
                             .hasChoch(false)
                             .fvgTop(r4(orbHigh))
                             .fvgBottom(r4(orbLow))
+                            .factorBreakdown(factors)
                             .timestamp(LocalDateTime.now())
                             .build());
                 }

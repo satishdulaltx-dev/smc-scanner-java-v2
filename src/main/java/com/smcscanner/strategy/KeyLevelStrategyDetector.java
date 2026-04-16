@@ -176,11 +176,19 @@ public class KeyLevelStrategyDetector {
 
                         if (rr >= tpRatio * 0.95) {
                             int confidence = 65;
-                            if (touches >= 3)                         confidence += 10; // 3+ tests = high-quality level
-                            if (touches >= 4)                         confidence += 5;  // 4+ = institutional distribution
-                            if (upperWick)                            confidence += 5;  // clear rejection wick
-                            if (last.getVolume() > avgVol * 2.0)     confidence += 5;  // volume surge at level
-                            if (counterTrend)                         confidence -= 8;  // counter-trend penalty (not a block)
+                            if (touches >= 3)                         confidence += 10;
+                            if (touches >= 4)                         confidence += 5;
+                            if (upperWick)                            confidence += 5;
+                            if (last.getVolume() > avgVol * 2.0)     confidence += 5;
+                            if (counterTrend)                         confidence -= 8;
+
+                            double volRatio = avgVol > 0 ? last.getVolume() / avgVol : 1.0;
+                            String factors = String.format(
+                                    "keylevel-short | level=$%.2f | touches=%d | type=RESISTANCE" +
+                                    " | wick=%s | vol=%.1f×avg | trend=%s | R:R=%.1f",
+                                    levelPrice, touches,
+                                    upperWick ? "✓" : "✗",
+                                    volRatio, htfTrend.toUpperCase(), rr);
 
                             result.add(TradeSetup.builder()
                                     .ticker(ticker)
@@ -190,12 +198,13 @@ public class KeyLevelStrategyDetector {
                                     .takeProfit(tp)
                                     .confidence(confidence)
                                     .session("NYSE")
-                                    .volatility("keylevel")    // used as strategy tag
+                                    .volatility("keylevel")
                                     .atr(atr)
                                     .hasBos(false)
                                     .hasChoch(false)
                                     .fvgTop(r4(levelPrice))
                                     .fvgBottom(r4(levelPrice - atr))
+                                    .factorBreakdown(factors)
                                     .timestamp(LocalDateTime.now())
                                     .build());
                             return result;
@@ -258,7 +267,15 @@ public class KeyLevelStrategyDetector {
                             if (touches >= 4)                         confidence += 5;
                             if (lowerWick)                            confidence += 5;
                             if (last.getVolume() > avgVol * 2.0)     confidence += 5;
-                            if (counterTrend)                         confidence -= 8;  // counter-trend penalty (not a block)
+                            if (counterTrend)                         confidence -= 8;
+
+                            double volRatio = avgVol > 0 ? last.getVolume() / avgVol : 1.0;
+                            String factors = String.format(
+                                    "keylevel-long | level=$%.2f | touches=%d | type=SUPPORT" +
+                                    " | wick=%s | vol=%.1f×avg | trend=%s | R:R=%.1f",
+                                    levelPrice, touches,
+                                    lowerWick ? "✓" : "✗",
+                                    volRatio, htfTrend.toUpperCase(), rr);
 
                             result.add(TradeSetup.builder()
                                     .ticker(ticker)
@@ -274,6 +291,7 @@ public class KeyLevelStrategyDetector {
                                     .hasChoch(false)
                                     .fvgTop(r4(levelPrice + atr))
                                     .fvgBottom(r4(levelPrice))
+                                    .factorBreakdown(factors)
                                     .timestamp(LocalDateTime.now())
                                     .build());
                             return result;

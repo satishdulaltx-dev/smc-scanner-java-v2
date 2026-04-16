@@ -100,12 +100,18 @@ public class VolatilitySqueezeDetector {
             if (squeezeCount >= 8)              conf += 5;
 
             if (sl < entry && tp > entry) {
+                String factors = String.format(
+                        "vsqueeze-long | squeeze=%d bars | BB=[%.2f/%.2f] mid=%.2f" +
+                        " | breakout=UP | vol=%.1f×avg",
+                        squeezeCount, bbLower, bbUpper, bbMid,
+                        last.getVolume() / Math.max(avgVol, 1));
                 result.add(TradeSetup.builder()
                         .ticker(ticker).direction("long")
                         .entry(entry).stopLoss(sl).takeProfit(tp)
                         .confidence(conf).session("NYSE").volatility("squeeze")
                         .atr(atr).hasBos(false).hasChoch(false)
                         .fvgTop(r4(bbUpper)).fvgBottom(r4(bbLower))
+                        .factorBreakdown(factors)
                         .timestamp(LocalDateTime.now()).build());
             }
         } else if (shortDir && shortMom && volSpike) {
@@ -120,12 +126,18 @@ public class VolatilitySqueezeDetector {
             if (squeezeCount >= 8)              conf += 5;
 
             if (sl > entry && tp < entry) {
+                String factors = String.format(
+                        "vsqueeze-short | squeeze=%d bars | BB=[%.2f/%.2f] mid=%.2f" +
+                        " | breakout=DOWN | vol=%.1f×avg",
+                        squeezeCount, bbLower, bbUpper, bbMid,
+                        last.getVolume() / Math.max(avgVol, 1));
                 result.add(TradeSetup.builder()
                         .ticker(ticker).direction("short")
                         .entry(entry).stopLoss(sl).takeProfit(tp)
                         .confidence(conf).session("NYSE").volatility("squeeze")
                         .atr(atr).hasBos(false).hasChoch(false)
                         .fvgTop(r4(bbUpper)).fvgBottom(r4(bbLower))
+                        .factorBreakdown(factors)
                         .timestamp(LocalDateTime.now()).build());
             }
         }

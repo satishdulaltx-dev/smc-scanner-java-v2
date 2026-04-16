@@ -217,6 +217,13 @@ public class VwapStrategyDetector {
                 if (tp < longMin2R) tp = longMin2R;
 
                 if (sl < entry && tp > entry) {
+                    String trend = trendBearish ? "BEARISH(penalized)" : trendStronglyBearish ? "STRONGLY-BEARISH(blocked)" : "neutral";
+                    String factors = String.format(
+                            "vwap-reversion-long | VWAP=$%.2f | Z=%.2f | below by %.1f×ATR" +
+                            " | vol=%.1f×avg | RVOL=%.1f | trend=%s | reverting=%s",
+                            vwap, zScore, (vwap - lastClose) / Math.max(curAtr, 0.001),
+                            last.getVolume() / Math.max(avgVol, 1), sessionRvol,
+                            trend, zScoreReverting ? "✓" : "✗");
                     result.add(TradeSetup.builder()
                             .ticker(ticker)
                             .direction("long")
@@ -231,6 +238,7 @@ public class VwapStrategyDetector {
                             .hasChoch(false)
                             .fvgTop(r4(vwap))
                             .fvgBottom(r4(lowestClose))
+                            .factorBreakdown(factors)
                             .timestamp(LocalDateTime.now())
                             .build());
                     // Don't return here — continue to evaluate SHORT side.
@@ -287,6 +295,13 @@ public class VwapStrategyDetector {
                 if (tp > shortMin2R) tp = shortMin2R;
 
                 if (sl > entry && tp < entry) {
+                    String trend = trendBullish ? "BULLISH(penalized)" : trendStronglyBullish ? "STRONGLY-BULLISH(blocked)" : "neutral";
+                    String factors = String.format(
+                            "vwap-reversion-short | VWAP=$%.2f | Z=%.2f | above by %.1f×ATR" +
+                            " | vol=%.1f×avg | RVOL=%.1f | trend=%s | reverting=%s",
+                            vwap, zScore, (curClose - vwap) / Math.max(curAtr, 0.001),
+                            last.getVolume() / Math.max(avgVol, 1), sessionRvol,
+                            trend, zScoreReverting ? "✓" : "✗");
                     result.add(TradeSetup.builder()
                             .ticker(ticker)
                             .direction("short")
@@ -301,6 +316,7 @@ public class VwapStrategyDetector {
                             .hasChoch(false)
                             .fvgTop(r4(highestClose))
                             .fvgBottom(r4(vwap))
+                            .factorBreakdown(factors)
                             .timestamp(LocalDateTime.now())
                             .build());
                 }

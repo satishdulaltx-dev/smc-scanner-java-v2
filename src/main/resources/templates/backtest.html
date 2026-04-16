@@ -1090,51 +1090,93 @@ async function openTradeChart(serializedTrade) {
     const reasonBox = document.getElementById('trade-reason');
     const dir = t.dir?.toLowerCase() === 'long' ? 'LONG' : 'SHORT';
     const strat = (t.strategy || 'unknown').toUpperCase();
-    let reasonHtml = `<div style="margin-bottom:6px;font-size:11px;font-weight:700;color:var(--blue)">WHY THIS TRADE?</div>`;
-    reasonHtml += `<div style="margin-bottom:4px"><span style="color:var(--muted)">Direction:</span> <strong style="color:${dir==='LONG'?'var(--green)':'var(--red)'}">${dir}</strong> &nbsp;|&nbsp; <span style="color:var(--muted)">Strategy:</span> <strong>${strat}</strong> &nbsp;|&nbsp; <span style="color:var(--muted)">Confidence:</span> <strong>${t.confidence}/100</strong></div>`;
+    // ── WHY THIS TRADE panel ─────────────────────────────────────────────────
+    // Header row: direction badge + strategy + confidence
+    let reasonHtml = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+      <span style="font-size:11px;font-weight:700;color:var(--blue)">WHY THIS TRADE?</span>
+      <span style="padding:1px 7px;border-radius:10px;font-size:10px;font-weight:600;background:${dir==='LONG'?'rgba(63,185,80,.18)':'rgba(248,81,73,.18)'};color:${dir==='LONG'?'var(--green)':'var(--red)'}">${dir}</span>
+      <span style="padding:1px 7px;border-radius:10px;font-size:10px;background:rgba(88,166,255,.12);color:var(--blue)">${strat}</span>
+      <span style="padding:1px 7px;border-radius:10px;font-size:10px;background:rgba(255,255,255,.07);color:var(--text)">conf ${t.confidence}/100</span>
+    </div>`;
+
     if (t.factor_breakdown) {
-        // Support two-line SMC format: "smc-short | sweep=... | ...\nadj: news -8 | ..."
+        // Support two-line SMC format: "smc-short | k=v | ...\nadj: news -8 | ..."
         const lines = t.factor_breakdown.split('\n');
         const primaryLine = lines[0] || '';
         const adjLine     = lines.length > 1 ? lines.slice(1).join(' ') : null;
 
-        // Parse the primary line: "setupType | detail1 | detail2 | ..."
+        // Parse: parts[0] = setup type key, parts[1..] = signal fields
         const parts = primaryLine.split(' | ');
         const setupType = parts[0] || '';
-        const rest = parts.slice(1).join(' | ');
+        const signals   = parts.slice(1); // array of "key=value" strings
 
-        const setupLabel = setupType === 'cap_reversal-long'               ? '🪝 Capitulation Reversal — waterfall exhaustion + volume climax + reversal signal'
-                         : setupType === 'smc-long'                       ? '📈 SMC Long — bullish liquidity sweep, displacement + FVG retest'
-                         : setupType === 'smc-short'                      ? '📉 SMC Short — bearish liquidity sweep, displacement + FVG retest'
-                         : setupType.startsWith('vwap-1sd-touch-long')   ? '📈 VWAP +1SD touch — bullish rejection, price reclaimed band'
-                         : setupType.startsWith('vwap-1sd-touch-short')  ? '📉 VWAP −1SD touch — bearish rejection, price broke band down'
-                         : setupType.startsWith('vwap-2sd-touch-long')   ? '🚀 VWAP +2SD touch — extreme extension, mean reversion long'
-                         : setupType.startsWith('vwap-2sd-touch-short')  ? '💥 VWAP −2SD touch — extreme extension, mean reversion short'
-                         : setupType.startsWith('vwap-cross-long')       ? '📈 VWAP cross up — price reclaimed VWAP with momentum'
-                         : setupType.startsWith('vwap-cross-short')      ? '📉 VWAP cross down — price lost VWAP with momentum'
-                         : setupType;
+        // Setup type → human label + icon
+        const setupMeta = setupType === 'cap_reversal-long'              ? {icon:'🪝', label:'Capitulation Reversal', desc:'Waterfall exhaustion → volume climax → bounce'}
+                        : setupType === 'smc-long'                       ? {icon:'📈', label:'SMC Long',             desc:'Bullish liquidity sweep + displacement + FVG retest'}
+                        : setupType === 'smc-short'                      ? {icon:'📉', label:'SMC Short',            desc:'Bearish liquidity sweep + displacement + FVG retest'}
+                        : setupType === 'keylevel-long'                  ? {icon:'🔑', label:'Key Level Support',    desc:'HTF support zone with 2+ touches → bounce'}
+                        : setupType === 'keylevel-short'                 ? {icon:'🔑', label:'Key Level Resistance', desc:'HTF resistance zone with 2+ touches → rejection'}
+                        : setupType === 'breakout-long'                  ? {icon:'🚀', label:'ORB Breakout Long',    desc:'Opening range breakout with volume confirmation'}
+                        : setupType === 'breakout-short'                 ? {icon:'💥', label:'ORB Breakdown Short',  desc:'Opening range breakdown with volume confirmation'}
+                        : setupType === 'vsqueeze-long'                  ? {icon:'⚡', label:'Vol Squeeze Long',     desc:'Bollinger inside Keltner squeeze release — upward'}
+                        : setupType === 'vsqueeze-short'                 ? {icon:'⚡', label:'Vol Squeeze Short',    desc:'Bollinger inside Keltner squeeze release — downward'}
+                        : setupType.startsWith('vwap-reversion-long')   ? {icon:'📈', label:'VWAP Reversion Long',  desc:'Z-score below VWAP — mean reversion bounce'}
+                        : setupType.startsWith('vwap-reversion-short')  ? {icon:'📉', label:'VWAP Reversion Short', desc:'Z-score above VWAP — mean reversion pullback'}
+                        : setupType.startsWith('vwap-1sd-touch-long')   ? {icon:'📈', label:'VWAP +1SD Touch',      desc:'Bullish rejection at +1SD band'}
+                        : setupType.startsWith('vwap-1sd-touch-short')  ? {icon:'📉', label:'VWAP −1SD Touch',      desc:'Bearish rejection at −1SD band'}
+                        : setupType.startsWith('vwap-2sd-touch-long')   ? {icon:'🚀', label:'VWAP +2SD Touch',      desc:'Extreme extension — mean reversion long'}
+                        : setupType.startsWith('vwap-2sd-touch-short')  ? {icon:'💥', label:'VWAP −2SD Touch',      desc:'Extreme extension — mean reversion short'}
+                        : setupType.startsWith('vwap-cross-long')       ? {icon:'📈', label:'VWAP Cross Up',        desc:'Price reclaimed VWAP with momentum'}
+                        : setupType.startsWith('vwap-cross-short')      ? {icon:'📉', label:'VWAP Cross Down',      desc:'Price lost VWAP with momentum'}
+                        : {icon:'📊', label: setupType, desc:''};
 
-        // Colour-code SMC signal fields: BOS=✓ green, BOS=✗ red; highlight FVG zone
-        const coloredRest = rest
-            .replace(/BOS=✓/g,  '<span style="color:var(--green)">BOS=✓</span>')
-            .replace(/BOS=✗/g,  '<span style="color:var(--red)">BOS=✗</span>')
-            .replace(/CHOCH=✓/g,'<span style="color:var(--green)">CHOCH=✓</span>')
-            .replace(/CHOCH=✗/g,'<span style="color:var(--red)">CHOCH=✗</span>')
-            .replace(/(FVG=\[[^\]]+\])/g, '<span style="color:#e3a008">$1</span>')
-            .replace(/(sweep=[A-Z]+\([^)]+\))/g, '<span style="color:#9b6dff">$1</span>');
+        // Setup banner
+        reasonHtml += `<div style="padding:6px 10px;background:rgba(88,166,255,.07);border-left:3px solid var(--blue);border-radius:0 4px 4px 0;margin-bottom:6px">
+          <div style="font-size:13px;font-weight:600;color:var(--text)">${setupMeta.icon} ${setupMeta.label}</div>
+          ${setupMeta.desc ? `<div style="font-size:11px;color:var(--muted);margin-top:2px">${setupMeta.desc}</div>` : ''}
+        </div>`;
 
-        reasonHtml += `<div style="margin:6px 0 4px;padding:6px 8px;background:rgba(88,166,255,.08);border-radius:4px;color:var(--text)">${setupLabel}</div>`;
-        reasonHtml += `<div style="font-size:11px;color:var(--muted);margin-top:4px">${coloredRest}</div>`;
+        // Signal pills — parse each "key=value" into a coloured badge
+        if (signals.length) {
+            reasonHtml += `<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:6px">`;
+            for (const sig of signals) {
+                const val = sig.split('=').slice(1).join('=');
+                const key = sig.split('=')[0];
+                // Colour logic: ✓ → green, ✗ → red, negative/counter-trend → orange, else blue-grey
+                const isGood = val.includes('✓') || val.includes('UP') || val.includes('SUPPORT') || val.includes('CHoCH') || val.includes('Engulf') || val.includes('Hammer');
+                const isBad  = val.includes('✗') || val.includes('penalized') || val.includes('blocked') || val.includes('wide') || val.includes('BEARISH') || val.includes('BEARISH');
+                const color  = isGood ? 'rgba(63,185,80,.15)' : isBad ? 'rgba(255,165,0,.15)' : 'rgba(255,255,255,.06)';
+                const textC  = isGood ? 'var(--green)' : isBad ? '#e3a008' : 'var(--muted)';
+                reasonHtml += `<span style="padding:2px 8px;border-radius:10px;font-size:10px;background:${color};color:${textC};white-space:nowrap"><b style="color:var(--text-dim,#8b949e)">${key}</b> ${val}</span>`;
+            }
+            reasonHtml += `</div>`;
+        }
+
+        // Adjustments row (SMC live trades only — "adj: news -8 | RS/VIX -6 → 75")
         if (adjLine) {
             const adjText = adjLine.replace(/^adj:\s*/, '');
-            reasonHtml += `<div style="font-size:11px;color:var(--muted);margin-top:3px;border-top:1px solid var(--border);padding-top:3px">Adjustments: ${adjText}</div>`;
+            reasonHtml += `<div style="font-size:10px;color:var(--muted);padding:4px 6px;background:rgba(255,255,255,.04);border-radius:3px;margin-bottom:4px">⚙ Conf adjustments: ${adjText}</div>`;
         }
+
+        // Raw breakdown toggle (ℹ button)
+        const rawId = 'raw-bd-' + Date.now();
+        reasonHtml += `<div style="margin-top:2px">
+          <button onclick="document.getElementById('${rawId}').style.display=document.getElementById('${rawId}').style.display==='none'?'block':'none'"
+            style="background:none;border:1px solid var(--border);border-radius:3px;color:var(--muted);font-size:10px;padding:1px 7px;cursor:pointer">ℹ raw breakdown</button>
+          <pre id="${rawId}" style="display:none;margin-top:4px;padding:6px 8px;background:rgba(0,0,0,.3);border-radius:4px;font-size:10px;color:var(--muted);white-space:pre-wrap;word-break:break-all">${t.factor_breakdown.replace(/</g,'&lt;')}</pre>
+        </div>`;
     } else {
-        reasonHtml += `<div style="font-size:11px;color:var(--muted)">No detailed breakdown available for ${strat} strategy</div>`;
+        // Fallback: no breakdown available — show what we know from metadata
+        reasonHtml += `<div style="padding:6px 8px;background:rgba(255,255,255,.04);border-radius:4px;font-size:11px;color:var(--muted)">
+          No signal-level breakdown stored for this ${strat} trade.
+          Entry: $${t.entry?.toFixed(2)} | SL: $${t.sl?.toFixed(2)} | TP: $${t.tp?.toFixed(2)}
+        </div>`;
     }
-    if (t.ctx_label)     reasonHtml += `<div style="font-size:11px;margin-top:3px;color:#9b6dff">RS/VIX: ${t.ctx_label}</div>`;
-    if (t.news_label)    reasonHtml += `<div style="font-size:11px;margin-top:3px;color:#8b949e">News: ${t.news_label}</div>`;
-    if (t.quality_label) reasonHtml += `<div style="font-size:11px;margin-top:3px;color:#e36209">Quality: ${t.quality_label}</div>`;
+
+    // Context / news / quality rows
+    if (t.ctx_label)     reasonHtml += `<div style="font-size:11px;margin-top:4px;color:#9b6dff">📊 RS/VIX: ${t.ctx_label}</div>`;
+    if (t.news_label)    reasonHtml += `<div style="font-size:11px;margin-top:3px;color:#8b949e">📰 News: ${t.news_label}</div>`;
+    if (t.quality_label) reasonHtml += `<div style="font-size:11px;margin-top:3px;color:#e36209">⚠ Quality: ${t.quality_label}</div>`;
     reasonHtml += `<div style="font-size:10px;margin-top:6px;color:var(--muted);border-top:1px solid var(--border);padding-top:5px">⚠ Entry price includes 0.05% market-order slippage above signal bar close. Arrow marks the signal candle — entry line shows the actual fill price.</div>`;
     if (t.outcome === 'TIMEOUT') {
         const msg = t.pnl_pct > 0 ? '✅ TIMEOUT = hit time limit while profitable — exited with gain, not a loss.' : '⏱ TIMEOUT = hit time limit before reaching TP or SL.';
