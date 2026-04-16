@@ -86,12 +86,13 @@
       "minConfidence": 70,
       "maxConfidence": 84,
       "slAtrMult": 0.5,
-      "tpRrRatio": 1.0,
+      "tpRrRatio": 1.5,
+      "skipHours": [13, 14],
       "skip": false,
       "skipReason": null,
-      "note": "Apr 2026 keylevel confirmed best. Full LIVE_PARITY scalp sweep: keylevel SCALP mode $2093 > Bollinger Scalp $784 — COIN reacts more reliably to key S/R levels than Bollinger compressions.",
-      "scalp":    { "skip": false, "strategyType": "scalp", "minConfidence": 72 },
-      "intraday": { "skip": false, "strategyType": "keylevel", "minConfidence": 70, "maxConfidence": 84 },
+      "note": "Apr 2026: tpRrRatio raised 1.0→1.5 (12 keylevel setups quality-filtered at 1:1 R:R). skipHours=[13,14] added — both 30d losses fired in 1–3 PM drift window. Scalp minConf raised 72→82 to require stronger BB setups (sub-1:1 R:R was slipping through quality filter at lower conf).",
+      "scalp":    { "skip": false, "strategyType": "scalp", "minConfidence": 82 },
+      "intraday": { "skip": false, "strategyType": "keylevel", "minConfidence": 70, "maxConfidence": 84, "tpRrRatio": 1.5 },
       "swing":    { "skip": false }
     },
     {
