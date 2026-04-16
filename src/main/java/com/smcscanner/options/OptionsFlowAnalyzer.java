@@ -233,8 +233,13 @@ public class OptionsFlowAnalyzer {
 
         if (best == null) return OptionsRecommendation.NONE;
 
-        // Calculate P&L estimates
-        double premium = best.close();
+        // Use live ask price as the fill price for limit orders — this is what Alpaca
+        // will use as the limit_price. If the ask is unavailable (0), fall back to
+        // close * 1.04 (empirical 4% spread between last close and intraday ask).
+        // Using close alone caused nearly all orders to be NOT_FILLED because the
+        // limit sat below the ask all day.
+        double premium = (best.ask() > 0) ? best.ask()
+                : (best.close() > 0 ? best.close() * 1.04 : best.close());
         double delta   = best.delta();
         double gamma   = best.gamma();
         double theta   = best.theta();

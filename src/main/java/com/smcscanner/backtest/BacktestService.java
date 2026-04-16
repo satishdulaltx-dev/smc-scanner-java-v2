@@ -51,8 +51,13 @@ public class BacktestService {
     private static final double ATR_TRAIL_NORMAL = 0.75;
     private static final double ATR_TRAIL_REVERSAL = 0.30;
     private static final int REVERSAL_CLOSES = 2;
-    private static final double TRAIL_EXIT_SLIPPAGE_BPS = 5.0; // 0.05% adverse slippage on trail exits
-    private static final double ENTRY_SLIPPAGE_BPS      = 5.0; // 0.05% adverse slippage on entry fills (mirrors Alpaca market-order spread)
+    private static final double TRAIL_EXIT_SLIPPAGE_BPS = 5.0;  // 0.05% adverse slippage on trail exits
+    // Live orders are placed as marketable limits at the ask price.
+    // Typical ask premium above last close is 3–5% for liquid options.
+    // We model the underlying stock entry with a modest 5 BPS slippage (unchanged),
+    // since TP/SL are tracked on the underlying, not the option premium.
+    // Fill is always assumed in backtest (matches the ask-based limit that fills immediately).
+    private static final double ENTRY_SLIPPAGE_BPS      = 5.0;  // 0.05% on underlying entry price
     private static final double HYBRID_BE_R = 1.0;    // move SL to breakeven at 1.0R profit
     private static final double HYBRID_TRAIL_R = 1.5; // activate trailing stop at 1.5R profit
 
@@ -924,8 +929,8 @@ public class BacktestService {
 
                 tradePlacedToday = true;
 
-                // Apply entry slippage: live Alpaca market orders fill ~5 BPS worse than signal price.
-                // Long entries buy at ask (slightly above signal); short entries sell at bid (below).
+                // Apply entry slippage: live orders are marketable limits at the ask price.
+                // Model underlying entry with 5 BPS adverse slippage; TP/SL resolved on underlying.
                 double slippageFactor = ENTRY_SLIPPAGE_BPS / 10000.0;
                 double entry = "long".equals(setup.getDirection())
                         ? setup.getEntry() * (1 + slippageFactor)

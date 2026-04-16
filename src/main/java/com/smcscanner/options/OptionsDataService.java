@@ -167,6 +167,12 @@ public class OptionsDataService {
             double dayLow  = day != null ? day.path("low").asDouble(0) : 0;
             double vwap    = day != null ? day.path("vwap").asDouble(0) : 0;
 
+            // Live bid/ask from last_quote — used for marketable limit orders.
+            // Polygon snapshot includes last_quote.ask / last_quote.bid for intraday fills.
+            JsonNode lastQuote = node.get("last_quote");
+            double ask = lastQuote != null ? lastQuote.path("ask").asDouble(0) : 0;
+            double bid = lastQuote != null ? lastQuote.path("bid").asDouble(0) : 0;
+
             long oi = node.path("open_interest").asLong(0);
             double iv = node.path("implied_volatility").asDouble(0);
 
@@ -179,7 +185,7 @@ public class OptionsDataService {
             double underlyingPrice = node.path("underlying_asset").path("price").asDouble(0);
 
             return new ContractData(contractTicker, contractType, strike, expDate,
-                    sharesPerContract, volume, close, dayHigh, dayLow, vwap,
+                    sharesPerContract, volume, close, dayHigh, dayLow, vwap, ask, bid,
                     oi, iv, delta, gamma, theta, vega, underlyingPrice);
         } catch (Exception e) {
             log.debug("Failed to parse contract: {}", e.getMessage());
@@ -196,10 +202,12 @@ public class OptionsDataService {
             String expirationDate,
             int    sharesPerContract,
             long   volume,
-            double close,           // last traded price
+            double close,           // last traded price (previous session)
             double dayHigh,
             double dayLow,
             double vwap,
+            double ask,             // live ask from last_quote (0 if unavailable)
+            double bid,             // live bid from last_quote (0 if unavailable)
             long   openInterest,
             double iv,              // implied volatility (decimal)
             double delta,
