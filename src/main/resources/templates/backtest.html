@@ -1103,7 +1103,8 @@ async function openTradeChart(serializedTrade) {
         const setupType = parts[0] || '';
         const rest = parts.slice(1).join(' | ');
 
-        const setupLabel = setupType === 'smc-long'                       ? '📈 SMC Long — bullish liquidity sweep, displacement + FVG retest'
+        const setupLabel = setupType === 'cap_reversal-long'               ? '🪝 Capitulation Reversal — waterfall exhaustion + volume climax + reversal signal'
+                         : setupType === 'smc-long'                       ? '📈 SMC Long — bullish liquidity sweep, displacement + FVG retest'
                          : setupType === 'smc-short'                      ? '📉 SMC Short — bearish liquidity sweep, displacement + FVG retest'
                          : setupType.startsWith('vwap-1sd-touch-long')   ? '📈 VWAP +1SD touch — bullish rejection, price reclaimed band'
                          : setupType.startsWith('vwap-1sd-touch-short')  ? '📉 VWAP −1SD touch — bearish rejection, price broke band down'

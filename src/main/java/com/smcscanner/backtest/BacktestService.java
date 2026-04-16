@@ -14,6 +14,7 @@ import com.smcscanner.news.NewsSentiment;
 import com.smcscanner.news.NewsService;
 import com.smcscanner.options.OptionsFlowAnalyzer;
 import com.smcscanner.strategy.BreakoutStrategyDetector;
+import com.smcscanner.strategy.CapitulationReversalDetector;
 import com.smcscanner.strategy.GapDetector;
 import com.smcscanner.strategy.GammaPinDetector;
 import com.smcscanner.strategy.IndexDivergenceDetector;
@@ -83,8 +84,9 @@ public class BacktestService {
     private final PivotPointService        pivotService;
     private final PressureService          pressureService;
     private final OvernightMomentumService overnightService;
-    private final PowerEarningsGapDetector pegDetector;
-    private final MultiTimeframeAnalyzer   mtf;
+    private final PowerEarningsGapDetector        pegDetector;
+    private final MultiTimeframeAnalyzer          mtf;
+    private final CapitulationReversalDetector    capReversalDetector;
 
     public BacktestService(PolygonClient client, AtrCalculator atrCalc, SetupDetector setupDetector,
                            VwapStrategyDetector vwapDetector, BreakoutStrategyDetector breakoutDetector,
@@ -100,7 +102,8 @@ public class BacktestService {
                            MarketRegimeDetector regimeDetector, PivotPointService pivotService,
                            PressureService pressureService, OvernightMomentumService overnightService,
                            PowerEarningsGapDetector pegDetector,
-                           MultiTimeframeAnalyzer mtf) {
+                           MultiTimeframeAnalyzer mtf,
+                           CapitulationReversalDetector capReversalDetector) {
         this.client = client; this.atrCalc = atrCalc; this.setupDetector = setupDetector;
         this.vwapDetector = vwapDetector; this.breakoutDetector = breakoutDetector; this.scalpDetector = scalpDetector;
         this.gapDetector = gapDetector;
@@ -113,6 +116,7 @@ public class BacktestService {
         this.regimeDetector = regimeDetector; this.pivotService = pivotService;
         this.pressureService = pressureService; this.overnightService = overnightService;
         this.pegDetector = pegDetector; this.mtf = mtf;
+        this.capReversalDetector = capReversalDetector;
     }
 
     public BacktestResult run(String ticker, int lookbackDays) {
@@ -496,11 +500,20 @@ public class BacktestService {
                     bSetups = indexDivDetector.detect(window, spySlice, ticker, dailyAtr);
                 } else if ("gammapin".equals(effectiveStrat)) {
                     bSetups = gammaPinDetector.detect(window, ticker, dailyAtr);
+                } else if ("cap_reversal".equals(effectiveStrat)) {
+                    bSetups = capReversalDetector.detect(window, ticker, dailyAtr);
                 } else {
                     SetupDetector.DetectResult dr = setupDetector.detectSetups(
                             window, htfBias, ticker, false, dailyAtr, true); // backtestMode=true, real dailyAtr for TP/SL
                     bSetups = dr.setups();
                 }
+
+                // ── Capitulation reversal overlay — mirrors live ScannerService ──
+                if (bSetups.isEmpty() && !ticker.startsWith("X:")
+                        && btRegime != MarketRegimeDetector.Regime.VOLATILE) {
+                    bSetups = capReversalDetector.detect(window, ticker, dailyAtr);
+                }
+
                 if (btRegime == MarketRegimeDetector.Regime.LOW_LIQUIDITY) {
                     log.debug("{} REGIME_LOW_LIQUIDITY {} — skipping bar window", ticker, date);
                     continue;

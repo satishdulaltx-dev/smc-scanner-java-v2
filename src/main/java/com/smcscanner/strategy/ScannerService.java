@@ -65,7 +65,8 @@ public class ScannerService {
     private final PivotPointService        pivotService;
     private final PressureService          pressureService;
     private final OvernightMomentumService overnightService;
-    private final PowerEarningsGapDetector pegDetector;
+    private final PowerEarningsGapDetector        pegDetector;
+    private final CapitulationReversalDetector    capReversal;
 
     public ScannerService(ScannerConfig config, PolygonClient client, SetupDetector setupDetector,
                           CryptoStrategyService crypto, MultiTimeframeAnalyzer mtf,
@@ -84,7 +85,8 @@ public class ScannerService {
                           TechnicalIndicators techIndicators, GapDetector gapDetector,
                           MarketRegimeDetector regimeDetector, PivotPointService pivotService,
                           PressureService pressureService, OvernightMomentumService overnightService,
-                          PowerEarningsGapDetector pegDetector) {
+                          PowerEarningsGapDetector pegDetector,
+                          CapitulationReversalDetector capReversal) {
         this.config=config; this.client=client; this.setupDetector=setupDetector; this.crypto=crypto;
         this.mtf=mtf; this.discord=discord; this.dedup=dedup; this.tracker=tracker; this.liveLog=liveLog; this.state=state;
         this.atrCalc=atrCalc; this.vwap=vwap; this.breakout=breakout; this.scalpMomentum=scalpMomentum; this.keyLevel=keyLevel;
@@ -94,7 +96,7 @@ public class ScannerService {
         this.rangeDetector=rangeDetector; this.alpaca=alpaca; this.techIndicators=techIndicators;
         this.gapDetector=gapDetector; this.regimeDetector=regimeDetector; this.pivotService=pivotService;
         this.pressureService=pressureService; this.overnightService=overnightService;
-        this.pegDetector=pegDetector;
+        this.pegDetector=pegDetector; this.capReversal=capReversal;
     }
 
     public boolean isCrypto(String t) { return t.startsWith("X:"); }
@@ -319,9 +321,27 @@ public class ScannerService {
                 } else if ("gammapin".equals(strategyType)) {
                     setups = gammaPin.detect(bars, ticker, dailyAtr);
                     phaseMsg = setups.isEmpty() ? "Watching for gamma pin convergence..." : "";
+                } else if ("cap_reversal".equals(strategyType)) {
+                    setups = capReversal.detect(bars, ticker, dailyAtr);
+                    phaseMsg = setups.isEmpty() ? "Watching for capitulation waterfall + reversal..." : "";
                 } else {
                     SetupDetector.DetectResult r=setupDetector.detectSetups(bars,htfBias,ticker,false,dailyAtr);
                     setups=r.setups(); phaseMsg=r.state().phaseMsg();
+                }
+            }
+
+            // ── Capitulation reversal overlay — runs on ALL equity tickers ────
+            // When the primary strategy finds nothing AND price has dropped ≥2.5%
+            // in recent bars, check for a capitulation reversal bounce.
+            // This catches the COIN/SOFI waterfall pattern regardless of configured strategy.
+            // Blocked in VOLATILE regime only (too much false-positive noise).
+            if (setups.isEmpty() && !isC && regime != MarketRegimeDetector.Regime.VOLATILE) {
+                List<TradeSetup> capSetups = capReversal.detect(bars, ticker, dailyAtr);
+                if (!capSetups.isEmpty()) {
+                    log.info("{} CAP_REVERSAL_OVERLAY: waterfall + reversal detected — primary strategy={}", ticker,
+                            profile.hasTimeRouting() ? profile.resolveStrategyForTime(lastBarTs) : profile.getStrategyType());
+                    setups = capSetups;
+                    phaseMsg = "";
                 }
             }
 
