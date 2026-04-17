@@ -127,20 +127,21 @@ public class KeyLevelStrategyDetector {
 
             if (isResistance) {
                 // ── SHORT: price touched resistance and is rejecting downward ──
-                // Vector check: price must be APPROACHING from below (not already above level).
-                // We check that at least 3 of the last 5 bars before this one were BELOW
-                // the level — confirming this is a fresh test from below, not a breakdown
-                // retest from above (which would be a LONG setup, not a SHORT).
+                // Vector check: the MAJORITY of today's session must have traded BELOW the level.
+                // A genuine resistance test has price mostly below the level then spiking up to it.
+                // A breakdown-from-above (e.g. GLD 03/24: opened $410, level $403.78, price dropped
+                // through it — most session bars were ABOVE the level) fails this check.
+                // Symmetric with the LONG approachingFromAbove check (35% threshold).
                 boolean approachingFromBelow = false;
                 if (sessionBars.size() >= 4) {
-                    int checkStart = Math.max(0, sessionBars.size() - 5);
+                    int totalBefore = sessionBars.size() - 1;
                     int belowCount = 0;
-                    for (int bi = checkStart; bi < sessionBars.size() - 1; bi++) {
+                    for (int bi = 0; bi < totalBefore; bi++) {
                         if (sessionBars.get(bi).getClose() < levelPrice) belowCount++;
                     }
-                    approachingFromBelow = belowCount >= 2;
+                    approachingFromBelow = belowCount >= totalBefore * 0.35;
                 }
-                if (!approachingFromBelow) continue; // price arriving from wrong side — skip
+                if (!approachingFromBelow) continue; // price arrived from wrong side — skip
 
                 boolean touched      = curHigh >= levelPrice * (1 - TOUCH_TOLERANCE);
                 boolean rejectedDown = curClose <= levelPrice * (1 + TOUCH_TOLERANCE * 0.3);
