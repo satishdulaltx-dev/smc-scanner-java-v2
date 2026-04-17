@@ -134,9 +134,9 @@
       "maxConfidence": 84,
       "slAtrMult": 0.8,
       "tpRrRatio": 1.5,
-      "skipHours": [9],
+      "skipHours": [9, 14],
       "skip": false,
-      "note": "Apr 2026: added GLD (SPDR Gold ETF). Gold is macro-driven (DXY, Fed, geopolitical risk) — not manipulable by individuals. VWAP reversion is the primary edge: gold is a VWAP-magnet on non-announcement days, trends hard when macro catalysts hit. slAtrMult=0.8 (wider than avg — gold bars are noisy from 24h futures carry). skipHours=[9] blocks first 30 min which absorbs overnight macro reactions. BTC correlation: none — gold is anti-BTC (risk-off vs risk-on). Currently in confirmed bull run (all-time highs Apr 2026) so LONG VWAP reversion setups will have highest edge.",
+      "note": "Apr 2026: added GLD (SPDR Gold ETF). Gold is macro-driven (DXY, Fed, geopolitical risk) — not manipulable by individuals. VWAP reversion is the primary edge: gold is a VWAP-magnet on non-announcement days, trends hard when macro catalysts hit. slAtrMult=0.8 (wider than avg — gold bars are noisy from 24h futures carry). skipHours=[9] blocks first 30 min. skipHours=[14] blocks 2-3pm window where VWAP and keylevel signals consistently time out on GLD (90d backtest: $182 losses vs $48 wins in hour 14). BTC correlation: none — gold is anti-BTC (risk-off vs risk-on). Currently in confirmed bull run (all-time highs Apr 2026) so LONG VWAP reversion setups will have highest edge.",
       "scalp":    { "skip": false, "strategyType": "scalp",    "minConfidence": 72 },
       "intraday": { "skip": false, "strategyType": "vwap",     "minConfidence": 70, "maxConfidence": 84 },
       "swing":    { "skip": false, "strategyType": "keylevel", "minConfidence": 68, "tpRrRatio": 2.0 }
