@@ -253,7 +253,13 @@ public class KeyLevelStrategyDetector {
                 // Counter-trend flag: buying into a downtrend reduces conviction
                 boolean counterTrend = "down".equals(htfTrend);
 
-                if (touched && bouncedUp && bullishBar && volConfirmed) {
+                // Entry must be close to the level — blocks stale entries where the bounce
+                // happened hours ago and price has since run far above the level.
+                // (e.g. GLD 02/13: opened $458, bounced from $460 support at 9:30, fired at
+                // $462.36 at 11:25 — $2.36 above the level while atr=$0.64 → stale chase)
+                boolean notTooFarAboveLevel = curClose <= levelPrice + atr * 1.5;
+
+                if (touched && bouncedUp && notTooFarAboveLevel && bullishBar && volConfirmed) {
                     double entry = r4(curClose);
                     double sl    = r4(levelPrice - atr * slMult);
                     // Safety guard: sl must be below entry for a long
