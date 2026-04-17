@@ -231,7 +231,7 @@ public class KeyLevelStrategyDetector {
                     for (int bi = 0; bi < totalBefore; bi++) {
                         if (sessionBars.get(bi).getClose() > levelPrice) aboveCount++;
                     }
-                    approachingFromAbove = aboveCount >= totalBefore * 0.4;
+                    approachingFromAbove = aboveCount >= totalBefore * 0.35;
                 }
                 if (!approachingFromAbove) continue; // price arrived from wrong side — skip
 
