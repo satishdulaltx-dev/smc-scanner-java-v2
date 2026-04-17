@@ -218,21 +218,22 @@ public class KeyLevelStrategyDetector {
                 // At least 2 of the recent bars before this one should have been ABOVE
                 // the level — confirming this is a fresh test from above, not a breakout
                 // retest from below (which would be a SHORT setup).
+                // Vector check: the MAJORITY of today's session must have traded ABOVE the level.
+                // A genuine pullback-to-support has price mostly above the level then dipping to it.
+                // A rally-from-below (like GLD 02/13: opened $458, level $460, only ~18% of bars
+                // above level before the 11:25 entry) fails this check — only a small fraction of
+                // bars were above because price spent the morning climbing UP through the level.
+                // This is ATR-independent and not fooled by overnight micro-gaps.
                 boolean approachingFromAbove = false;
                 if (sessionBars.size() >= 4) {
-                    int checkStart = Math.max(0, sessionBars.size() - 5);
+                    int totalBefore = sessionBars.size() - 1;
                     int aboveCount = 0;
-                    for (int bi = checkStart; bi < sessionBars.size() - 1; bi++) {
+                    for (int bi = 0; bi < totalBefore; bi++) {
                         if (sessionBars.get(bi).getClose() > levelPrice) aboveCount++;
                     }
-                    // Session open must be within TOUCH_TOLERANCE of the level (or above it).
-                    // This blocks rally-chase entries where the session opened well below the level
-                    // (e.g. GLD 02/13: opened $458 = 0.87% below $462) while still allowing valid
-                    // overnight micro-gap scenarios where price opens just inside the level zone.
-                    boolean sessionOpenNearLevel = sessionBars.get(0).getClose() > levelPrice * (1 - TOUCH_TOLERANCE);
-                    approachingFromAbove = aboveCount >= 2 && sessionOpenNearLevel;
+                    approachingFromAbove = aboveCount >= totalBefore * 0.4;
                 }
-                if (!approachingFromAbove) continue; // price arriving from wrong side — skip
+                if (!approachingFromAbove) continue; // price arrived from wrong side — skip
 
                 boolean touched      = curLow <= levelPrice * (1 + TOUCH_TOLERANCE);
                 boolean bouncedUp    = curClose >= levelPrice * (1 - TOUCH_TOLERANCE * 0.3);
@@ -253,16 +254,7 @@ public class KeyLevelStrategyDetector {
                 // Counter-trend flag: buying into a downtrend reduces conviction
                 boolean counterTrend = "down".equals(htfTrend);
 
-                // Entry must be close to the level — blocks stale entries where the bounce
-                // happened hours ago and price has since run far above the level.
-                // (e.g. GLD 02/13: opened $458, bounced from $460 support at 9:30, fired at
-                // $462.36 at 11:25 — $2.36 above the level while atr=$0.64 → stale chase)
-                // 02/13 GLD: entry $462.36, level $460, atr $0.64 → 3.69× ATR above level → blocked
-                // 03/27 GLD valid win: entry $409.68, level $405.54, atr $2.40 → 1.73× ATR above → allowed
-                // Multiplier 2.0 sits cleanly between both cases.
-                boolean notTooFarAboveLevel = curClose <= levelPrice + atr * 2.0;
-
-                if (touched && bouncedUp && notTooFarAboveLevel && bullishBar && volConfirmed) {
+                if (touched && bouncedUp && bullishBar && volConfirmed) {
                     double entry = r4(curClose);
                     double sl    = r4(levelPrice - atr * slMult);
                     // Safety guard: sl must be below entry for a long
