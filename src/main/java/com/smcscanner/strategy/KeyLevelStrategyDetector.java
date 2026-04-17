@@ -225,10 +225,12 @@ public class KeyLevelStrategyDetector {
                     for (int bi = checkStart; bi < sessionBars.size() - 1; bi++) {
                         if (sessionBars.get(bi).getClose() > levelPrice) aboveCount++;
                     }
-                    // Session must have OPENED above the level — proves this is a pullback to support,
-                    // not a rally passing upward through it (e.g. GLD 02/13: opened $458, rallied to $462).
-                    boolean sessionOpenAbove = sessionBars.get(0).getClose() > levelPrice;
-                    approachingFromAbove = aboveCount >= 2 && sessionOpenAbove;
+                    // Session open must be within TOUCH_TOLERANCE of the level (or above it).
+                    // This blocks rally-chase entries where the session opened well below the level
+                    // (e.g. GLD 02/13: opened $458 = 0.87% below $462) while still allowing valid
+                    // overnight micro-gap scenarios where price opens just inside the level zone.
+                    boolean sessionOpenNearLevel = sessionBars.get(0).getClose() > levelPrice * (1 - TOUCH_TOLERANCE);
+                    approachingFromAbove = aboveCount >= 2 && sessionOpenNearLevel;
                 }
                 if (!approachingFromAbove) continue; // price arriving from wrong side — skip
 
