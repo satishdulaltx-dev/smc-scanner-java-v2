@@ -222,16 +222,13 @@ public class KeyLevelStrategyDetector {
                 if (sessionBars.size() >= 4) {
                     int checkStart = Math.max(0, sessionBars.size() - 5);
                     int aboveCount = 0;
-                    boolean hadPullback = false; // at least one bar was above level AND above curClose (real pullback)
                     for (int bi = checkStart; bi < sessionBars.size() - 1; bi++) {
-                        double biClose = sessionBars.get(bi).getClose();
-                        if (biClose > levelPrice) {
-                            aboveCount++;
-                            // Must have been meaningfully higher than current price — not just a rally passing through
-                            if (biClose > curClose + atr * 0.3) hadPullback = true;
-                        }
+                        if (sessionBars.get(bi).getClose() > levelPrice) aboveCount++;
                     }
-                    approachingFromAbove = aboveCount >= 2 && hadPullback;
+                    // Session must have OPENED above the level — proves this is a pullback to support,
+                    // not a rally passing upward through it (e.g. GLD 02/13: opened $458, rallied to $462).
+                    boolean sessionOpenAbove = sessionBars.get(0).getClose() > levelPrice;
+                    approachingFromAbove = aboveCount >= 2 && sessionOpenAbove;
                 }
                 if (!approachingFromAbove) continue; // price arriving from wrong side — skip
 
