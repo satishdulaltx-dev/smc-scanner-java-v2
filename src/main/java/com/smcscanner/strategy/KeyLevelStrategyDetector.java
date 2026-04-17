@@ -257,7 +257,10 @@ public class KeyLevelStrategyDetector {
                 // happened hours ago and price has since run far above the level.
                 // (e.g. GLD 02/13: opened $458, bounced from $460 support at 9:30, fired at
                 // $462.36 at 11:25 — $2.36 above the level while atr=$0.64 → stale chase)
-                boolean notTooFarAboveLevel = curClose <= levelPrice + atr * 1.5;
+                // 02/13 GLD: entry $462.36, level $460, atr $0.64 → 3.69× ATR above level → blocked
+                // 03/27 GLD valid win: entry $409.68, level $405.54, atr $2.40 → 1.73× ATR above → allowed
+                // Multiplier 2.0 sits cleanly between both cases.
+                boolean notTooFarAboveLevel = curClose <= levelPrice + atr * 2.0;
 
                 if (touched && bouncedUp && notTooFarAboveLevel && bullishBar && volConfirmed) {
                     double entry = r4(curClose);
