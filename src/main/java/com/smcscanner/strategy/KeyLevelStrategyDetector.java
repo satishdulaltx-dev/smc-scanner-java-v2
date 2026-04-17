@@ -222,10 +222,16 @@ public class KeyLevelStrategyDetector {
                 if (sessionBars.size() >= 4) {
                     int checkStart = Math.max(0, sessionBars.size() - 5);
                     int aboveCount = 0;
+                    boolean hadPullback = false; // at least one bar was above level AND above curClose (real pullback)
                     for (int bi = checkStart; bi < sessionBars.size() - 1; bi++) {
-                        if (sessionBars.get(bi).getClose() > levelPrice) aboveCount++;
+                        double biClose = sessionBars.get(bi).getClose();
+                        if (biClose > levelPrice) {
+                            aboveCount++;
+                            // Must have been meaningfully higher than current price — not just a rally passing through
+                            if (biClose > curClose + atr * 0.3) hadPullback = true;
+                        }
                     }
-                    approachingFromAbove = aboveCount >= 2;
+                    approachingFromAbove = aboveCount >= 2 && hadPullback;
                 }
                 if (!approachingFromAbove) continue; // price arriving from wrong side — skip
 
