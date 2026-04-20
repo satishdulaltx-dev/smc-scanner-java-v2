@@ -83,9 +83,18 @@ public class SetupDetector {
             java.time.LocalDate fvgDate  = java.time.Instant.ofEpochMilli(fvgBarTs).atZone(etZone).toLocalDate();
             java.time.LocalDate currDate = java.time.Instant.ofEpochMilli(currBarTs).atZone(etZone).toLocalDate();
             java.time.LocalTime currTime = java.time.Instant.ofEpochMilli(currBarTs).atZone(etZone).toLocalTime();
+            // Block cross-day FVGs before 10:00 — prior-session zone unreliable at open
             if (!fvgDate.equals(currDate) && currTime.isBefore(java.time.LocalTime.of(10, 0))) {
                 log.debug("{} filtered: CROSS_DAY_FVG fvgDate={} currDate={} currTime={} — stale prior-session zone at open",
                         ticker, fvgDate, currDate, currTime);
+                state.setPhase(SetupPhase.IDLE);
+                return new DetectResult(List.of(), state);
+            }
+            // Block ALL SMC entries in the first 15 min — opening bars are directionally unreliable
+            // (gap fills, stop hunts, news reactions). Same-day FVG formed on the 09:30 bar itself
+            // also fails this check. User confirmed: "first 5-15 mins volatile, doesn't predict direction."
+            if (currTime.isBefore(java.time.LocalTime.of(9, 45))) {
+                log.debug("{} filtered: OPEN_VOLATILITY — SMC blocked before 09:45 (currTime={})", ticker, currTime);
                 state.setPhase(SetupPhase.IDLE);
                 return new DetectResult(List.of(), state);
             }
