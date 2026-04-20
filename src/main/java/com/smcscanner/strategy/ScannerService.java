@@ -255,9 +255,27 @@ public class ScannerService {
             // ── Intraday alert (5m bars → original Discord channel) ─────────
             long lastBarTs = bars.isEmpty() ? System.currentTimeMillis()
                     : bars.get(bars.size() - 1).getTimestamp();
+
+            // ── Universal intraday time gate ──────────────────────────────────
+            // Pre-compute so capReversal/fallback overlays share the same gate.
+            java.time.LocalTime etNowIntraday = isC ? java.time.LocalTime.NOON
+                    : java.time.ZonedDateTime.now(java.time.ZoneId.of("America/New_York")).toLocalTime();
+            boolean intradayTooEarly = !isC && etNowIntraday.isBefore(java.time.LocalTime.of(9, 45));
+            boolean intradayTooLate  = !isC && !etNowIntraday.isBefore(java.time.LocalTime.of(15, 30));
+
             List<TradeSetup> setups; String phaseMsg;
             if (isC) { setups=crypto.detectCryptoSetup(bars,ticker); phaseMsg=setups.isEmpty()?"Waiting for breakout + volume spike...":""; }
-            else {
+            else if (intradayTooEarly) {
+                // First 15 min: opening bars are volatile, direction unreliable — wait for 09:45
+                setups = List.of();
+                phaseMsg = "⏳ Open volatility — no entries before 09:45 ET";
+                setTs(ticker, "idle", null, 0, phaseMsg);
+            } else if (intradayTooLate) {
+                // Last 30 min: approaching close, spreads widen, new intraday entries unreliable
+                setups = List.of();
+                phaseMsg = "🔒 Late session — no new entries after 15:30 ET";
+                setTs(ticker, "idle", null, 0, phaseMsg);
+            } else {
                 // ── Multi-strategy dispatch ─────────────────────────────────────
                 // Run ALL strategy types from active sub-profiles simultaneously.
                 // Previously a single strategyType was time-routed (scalp OR keylevel),
@@ -379,7 +397,7 @@ public class ScannerService {
             // in recent bars, check for a capitulation reversal bounce.
             // This catches the COIN/SOFI waterfall pattern regardless of configured strategy.
             // Blocked in VOLATILE regime only (too much false-positive noise).
-            if (setups.isEmpty() && !isC && regime != MarketRegimeDetector.Regime.VOLATILE) {
+            if (setups.isEmpty() && !isC && !intradayTooEarly && !intradayTooLate && regime != MarketRegimeDetector.Regime.VOLATILE) {
                 List<TradeSetup> capSetups = capReversal.detect(bars, ticker, dailyAtr);
                 if (!capSetups.isEmpty()) {
                     log.info("{} CAP_REVERSAL_OVERLAY: waterfall + reversal detected — primary strategy={}", ticker,
@@ -393,7 +411,7 @@ public class ScannerService {
             // e.g. SMC ticker in a RANGING day → try keylevel instead.
             // Only the 3 generic regimes have clear fallbacks; VOLATILE/LOW_LIQUIDITY
             // don't (LOW_LIQUIDITY is already gated above, VOLATILE trusts the profile).
-            if (setups.isEmpty() && !isC) {
+            if (setups.isEmpty() && !isC && !intradayTooEarly && !intradayTooLate) {
                 String strategyType = profile.hasTimeRouting()
                         ? profile.resolveStrategyForTime(lastBarTs)
                         : profile.getStrategyType();
@@ -443,6 +461,39 @@ public class ScannerService {
                     setTs(ticker, "idle", null, 0, "⊘ Gap-fill wait — LONG blocked");
                     removeSetup(ticker);
                     return;
+                }
+
+                // ── SPY intraday directional gate ─────────────────────────────
+                // When SPY moves >1.5% intraday, the market has strong directional
+                // conviction. Counter-trend setups fail at >2× normal rate.
+                // Hard-veto: skip the setup entirely (swing/overnight still runs).
+                if (!isC && !"SPY".equals(ticker) && !"QQQ".equals(ticker)) {
+                    List<OHLCV> spyGateBars = List.of();
+                    try {
+                        List<OHLCV> sp = client.getBars("SPY", "5m", 80);
+                        if (sp != null) spyGateBars = pressureService.getSessionBars(sp);
+                    } catch (Exception e) { log.debug("{} SPY gate fetch: {}", ticker, e.getMessage()); }
+                    if (spyGateBars.size() >= 3) {
+                        double spyOpen = spyGateBars.get(0).getOpen();
+                        double spyCur  = spyGateBars.get(spyGateBars.size() - 1).getClose();
+                        double spyMove = spyOpen > 0 ? (spyCur - spyOpen) / spyOpen : 0;
+                        if (spyMove > 0.015 && "short".equals(s.getDirection())) {
+                            log.info("{} SPY_BIAS_BLOCK: SPY +{:.1f}%% intraday — SHORT vetoed (counter-trend)",
+                                    ticker, spyMove * 100);
+                            setTs(ticker, "idle", null, 0,
+                                    String.format("↑ SPY +%.1f%% intraday — no shorts today", spyMove * 100));
+                            removeSetup(ticker);
+                            return;
+                        }
+                        if (spyMove < -0.015 && "long".equals(s.getDirection())) {
+                            log.info("{} SPY_BIAS_BLOCK: SPY {:.1f}%% intraday — LONG vetoed (counter-trend)",
+                                    ticker, spyMove * 100);
+                            setTs(ticker, "idle", null, 0,
+                                    String.format("↓ SPY %.1f%% intraday — no longs today", spyMove * 100));
+                            removeSetup(ticker);
+                            return;
+                        }
+                    }
                 }
 
                 // ── Volume pressure trap detection ────────────────────────────
