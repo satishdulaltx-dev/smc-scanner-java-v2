@@ -43,6 +43,7 @@ public class ScalpMomentumDetector {
     private static final double LEVEL_TOUCH_ATR = 0.45;
     // Minimum volume multiplier on the rejection bar
     private static final double MIN_VOL_RATIO   = 1.4;
+    // Reject obvious chase entries after two same-direction expansion bars
 
     private final PolygonClient           polygon;
     private final VolumeProfileCalculator vpCalc;
@@ -141,12 +142,14 @@ public class ScalpMomentumDetector {
                 && lastGreen && lastBodyPct >= 0.40 && closeNearHigh
                 && volRatio >= MIN_VOL_RATIO
                 && bullStructure
+                && !isLateExpansionChase(sessionBars, n, atr, true)
                 && !spyBear && rsLead > -0.002;
 
         boolean setupShort = shortLevel != null
                 && lastRed && lastBodyPct >= 0.40 && closeNearLow
                 && volRatio >= MIN_VOL_RATIO
                 && bearStructure
+                && !isLateExpansionChase(sessionBars, n, atr, false)
                 && !spyBull && rsLead < 0.002;
 
         if (!setupLong && !setupShort) return result;
@@ -174,11 +177,13 @@ public class ScalpMomentumDetector {
             stop = round4(lastLo - atr * 0.15);
             double risk = Math.abs(entry - stop);
             if (risk <= 0 || risk > atr * 1.5) return result;
+            if (isLateExpansionChase(sessionBars, n, atr, true) && (tpBand - entry) < risk * 0.8) return result;
             tp = round4(Math.max(tpBand, entry + risk * 1.5));
         } else {
             stop = round4(lastHi + atr * 0.15);
             double risk = Math.abs(entry - stop);
             if (risk <= 0 || risk > atr * 1.5) return result;
+            if (isLateExpansionChase(sessionBars, n, atr, false) && (entry - tpBand) < risk * 0.8) return result;
             tp = round4(Math.min(tpBand, entry - risk * 1.5));
         }
 
@@ -374,6 +379,33 @@ public class ScalpMomentumDetector {
         for (int i = start + 1; i <= end; i++)
             ema = bars.get(i).getClose() * k + ema * (1 - k);
         return ema;
+    }
+
+    private boolean isLateExpansionChase(List<OHLCV> bars, int n, double atr, boolean bullish) {
+        if (n < 4) return false;
+        OHLCV last = bars.get(n - 1);
+        OHLCV prev = bars.get(n - 2);
+        if (!isExpansionBar(last, atr, bullish) || !isExpansionBar(prev, atr, bullish)) return false;
+
+        OHLCV anchor = bars.get(n - 4);
+        if (bullish) {
+            double extension = last.getClose() - Math.min(anchor.getLow(), prev.getLow());
+            return extension > atr * 1.6;
+        }
+        double extension = Math.max(anchor.getHigh(), prev.getHigh()) - last.getClose();
+        return extension > atr * 1.6;
+    }
+
+    private boolean isExpansionBar(OHLCV bar, double atr, boolean bullish) {
+        double range = Math.max(0.0001, bar.getHigh() - bar.getLow());
+        if (range < atr * 0.85) return false;
+        if (bodyPct(bar) < 0.55) return false;
+        if (bullish) {
+            return bar.getClose() > bar.getOpen()
+                    && (bar.getHigh() - bar.getClose()) <= range * 0.30;
+        }
+        return bar.getClose() < bar.getOpen()
+                && (bar.getClose() - bar.getLow()) <= range * 0.30;
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
