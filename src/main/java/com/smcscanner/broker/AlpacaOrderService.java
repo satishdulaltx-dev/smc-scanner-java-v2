@@ -1020,6 +1020,28 @@ public class AlpacaOrderService {
         return recovered;
     }
 
+    /**
+     * Restore a tracked position with exact SL/TP from the trade log.
+     * Called on startup by DashboardController after cross-referencing liveLog.
+     * Returns true if the position was newly added, false if already tracked.
+     */
+    public boolean recoverTrackedPosition(String occSymbol, String underlying,
+                                          String direction, double entry,
+                                          double sl, double tp) {
+        if (trackedPositions.containsKey(underlying)) return false; // already tracked
+        if (entry <= 0 || sl <= 0 || tp <= 0) return false;
+        TrackedPosition recovered = new TrackedPosition(
+                underlying, direction, entry, sl, tp,
+                null,
+                encodeHybridState(sl, tp, false, false, null),
+                entry, 0, occSymbol, System.currentTimeMillis());
+        putTrackedPosition(underlying, recovered);
+        log.info("STARTUP_RECOVER {}: restored from trade log entry={} sl={} tp={} contract={}",
+                underlying, String.format("%.2f", entry),
+                String.format("%.2f", sl), String.format("%.2f", tp), occSymbol);
+        return true;
+    }
+
     private double computeAtrFromBars(List<OHLCV> bars, int period) {
         int p = Math.min(period, bars.size() - 1);
         if (p < 1) return 0.0;
@@ -1546,7 +1568,7 @@ public class AlpacaOrderService {
         return new PositionCheck("", null);
     }
 
-    private String underlyingFromOcc(String symbol) {
+    public String underlyingFromOcc(String symbol) {
         if (symbol == null || symbol.isBlank()) return "";
         String normalized = symbol.startsWith("O:") ? symbol.substring(2) : symbol;
         int idx = 0;

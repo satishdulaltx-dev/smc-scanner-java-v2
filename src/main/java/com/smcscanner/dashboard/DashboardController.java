@@ -27,6 +27,8 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import com.smcscanner.alert.DiscordAlertService;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.servlet.view.RedirectView;
@@ -83,6 +85,44 @@ public class DashboardController {
         this.reportCache=reportCache; this.backtestService=backtestService; this.adaptive=adaptive;
         this.analysisService=analysisService; this.liveLog=liveLog; this.polygon=polygon;
         this.optimizer=optimizer; this.researchService=researchService; this.alpaca=alpaca;
+    }
+
+    /**
+     * On startup: recover any open options positions from the live trade log into
+     * the AlpacaOrderService tracker so SL/TP are enforced after a Railway redeploy.
+     * Railway uses an ephemeral FS — the tracked-positions.json is wiped on restart.
+     */
+    @EventListener(ApplicationReadyEvent.class)
+    public void recoverOpenPositionsOnStartup() {
+        if (!alpaca.isEnabled()) return;
+        try {
+            List<Map<String, Object>> positions = alpaca.getPositions();
+            int recovered = 0;
+            for (Map<String, Object> pos : positions) {
+                String assetClass = String.valueOf(pos.getOrDefault("asset_class", ""));
+                if (!"us_option".equals(assetClass)) continue;
+
+                String occSymbol   = String.valueOf(pos.getOrDefault("symbol", ""));
+                String underlying  = alpaca.underlyingFromOcc(occSymbol);
+                Map<String, Object> trade = liveLog.findOpenTradeForPosition(occSymbol, underlying);
+                if (trade == null) continue;
+
+                double entry = toDouble(trade.get("entry"));
+                double sl    = toDouble(trade.get("stopLoss"));
+                double tp    = toDouble(trade.get("takeProfit"));
+                String dir   = String.valueOf(trade.getOrDefault("direction", "long"));
+                if (alpaca.recoverTrackedPosition(occSymbol, underlying, dir, entry, sl, tp)) recovered++;
+            }
+            if (recovered > 0)
+                log.info("STARTUP_RECOVER: restored {} option position(s) into live tracker", recovered);
+        } catch (Exception e) {
+            log.warn("STARTUP_RECOVER failed: {}", e.getMessage());
+        }
+    }
+
+    private static double toDouble(Object v) {
+        if (v == null) return 0.0;
+        try { return Double.parseDouble(v.toString()); } catch (Exception e) { return 0.0; }
     }
 
     @GetMapping("/")
