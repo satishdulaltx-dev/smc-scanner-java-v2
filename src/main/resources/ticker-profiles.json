@@ -105,15 +105,15 @@
     {
       "ticker": "CRWD",
       "character": "MOMENTUM",
-      "strategyType": "vwap",
-      "minConfidence": 78,
+      "strategyType": "smc",
+      "minConfidence": 70,
       "maxConfidence": 84,
-      "slAtrMult": 0.4,
-      "tpRrRatio": 1.5,
-      "note": "Apr 2026 optimize loop (90d): VWAP mc=78 sl=0.4 tp=1.5 → 6T 83.3%WR $1655.",
+      "slAtrMult": 1.0,
+      "tpRrRatio": 2.0,
+      "note": "Apr 2026 30d optimizer: smc minC=70 SL=1.0 TP=2.0 → 10T 70%WR $2399. Reverted vwap→smc (vwap generated 0 trades in 30d).",
       "scalp":    { "skip": false, "strategyType": "scalp", "minConfidence": 75 },
-      "intraday": { "skip": false, "strategyType": "vwap", "minConfidence": 78 },
-      "swing":    { "skip": false }
+      "intraday": { "skip": false, "strategyType": "smc",   "minConfidence": 70 },
+      "swing":    { "skip": false, "strategyType": "smc" }
     },
     {
       "ticker": "DDOG",
@@ -138,16 +138,16 @@
     {
       "ticker": "GLD",
       "character": "MOMENTUM",
-      "strategyType": "vwap",
-      "minConfidence": 70,
+      "strategyType": "smc",
+      "minConfidence": 78,
       "maxConfidence": 84,
-      "slAtrMult": 0.8,
-      "tpRrRatio": 1.5,
+      "slAtrMult": 1.0,
+      "tpRrRatio": 2.0,
       "skipHours": [9, 14],
       "skip": false,
       "note": "Apr 2026: added GLD (SPDR Gold ETF). Gold is macro-driven (DXY, Fed, geopolitical risk) — not manipulable by individuals. VWAP reversion is the primary edge: gold is a VWAP-magnet on non-announcement days, trends hard when macro catalysts hit. slAtrMult=0.8 (wider than avg — gold bars are noisy from 24h futures carry). skipHours=[9] blocks first 30 min. skipHours=[14] blocks 2-3pm window where VWAP and keylevel signals consistently time out on GLD (90d backtest: $182 losses vs $48 wins in hour 14). BTC correlation: none — gold is anti-BTC (risk-off vs risk-on). Currently in confirmed bull run (all-time highs Apr 2026) so LONG VWAP reversion setups will have highest edge.",
       "scalp":    { "skip": false, "strategyType": "scalp",    "minConfidence": 72 },
-      "intraday": { "skip": false, "strategyType": "vwap",     "minConfidence": 70, "maxConfidence": 84 },
+      "intraday": { "skip": false, "strategyType": "smc",      "minConfidence": 78, "maxConfidence": 84 },
       "swing":    { "skip": false, "strategyType": "keylevel", "minConfidence": 68, "tpRrRatio": 2.0 }
     },
     {
@@ -167,15 +167,15 @@
     {
       "ticker": "GS",
       "character": "FINANCIAL",
-      "strategyType": "keylevel",
+      "strategyType": "smc",
       "minConfidence": 70,
       "maxConfidence": 84,
-      "slAtrMult": 0.5,
-      "tpRrRatio": 1.5,
+      "slAtrMult": 1.0,
+      "tpRrRatio": 1.0,
       "skip": false,
-      "note": "Apr 2026 full sweep: keylevel 3/5 (30d/60d/90d) with huge PnL ($1786/$1824/$1863 — high stock price ~$500). Fails 180d/365d — macro-regime sensitive, works in shorter windows. Was wrongly skipped on 4 bad trades. Intraday only — swing 50%WR below threshold.",
+      "note": "Apr 2026 30d optimizer: smc minC=70 SL=1.0 TP=1.0 → 3T 100%WR $2394. Reverted keylevel→smc (keylevel gave 1T -$377). NOTE: FINANCIAL -20 conf penalty applies live-only; live fires raw conf 90+ only.",
       "scalp":    { "skip": true, "skipReason": "Only 2/5 scalp timeframes pass" },
-      "intraday": { "skip": false, "strategyType": "keylevel", "minConfidence": 70, "maxConfidence": 84 },
+      "intraday": { "skip": false, "strategyType": "smc", "minConfidence": 70, "maxConfidence": 84 },
       "swing":    { "skip": true, "skipReason": "50%WR at 365d — below threshold" }
     },
     {
@@ -280,15 +280,15 @@
     {
       "ticker": "NFLX",
       "character": "MOMENTUM",
-      "strategyType": "vwap",
-      "minConfidence": 65,
+      "strategyType": "smc",
+      "minConfidence": 78,
       "maxConfidence": 84,
       "slAtrMult": 1.0,
-      "tpRrRatio": 1.25,
-      "note": "Apr 2026 HYBRID strategy sweep: switched smc→vwap. VWAP -$3 vs SMC -$140 — vwap is near-breakeven at 180d. NFLX is a large-cap VWAP-magnet.",
+      "tpRrRatio": 2.0,
+      "note": "Apr 2026 30d optimizer: smc minC=78 SL=1.0 TP=2.0 → 6T 83.3%WR $797. Prior vwap generated 1T -$16 in 30d. 180d vwap was near-zero but 30d smc dominates.",
       "scalp":    { "skip": false, "strategyType": "scalp", "minConfidence": 68 },
-      "intraday": { "skip": false, "strategyType": "vwap", "minConfidence": 65, "maxConfidence": 84 },
-      "swing":    { "skip": false }
+      "intraday": { "skip": false, "strategyType": "smc",   "minConfidence": 78, "maxConfidence": 84 },
+      "swing":    { "skip": false, "strategyType": "smc" }
     },
     {
       "ticker": "NIO",
