@@ -89,7 +89,7 @@
     {
       "ticker": "COIN",
       "character": "MOMENTUM",
-      "strategyType": "keylevel",
+      "strategyType": "smc",
       "minConfidence": 70,
       "maxConfidence": 84,
       "slAtrMult": 0.5,
@@ -97,9 +97,9 @@
       "skipHours": [13, 14],
       "skip": false,
       "skipReason": null,
-      "note": "Apr 2026: tpRrRatio raised 1.0→1.5 (12 keylevel setups quality-filtered at 1:1 R:R). skipHours=[13,14] added — both 30d losses fired in 1–3 PM drift window. Scalp minConf raised 72→82 to require stronger BB setups (sub-1:1 R:R was slipping through quality filter at lower conf).",
-      "scalp":    { "skip": false, "strategyType": "scalp", "minConfidence": 82 },
-      "intraday": { "skip": false, "strategyType": "keylevel", "minConfidence": 70, "maxConfidence": 84, "tpRrRatio": 1.5 },
+      "note": "Apr 2026: reverted intraday keylevel→smc (keylevel generated 0 trades in 60d — COIN breaks levels too fast). scalp minConf reverted 82→72 (R:R concern already handled by tpRrRatio=1.5). skipHours=[13,14] kept — data-driven, valid.",
+      "scalp":    { "skip": false, "strategyType": "scalp", "minConfidence": 72 },
+      "intraday": { "skip": false, "strategyType": "smc",   "minConfidence": 70, "maxConfidence": 84, "tpRrRatio": 1.5 },
       "swing":    { "skip": false }
     },
     {
