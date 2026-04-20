@@ -257,7 +257,7 @@ public class TickerProfile {
     }
     /** Minimum SL distance as fraction of price (0 = no floor). */
     public double minSlPricePct() {
-        return "SPECULATIVE_LOW_PRICE".equals(getCharacter()) ? 0.025 : 0.0; // 2.5% floor on sub-$25
+        return "SPECULATIVE_LOW_PRICE".equals(getCharacter()) ? 0.02 : 0.0; // 2.0% floor override for tagged tickers
     }
 
     // ── Mode profile getters/setters ─────────────────────────────────────────

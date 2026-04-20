@@ -16,8 +16,12 @@ import java.util.List;
 public class SetupDetector {
     private static final Logger log = LoggerFactory.getLogger(SetupDetector.class);
     private static final int    SWEEP_LOOKBACK = 80, FVG_WINDOW = 12, RETEST_WINDOW = 25;
-    private static final double DISP_ATR_MULT  = 1.3, MIN_FVG_PCT = 0.0004, MIN_VOL_MULT = 1.5; // global defaults — per-ticker overrides in ticker-profiles.json
+    private static final double DISP_ATR_MULT  = 1.3, MIN_FVG_PCT = 0.0002, MIN_VOL_MULT = 1.5; // global defaults — per-ticker overrides in ticker-profiles.json
     private static final double MAX_ENTRY_DISTANCE_ATR = 2.5;
+    // Price-based distance floor: never reject if price is within 3.5% of FVG midpoint.
+    // Fixes COIN ($209, ATR $1.75 → 2.5×ATR=$4.38 < $6.45 gap → filtered unfairly)
+    // and SOFI ($17, ATR $0.05 → 2.5×ATR=$0.125 < $0.19 gap → filtered unfairly).
+    private static final double MAX_ENTRY_DISTANCE_PRICE_PCT = 0.035;
 
     private final ScannerConfig config;
     private final AtrCalculator atrCalc;
@@ -100,12 +104,20 @@ public class SetupDetector {
             }
         }
 
-        // Price proximity: current price must be within 3 ATRs of FVG zone
+        // Price proximity: current price must be near the FVG zone.
+        // Dual limit: ATR-based (2.5×) OR price-based floor (3.5% of price), whichever is larger.
+        // Pure ATR-based check fails for:
+        //   High-beta large caps (COIN $209, 5m ATR $1.75 → cap $4.38, but $6 moves are normal)
+        //   Low-price volatile stocks (SOFI $17, 5m ATR $0.05 → cap $0.13, any wick = filtered)
         double fvgMidCheck = (state.getFvgTop() + state.getFvgBottom()) / 2.0;
-        if (Math.abs(lastClose - fvgMidCheck) > curAtr * MAX_ENTRY_DISTANCE_ATR) {
-            log.debug("{} filtered: PRICE_FAR_FROM_FVG price={} fvgMid={} dist={} atr={}", ticker,
+        double distLimit   = Math.max(curAtr * MAX_ENTRY_DISTANCE_ATR, lastClose * MAX_ENTRY_DISTANCE_PRICE_PCT);
+        if (Math.abs(lastClose - fvgMidCheck) > distLimit) {
+            log.debug("{} filtered: PRICE_FAR_FROM_FVG price={} fvgMid={} dist={} limit={} (atrLimit={} pctLimit={})", ticker,
                 String.format("%.2f", lastClose), String.format("%.2f", fvgMidCheck),
-                String.format("%.2f", Math.abs(lastClose - fvgMidCheck)), String.format("%.2f", curAtr));
+                String.format("%.2f", Math.abs(lastClose - fvgMidCheck)),
+                String.format("%.2f", distLimit),
+                String.format("%.2f", curAtr * MAX_ENTRY_DISTANCE_ATR),
+                String.format("%.2f", lastClose * MAX_ENTRY_DISTANCE_PRICE_PCT));
             state.setPhase(SetupPhase.IDLE);
             return new DetectResult(List.of(),state);
         }

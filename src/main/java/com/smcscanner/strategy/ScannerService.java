@@ -525,9 +525,11 @@ public class ScannerService {
                             return;
                         }
                     }
-                    // SPECULATIVE_LOW_PRICE: enforce minimum SL distance (2.5% of price)
-                    // Prevents wick-out on stocks that whip 3-5% intraday (SOFI pattern)
-                    double minSlPct = profile.minSlPricePct();
+                    // Universal SL floor: 1.5% of price for any stock under $30.
+                    // Ticker-character override (SPECULATIVE_LOW_PRICE) adds extra floor.
+                    // Prevents wick-out on low-price volatile stocks (SOFI: $0.05 ATR → $0.08 SL = dead).
+                    double minSlPct = Math.max(profile.minSlPricePct(),
+                            s.getEntry() < 30.0 ? 0.015 : 0.0);
                     if (minSlPct > 0) {
                         double entry = s.getEntry();
                         double slDist = Math.abs(s.getStopLoss() - entry);
