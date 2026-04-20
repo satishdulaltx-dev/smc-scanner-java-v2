@@ -117,6 +117,23 @@ public class TickerProfile {
     // Example: [11, 12] blocks 11am-11:59 and 12pm-12:59 ET entries.
     private java.util.List<Integer> skipHours = null;
 
+    // ── Ticker DNA — encodes structural trading characteristics ───────────────
+    // MOMENTUM          : High-beta, institutional order-flow driven (TSLA, META, NVDA, PLTR)
+    //                     SMC/FVG works well. Full signal throughput.
+    // STABLE_LARGE_CAP  : Slow mega-cap, moves <1%/day without catalyst (AAPL, MSFT, AMZN, GOOGL)
+    //                     SMC setups time-decay before TP is reached. Requires news catalyst.
+    // EXTERNAL_CORRELATED: Moves on external asset (BTC, macro), not internal order flow (MARA)
+    //                     SMC patterns are noise. SMC detection is blocked; scalp allowed.
+    // FINANCIAL         : Sector-rotation driven, high option premiums on small % moves (GS, V, JPM)
+    //                     One stopped trade = massive option loss. Confidence penalty applied.
+    // SPECULATIVE_LOW_PRICE: Sub-$25 volatile stock, whips 3-5% intraday (SOFI)
+    //                     Tight FVG SL gets wick-out every time. Minimum SL floor enforced.
+    private String  character = "MOMENTUM"; // default: no restriction
+
+    // When true: this ticker only trades on confirmed news catalyst days.
+    // Used for STABLE_LARGE_CAP (AAPL, MSFT) where options time-decay kills non-catalyst setups.
+    private boolean requireCatalyst = false;
+
     // ── Per-mode profile overrides ────────────────────────────────────────────
     // Each mode can independently skip this ticker and override strategy/params.
     // Root-level skip=true disables all modes unless a mode block sets skip=false.
@@ -218,6 +235,30 @@ public class TickerProfile {
     public void setOpenStrategy(String v)    { this.openStrategy = v; }
     public void setPrimeStrategy(String v)   { this.primeStrategy = v; }
     public void setLunchStrategy(String v)   { this.lunchStrategy = v; }
+    public String  getCharacter()            { return character != null ? character : "MOMENTUM"; }
+    public void    setCharacter(String v)    { this.character = v; }
+    public boolean isRequireCatalyst()       { return requireCatalyst; }
+    public void    setRequireCatalyst(boolean v) { this.requireCatalyst = v; }
+    /** True when SMC/FVG detection should be suppressed for this ticker's character. */
+    public boolean isSmcBlocked() {
+        return "EXTERNAL_CORRELATED".equals(getCharacter());
+    }
+    /** True when a news catalyst is required before any intraday trade fires. */
+    public boolean isCatalystRequired() {
+        return requireCatalyst || "STABLE_LARGE_CAP".equals(getCharacter());
+    }
+    /** Confidence penalty applied due to ticker character (financials, speculative). */
+    public int characterConfPenalty() {
+        return switch (getCharacter()) {
+            case "FINANCIAL"             -> -20; // high option premium, tiny % SL
+            case "SPECULATIVE_LOW_PRICE" -> -10; // wick-out risk even with wider SL
+            default                      ->   0;
+        };
+    }
+    /** Minimum SL distance as fraction of price (0 = no floor). */
+    public double minSlPricePct() {
+        return "SPECULATIVE_LOW_PRICE".equals(getCharacter()) ? 0.025 : 0.0; // 2.5% floor on sub-$25
+    }
 
     // ── Mode profile getters/setters ─────────────────────────────────────────
     public ModeProfile getScalp()    { return scalp; }

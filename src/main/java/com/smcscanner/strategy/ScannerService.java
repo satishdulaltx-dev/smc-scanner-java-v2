@@ -496,6 +496,59 @@ public class ScannerService {
                     }
                 }
 
+                // ── Ticker DNA (character) gates ─────────────────────────────
+                // Structural incompatibilities identified from 30d loss audit:
+                //   EXTERNAL_CORRELATED (MARA): SMC patterns = noise vs BTC moves. Block.
+                //   STABLE_LARGE_CAP (AAPL/MSFT): options decay before slow stock hits TP.
+                //                                  Only trade with confirmed news catalyst.
+                //   FINANCIAL (GS/V/JPM): option premium too large vs typical % move.
+                //                         -20 conf penalty makes these nearly un-fireable.
+                //   SPECULATIVE_LOW_PRICE (SOFI): SL must be widened to survive 3-5% wicks.
+                if (!isC) {
+                    // EXTERNAL_CORRELATED: SMC blocked, swing-only allowed
+                    if (profile.isSmcBlocked()) {
+                        String strat = s.getVolatility(); // strategy label lives in volatility field
+                        if (!"scalp".equals(strat) && !"keylevel".equals(strat)) {
+                            log.info("{} DNA_BLOCK EXTERNAL_CORRELATED: SMC blocked (BTC-correlated, not order-flow driven)", ticker);
+                            setTs(ticker, "idle", null, 0, "⊘ BTC-correlated — SMC not applicable");
+                            removeSetup(ticker);
+                            return;
+                        }
+                    }
+                    // STABLE_LARGE_CAP: require news catalyst (no catalyst = time-decay death)
+                    if (profile.isCatalystRequired()) {
+                        boolean hasCatalyst = news.getSentiment(ticker).isAligned(s.getDirection());
+                        if (!hasCatalyst) {
+                            log.info("{} DNA_BLOCK STABLE_LARGE_CAP: no catalyst — slow mover, options would decay before TP", ticker);
+                            setTs(ticker, "idle", null, 0, "⊘ No catalyst — " + ticker + " only trades on news days");
+                            removeSetup(ticker);
+                            return;
+                        }
+                    }
+                    // SPECULATIVE_LOW_PRICE: enforce minimum SL distance (2.5% of price)
+                    // Prevents wick-out on stocks that whip 3-5% intraday (SOFI pattern)
+                    double minSlPct = profile.minSlPricePct();
+                    if (minSlPct > 0) {
+                        double entry = s.getEntry();
+                        double slDist = Math.abs(s.getStopLoss() - entry);
+                        double minSlDist = entry * minSlPct;
+                        if (slDist < minSlDist) {
+                            double newSl = "long".equals(s.getDirection())
+                                    ? Math.round((entry - minSlDist) * 10000.0) / 10000.0
+                                    : Math.round((entry + minSlDist) * 10000.0) / 10000.0;
+                            log.info("{} DNA_SL_FLOOR: SL widened {:.4f}→{:.4f} (minSlPct={}%)", ticker,
+                                    s.getStopLoss(), newSl, minSlPct * 100);
+                            s = TradeSetup.builder()
+                                    .ticker(s.getTicker()).direction(s.getDirection())
+                                    .entry(s.getEntry()).stopLoss(newSl).takeProfit(s.getTakeProfit())
+                                    .confidence(s.getConfidence()).session(s.getSession()).volatility(s.getVolatility())
+                                    .atr(s.getAtr()).hasBos(s.isHasBos()).hasChoch(s.isHasChoch())
+                                    .fvgTop(s.getFvgTop()).fvgBottom(s.getFvgBottom()).timestamp(s.getTimestamp())
+                                    .build();
+                        }
+                    }
+                }
+
                 // ── Volume pressure trap detection ────────────────────────────
                 // BOS with declining bar pressure = institutional trap. Bypassed
                 // for VWAP (mean-reversion) and SQUEEZE regime (volume naturally low).
@@ -871,7 +924,11 @@ public class ScannerService {
                 // Apply combined confidence adjustment (news + context + quality + flow + regime + correlation + RS)
                 // Penalty floor: secondary filters can reduce base confidence by at most 25%.
                 // e.g. base=80 → floor=60, base=70 → floor=52. Prevents "death by a thousand filters."
-                int rawAdj   = newsAdj + ctxAdj + qualityAdj + flowAdj + regimeAdj + corrAdj + intradayRsAdj + deadZoneAdj + bias15mAdj + alignmentAdj + sma200Adj + rsiAdj + candleAdj + volAdj + regimeStratAdj + pivotAdj + trapAdj + exhaustionAdj + confluenceVetoAdj;
+                // Ticker DNA confidence penalty (FINANCIAL: -20, SPECULATIVE_LOW_PRICE: -10)
+                int dnaAdj = !isC ? profile.characterConfPenalty() : 0;
+                if (dnaAdj != 0) log.info("{} DNA_CONF_ADJ: character={} adj={}", ticker, profile.getCharacter(), dnaAdj);
+
+                int rawAdj   = newsAdj + ctxAdj + qualityAdj + flowAdj + regimeAdj + corrAdj + intradayRsAdj + deadZoneAdj + bias15mAdj + alignmentAdj + sma200Adj + rsiAdj + candleAdj + volAdj + regimeStratAdj + pivotAdj + trapAdj + exhaustionAdj + confluenceVetoAdj + dnaAdj;
                 int penaltyFloor = (int)(s.getConfidence() * 0.75);
                 int totalAdj = rawAdj; // no longer clamping at -40; floor handles it
                 if (rawAdj != totalAdj) {

@@ -2,6 +2,8 @@
   "profiles": [
     {
       "ticker": "AAPL",
+      "character": "STABLE_LARGE_CAP",
+      "requireCatalyst": true,
       "strategyType": "vwap",
       "minConfidence": 70,
       "maxConfidence": 84,
@@ -30,6 +32,7 @@
     },
     {
       "ticker": "AMD",
+      "character": "MOMENTUM",
       "strategyType": "breakout",
       "minConfidence": 78,
       "slAtrMult": 1.0,
@@ -42,6 +45,7 @@
     },
     {
       "ticker": "AMZN",
+      "character": "STABLE_LARGE_CAP",
       "strategyType": "keylevel",
       "minConfidence": 70,
       "slAtrMult": 0.4,
@@ -55,6 +59,7 @@
     },
     {
       "ticker": "BA",
+      "character": "MOMENTUM",
       "strategyType": "smc",
       "minConfidence": 70,
       "maxConfidence": 84,
@@ -69,6 +74,7 @@
     },
     {
       "ticker": "BABA",
+      "character": "MOMENTUM",
       "strategyType": "smc",
       "minConfidence": 70,
       "maxConfidence": 84,
@@ -82,6 +88,7 @@
     },
     {
       "ticker": "COIN",
+      "character": "MOMENTUM",
       "strategyType": "keylevel",
       "minConfidence": 70,
       "maxConfidence": 84,
@@ -97,6 +104,7 @@
     },
     {
       "ticker": "CRWD",
+      "character": "MOMENTUM",
       "strategyType": "vwap",
       "minConfidence": 78,
       "maxConfidence": 84,
@@ -129,6 +137,7 @@
     },
     {
       "ticker": "GLD",
+      "character": "MOMENTUM",
       "strategyType": "vwap",
       "minConfidence": 70,
       "maxConfidence": 84,
@@ -143,6 +152,7 @@
     },
     {
       "ticker": "GOOGL",
+      "character": "STABLE_LARGE_CAP",
       "strategyType": "vwap",
       "minConfidence": 70,
       "maxConfidence": 84,
@@ -156,6 +166,7 @@
     },
     {
       "ticker": "GS",
+      "character": "FINANCIAL",
       "strategyType": "keylevel",
       "minConfidence": 70,
       "maxConfidence": 84,
@@ -179,6 +190,7 @@
     },
     {
       "ticker": "JPM",
+      "character": "FINANCIAL",
       "strategyType": "keylevel",
       "minConfidence": 72,
       "maxConfidence": 84,
@@ -193,6 +205,7 @@
     },
     {
       "ticker": "MARA",
+      "character": "EXTERNAL_CORRELATED",
       "strategyType": "smc",
       "minConfidence": 78,
       "slAtrMult": 1.0,
@@ -206,6 +219,7 @@
     },
     {
       "ticker": "META",
+      "character": "MOMENTUM",
       "strategyType": "smc",
       "minConfidence": 70,
       "maxConfidence": 84,
@@ -234,6 +248,7 @@
     },
     {
       "ticker": "MSFT",
+      "character": "STABLE_LARGE_CAP",
       "strategyType": "smc",
       "minConfidence": 78,
       "minFvgPct": 0.0004,
@@ -264,6 +279,7 @@
     },
     {
       "ticker": "NFLX",
+      "character": "MOMENTUM",
       "strategyType": "vwap",
       "minConfidence": 65,
       "maxConfidence": 84,
@@ -284,6 +300,7 @@
     },
     {
       "ticker": "NVDA",
+      "character": "MOMENTUM",
       "strategyType": "smc",
       "minConfidence": 78,
       "maxConfidence": 84,
@@ -310,6 +327,7 @@
     },
     {
       "ticker": "PLTR",
+      "character": "MOMENTUM",
       "strategyType": "smc",
       "minConfidence": 62,
       "minFvgPct": 0.0006,
@@ -328,6 +346,7 @@
     },
     {
       "ticker": "QQQ",
+      "character": "MOMENTUM",
       "strategyType": "smc",
       "minConfidence": 70,
       "maxConfidence": 84,
@@ -377,6 +396,7 @@
     },
     {
       "ticker": "SHOP",
+      "character": "MOMENTUM",
       "strategyType": "smc",
       "minConfidence": 70,
       "maxConfidence": 84,
@@ -408,6 +428,7 @@
     },
     {
       "ticker": "SOFI",
+      "character": "SPECULATIVE_LOW_PRICE",
       "strategyType": "vwap",
       "minConfidence": 62,
       "maxConfidence": 84,
@@ -423,6 +444,7 @@
     },
     {
       "ticker": "SPY",
+      "character": "MOMENTUM",
       "strategyType": "smc",
       "minConfidence": 70,
       "maxConfidence": 84,
@@ -445,6 +467,7 @@
     },
     {
       "ticker": "TSLA",
+      "character": "MOMENTUM",
       "strategyType": "vwap",
       "minConfidence": 74,
       "maxConfidence": 84,
@@ -460,6 +483,7 @@
     },
     {
       "ticker": "UBER",
+      "character": "MOMENTUM",
       "strategyType": "smc",
       "minConfidence": 70,
       "maxConfidence": 84,
@@ -473,6 +497,7 @@
     },
     {
       "ticker": "V",
+      "character": "FINANCIAL",
       "skip": true,
       "skipReason": "Neither VWAP (0% WR) nor Key Level (18% WR, -0.01% expectancy) produced reliable intraday edge — too slow-moving for 5m strategy",
       "strategyType": "keylevel",
