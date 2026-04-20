@@ -1732,22 +1732,21 @@ public class BacktestService {
         // Add swing unconditionally — widest window, highest quality exit
         merged.addAll(swingResult.trades);
 
-        // Track which (date, strategy, direction) slots swing already claimed
+        // Track which (timestamp-minute, strategy, direction) slots swing already claimed.
+        // Use entry epoch bucketed to the minute for precise dedup (not just date).
+        // Applies to both executed AND filtered outcomes so filtered signals don't appear twice
+        // when intraday and swing share the same strategy.
         Set<String> swingClaimed = new HashSet<>();
         for (TradeResult t : swingResult.trades) {
-            if (!isFilteredOutcome(t)) {
-                String date = t.entryTime() != null ? t.entryTime().split(" ")[0] : "";
-                swingClaimed.add(date + "|" + t.strategy() + "|" + t.direction());
-            }
+            long bucket = (t.entryEpochMs() / 60000L) * 60000L; // floor to minute
+            swingClaimed.add(bucket + "|" + t.strategy() + "|" + t.direction());
         }
 
         // Add intraday only if a different strategy OR swing didn't already claim that slot
         Set<String> intradayClaimed = new HashSet<>(swingClaimed);
         for (TradeResult t : intradayResult.trades) {
-            if (isFilteredOutcome(t)) { merged.add(t); continue; }
-            String date = t.entryTime() != null ? t.entryTime().split(" ")[0] : "";
-            String key  = date + "|" + t.strategy() + "|" + t.direction();
-            // If intraday and swing use same strategy, swing already covers this day
+            long bucket = (t.entryEpochMs() / 60000L) * 60000L;
+            String key  = bucket + "|" + t.strategy() + "|" + t.direction();
             if (intradayStrat.equals(swingStrat) && swingClaimed.contains(key)) continue;
             merged.add(t);
             intradayClaimed.add(key);
@@ -1755,9 +1754,8 @@ public class BacktestService {
 
         // Add scalp only if it uses a distinct strategy OR neither swing nor intraday claimed the slot
         for (TradeResult t : scalpResult.trades) {
-            if (isFilteredOutcome(t)) { merged.add(t); continue; }
-            String date = t.entryTime() != null ? t.entryTime().split(" ")[0] : "";
-            String key  = date + "|" + t.strategy() + "|" + t.direction();
+            long bucket = (t.entryEpochMs() / 60000L) * 60000L;
+            String key  = bucket + "|" + t.strategy() + "|" + t.direction();
             if (scalpStrat.equals(swingStrat)    && swingClaimed.contains(key))    continue;
             if (scalpStrat.equals(intradayStrat) && intradayClaimed.contains(key)) continue;
             merged.add(t);
