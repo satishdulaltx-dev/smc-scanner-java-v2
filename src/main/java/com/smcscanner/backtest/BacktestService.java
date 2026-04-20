@@ -711,7 +711,18 @@ public class BacktestService {
                 } else {
                     effectiveMinConf = rootMinConf;
                 }
-                int effectiveMaxConf = bp2.resolveMaxConfidence(); // upper cap for reversed-pattern tickers
+                // Mode-aware maxConf: intraday/scalp/swing sub-profiles can raise the cap independently
+                int rootMaxConf = bp2.resolveMaxConfidence();
+                int effectiveMaxConf;
+                if (mode == BacktestMode.SCALP) {
+                    effectiveMaxConf = bp2.resolveMode("scalp").resolveMaxConfidence(rootMaxConf);
+                } else if (mode == BacktestMode.INTRADAY) {
+                    effectiveMaxConf = bp2.resolveMode("intraday").resolveMaxConfidence(rootMaxConf);
+                } else if (mode == BacktestMode.SWING) {
+                    effectiveMaxConf = bp2.resolveMode("swing").resolveMaxConfidence(rootMaxConf);
+                } else {
+                    effectiveMaxConf = rootMaxConf;
+                }
 
                 // News: 48h window ending at entry timestamp
                 NewsSentiment sentiment = ticker.startsWith("X:") ? NewsSentiment.NONE
