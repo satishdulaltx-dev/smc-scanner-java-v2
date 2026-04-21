@@ -49,8 +49,8 @@ public class BacktestService {
     private static final Logger log = LoggerFactory.getLogger(BacktestService.class);
     private static final ZoneId ET = ZoneId.of("America/New_York");
     private static final DateTimeFormatter DT_FMT = DateTimeFormatter.ofPattern("MM/dd HH:mm");
-    private static final double ATR_TRAIL_NORMAL = 0.75;
-    private static final double ATR_TRAIL_REVERSAL = 0.30;
+    private static final double ATR_TRAIL_NORMAL = 1.50;    // trend continuation: wider trail (was 0.75)
+    private static final double ATR_TRAIL_REVERSAL = 0.50;  // tighten on reversal closes (was 0.30)
     private static final int REVERSAL_CLOSES = 2;
     private static final double TRAIL_EXIT_SLIPPAGE_BPS = 5.0;  // 0.05% adverse slippage on trail exits
     // Live orders are placed as marketable limits at the ask price.
@@ -60,7 +60,10 @@ public class BacktestService {
     // Fill is always assumed in backtest (matches the ask-based limit that fills immediately).
     private static final double ENTRY_SLIPPAGE_BPS      = 5.0;  // 0.05% on underlying entry price
     private static final double HYBRID_BE_R = 1.0;    // move SL to breakeven at 1.0R profit
-    private static final double HYBRID_TRAIL_R = 1.5; // activate trailing stop at 1.5R profit
+    private static final double HYBRID_TRAIL_R = 2.5; // arm trailing stop at 2.5R (was 1.5)
+    // Scalp-specific trail constants (mirrors AlpacaOrderService SCALP_* values)
+    private static final double SCALP_TRAIL_R      = 2.0;  // arm trail at 2.0R for scalps (was 0.90)
+    private static final double SCALP_TRAIL_NORMAL = 0.75; // scalp trail ATR mult (was 0.35)
 
     private final PolygonClient            client;
     private final AtrCalculator            atrCalc;
@@ -1428,9 +1431,9 @@ public class BacktestService {
     }
 
     /**
-     * Scalp exit: mirrors simulateHybridExit exactly but uses 1m bars for ATR
-     * (same HYBRID_BE_R=1.0, HYBRID_TRAIL_R=1.5, ATR trail, 1.5R floor, dynamic TP).
-     * Keeps full parity with live AlpacaOrderService trailing on 1m bars.
+     * Scalp exit: mirrors simulateHybridExit but uses scalp-specific trail constants
+     * (HYBRID_BE_R=1.0, SCALP_TRAIL_R=2.0 arm, SCALP_TRAIL_NORMAL=0.75 ATR trail).
+     * Keeps full parity with live AlpacaOrderService scalp trailing on 1m bars.
      */
     private ExitResult simulateScalpExit(List<OHLCV> entryWindow, List<OHLCV> fwdBars,
                                          double entry, double sl, double tp, String dir) {
@@ -1439,8 +1442,8 @@ public class BacktestService {
         double risk = Math.abs(entry - sl);
         if (risk <= 0) return null;
 
-        double beLevel       = isLong ? entry + risk * HYBRID_BE_R    : entry - risk * HYBRID_BE_R;
-        double trailArmLevel = isLong ? entry + risk * HYBRID_TRAIL_R : entry - risk * HYBRID_TRAIL_R;
+        double beLevel       = isLong ? entry + risk * HYBRID_BE_R   : entry - risk * HYBRID_BE_R;
+        double trailArmLevel = isLong ? entry + risk * SCALP_TRAIL_R : entry - risk * SCALP_TRAIL_R;
 
         boolean beActive    = false;
         boolean trailActive = false;
@@ -1471,12 +1474,12 @@ public class BacktestService {
                 }
             }
 
-            // Arm trail at 1.5R; floor activeSl at trailArmLevel immediately
+            // Arm trail at 2.0R (SCALP_TRAIL_R); floor activeSl at trailArmLevel immediately
             if (!trailActive) {
                 if (isLong ? peakClose >= trailArmLevel : peakClose <= trailArmLevel) {
                     trailActive = true;
                     peakClose   = close;
-                    activeSl    = trailArmLevel; // 1.5R floor
+                    activeSl    = trailArmLevel; // 2.0R floor
                 }
             }
 
@@ -1501,7 +1504,7 @@ public class BacktestService {
                         : close > peakClose + atr * 0.20;
                 reversalCount = reversalClose ? reversalCount + 1 : 0;
 
-                double atrMult   = reversalCount >= REVERSAL_CLOSES ? ATR_TRAIL_REVERSAL : ATR_TRAIL_NORMAL;
+                double atrMult   = reversalCount >= REVERSAL_CLOSES ? ATR_TRAIL_REVERSAL : SCALP_TRAIL_NORMAL;
                 double targetStop = isLong ? peakClose - atr * atrMult : peakClose + atr * atrMult;
                 // 1.5R floor — trail stop never retreats below trailArmLevel
                 if (isLong) targetStop = Math.max(targetStop, trailArmLevel);
