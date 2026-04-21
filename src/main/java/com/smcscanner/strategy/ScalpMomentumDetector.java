@@ -65,6 +65,14 @@ public class ScalpMomentumDetector {
         if (sessionBars.size() < 20) return result;
 
         OHLCV last = sessionBars.get(sessionBars.size() - 1);
+
+        // Staleness guard: last session bar must be from today's wall-clock date.
+        // Without this, a scan running before today's bars arrive uses yesterday's
+        // (or last Friday's) session as "today" and fires signals with stale prices.
+        if (!Instant.ofEpochMilli(last.getTimestamp()).atZone(ET).toLocalDate().equals(LocalDate.now(ET))) {
+            return result;
+        }
+
         LocalTime now = Instant.ofEpochMilli(last.getTimestamp()).atZone(ET).toLocalTime();
 
         // Active windows: morning (9:35–11:30) and afternoon (13:30–15:30)
