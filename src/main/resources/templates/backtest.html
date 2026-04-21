@@ -325,16 +325,69 @@
             WATCHLIST BACKTEST RESULTS
             <span style="color:var(--muted); font-size:10px; margin-left:8px;">CLICK A CARD TO DRILL IN</span>
         </span>
-        <div style="display:flex;gap:8px">
+        <div style="display:flex;gap:8px;align-items:center">
             <button onclick="toggleLossBreakdown()" style="background:rgba(248,81,73,.1);border:1px solid rgba(248,81,73,.3);color:#f85149;font-size:11px;padding:4px 10px;border-radius:4px;cursor:pointer;" id="loss-breakdown-btn">
                 Loss Breakdown
             </button>
             <button onclick="toggleFilteredBox()" style="background:rgba(139,148,158,.1);border:1px solid var(--border);color:var(--muted);font-size:11px;padding:4px 10px;border-radius:4px;cursor:pointer;" id="filtered-toggle-btn">
                 Show Filtered Trades
             </button>
+            <button onclick="toggleCapitalSim()" style="background:rgba(63,185,80,.1);border:1px solid rgba(63,185,80,.35);color:#3fb950;font-size:11px;padding:4px 10px;border-radius:4px;cursor:pointer;" id="capital-sim-btn">
+                $ Capital Sim
+            </button>
         </div>
     </div>
     <div class="batch-summary" id="batch-summary"></div>
+
+    <!-- Capital Simulation Panel -->
+    <div id="capital-sim-box" style="display:none; padding:0 24px 16px;">
+        <div style="border:1px solid rgba(63,185,80,.3);border-radius:8px;padding:16px;background:rgba(63,185,80,.04);">
+            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px;">
+                <span style="font-size:12px;font-weight:700;color:#3fb950;text-transform:uppercase;letter-spacing:.7px;">Capital Simulation</span>
+                <span style="font-size:11px;color:var(--muted)">Cash account · T+1 settlement · Scales contracts to available capital</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
+                <div style="display:flex;flex-direction:column;gap:4px;">
+                    <label style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;">Starting Capital ($)</label>
+                    <input id="sim-capital" type="number" value="5000" min="500" step="500"
+                        style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:7px 12px;border-radius:6px;font-size:13px;width:130px;"
+                        oninput="runCapitalSim()" />
+                </div>
+                <div style="display:flex;flex-direction:column;gap:4px;margin-top:14px;">
+                    <span style="font-size:10px;color:var(--muted)">Common:</span>
+                    <div style="display:flex;gap:6px;">
+                        <button onclick="setCapital(2000)"  style="background:var(--bg);border:1px solid var(--border);color:var(--muted);font-size:11px;padding:4px 10px;border-radius:4px;cursor:pointer;">$2K</button>
+                        <button onclick="setCapital(5000)"  style="background:var(--bg);border:1px solid var(--border);color:var(--muted);font-size:11px;padding:4px 10px;border-radius:4px;cursor:pointer;">$5K</button>
+                        <button onclick="setCapital(10000)" style="background:var(--bg);border:1px solid var(--border);color:var(--muted);font-size:11px;padding:4px 10px;border-radius:4px;cursor:pointer;">$10K</button>
+                        <button onclick="setCapital(25000)" style="background:var(--bg);border:1px solid var(--border);color:var(--muted);font-size:11px;padding:4px 10px;border-radius:4px;cursor:pointer;">$25K</button>
+                    </div>
+                </div>
+            </div>
+            <div id="capital-sim-results" style="display:none;">
+                <!-- Summary stats row -->
+                <div id="capital-sim-stats" style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:16px;padding:12px;background:var(--bg);border-radius:8px;border:1px solid var(--border);"></div>
+                <!-- Monthly table -->
+                <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px;">Monthly Breakdown</div>
+                <div style="overflow-x:auto;">
+                    <table id="capital-sim-table" style="min-width:600px;">
+                        <thead>
+                            <tr>
+                                <th>Month</th><th>Trades</th><th>W/L</th><th>P&L ($)</th><th>Return %</th><th>End Balance</th>
+                            </tr>
+                        </thead>
+                        <tbody id="capital-sim-tbody"></tbody>
+                    </table>
+                </div>
+                <!-- Equity curve -->
+                <div style="margin-top:14px;">
+                    <div class="chart-title">Account Equity Curve</div>
+                    <div style="position:relative;height:180px;"><canvas id="capital-equity-chart"></canvas></div>
+                </div>
+                <div id="capital-sim-note" style="margin-top:10px;font-size:10px;color:var(--muted);line-height:1.6;"></div>
+            </div>
+        </div>
+    </div>
+
     <div class="batch-grid" id="batch-grid"></div>
     <!-- Loss breakdown across all tickers — hidden by default -->
     <div id="batch-loss-box" style="display:none; padding:0 24px 16px;"></div>
@@ -1564,6 +1617,209 @@ function toggleFilteredBox() {
         box.style.display = 'none';
         btn.textContent = 'Show Filtered Trades';
     }
+}
+
+// ── Capital Simulation ────────────────────────────────────────────────────────
+let _capitalChart = null;
+
+function toggleCapitalSim() {
+    const box = document.getElementById('capital-sim-box');
+    const btn = document.getElementById('capital-sim-btn');
+    if (box.style.display === 'none') {
+        box.style.display = 'block';
+        btn.style.background = 'rgba(63,185,80,.2)';
+        runCapitalSim();
+    } else {
+        box.style.display = 'none';
+        btn.style.background = 'rgba(63,185,80,.1)';
+    }
+}
+
+function setCapital(amount) {
+    document.getElementById('sim-capital').value = amount;
+    runCapitalSim();
+}
+
+function getNextBusinessDay(dateStr) {
+    // T+1: find next weekday after dateStr
+    const d = new Date(dateStr + 'T18:00:00Z'); // use 6pm UTC to be safely past the trading day
+    d.setUTCDate(d.getUTCDate() + 1);
+    while (d.getUTCDay() === 0 || d.getUTCDay() === 6) d.setUTCDate(d.getUTCDate() + 1);
+    return d.toISOString().split('T')[0];
+}
+
+function runCapitalSim() {
+    if (!_batchLossData || !_batchLossData.length) return;
+    const startingCapital = parseFloat(document.getElementById('sim-capital').value) || 5000;
+    if (startingCapital < 100) return;
+
+    // Collect all executed trades (skip filtered) that have options premium data
+    const allTrades = [];
+    _batchLossData.forEach(d => {
+        if (!d.trades) return;
+        d.trades.forEach(t => {
+            if (FILTERED_OUTCOMES.has(t.outcome)) return;          // skipped by filters
+            if (!t.opt_entry_premium || t.opt_entry_premium <= 0) return; // no premium data
+            allTrades.push({ ...t, _ticker: d.ticker });
+        });
+    });
+
+    if (!allTrades.length) return;
+
+    // Sort chronologically by entry timestamp
+    allTrades.sort((a, b) => (a.entry_ts || 0) - (b.entry_ts || 0));
+
+    // ── Simulation with T+1 settlement ────────────────────────────────────────
+    let settledCash  = startingCapital;
+    const pendingByDate = {}; // "YYYY-MM-DD" → amount settling on that day
+    let tradesExecuted = 0, tradesSkipped = 0, tradesScaledDown = 0;
+    const monthlyData = {}; // "YYYY-MM" → { pnl, trades, wins, losses, startBalance }
+    const equityPoints = [{ x: 0, y: startingCapital }]; // (trade index, account value)
+    let runningBalance = startingCapital;
+    let tradeIndex = 0;
+
+    allTrades.forEach(t => {
+        const entryDateStr = t.entry_ts ? new Date(t.entry_ts).toISOString().split('T')[0] : null;
+        const exitDateStr  = t.exit_ts  ? new Date(t.exit_ts ).toISOString().split('T')[0] : entryDateStr;
+        if (!entryDateStr) return;
+
+        // Process all pending settlements up to (and including) the entry date
+        Object.keys(pendingByDate).sort().forEach(d => {
+            if (d <= entryDateStr) {
+                settledCash += pendingByDate[d];
+                delete pendingByDate[d];
+            }
+        });
+
+        const contracts    = t.contracts || 1;
+        const costPerContr = t.opt_entry_premium * 100; // one contract = 100 shares
+        const fullCost     = costPerContr * contracts;
+
+        // How many contracts can we afford right now?
+        const affordable   = Math.floor(settledCash / costPerContr);
+        if (affordable === 0) {
+            tradesSkipped++;
+            return;
+        }
+        const actual = Math.min(affordable, contracts);
+        if (actual < contracts) tradesScaledDown++;
+
+        const actualCost  = costPerContr * actual;
+        // opt_pnl_scaled is already total for all 'contracts' contracts
+        const pnlPerContr = (t.opt_pnl_scaled || 0) / contracts;
+        const actualPnl   = pnlPerContr * actual;
+        const proceeds    = actualCost + actualPnl;
+
+        // Deduct cost immediately; proceeds settle T+1
+        settledCash -= actualCost;
+        const settleDate = getNextBusinessDay(exitDateStr || entryDateStr);
+        pendingByDate[settleDate] = (pendingByDate[settleDate] || 0) + proceeds;
+
+        tradesExecuted++;
+        tradeIndex++;
+
+        // Running balance = settled cash + all pending
+        const pending = Object.values(pendingByDate).reduce((a, b) => a + b, 0);
+        runningBalance = settledCash + pending;
+        equityPoints.push({ x: tradeIndex, y: Math.round(runningBalance) });
+
+        // Monthly tracking
+        const month = entryDateStr.substring(0, 7);
+        if (!monthlyData[month]) {
+            monthlyData[month] = { pnl: 0, trades: 0, wins: 0, losses: 0, startBalance: runningBalance - actualPnl };
+        }
+        monthlyData[month].pnl    += actualPnl;
+        monthlyData[month].trades++;
+        if (actualPnl > 0) monthlyData[month].wins++;
+        else                monthlyData[month].losses++;
+    });
+
+    // Flush remaining settlements
+    Object.values(pendingByDate).forEach(v => settledCash += v);
+    const finalBalance = settledCash;
+    const totalPnl     = finalBalance - startingCapital;
+    const totalReturn  = (totalPnl / startingCapital) * 100;
+
+    // ── Render summary stats ───────────────────────────────────────────────────
+    const pnlColor = totalPnl >= 0 ? 'var(--green)' : 'var(--red)';
+    const stats = [
+        { val: `$${startingCapital.toLocaleString()}`,                  lbl: 'Starting Capital' },
+        { val: `$${Math.round(finalBalance).toLocaleString()}`,         lbl: 'Final Balance',     col: pnlColor },
+        { val: `${totalPnl >= 0 ? '+' : ''}$${Math.round(totalPnl).toLocaleString()}`, lbl: 'Total P&L', col: pnlColor },
+        { val: `${totalReturn >= 0 ? '+' : ''}${totalReturn.toFixed(1)}%`,              lbl: 'Total Return', col: pnlColor },
+        { val: tradesExecuted,                                           lbl: 'Trades Taken' },
+        { val: tradesScaledDown > 0 ? tradesScaledDown : '—',           lbl: 'Scaled Down (capital)', col: 'var(--yellow)' },
+        { val: tradesSkipped   > 0 ? tradesSkipped   : '—',             lbl: 'Skipped (no capital)',  col: tradesSkipped > 5 ? 'var(--red)' : 'var(--muted)' },
+    ];
+    document.getElementById('capital-sim-stats').innerHTML = stats.map(s =>
+        `<div style="display:flex;flex-direction:column;align-items:center;min-width:90px;">
+            <div style="font-size:20px;font-weight:700;color:${s.col||'var(--text)'};">${s.val}</div>
+            <div style="font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;margin-top:2px;">${s.lbl}</div>
+        </div>`
+    ).join('<div style="width:1px;height:40px;background:var(--border);align-self:center;"></div>');
+
+    // ── Monthly table ──────────────────────────────────────────────────────────
+    let cumBalance = startingCapital;
+    const months = Object.keys(monthlyData).sort();
+    let monthHtml = '';
+    months.forEach(m => {
+        const md = monthlyData[m];
+        cumBalance += md.pnl;
+        const ret = md.startBalance > 0 ? (md.pnl / md.startBalance * 100) : 0;
+        const pnlC = md.pnl >= 0 ? 'var(--green)' : 'var(--red)';
+        const label = new Date(m + '-01').toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+        monthHtml += `<tr>
+            <td style="font-weight:600">${label}</td>
+            <td>${md.trades}</td>
+            <td><span style="color:var(--green)">${md.wins}W</span> / <span style="color:var(--red)">${md.losses}L</span></td>
+            <td style="color:${pnlC};font-weight:700">${md.pnl >= 0 ? '+' : ''}$${Math.round(md.pnl).toLocaleString()}</td>
+            <td style="color:${pnlC}">${ret >= 0 ? '+' : ''}${ret.toFixed(1)}%</td>
+            <td style="font-weight:600">$${Math.round(cumBalance).toLocaleString()}</td>
+        </tr>`;
+    });
+    document.getElementById('capital-sim-tbody').innerHTML = monthHtml;
+
+    // ── Note ───────────────────────────────────────────────────────────────────
+    const notes = [];
+    if (tradesSkipped > 0) notes.push(`⚠ ${tradesSkipped} trade(s) skipped — insufficient settled cash at entry time. Increasing capital eliminates skips.`);
+    if (tradesScaledDown > 0) notes.push(`ℹ ${tradesScaledDown} trade(s) entered with fewer contracts than conviction called for (capital constraint).`);
+    notes.push(`T+1 settlement: proceeds from each exit are available the next business day. Full conviction sizing assumed when capital allows.`);
+    document.getElementById('capital-sim-note').innerHTML = notes.join('<br>');
+
+    // ── Equity chart ───────────────────────────────────────────────────────────
+    const ctx = document.getElementById('capital-equity-chart').getContext('2d');
+    if (_capitalChart) { _capitalChart.destroy(); _capitalChart = null; }
+    _capitalChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: equityPoints.map(p => p.x === 0 ? 'Start' : `T${p.x}`),
+            datasets: [{
+                data: equityPoints.map(p => p.y),
+                borderColor: totalPnl >= 0 ? '#3fb950' : '#f85149',
+                borderWidth: 1.5,
+                pointRadius: 0,
+                fill: true,
+                backgroundColor: totalPnl >= 0 ? 'rgba(63,185,80,.08)' : 'rgba(248,81,73,.08)',
+                tension: 0.3
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false }, tooltip: {
+                callbacks: { label: ctx => `$${ctx.parsed.y.toLocaleString()}` }
+            }},
+            scales: {
+                x: { display: false },
+                y: {
+                    ticks: { color: '#8b949e', font: { size: 10 },
+                        callback: v => '$' + v.toLocaleString() },
+                    grid: { color: 'rgba(255,255,255,.05)' }
+                }
+            }
+        }
+    });
+
+    document.getElementById('capital-sim-results').style.display = 'block';
 }
 
 // Init — force reset dropdowns (browsers aggressively cache select values)
