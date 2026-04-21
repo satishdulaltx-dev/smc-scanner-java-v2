@@ -1713,10 +1713,11 @@ function runCapitalSim() {
         if (actual < contracts) tradesScaledDown++;
 
         const actualCost  = costPerContr * actual;
-        // P&L scaled proportionally: same return % on realistic cost base
+        // P&L is the validated backtest number — do NOT scale it up by cost ratio.
+        // Realistic cost only gates whether you can enter; the actual profit/loss in
+        // dollar terms comes from the underlying move (same regardless of what you paid).
         const modelPnlPerContr = (t.opt_pnl_scaled || 0) / contracts;
-        const pnlRatio    = modelCost > 0 ? costPerContr / modelCost : 1;
-        const actualPnl   = modelPnlPerContr * pnlRatio * actual;
+        const actualPnl   = modelPnlPerContr * actual;
         const proceeds    = actualCost + actualPnl;
 
         // Deduct cost immediately; proceeds settle T+1
@@ -1768,8 +1769,7 @@ function runCapitalSim() {
             if (aff === 0) { skips++; return; }
             const act = Math.min(aff, t.contracts || 1);
             cash -= cpc * act;
-            const ratio = mc > 0 ? cpc / mc : 1;
-            const ppl = ((t.opt_pnl_scaled || 0) / (t.contracts || 1)) * ratio * act;
+            const ppl = ((t.opt_pnl_scaled || 0) / (t.contracts || 1)) * act;
             const sd = getNextBusinessDay(xd || ed);
             pending[sd] = (pending[sd] || 0) + cpc * act + ppl;
         });
