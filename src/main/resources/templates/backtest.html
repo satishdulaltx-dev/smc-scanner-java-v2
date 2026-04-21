@@ -1421,8 +1421,9 @@ function drawTradeChart(data, trade) {
 }
 
 let _lastBatchDays = 90;
-let _simSkippedKeys = new Set();   // entry_ts keys of trades skipped by capital sim
-let _simDayBalance  = {};          // "YYYY-MM-DD" → end-of-day running balance
+let _simSkippedKeys  = new Set();   // entry_ts keys of trades skipped by capital sim
+let _simDayBalance   = {};          // "YYYY-MM-DD" → end-of-day running balance
+let _simTradeActuals = {};          // simKey → { actual (contracts), actualPnl, actualCost }
 function renderBatch(results, days) {
     show('batch-results');
     _batchLossData = results; // store for loss breakdown panel
@@ -1694,8 +1695,9 @@ function runCapitalSim() {
     allTrades.sort((a, b) => (a.entry_ts || 0) - (b.entry_ts || 0));
 
     // Reset state — By Day view reads these to mark skipped rows and show daily balance
-    _simSkippedKeys = new Set();
-    _simDayBalance  = {};
+    _simSkippedKeys  = new Set();
+    _simDayBalance   = {};
+    _simTradeActuals = {};
 
     // ── Simulation with T+1 settlement ────────────────────────────────────────
     let settledCash  = startingCapital;
@@ -1744,11 +1746,11 @@ function runCapitalSim() {
         if (actual < contracts) tradesScaledDown++;
 
         const actualCost  = costPerContr * actual;
-        // P&L is the validated backtest number — do NOT scale it up by cost ratio.
-        // Realistic cost only gates whether you can enter; the actual profit/loss in
-        // dollar terms comes from the underlying move (same regardless of what you paid).
         const modelPnlPerContr = (t.opt_pnl_scaled || 0) / contracts;
         const actualPnl   = modelPnlPerContr * actual;
+
+        // Store for By Day display so premium paid and P&L reflect actual contracts taken
+        if (t.entry_ts) _simTradeActuals[t.entry_ts + '_' + (t._ticker || '')] = { actual, actualPnl: Math.round(actualPnl), actualCost: Math.round(actualCost) };
         const proceeds    = actualCost + actualPnl;
 
         // Deduct cost immediately; proceeds settle T+1
@@ -1984,7 +1986,9 @@ function renderByDay() {
         const wins   = executed.filter(isWinOutcome).length;
         const losses = executed.filter(isLossOutcome).length;
         const other  = executed.length - wins - losses;
-        const dayPnl = executed.reduce((sum, t) => sum + (t.opt_pnl_scaled || 0), 0);
+        // Use actual sim P&L (contract-scaled) when available, else fall back to backtest P&L
+        const getActualPnl = t => { const k = t.entry_ts+'_'+(t._ticker||''); return _simTradeActuals[k]?.actualPnl ?? (t.opt_pnl_scaled||0); };
+        const dayPnl = executed.reduce((sum, t) => sum + getActualPnl(t), 0);
         const pnlCol = dayPnl >= 0 ? 'var(--green)' : 'var(--red)';
         const wrPct  = executed.length > 0 ? Math.round(wins / (wins + losses || 1) * 100) : 0;
         const wrCol  = wrPct >= 60 ? 'var(--green)' : wrPct >= 40 ? 'var(--yellow)' : 'var(--red)';
@@ -2050,7 +2054,13 @@ function renderByDay() {
                             else if (isLoss) outBadge = `<span class="loss-badge">LOSS</span>`;
                             else outBadge = `<span class="timeout-badge">${outcome}</span>`;
                             const entryStr = t.entry ? `$${t.entry.toFixed(2)}` : '—';
-                            const contracts = t.contracts || 1;
+                            const modelContracts = t.contracts || 1;
+                            const simActual = _simTradeActuals[simKey];
+                            const actualContracts = simActual ? simActual.actual : modelContracts;
+                            const actualPnl = simActual ? simActual.actualPnl : pnl;
+                            const pnlDisplay = actualPnl;
+                            const pnlDisplayCol = pnlDisplay >= 0 ? 'var(--green)' : 'var(--red)';
+                            const contractsScaled = simActual && actualContracts < modelContracts;
                             return `<tr style="border-bottom:1px solid var(--border);border-left:${rowBorder};cursor:pointer;${rowOpacity}"
                                         onclick="drillIn('${t._ticker}', ${_lastBatchDays||90})">
                                 <td style="padding:7px 14px;font-size:11px;color:var(--muted)">${time}</td>
@@ -2060,13 +2070,18 @@ function renderByDay() {
                                 <td style="padding:7px 14px;font-size:11px">${entryStr}</td>
                                 <td style="padding:7px 14px;">${outBadge}</td>
                                 <td style="padding:7px 14px;font-size:11px;color:var(--muted);text-align:right">${(() => {
+                                    if (simActual) {
+                                        // Show actual cost from sim (already accounts for scaled contracts)
+                                        const scaledNote = contractsScaled ? `${actualContracts}/${modelContracts}ct` : `${actualContracts}ct`;
+                                        return `$${simActual.actualCost.toLocaleString()} <span style="font-size:10px;opacity:.6">${scaledNote} ~est${contractsScaled?' ⬇':''}` + `</span>`;
+                                    }
                                     const mc = (t.opt_entry_premium||0)*100;
                                     const rc = t.entry > 0 ? t.entry*0.015*100 : mc;
-                                    const cost = Math.max(mc, rc) * contracts;
+                                    const cost = Math.max(mc, rc) * modelContracts;
                                     const isEstimated = rc > mc;
-                                    return `$${Math.round(cost).toLocaleString()} <span style="font-size:10px;opacity:.6">${contracts}ct${isEstimated?' ~est':''}</span>`;
+                                    return `$${Math.round(cost).toLocaleString()} <span style="font-size:10px;opacity:.6">${modelContracts}ct${isEstimated?' ~est':''}</span>`;
                                 })()}</td>
-                                <td style="padding:7px 14px;font-size:12px;font-weight:700;color:${isSkipped?'var(--muted)':pnlCol};text-align:right">${isSkipped ? '—' : (pnl>=0?'+':'')+'$'+Math.round(pnl).toLocaleString()}</td>
+                                <td style="padding:7px 14px;font-size:12px;font-weight:700;color:${isSkipped?'var(--muted)':pnlDisplayCol};text-align:right">${isSkipped ? '—' : (pnlDisplay>=0?'+':'')+'$'+Math.abs(Math.round(pnlDisplay)).toLocaleString()}</td>
                                 <td style="padding:7px 14px;font-size:11px;color:var(--muted);text-align:right">${t.confidence||'—'}</td>
                             </tr>`;
                         }).join('')}
