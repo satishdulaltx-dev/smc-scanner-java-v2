@@ -335,6 +335,9 @@
             <button onclick="toggleCapitalSim()" style="background:rgba(63,185,80,.15);border:1px solid #3fb950;color:#3fb950;font-size:12px;font-weight:700;padding:6px 14px;border-radius:4px;cursor:pointer;" id="capital-sim-btn">
                 $ Capital Sim
             </button>
+            <button onclick="toggleByDay()" style="background:rgba(88,166,255,.15);border:1px solid var(--blue);color:var(--blue);font-size:12px;font-weight:700;padding:6px 14px;border-radius:4px;cursor:pointer;" id="by-day-btn">
+                By Day
+            </button>
         </div>
     </div>
     <div class="batch-summary" id="batch-summary"></div>
@@ -385,6 +388,17 @@
                 </div>
                 <div id="capital-sim-note" style="margin-top:10px;font-size:10px;color:var(--muted);line-height:1.6;"></div>
             </div>
+        </div>
+    </div>
+
+    <!-- By Day panel -->
+    <div id="by-day-box" style="display:none; padding:0 24px 16px;">
+        <div style="border:1px solid rgba(88,166,255,.25);border-radius:8px;padding:16px;background:rgba(88,166,255,.03);">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+                <span style="font-size:12px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.7px;">All Trades By Day</span>
+                <span style="font-size:11px;color:var(--muted)">Executed trades only · Newest first · Click row to drill in</span>
+            </div>
+            <div id="by-day-content"></div>
         </div>
     </div>
 
@@ -1403,9 +1417,14 @@ function drawTradeChart(data, trade) {
     tradeResizeHandler.observe(container);
 }
 
+let _lastBatchDays = 90;
 function renderBatch(results, days) {
     show('batch-results');
     _batchLossData = results; // store for loss breakdown panel
+    _lastBatchDays = days;
+    // Reset by-day panel when new results load
+    document.getElementById('by-day-box').style.display = 'none';
+    document.getElementById('by-day-btn').style.background = 'rgba(88,166,255,.15)';
     document.getElementById('batch-loss-box').style.display = 'none';
     document.getElementById('loss-breakdown-btn').textContent = 'Loss Breakdown';
     results.sort((a, b) => b.expectancy - a.expectancy);
@@ -1866,6 +1885,131 @@ function runCapitalSim() {
     });
 
     document.getElementById('capital-sim-results').style.display = 'block';
+}
+
+// ── By Day View ───────────────────────────────────────────────────────────────
+function toggleByDay() {
+    const box = document.getElementById('by-day-box');
+    const btn = document.getElementById('by-day-btn');
+    if (box.style.display === 'none') {
+        box.style.display = 'block';
+        btn.style.background = 'rgba(88,166,255,.3)';
+        renderByDay();
+    } else {
+        box.style.display = 'none';
+        btn.style.background = 'rgba(88,166,255,.15)';
+    }
+}
+
+function renderByDay() {
+    if (!_batchLossData || !_batchLossData.length) return;
+
+    // Collect all executed trades from all tickers
+    const allTrades = [];
+    _batchLossData.forEach(d => {
+        if (!d.trades) return;
+        d.trades.forEach(t => {
+            if (FILTERED_OUTCOMES.has(t.outcome)) return;
+            allTrades.push({ ...t, _ticker: d.ticker });
+        });
+    });
+
+    // Sort newest first
+    allTrades.sort((a, b) => (b.entry_ts || 0) - (a.entry_ts || 0));
+
+    // Group by date (ET date from entry_time string e.g. "2026-03-15 10:30")
+    const byDate = {};
+    allTrades.forEach(t => {
+        const dateKey = t.entry_time ? t.entry_time.split(' ')[0] : (t.entry_ts ? new Date(t.entry_ts).toISOString().split('T')[0] : 'unknown');
+        if (!byDate[dateKey]) byDate[dateKey] = [];
+        byDate[dateKey].push(t);
+    });
+
+    const dates = Object.keys(byDate).sort().reverse(); // newest first
+
+    let html = '';
+    dates.forEach(date => {
+        const trades = byDate[date];
+        const wins   = trades.filter(isWinOutcome).length;
+        const losses = trades.filter(isLossOutcome).length;
+        const other  = trades.length - wins - losses;
+        const dayPnl = trades.reduce((sum, t) => sum + (t.opt_pnl_scaled || 0), 0);
+        const pnlCol = dayPnl >= 0 ? 'var(--green)' : 'var(--red)';
+        const wrPct  = trades.length > 0 ? Math.round(wins / (wins + losses || 1) * 100) : 0;
+        const wrCol  = wrPct >= 60 ? 'var(--green)' : wrPct >= 40 ? 'var(--yellow)' : 'var(--red)';
+
+        // Format date nicely
+        const d = new Date(date + 'T12:00:00Z');
+        const dayLabel = d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
+        html += `
+        <div style="margin-bottom:12px;border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+            <!-- Day header -->
+            <div style="background:var(--surface);padding:8px 14px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;cursor:pointer;"
+                 onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
+                <span style="font-size:13px;font-weight:700;color:var(--text);min-width:110px;">${dayLabel}</span>
+                <span style="font-size:11px;color:var(--muted)">${trades.length} trade${trades.length!==1?'s':''}</span>
+                <span style="font-size:11px;">
+                    <span style="color:var(--green)">${wins}W</span>
+                    <span style="color:var(--muted)"> / </span>
+                    <span style="color:var(--red)">${losses}L</span>
+                    ${other > 0 ? `<span style="color:var(--yellow)"> / ${other} other</span>` : ''}
+                </span>
+                <span style="font-size:11px;color:${wrCol};font-weight:700">${wins+losses>0?wrPct+'% WR':''}</span>
+                <span style="font-size:13px;font-weight:700;color:${pnlCol};margin-left:auto">
+                    ${dayPnl >= 0 ? '+' : ''}$${Math.round(dayPnl).toLocaleString()}
+                </span>
+            </div>
+            <!-- Trade rows -->
+            <div style="display:block;">
+                <table style="width:100%;">
+                    <thead>
+                        <tr style="background:rgba(255,255,255,.02);">
+                            <th style="padding:6px 14px;font-size:10px;color:var(--muted);text-align:left;font-weight:600;text-transform:uppercase;letter-spacing:.7px;">Time</th>
+                            <th style="padding:6px 14px;font-size:10px;color:var(--muted);text-align:left;font-weight:600;text-transform:uppercase;letter-spacing:.7px;">Ticker</th>
+                            <th style="padding:6px 14px;font-size:10px;color:var(--muted);text-align:left;font-weight:600;text-transform:uppercase;letter-spacing:.7px;">Dir</th>
+                            <th style="padding:6px 14px;font-size:10px;color:var(--muted);text-align:left;font-weight:600;text-transform:uppercase;letter-spacing:.7px;">Strategy</th>
+                            <th style="padding:6px 14px;font-size:10px;color:var(--muted);text-align:left;font-weight:600;text-transform:uppercase;letter-spacing:.7px;">Entry</th>
+                            <th style="padding:6px 14px;font-size:10px;color:var(--muted);text-align:left;font-weight:600;text-transform:uppercase;letter-spacing:.7px;">Outcome</th>
+                            <th style="padding:6px 14px;font-size:10px;color:var(--muted);text-align:right;font-weight:600;text-transform:uppercase;letter-spacing:.7px;">Opt P&L</th>
+                            <th style="padding:6px 14px;font-size:10px;color:var(--muted);text-align:right;font-weight:600;text-transform:uppercase;letter-spacing:.7px;">Conf</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${trades.map(t => {
+                            const isWin  = isWinOutcome(t);
+                            const isLoss = isLossOutcome(t);
+                            const rowBorder = isWin ? '3px solid var(--green)' : isLoss ? '3px solid var(--red)' : '3px solid var(--yellow)';
+                            const pnl = t.opt_pnl_scaled || 0;
+                            const pnlCol = pnl >= 0 ? 'var(--green)' : 'var(--red)';
+                            const dirCol = t.dir === 'long' ? 'var(--green)' : 'var(--red)';
+                            const time = t.entry_time ? t.entry_time.split(' ')[1] || '' : '';
+                            const outcome = t.outcome || '';
+                            let outBadge;
+                            if (isWin)  outBadge = `<span class="win-badge">WIN</span>`;
+                            else if (isLoss) outBadge = `<span class="loss-badge">LOSS</span>`;
+                            else outBadge = `<span class="timeout-badge">${outcome}</span>`;
+                            const entryStr = t.entry ? `$${t.entry.toFixed(2)}` : '—';
+                            const contracts = t.contracts || 1;
+                            return `<tr style="border-bottom:1px solid var(--border);border-left:${rowBorder};cursor:pointer;"
+                                        onclick="drillIn('${t._ticker}', ${_lastBatchDays||90})">
+                                <td style="padding:7px 14px;font-size:11px;color:var(--muted)">${time}</td>
+                                <td style="padding:7px 14px;font-size:12px;font-weight:700;color:var(--blue)">${t._ticker}</td>
+                                <td style="padding:7px 14px;font-size:11px;font-weight:700;color:${dirCol}">${(t.dir||'').toUpperCase()}</td>
+                                <td style="padding:7px 14px;">${strategyLabel(t.strategy)}</td>
+                                <td style="padding:7px 14px;font-size:11px">${entryStr}</td>
+                                <td style="padding:7px 14px;">${outBadge}</td>
+                                <td style="padding:7px 14px;font-size:12px;font-weight:700;color:${pnlCol};text-align:right">${pnl>=0?'+':''}$${Math.round(pnl).toLocaleString()} <span style="font-size:10px;color:var(--muted)">${contracts}ct</span></td>
+                                <td style="padding:7px 14px;font-size:11px;color:var(--muted);text-align:right">${t.confidence||'—'}</td>
+                            </tr>`;
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>
+        </div>`;
+    });
+
+    document.getElementById('by-day-content').innerHTML = html || '<div style="color:var(--muted);padding:20px">No executed trades found.</div>';
 }
 
 // Init — force reset dropdowns (browsers aggressively cache select values)
