@@ -1691,9 +1691,11 @@ function runCapitalSim() {
             }
         });
 
+        // Capture account value BEFORE this trade (settled + still-pending from earlier trades)
+        const balanceBeforeTrade = settledCash + Object.values(pendingByDate).reduce((a, b) => a + b, 0);
+
         const contracts    = t.contracts || 1;
         const costPerContr = t.opt_entry_premium * 100; // one contract = 100 shares
-        const fullCost     = costPerContr * contracts;
 
         // How many contracts can we afford right now?
         const affordable   = Math.floor(settledCash / costPerContr);
@@ -1723,10 +1725,10 @@ function runCapitalSim() {
         runningBalance = settledCash + pending;
         equityPoints.push({ x: tradeIndex, y: Math.round(runningBalance) });
 
-        // Monthly tracking
+        // Monthly tracking — startBalance captured BEFORE first trade of the month
         const month = entryDateStr.substring(0, 7);
         if (!monthlyData[month]) {
-            monthlyData[month] = { pnl: 0, trades: 0, wins: 0, losses: 0, startBalance: runningBalance - actualPnl };
+            monthlyData[month] = { pnl: 0, trades: 0, wins: 0, losses: 0, startBalance: balanceBeforeTrade };
         }
         monthlyData[month].pnl    += actualPnl;
         monthlyData[month].trades++;
