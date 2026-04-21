@@ -1917,10 +1917,17 @@ function renderByDay() {
     // Sort newest first
     allTrades.sort((a, b) => (b.entry_ts || 0) - (a.entry_ts || 0));
 
-    // Group by date (ET date from entry_time string e.g. "2026-03-15 10:30")
+    // Group by date — use entry_ts (epoch ms, always present) as primary source.
+    // entry_time is a formatted string and may be missing for some trade types.
     const byDate = {};
     allTrades.forEach(t => {
-        const dateKey = t.entry_time ? t.entry_time.split(' ')[0] : (t.entry_ts ? new Date(t.entry_ts).toISOString().split('T')[0] : 'unknown');
+        let dateKey = null;
+        if (t.entry_ts) {
+            // Convert epoch ms → ET date string (entry_ts is in ET, stored as epoch ms)
+            // Use entry_time's date part if available (already ET), else fall back to UTC date
+            dateKey = t.entry_time ? t.entry_time.split(' ')[0] : new Date(t.entry_ts).toISOString().split('T')[0];
+        }
+        if (!dateKey || dateKey === 'null' || dateKey === 'undefined') return;
         if (!byDate[dateKey]) byDate[dateKey] = [];
         byDate[dateKey].push(t);
     });
