@@ -1971,6 +1971,7 @@ function renderByDay() {
                             <th style="padding:6px 14px;font-size:10px;color:var(--muted);text-align:left;font-weight:600;text-transform:uppercase;letter-spacing:.7px;">Strategy</th>
                             <th style="padding:6px 14px;font-size:10px;color:var(--muted);text-align:left;font-weight:600;text-transform:uppercase;letter-spacing:.7px;">Entry</th>
                             <th style="padding:6px 14px;font-size:10px;color:var(--muted);text-align:left;font-weight:600;text-transform:uppercase;letter-spacing:.7px;">Outcome</th>
+                            <th style="padding:6px 14px;font-size:10px;color:var(--muted);text-align:right;font-weight:600;text-transform:uppercase;letter-spacing:.7px;">Premium Paid</th>
                             <th style="padding:6px 14px;font-size:10px;color:var(--muted);text-align:right;font-weight:600;text-transform:uppercase;letter-spacing:.7px;">Opt P&L</th>
                             <th style="padding:6px 14px;font-size:10px;color:var(--muted);text-align:right;font-weight:600;text-transform:uppercase;letter-spacing:.7px;">Conf</th>
                         </tr>
@@ -1999,7 +2000,8 @@ function renderByDay() {
                                 <td style="padding:7px 14px;">${strategyLabel(t.strategy)}</td>
                                 <td style="padding:7px 14px;font-size:11px">${entryStr}</td>
                                 <td style="padding:7px 14px;">${outBadge}</td>
-                                <td style="padding:7px 14px;font-size:12px;font-weight:700;color:${pnlCol};text-align:right">${pnl>=0?'+':''}$${Math.round(pnl).toLocaleString()} <span style="font-size:10px;color:var(--muted)">${contracts}ct</span></td>
+                                <td style="padding:7px 14px;font-size:11px;color:var(--muted);text-align:right">$${Math.round((t.opt_entry_premium||0)*100*contracts).toLocaleString()} <span style="font-size:10px;opacity:.6">${contracts}ct</span></td>
+                                <td style="padding:7px 14px;font-size:12px;font-weight:700;color:${pnlCol};text-align:right">${pnl>=0?'+':''}$${Math.round(pnl).toLocaleString()}</td>
                                 <td style="padding:7px 14px;font-size:11px;color:var(--muted);text-align:right">${t.confidence||'—'}</td>
                             </tr>`;
                         }).join('')}
