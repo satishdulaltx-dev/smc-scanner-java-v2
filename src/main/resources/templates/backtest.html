@@ -1926,15 +1926,13 @@ function renderByDay() {
     // Sort newest first
     allTrades.sort((a, b) => (b.entry_ts || 0) - (a.entry_ts || 0));
 
-    // Group by date — use entry_ts (epoch ms, always present) as primary source.
-    // entry_time is a formatted string and may be missing for some trade types.
+    // Group by date — always derive from entry_ts (epoch ms → ISO "YYYY-MM-DD").
+    // entry_time may be in US locale format "MM/DD/YYYY HH:mm" which breaks date parsing.
     const byDate = {};
     allTrades.forEach(t => {
         let dateKey = null;
         if (t.entry_ts) {
-            // Convert epoch ms → ET date string (entry_ts is in ET, stored as epoch ms)
-            // Use entry_time's date part if available (already ET), else fall back to UTC date
-            dateKey = t.entry_time ? t.entry_time.split(' ')[0] : new Date(t.entry_ts).toISOString().split('T')[0];
+            dateKey = new Date(t.entry_ts).toISOString().split('T')[0]; // always "YYYY-MM-DD"
         }
         if (!dateKey || dateKey === 'null' || dateKey === 'undefined') return;
         if (!byDate[dateKey]) byDate[dateKey] = [];
@@ -2003,7 +2001,7 @@ function renderByDay() {
                             const pnl = t.opt_pnl_scaled || 0;
                             const pnlCol = pnl >= 0 ? 'var(--green)' : 'var(--red)';
                             const dirCol = t.dir === 'long' ? 'var(--green)' : 'var(--red)';
-                            const time = t.entry_time ? t.entry_time.split(' ')[1] || '' : '';
+                            const time = t.entry_time ? t.entry_time.split(' ')[1] || '' : (t.entry_ts ? new Date(t.entry_ts).toISOString().substring(11,16) : '');
                             const outcome = t.outcome || '';
                             let outBadge;
                             if (isSkipped) outBadge = `<span style="background:rgba(255,255,255,.1);color:var(--muted);font-size:10px;font-weight:700;padding:2px 6px;border-radius:3px;letter-spacing:.5px">SKIPPED</span>`;
