@@ -247,19 +247,28 @@ public class AlpacaOrderService {
 
             // Options are always a "buy" — calls for LONG setups, puts for SHORT
             // asset_class MUST be "us_option" or Alpaca treats it as a stock order
+            //
+            // Marketable limit: set limit_price 5% above the current ask so the order
+            // fills immediately at the prevailing ask rather than sitting unfilled.
+            // A plain limit-at-ask frequently misses fills because the ask moves up by
+            // the time the order reaches the exchange (especially for fast-moving options).
+            // The 5% buffer caps slippage while virtually guaranteeing a same-second fill.
+            // Alpaca rounds to the nearest $0.01, so we round up to nearest cent.
+            double marketablePremium = Math.ceil(premium * 1.05 * 100.0) / 100.0;
             Map<String, Object> order = new LinkedHashMap<>();
             order.put("symbol", occSymbol);
             order.put("qty", String.valueOf(contracts));
             order.put("side", "buy");
             order.put("type", "limit");
-            order.put("limit_price", String.format("%.2f", premium));
+            order.put("limit_price", String.format("%.2f", marketablePremium));
             order.put("time_in_force", "day");
             order.put("asset_class", "us_option");
 
             String json = mapper.writeValueAsString(order);
-            log.info("ALPACA OPTIONS ORDER ATTEMPT: symbol={} qty={} premium=${} totalCost=${} bp=${} optionsBp=${} budget=${} suggestedQty={} dir={} mode={}",
+            log.info("ALPACA OPTIONS ORDER ATTEMPT: symbol={} qty={} ask=${} limitPrice=${} totalCost=${} bp=${} optionsBp=${} budget=${} suggestedQty={} dir={} mode={}",
                     occSymbol, contracts,
                     String.format("%.2f", premium),
+                    String.format("%.2f", marketablePremium),
                     String.format("%.2f", contractCost * contracts),
                     String.format("%.2f", buyingPower),
                     String.format("%.2f", optionsBuyingPower),
