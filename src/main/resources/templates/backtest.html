@@ -320,19 +320,19 @@
 
 <!-- Batch results -->
 <div id="batch-results" style="display:none">
-    <div style="padding:16px 24px 8px; display:flex; align-items:center; justify-content:space-between;">
+    <div style="padding:16px 24px 8px; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:8px;">
         <span style="color:var(--muted); font-size:11px; text-transform:uppercase; font-weight:600; letter-spacing:.8px;">
             WATCHLIST BACKTEST RESULTS
             <span style="color:var(--muted); font-size:10px; margin-left:8px;">CLICK A CARD TO DRILL IN</span>
         </span>
-        <div style="display:flex;gap:8px;align-items:center">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
             <button onclick="toggleLossBreakdown()" style="background:rgba(248,81,73,.1);border:1px solid rgba(248,81,73,.3);color:#f85149;font-size:11px;padding:4px 10px;border-radius:4px;cursor:pointer;" id="loss-breakdown-btn">
                 Loss Breakdown
             </button>
             <button onclick="toggleFilteredBox()" style="background:rgba(139,148,158,.1);border:1px solid var(--border);color:var(--muted);font-size:11px;padding:4px 10px;border-radius:4px;cursor:pointer;" id="filtered-toggle-btn">
                 Show Filtered Trades
             </button>
-            <button onclick="toggleCapitalSim()" style="background:rgba(63,185,80,.1);border:1px solid rgba(63,185,80,.35);color:#3fb950;font-size:11px;padding:4px 10px;border-radius:4px;cursor:pointer;" id="capital-sim-btn">
+            <button onclick="toggleCapitalSim()" style="background:rgba(63,185,80,.15);border:1px solid #3fb950;color:#3fb950;font-size:12px;font-weight:700;padding:6px 14px;border-radius:4px;cursor:pointer;" id="capital-sim-btn">
                 $ Capital Sim
             </button>
         </div>
