@@ -1971,12 +1971,15 @@ function renderByDay() {
     let html = '';
     dates.forEach(date => {
         const trades = byDate[date];
-        const wins   = trades.filter(isWinOutcome).length;
-        const losses = trades.filter(isLossOutcome).length;
-        const other  = trades.length - wins - losses;
-        const dayPnl = trades.reduce((sum, t) => sum + (t.opt_pnl_scaled || 0), 0);
+        // Exclude skipped trades from P&L and W/L counts — they weren't taken
+        const executed = trades.filter(t => !_simSkippedKeys.has(t.entry_ts + '_' + (t._ticker || '')));
+        const skippedCount = trades.length - executed.length;
+        const wins   = executed.filter(isWinOutcome).length;
+        const losses = executed.filter(isLossOutcome).length;
+        const other  = executed.length - wins - losses;
+        const dayPnl = executed.reduce((sum, t) => sum + (t.opt_pnl_scaled || 0), 0);
         const pnlCol = dayPnl >= 0 ? 'var(--green)' : 'var(--red)';
-        const wrPct  = trades.length > 0 ? Math.round(wins / (wins + losses || 1) * 100) : 0;
+        const wrPct  = executed.length > 0 ? Math.round(wins / (wins + losses || 1) * 100) : 0;
         const wrCol  = wrPct >= 60 ? 'var(--green)' : wrPct >= 40 ? 'var(--yellow)' : 'var(--red)';
         const endBal = _simDayBalance[date];
         const balStr = endBal != null ? `$${endBal.toLocaleString()}` : null;
@@ -1991,7 +1994,7 @@ function renderByDay() {
             <div style="background:var(--surface);padding:8px 14px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;cursor:pointer;"
                  onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
                 <span style="font-size:13px;font-weight:700;color:var(--text);min-width:110px;">${dayLabel}</span>
-                <span style="font-size:11px;color:var(--muted)">${trades.length} trade${trades.length!==1?'s':''}</span>
+                <span style="font-size:11px;color:var(--muted)">${executed.length} trade${executed.length!==1?'s':''}${skippedCount>0?` <span style="color:rgba(255,255,255,.3)">${skippedCount} skipped</span>`:''}</span>
                 <span style="font-size:11px;">
                     <span style="color:var(--green)">${wins}W</span>
                     <span style="color:var(--muted)"> / </span>
