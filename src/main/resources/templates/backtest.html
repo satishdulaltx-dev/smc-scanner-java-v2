@@ -2007,7 +2007,13 @@ function renderByDay() {
                                 <td style="padding:7px 14px;">${strategyLabel(t.strategy)}</td>
                                 <td style="padding:7px 14px;font-size:11px">${entryStr}</td>
                                 <td style="padding:7px 14px;">${outBadge}</td>
-                                <td style="padding:7px 14px;font-size:11px;color:var(--muted);text-align:right">$${Math.round((t.opt_entry_premium||0)*100*contracts).toLocaleString()} <span style="font-size:10px;opacity:.6">${contracts}ct</span></td>
+                                <td style="padding:7px 14px;font-size:11px;color:var(--muted);text-align:right">${(() => {
+                                    const mc = (t.opt_entry_premium||0)*100;
+                                    const rc = t.entry > 0 ? t.entry*0.015*100 : mc;
+                                    const cost = Math.max(mc, rc) * contracts;
+                                    const isEstimated = rc > mc;
+                                    return `$${Math.round(cost).toLocaleString()} <span style="font-size:10px;opacity:.6">${contracts}ct${isEstimated?' ~est':''}</span>`;
+                                })()}</td>
                                 <td style="padding:7px 14px;font-size:12px;font-weight:700;color:${pnlCol};text-align:right">${pnl>=0?'+':''}$${Math.round(pnl).toLocaleString()}</td>
                                 <td style="padding:7px 14px;font-size:11px;color:var(--muted);text-align:right">${t.confidence||'—'}</td>
                             </tr>`;
