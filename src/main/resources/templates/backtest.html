@@ -1418,7 +1418,8 @@ function drawTradeChart(data, trade) {
 }
 
 let _lastBatchDays = 90;
-let _simSkippedKeys = new Set(); // entry_ts keys of trades skipped by capital sim
+let _simSkippedKeys = new Set();   // entry_ts keys of trades skipped by capital sim
+let _simDayBalance  = {};          // "YYYY-MM-DD" → end-of-day running balance
 function renderBatch(results, days) {
     show('batch-results');
     _batchLossData = results; // store for loss breakdown panel
@@ -1689,8 +1690,9 @@ function runCapitalSim() {
     // Sort chronologically by entry timestamp
     allTrades.sort((a, b) => (a.entry_ts || 0) - (b.entry_ts || 0));
 
-    // Reset skipped keys — By Day view will read this to mark skipped rows
+    // Reset state — By Day view reads these to mark skipped rows and show daily balance
     _simSkippedKeys = new Set();
+    _simDayBalance  = {};
 
     // ── Simulation with T+1 settlement ────────────────────────────────────────
     let settledCash  = startingCapital;
@@ -1731,6 +1733,8 @@ function runCapitalSim() {
         if (affordable === 0) {
             tradesSkipped++;
             if (t.entry_ts) _simSkippedKeys.add(t.entry_ts + '_' + (t._ticker || ''));
+            // Still record balance for this date (unchanged — skip costs nothing)
+            _simDayBalance[entryDateStr] = Math.round(settledCash + Object.values(pendingByDate).reduce((a,b)=>a+b,0));
             return;
         }
         const actual = Math.min(affordable, contracts);
@@ -1756,6 +1760,7 @@ function runCapitalSim() {
         const pending = Object.values(pendingByDate).reduce((a, b) => a + b, 0);
         runningBalance = settledCash + pending;
         equityPoints.push({ x: tradeIndex, y: Math.round(runningBalance) });
+        _simDayBalance[entryDateStr] = Math.round(runningBalance); // latest trade on this date wins
 
         // Monthly tracking — startBalance captured BEFORE first trade of the month
         const month = entryDateStr.substring(0, 7);
@@ -1903,7 +1908,10 @@ function toggleByDay() {
     if (box.style.display === 'none') {
         box.style.display = 'block';
         btn.style.background = 'rgba(88,166,255,.3)';
-        renderByDay();
+        // Run sim first so _simSkippedKeys is populated before rendering
+        const simBox = document.getElementById('capital-sim-box');
+        if (simBox && simBox.style.display !== 'none') runCapitalSim();
+        else renderByDay();
     } else {
         box.style.display = 'none';
         btn.style.background = 'rgba(88,166,255,.15)';
@@ -1951,6 +1959,8 @@ function renderByDay() {
         const pnlCol = dayPnl >= 0 ? 'var(--green)' : 'var(--red)';
         const wrPct  = trades.length > 0 ? Math.round(wins / (wins + losses || 1) * 100) : 0;
         const wrCol  = wrPct >= 60 ? 'var(--green)' : wrPct >= 40 ? 'var(--yellow)' : 'var(--red)';
+        const endBal = _simDayBalance[date];
+        const balStr = endBal != null ? `$${endBal.toLocaleString()}` : null;
 
         // Format date nicely
         const d = new Date(date + 'T12:00:00Z');
@@ -1973,6 +1983,7 @@ function renderByDay() {
                 <span style="font-size:13px;font-weight:700;color:${pnlCol};margin-left:auto">
                     ${dayPnl >= 0 ? '+' : ''}$${Math.round(dayPnl).toLocaleString()}
                 </span>
+                ${balStr ? `<span style="font-size:11px;color:var(--muted);white-space:nowrap">bal&nbsp;<span style="font-weight:700;color:var(--text)">${balStr}</span></span>` : ''}
             </div>
             <!-- Trade rows -->
             <div style="display:block;">
