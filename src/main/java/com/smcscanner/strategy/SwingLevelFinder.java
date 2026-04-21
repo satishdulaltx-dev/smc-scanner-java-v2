@@ -50,7 +50,11 @@ public final class SwingLevelFinder {
 
         if (bestLow == Double.NEGATIVE_INFINITY) return fallback; // no pivot found
 
-        double sl = Math.round((bestLow - atr * 0.10) * 10_000.0) / 10_000.0;
+        // Buffer: large enough to survive a typical liquidity sweep below support.
+        // Retail stops cluster just below the swing low — institutions dip through briefly.
+        // Use max(0.25 × ATR, 0.20% of price) so the buffer scales with price level.
+        double buffer = Math.max(atr * 0.25, entry * 0.0020);
+        double sl = Math.round((bestLow - buffer) * 10_000.0) / 10_000.0;
         // Cap: never risk more than 2× ATR (prevents absurdly wide stops)
         sl = Math.max(sl, entry - atr * 2.0);
         return sl < entry ? sl : fallback;
@@ -84,7 +88,9 @@ public final class SwingLevelFinder {
 
         if (bestHigh == Double.POSITIVE_INFINITY) return fallback;
 
-        double sl = Math.round((bestHigh + atr * 0.10) * 10_000.0) / 10_000.0;
+        // Same logic: buffer above the swing high to survive liquidity sweeps above resistance.
+        double buffer = Math.max(atr * 0.25, entry * 0.0020);
+        double sl = Math.round((bestHigh + buffer) * 10_000.0) / 10_000.0;
         // Cap: never risk more than 2× ATR
         sl = Math.min(sl, entry + atr * 2.0);
         return sl > entry ? sl : fallback;
