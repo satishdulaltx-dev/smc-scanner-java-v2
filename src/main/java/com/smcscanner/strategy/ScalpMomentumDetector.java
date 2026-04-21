@@ -182,13 +182,15 @@ public class ScalpMomentumDetector {
         double stop, tp;
 
         if (isLong) {
-            stop = round4(lastLo - atr * 0.15);
+            double slFallback = round4(lastLo - atr * 0.15);
+            stop = round4(SwingLevelFinder.swingLowSl(sessionBars, entry, atr, 15, slFallback));
             double risk = Math.abs(entry - stop);
             if (risk <= 0 || risk > atr * 1.5) return result;
             if (isLateExpansionChase(sessionBars, n, atr, true) && (tpBand - entry) < risk * 0.8) return result;
             tp = round4(Math.max(tpBand, entry + risk * 1.5));
         } else {
-            stop = round4(lastHi + atr * 0.15);
+            double slFallback = round4(lastHi + atr * 0.15);
+            stop = round4(SwingLevelFinder.swingHighSl(sessionBars, entry, atr, 15, slFallback));
             double risk = Math.abs(entry - stop);
             if (risk <= 0 || risk > atr * 1.5) return result;
             if (isLateExpansionChase(sessionBars, n, atr, false) && (entry - tpBand) < risk * 0.8) return result;

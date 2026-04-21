@@ -90,8 +90,9 @@ public class VolatilitySqueezeDetector {
         boolean volSpike = last.getVolume() > avgVol * 1.3;
 
         if (longDir && longMom && volSpike) {
-            double entry = r4(curClose);
-            double sl    = r4(Math.min(bbLower, entry - atr * 0.5));
+            double entry       = r4(curClose);
+            double atrFallback = r4(Math.min(bbLower, entry - atr * 0.5));
+            double sl          = r4(SwingLevelFinder.swingLowSl(sb, entry, atr, 20, atrFallback));
             double risk  = entry - sl;
             double tp    = r4(entry + Math.max(risk * 2.0, effAtr > 0 ? effAtr * 0.8 : risk * 2.0));
 
@@ -116,8 +117,9 @@ public class VolatilitySqueezeDetector {
                         .timestamp(LocalDateTime.now()).build());
             }
         } else if (shortDir && shortMom && volSpike) {
-            double entry = r4(curClose);
-            double sl    = r4(Math.max(bbUpper, entry + atr * 0.5));
+            double entry       = r4(curClose);
+            double atrFallback = r4(Math.max(bbUpper, entry + atr * 0.5));
+            double sl          = r4(SwingLevelFinder.swingHighSl(sb, entry, atr, 20, atrFallback));
             double risk  = sl - entry;
             double tp    = r4(entry - Math.max(risk * 2.0, effAtr > 0 ? effAtr * 0.8 : risk * 2.0));
 

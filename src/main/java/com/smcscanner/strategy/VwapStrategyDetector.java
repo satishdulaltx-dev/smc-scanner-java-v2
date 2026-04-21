@@ -193,10 +193,10 @@ public class VwapStrategyDetector {
 
             if (belowVwap && bouncingUp && bullishBar && volSpike && notFreeFall && zScoreReverting) {
                 double entry = r4(curClose);
-                double slRaw = r4(lowestClose - curAtr * 0.3);
-                double sl    = Math.min(slRaw, r4(entry - targetAtr * 0.35));
-                // sl must be below entry
-                sl = Math.min(sl, r4(entry - curAtr * 0.1));
+                // Anchor SL at nearest structural swing low below entry; fall back to ATR-based
+                double atrFallback = Math.min(r4(lowestClose - curAtr * 0.3), r4(entry - targetAtr * 0.35));
+                atrFallback = Math.min(atrFallback, r4(entry - curAtr * 0.1));
+                double sl = r4(SwingLevelFinder.swingLowSl(sessionBars, entry, curAtr, 20, atrFallback));
 
                 double tpRaw = r4(vwap + curAtr * 0.3);
                 double tp    = tpRaw > entry * 1.005 ? tpRaw : r4(entry + targetAtr * 0.9);
@@ -273,10 +273,10 @@ public class VwapStrategyDetector {
 
             if (aboveVwap && revertingDown && bearishBar && volSpike && notFreeRocket && zScoreReverting) {
                 double entry = r4(curClose);
-                double slRaw = r4(highestClose + curAtr * 0.3);
-                double sl    = Math.max(slRaw, r4(entry + targetAtr * 0.35));
-                // sl must be above entry
-                sl = Math.max(sl, r4(entry + curAtr * 0.1));
+                // Anchor SL at nearest structural swing high above entry; fall back to ATR-based
+                double atrFallback = Math.max(r4(highestClose + curAtr * 0.3), r4(entry + targetAtr * 0.35));
+                atrFallback = Math.max(atrFallback, r4(entry + curAtr * 0.1));
+                double sl = r4(SwingLevelFinder.swingHighSl(sessionBars, entry, curAtr, 20, atrFallback));
 
                 double tpRaw = r4(vwap - curAtr * 0.3);
                 double tp    = tpRaw < entry * 0.995 ? tpRaw : r4(entry - targetAtr * 0.9);
