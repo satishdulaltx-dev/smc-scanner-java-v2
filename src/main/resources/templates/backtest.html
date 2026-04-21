@@ -1968,6 +1968,13 @@ function renderByDay() {
 
     const dates = Object.keys(byDate).sort(); // oldest first
 
+    // Compute running balance as clean cumulative sum — avoids T+1 drift in _simDayBalance
+    const simCapitalEl = document.getElementById('sim-capital');
+    const simBox = document.getElementById('capital-sim-box');
+    const simOpen = simBox && simBox.style.display !== 'none';
+    const startingCapital = simOpen && simCapitalEl ? (parseFloat(simCapitalEl.value) || null) : null;
+    let runningBal = startingCapital;
+
     let html = '';
     dates.forEach(date => {
         const trades = byDate[date];
@@ -1981,7 +1988,8 @@ function renderByDay() {
         const pnlCol = dayPnl >= 0 ? 'var(--green)' : 'var(--red)';
         const wrPct  = executed.length > 0 ? Math.round(wins / (wins + losses || 1) * 100) : 0;
         const wrCol  = wrPct >= 60 ? 'var(--green)' : wrPct >= 40 ? 'var(--yellow)' : 'var(--red)';
-        const endBal = _simDayBalance[date];
+        if (runningBal !== null) runningBal = Math.round(runningBal + dayPnl);
+        const endBal = runningBal;
         const balStr = endBal != null ? `$${endBal.toLocaleString()}` : null;
 
         // Format date nicely
