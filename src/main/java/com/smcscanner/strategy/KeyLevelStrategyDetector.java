@@ -63,8 +63,11 @@ public class KeyLevelStrategyDetector {
         // ── Filter 5m bars to regular NYSE session (9:30–16:00 ET) ────────────
         // This avoids: (a) pre-market volume distorting avgVol, (b) firing on the
         // noisy first opening bar, (c) after-hours false signals.
+        LocalDate sysToday  = LocalDate.now(ET);
         LocalDate today     = Instant.ofEpochMilli(
                 fiveMinBars.get(fiveMinBars.size() - 1).getTimestamp()).atZone(ET).toLocalDate();
+        // Staleness guard: reject if last bar is from a prior calendar day
+        if (!today.equals(sysToday)) return result;
         LocalTime mktOpen   = LocalTime.of(9, 30);
         LocalTime mktClose  = LocalTime.of(16, 0);
 

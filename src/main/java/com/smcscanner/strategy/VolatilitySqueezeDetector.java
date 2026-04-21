@@ -33,6 +33,7 @@ public class VolatilitySqueezeDetector {
         OHLCV lastRaw = bars.get(bars.size() - 1);
         LocalDate today = Instant.ofEpochMilli(lastRaw.getTimestamp())
                 .atZone(ET).toLocalDate();
+        if (!today.equals(LocalDate.now(ET))) return result; // staleness guard
         LocalTime mktOpen  = LocalTime.of(9, 30);
         LocalTime mktClose = LocalTime.of(16, 0);
 

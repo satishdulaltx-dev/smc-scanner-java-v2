@@ -47,6 +47,10 @@ public class SetupDetector {
         if (!backtestMode) {
             if (isCrypto&&!sessionFilter.isInCryptoSession()) { state.setPhase(SetupPhase.OUTSIDE_SESSION); return new DetectResult(List.of(),state); }
             if (!isCrypto&&!sessionFilter.isInNySession())    { state.setPhase(SetupPhase.OUTSIDE_SESSION); return new DetectResult(List.of(),state); }
+            // Staleness guard: reject if the last bar is from a prior calendar day
+            java.time.ZoneId et = java.time.ZoneId.of("America/New_York");
+            java.time.LocalDate lastBarDate = java.time.Instant.ofEpochMilli(bars.get(bars.size()-1).getTimestamp()).atZone(et).toLocalDate();
+            if (!lastBarDate.equals(java.time.LocalDate.now(et))) { state.setPhase(SetupPhase.OUTSIDE_SESSION); return new DetectResult(List.of(),state); }
         }
 
         double[] atrArr=atrCalc.computeAtr(bars,14);
