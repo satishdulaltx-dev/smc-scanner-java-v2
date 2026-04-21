@@ -1742,16 +1742,50 @@ function runCapitalSim() {
     const totalPnl     = finalBalance - startingCapital;
     const totalReturn  = (totalPnl / startingCapital) * 100;
 
+    // ── Find minimum viable capital (binary search — 0 skips threshold) ─────────
+    // Run a lightweight version of the sim at progressively lower amounts to find
+    // the true floor where no trades get skipped.
+    function simSkips(capital) {
+        let cash = capital;
+        const pending = {};
+        let skips = 0;
+        allTrades.forEach(t => {
+            const ed = t.entry_ts ? new Date(t.entry_ts).toISOString().split('T')[0] : null;
+            const xd = t.exit_ts  ? new Date(t.exit_ts ).toISOString().split('T')[0] : ed;
+            if (!ed) return;
+            Object.keys(pending).sort().forEach(d => { if (d <= ed) { cash += pending[d]; delete pending[d]; } });
+            const cpc = t.opt_entry_premium * 100;
+            const aff = Math.floor(cash / cpc);
+            if (aff === 0) { skips++; return; }
+            const act = Math.min(aff, t.contracts || 1);
+            cash -= cpc * act;
+            const ppl = ((t.opt_pnl_scaled || 0) / (t.contracts || 1)) * act;
+            const sd = getNextBusinessDay(xd || ed);
+            pending[sd] = (pending[sd] || 0) + cpc * act + ppl;
+        });
+        return skips;
+    }
+    // Binary search for minimum capital with 0 skips (search $50–$5000)
+    let lo = 50, hi = Math.max(startingCapital, 5000), minViable = hi;
+    for (let iter = 0; iter < 16; iter++) {
+        const mid = Math.round((lo + hi) / 2);
+        if (simSkips(mid) === 0) { minViable = mid; hi = mid - 1; }
+        else lo = mid + 1;
+    }
+    // Round up to nearest $50 for a clean display
+    minViable = Math.ceil(minViable / 50) * 50;
+
     // ── Render summary stats ───────────────────────────────────────────────────
     const pnlColor = totalPnl >= 0 ? 'var(--green)' : 'var(--red)';
+    const minViableColor = startingCapital >= minViable ? 'var(--green)' : 'var(--red)';
     const stats = [
         { val: `$${startingCapital.toLocaleString()}`,                  lbl: 'Starting Capital' },
         { val: `$${Math.round(finalBalance).toLocaleString()}`,         lbl: 'Final Balance',     col: pnlColor },
         { val: `${totalPnl >= 0 ? '+' : ''}$${Math.round(totalPnl).toLocaleString()}`, lbl: 'Total P&L', col: pnlColor },
         { val: `${totalReturn >= 0 ? '+' : ''}${totalReturn.toFixed(1)}%`,              lbl: 'Total Return', col: pnlColor },
         { val: tradesExecuted,                                           lbl: 'Trades Taken' },
-        { val: tradesScaledDown > 0 ? tradesScaledDown : '—',           lbl: 'Scaled Down (capital)', col: 'var(--yellow)' },
-        { val: tradesSkipped   > 0 ? tradesSkipped   : '—',             lbl: 'Skipped (no capital)',  col: tradesSkipped > 5 ? 'var(--red)' : 'var(--muted)' },
+        { val: `$${minViable.toLocaleString()}`,                        lbl: 'Min Viable Capital', col: minViableColor },
+        { val: tradesSkipped > 0 ? tradesSkipped : '—',                 lbl: 'Skipped (no capital)', col: tradesSkipped > 5 ? 'var(--red)' : 'var(--muted)' },
     ];
     document.getElementById('capital-sim-stats').innerHTML = stats.map(s =>
         `<div style="display:flex;flex-direction:column;align-items:center;min-width:90px;">
