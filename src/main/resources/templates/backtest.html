@@ -1418,6 +1418,7 @@ function drawTradeChart(data, trade) {
 }
 
 let _lastBatchDays = 90;
+let _simSkippedKeys = new Set(); // entry_ts keys of trades skipped by capital sim
 function renderBatch(results, days) {
     show('batch-results');
     _batchLossData = results; // store for loss breakdown panel
@@ -1688,6 +1689,9 @@ function runCapitalSim() {
     // Sort chronologically by entry timestamp
     allTrades.sort((a, b) => (a.entry_ts || 0) - (b.entry_ts || 0));
 
+    // Reset skipped keys — By Day view will read this to mark skipped rows
+    _simSkippedKeys = new Set();
+
     // ── Simulation with T+1 settlement ────────────────────────────────────────
     let settledCash  = startingCapital;
     const pendingByDate = {}; // "YYYY-MM-DD" → amount settling on that day
@@ -1726,6 +1730,7 @@ function runCapitalSim() {
         const affordable   = Math.floor(settledCash / costPerContr);
         if (affordable === 0) {
             tradesSkipped++;
+            if (t.entry_ts) _simSkippedKeys.add(t.entry_ts + '_' + (t._ticker || ''));
             return;
         }
         const actual = Math.min(affordable, contracts);
@@ -1885,6 +1890,10 @@ function runCapitalSim() {
     });
 
     document.getElementById('capital-sim-results').style.display = 'block';
+
+    // If By Day panel is open, re-render it so skipped rows update immediately
+    const byDayBox = document.getElementById('by-day-box');
+    if (byDayBox && byDayBox.style.display !== 'none') renderByDay();
 }
 
 // ── By Day View ───────────────────────────────────────────────────────────────
@@ -1985,21 +1994,25 @@ function renderByDay() {
                     </thead>
                     <tbody>
                         ${trades.map(t => {
+                            const simKey = t.entry_ts + '_' + (t._ticker || '');
+                            const isSkipped = _simSkippedKeys.size > 0 && _simSkippedKeys.has(simKey);
                             const isWin  = isWinOutcome(t);
                             const isLoss = isLossOutcome(t);
-                            const rowBorder = isWin ? '3px solid var(--green)' : isLoss ? '3px solid var(--red)' : '3px solid var(--yellow)';
+                            const rowBorder = isSkipped ? '3px solid rgba(255,255,255,.12)' : isWin ? '3px solid var(--green)' : isLoss ? '3px solid var(--red)' : '3px solid var(--yellow)';
+                            const rowOpacity = isSkipped ? 'opacity:.4;' : '';
                             const pnl = t.opt_pnl_scaled || 0;
                             const pnlCol = pnl >= 0 ? 'var(--green)' : 'var(--red)';
                             const dirCol = t.dir === 'long' ? 'var(--green)' : 'var(--red)';
                             const time = t.entry_time ? t.entry_time.split(' ')[1] || '' : '';
                             const outcome = t.outcome || '';
                             let outBadge;
-                            if (isWin)  outBadge = `<span class="win-badge">WIN</span>`;
+                            if (isSkipped) outBadge = `<span style="background:rgba(255,255,255,.1);color:var(--muted);font-size:10px;font-weight:700;padding:2px 6px;border-radius:3px;letter-spacing:.5px">SKIPPED</span>`;
+                            else if (isWin)  outBadge = `<span class="win-badge">WIN</span>`;
                             else if (isLoss) outBadge = `<span class="loss-badge">LOSS</span>`;
                             else outBadge = `<span class="timeout-badge">${outcome}</span>`;
                             const entryStr = t.entry ? `$${t.entry.toFixed(2)}` : '—';
                             const contracts = t.contracts || 1;
-                            return `<tr style="border-bottom:1px solid var(--border);border-left:${rowBorder};cursor:pointer;"
+                            return `<tr style="border-bottom:1px solid var(--border);border-left:${rowBorder};cursor:pointer;${rowOpacity}"
                                         onclick="drillIn('${t._ticker}', ${_lastBatchDays||90})">
                                 <td style="padding:7px 14px;font-size:11px;color:var(--muted)">${time}</td>
                                 <td style="padding:7px 14px;font-size:12px;font-weight:700;color:var(--blue)">${t._ticker}</td>
@@ -2014,7 +2027,7 @@ function renderByDay() {
                                     const isEstimated = rc > mc;
                                     return `$${Math.round(cost).toLocaleString()} <span style="font-size:10px;opacity:.6">${contracts}ct${isEstimated?' ~est':''}</span>`;
                                 })()}</td>
-                                <td style="padding:7px 14px;font-size:12px;font-weight:700;color:${pnlCol};text-align:right">${pnl>=0?'+':''}$${Math.round(pnl).toLocaleString()}</td>
+                                <td style="padding:7px 14px;font-size:12px;font-weight:700;color:${isSkipped?'var(--muted)':pnlCol};text-align:right">${isSkipped ? '—' : (pnl>=0?'+':'')+'$'+Math.round(pnl).toLocaleString()}</td>
                                 <td style="padding:7px 14px;font-size:11px;color:var(--muted);text-align:right">${t.confidence||'—'}</td>
                             </tr>`;
                         }).join('')}
