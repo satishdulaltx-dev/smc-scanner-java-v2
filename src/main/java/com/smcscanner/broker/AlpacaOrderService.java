@@ -248,20 +248,24 @@ public class AlpacaOrderService {
             // Options are always a "buy" — calls for LONG setups, puts for SHORT
             // asset_class MUST be "us_option" or Alpaca treats it as a stock order
             //
-            // Market order: fills immediately at the prevailing ask. Same approach
-            // already used for sell-to-close. Eliminates all unfilled-limit issues.
+            // Marketable limit at ask * 1.03: fills immediately in ~99% of cases while
+            // capping slippage at 3% above the ask at signal time (~$6-15/contract).
+            // Pure market orders risk bad fills on wide-spread tickers (GLD, MARA, SOFI).
+            double marketablePremium = Math.ceil(premium * 1.03 * 100.0) / 100.0;
             Map<String, Object> order = new LinkedHashMap<>();
             order.put("symbol", occSymbol);
             order.put("qty", String.valueOf(contracts));
             order.put("side", "buy");
-            order.put("type", "market");
+            order.put("type", "limit");
+            order.put("limit_price", String.format("%.2f", marketablePremium));
             order.put("time_in_force", "day");
             order.put("asset_class", "us_option");
 
             String json = mapper.writeValueAsString(order);
-            log.info("ALPACA OPTIONS ORDER ATTEMPT: symbol={} qty={} ask=${} type=market totalCost=${} bp=${} optionsBp=${} budget=${} suggestedQty={} dir={} mode={}",
+            log.info("ALPACA OPTIONS ORDER ATTEMPT: symbol={} qty={} ask=${} limitPrice=${} (ask*1.03) totalCost=${} bp=${} optionsBp=${} budget=${} suggestedQty={} dir={} mode={}",
                     occSymbol, contracts,
                     String.format("%.2f", premium),
+                    String.format("%.2f", marketablePremium),
                     String.format("%.2f", contractCost * contracts),
                     String.format("%.2f", buyingPower),
                     String.format("%.2f", optionsBuyingPower),
