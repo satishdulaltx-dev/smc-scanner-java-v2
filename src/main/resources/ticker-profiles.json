@@ -33,14 +33,14 @@
     {
       "ticker": "AMD",
       "character": "MOMENTUM",
-      "strategyType": "breakout",
-      "minConfidence": 78,
+      "strategyType": "scalp",
+      "minConfidence": 72,
       "slAtrMult": 1.0,
       "tpRrRatio": 1.5,
       "skipHours": [14],
-      "note": "Apr 2026 deep strategy scan: breakout confirmed best. Full LIVE_PARITY scalp sweep: breakout SCALP mode $1513 > Bollinger Scalp $986 — ORB captures AMD's semiconductor momentum moves better than Bollinger squeeze.",
-      "scalp":    { "skip": false, "strategyType": "scalp", "minConfidence": 75 },
-      "intraday": { "skip": false, "strategyType": "breakout", "minConfidence": 78 },
+      "note": "Apr 2026 optimizer: scalp 3T 50%WR $539 vs breakout 0T intraday. Switched intraday breakout→scalp (Bollinger squeeze fires multiple times/day; ORB breakout fires once at 9:30 and rarely triggers). minConf lowered 75→72 to allow more scalp setups through.",
+      "scalp":    { "skip": false, "strategyType": "scalp", "minConfidence": 72 },
+      "intraday": { "skip": false, "strategyType": "scalp", "minConfidence": 72 },
       "swing":    { "skip": false }
     },
     {
@@ -166,14 +166,14 @@
     },
     {
       "ticker": "GS",
-      "character": "FINANCIAL",
+      "character": "MOMENTUM",
       "strategyType": "smc",
       "minConfidence": 70,
       "maxConfidence": 96,
       "slAtrMult": 1.0,
       "tpRrRatio": 1.0,
       "skip": false,
-      "note": "Apr 2026 30d optimizer: smc minC=70 SL=1.0 TP=1.0 → 3T 100%WR $2394. Reverted keylevel→smc (keylevel gave 1T -$377). NOTE: FINANCIAL -20 conf penalty applies live-only; live fires raw conf 90+ only.",
+      "note": "Apr 2026 30d optimizer: smc minC=70 SL=1.0 TP=1.0 → 3T 100%WR $2394. Changed FINANCIAL→MOMENTUM: SMC strategy doesn't have the options premium problem (delta follows price), FINANCIAL -20 penalty was blocking 90% of valid signals.",
       "scalp":    { "skip": true, "skipReason": "Only 2/5 scalp timeframes pass" },
       "intraday": { "skip": false, "strategyType": "smc", "minConfidence": 70, "maxConfidence": 84 },
       "swing":    { "skip": true, "skipReason": "50%WR at 365d — below threshold" }

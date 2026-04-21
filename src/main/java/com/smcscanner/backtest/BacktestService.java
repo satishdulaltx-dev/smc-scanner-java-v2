@@ -215,7 +215,8 @@ public class BacktestService {
         // Pre-fetch SPY 5m bars for intraday RS gate (only if this ticker uses it)
         TickerProfile preProfile = config.getTickerProfile(ticker);
         String scalpSubStratForSpy = preProfile.resolveMode("scalp").resolveStrategy(preProfile.getStrategyType());
-        boolean needsSpy5m = preProfile.isIntradayRsGate()
+        boolean needsSpy5m = !ticker.startsWith("X:")  // always fetch for non-crypto (SPY directional gate applies to all)
+                || preProfile.isIntradayRsGate()
                 || "idiv".equals(preProfile.getStrategyType())
                 || "idiv".equals(strategyOverride)
                 || "scalp".equals(preProfile.getStrategyType())
@@ -597,6 +598,27 @@ public class BacktestService {
                     }
                 }
 
+                // ── SPY intraday directional gate — mirrors live ScannerService ─
+                // When SPY moves >1.5% intraday, counter-trend setups fail at 2x normal rate.
+                // Hard-veto for non-crypto, non-SPY, non-QQQ tickers only.
+                if (!ticker.startsWith("X:") && !"SPY".equals(ticker) && !"QQQ".equals(ticker)) {
+                    List<OHLCV> spyDay = spy5mByDate.getOrDefault(date, List.of());
+                    List<OHLCV> spySession = spyDay.stream().filter(this::isRegularSessionBar).collect(Collectors.toList());
+                    if (spySession.size() >= 3) {
+                        double spyOpen = spySession.get(0).getOpen();
+                        double spyCur  = spySession.get(spySession.size() - 1).getClose();
+                        double spyMove = spyOpen > 0 ? (spyCur - spyOpen) / spyOpen : 0;
+                        if (spyMove > 0.015 && "short".equals(setup.getDirection())) {
+                            log.debug("{} SPY_BIAS_BLOCK_BT {}: SPY +{:.1f}%% — SHORT vetoed", ticker, date, spyMove * 100);
+                            continue;
+                        }
+                        if (spyMove < -0.015 && "long".equals(setup.getDirection())) {
+                            log.debug("{} SPY_BIAS_BLOCK_BT {}: SPY {:.1f}%% — LONG vetoed", ticker, date, spyMove * 100);
+                            continue;
+                        }
+                    }
+                }
+
                 // ── Volume pressure trap detection — mirrors live ──────────────
                 int trapAdj = !ticker.startsWith("X:") ? pressureService.computeTrapAdj(
                         window, setup.getDirection(), effectiveStrat, btRegime) : 0;
@@ -728,6 +750,26 @@ public class BacktestService {
                 NewsSentiment sentiment = ticker.startsWith("X:") ? NewsSentiment.NONE
                         : newsService.getSentimentAt(ticker, entryEpochMs);
                 int newsAdj = sentiment.confidenceDelta(setup.getDirection(), effectiveStrat);
+
+                // ── Ticker DNA gates — mirrors live ScannerService ────────────
+                if (!ticker.startsWith("X:")) {
+                    // EXTERNAL_CORRELATED (MARA): SMC/FVG patterns = BTC noise, not order-flow
+                    if (bp2.isSmcBlocked()) {
+                        String strat = setup.getVolatility(); // strategy label lives in volatility field
+                        if (!"scalp".equals(strat) && !"keylevel".equals(strat)) {
+                            log.debug("{} DNA_BLOCK_BT EXTERNAL_CORRELATED: SMC blocked on {}", ticker, date);
+                            continue;
+                        }
+                    }
+                    // STABLE_LARGE_CAP (AAPL/MSFT/AMZN/GOOGL): options decay before slow stock hits TP.
+                    // Only fire when news is aligned (confirmed catalyst day).
+                    if (bp2.isCatalystRequired()) {
+                        if (!sentiment.isAligned(setup.getDirection())) {
+                            log.debug("{} DNA_BLOCK_BT STABLE_LARGE_CAP: no catalyst on {} — skipping", ticker, date);
+                            continue;
+                        }
+                    }
+                }
 
                 // News-aligned TP extension: widen TP to 3:1 R:R (but respect ticker tpRrRatio)
                 // If profile sets tpRrRatio (e.g. JPM=1.0), don't override — the low ratio is intentional
@@ -891,7 +933,13 @@ public class BacktestService {
                 if (sma200Adj      < 0) negPrimaryCountBt++;
                 int confluenceVetoAdj = negPrimaryCountBt >= 4 ? -20 : negPrimaryCountBt == 3 ? -10 : 0;
 
-                int totalAdj = newsAdj + ctxAdj + qualityAdj + flowAdj + regimeAdj + corrAdj + intradayRsAdj + deadZoneAdj + bias15mAdj + alignmentAdj + sma200Adj + rsiAdj + candleAdj + volAdj + regimeStratAdj + pivotAdj + trapAdj + exhaustionAdj + confluenceVetoAdj;
+                // ── DNA character confidence penalty — mirrors live ScannerService ─
+                // FINANCIAL (V, JPM): -20 (high option premium vs small % moves)
+                // SPECULATIVE_LOW_PRICE (SOFI): -10 (wick-out risk even with wider SL)
+                // GS changed FINANCIAL→MOMENTUM so it doesn't get penalised.
+                int dnaAdj = !ticker.startsWith("X:") ? bp2.characterConfPenalty() : 0;
+
+                int totalAdj = newsAdj + ctxAdj + qualityAdj + flowAdj + regimeAdj + corrAdj + intradayRsAdj + deadZoneAdj + bias15mAdj + alignmentAdj + sma200Adj + rsiAdj + candleAdj + volAdj + regimeStratAdj + pivotAdj + trapAdj + exhaustionAdj + confluenceVetoAdj + dnaAdj;
                 // Penalty floor: secondary filters can reduce base confidence by at most 25%.
                 // A strong base setup (80+) should never be killed by stacking RS + news + quality.
                 // Floor = 75% of base confidence. e.g. base=80 → floor=60, base=70 → floor=52.
@@ -1067,6 +1115,27 @@ public class BacktestService {
                                 }
                             }
                             break; // only check the first next-day bar
+                        }
+                    }
+                }
+
+                // ── SL price floor — mirrors live ScannerService DNA gates ────
+                // Universal floor: 1.5% of price for any stock under $30.
+                // Ticker-character override (SPECULATIVE_LOW_PRICE) adds extra floor (2%).
+                // Prevents wick-out on low-price volatile stocks (SOFI: tiny ATR SL → dead).
+                if (!ticker.startsWith("X:")) {
+                    double minSlPct = Math.max(bp2.minSlPricePct(),
+                            entry < 30.0 ? 0.015 : 0.0);
+                    if (minSlPct > 0) {
+                        double slDist = Math.abs(sl - entry);
+                        double minSlDist = entry * minSlPct;
+                        if (slDist < minSlDist) {
+                            double newSl = "long".equals(dir)
+                                    ? Math.round((entry - minSlDist) * 10000.0) / 10000.0
+                                    : Math.round((entry + minSlDist) * 10000.0) / 10000.0;
+                            log.debug("{} DNA_SL_FLOOR_BT {}: SL widened {} → {} (minSlPct={}%)",
+                                    ticker, date, sl, newSl, minSlPct * 100);
+                            sl = newSl;
                         }
                     }
                 }
