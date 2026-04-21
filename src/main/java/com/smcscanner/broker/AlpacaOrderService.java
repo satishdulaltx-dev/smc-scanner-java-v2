@@ -81,18 +81,18 @@ public class AlpacaOrderService {
     // Track last processed candle timestamp to avoid re-processing same candle
     private final Map<String, String> lastProcessedCandle = new ConcurrentHashMap<>();
     // ATR multipliers for normal trail and reversal-tightened trail
-    private static final double ATR_TRAIL_NORMAL   = 0.75; // trail at peak - 0.75 ATR while running
-    private static final double ATR_TRAIL_REVERSAL = 0.30; // tighten to peak - 0.3 ATR on confirmed reversal
+    private static final double ATR_TRAIL_NORMAL   = 1.50; // trail at peak - 1.5 ATR (trend continuation: wider to let it run)
+    private static final double ATR_TRAIL_REVERSAL = 0.50; // tighten to peak - 0.5 ATR on confirmed reversal
     private static final int    REVERSAL_CLOSES    = 2;    // consecutive closes against direction to confirm reversal
     private static final double HYBRID_BE_R        = 1.0;  // move SL to breakeven at 1R
-    private static final double HYBRID_TRAIL_R     = 1.5;  // start ATR trailing only after 1.5R
+    private static final double HYBRID_TRAIL_R     = 2.5;  // trend continuation: trail only arms after 2.5R (was 1.5R)
     private static final double SCALP_BE_R         = 0.60; // scalp moves to BE faster
-    private static final double SCALP_TRAIL_R      = 0.90; // scalp arms trail after first push
-    private static final double SCALP_TRAIL_NORMAL = 0.35; // tighter trail for fast momentum
-    private static final double SCALP_TRAIL_REVERSAL = 0.18;
+    private static final double SCALP_TRAIL_R      = 2.0;  // trend continuation: scalp trail arms after 2.0R (was 0.9R)
+    private static final double SCALP_TRAIL_NORMAL = 0.75; // wider scalp trail once trend is confirmed (was 0.35)
+    private static final double SCALP_TRAIL_REVERSAL = 0.30;
     // Options P&L thresholds — trigger BE/trail based on dollar profit regardless of underlying R
     private static final double OPTIONS_PNL_BE_THRESHOLD    = 75.0;  // $75 unrealized → move SL to breakeven
-    private static final double OPTIONS_PNL_TRAIL_THRESHOLD = 150.0; // $150 unrealized → arm ATR trail
+    private static final double OPTIONS_PNL_TRAIL_THRESHOLD = 300.0; // $300 unrealized → arm trail (raised from $150 for trend continuation)
 
     // Config defaults (overridden by env vars)
     private static final double DEFAULT_MAX_POSITION = 500.0;   // max $ per trade
@@ -411,7 +411,7 @@ public class AlpacaOrderService {
                             } else {
                                 trailLabel = tracked.consecutiveReversal() >= REVERSAL_CLOSES
                                         ? "HYBRID REVERSAL-TIGHT (0.3 ATR)"
-                                        : "HYBRID NORMAL-TRAIL (0.75 ATR)";
+                                        : "HYBRID NORMAL-TRAIL (1.5 ATR)";
                             }
                             pos.put("tracked_trail_label", trailLabel);
                             pos.put("tracked_trail_method", "App-managed hybrid: BE at 1R, trail after 1.5R on underlying price");
@@ -727,7 +727,7 @@ public class AlpacaOrderService {
         if (!trailArmed) {
             trailArmed = isLong ? newPeak >= trailTrigger : newPeak <= trailTrigger;
             if (trailArmed) {
-                log.info("TRAIL HYBRID {}: 1.5R reached — arming ATR trail", symbol);
+                log.info("TRAIL HYBRID {}: trend continuation threshold reached — arming ATR trail (1.5 ATR wide)", symbol);
             }
         }
 
