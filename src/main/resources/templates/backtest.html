@@ -398,7 +398,7 @@
         <div style="border:1px solid rgba(88,166,255,.25);border-radius:8px;padding:16px;background:rgba(88,166,255,.03);">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px;">
                 <span style="font-size:12px;font-weight:700;color:var(--blue);text-transform:uppercase;letter-spacing:.7px;">All Trades By Day</span>
-                <span style="font-size:11px;color:var(--muted)">Executed trades only · Newest first · Click row to drill in</span>
+                <span style="font-size:11px;color:var(--muted)">Executed trades only · Oldest first · Click row to drill in</span>
             </div>
             <div id="by-day-sim-banner" style="display:none;margin-bottom:10px;padding:7px 12px;background:rgba(63,185,80,.08);border:1px solid rgba(63,185,80,.2);border-radius:6px;font-size:11px;color:var(--muted);"></div>
             <div id="by-day-content"></div>
@@ -1950,8 +1950,8 @@ function renderByDay() {
         });
     });
 
-    // Sort newest first
-    allTrades.sort((a, b) => (b.entry_ts || 0) - (a.entry_ts || 0));
+    // Sort oldest first (within each day, trades appear in chronological order)
+    allTrades.sort((a, b) => (a.entry_ts || 0) - (b.entry_ts || 0));
 
     // Group by date — always derive from entry_ts (epoch ms → ISO "YYYY-MM-DD").
     // entry_time may be in US locale format "MM/DD/YYYY HH:mm" which breaks date parsing.
@@ -1966,7 +1966,7 @@ function renderByDay() {
         byDate[dateKey].push(t);
     });
 
-    const dates = Object.keys(byDate).sort().reverse(); // newest first
+    const dates = Object.keys(byDate).sort(); // oldest first
 
     let html = '';
     dates.forEach(date => {
