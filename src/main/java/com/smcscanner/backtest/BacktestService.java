@@ -1359,23 +1359,41 @@ public class BacktestService {
             atrWindow.add(fb);
             if (atrWindow.size() > 20) atrWindow.remove(0);
 
+            double high  = fb.getHigh();
+            double low   = fb.getLow();
             double close = fb.getClose();
-            if (isLong && close > peakClose) peakClose = close;
-            if (!isLong && close < peakClose) peakClose = close;
+
+            // Track intrabar high/low for peak — live trailing sees actual wicks, not just closes
+            if (isLong  && high  > peakClose) peakClose = high;
+            if (!isLong && low   < peakClose) peakClose = low;
 
             if (!beActive) {
                 boolean touchedBe = isLong ? peakClose >= beLevel : peakClose <= beLevel;
                 if (touchedBe) beActive = true;
             }
 
-            // Keep the classic large-target payout alive until the trade has moved
-            // far enough to justify active trailing.
+            double currentStop = trailActive ? activeSl : (beActive ? entry : sl);
+
+            // ── SL check (intrabar) — live stop orders fire on touch, not close ──
+            boolean stopBreached = isLong ? low <= currentStop : high >= currentStop;
+            if (stopBreached) {
+                double exitPrice = currentStop; // fill at stop level, matching live behavior
+                double pnlPct = isLong
+                        ? round2((exitPrice - entry) / entry * 100)
+                        : round2((entry - exitPrice) / entry * 100);
+                String outcome;
+                if (trailActive) outcome = pnlPct > 0 ? "TRAIL_WIN" : "TRAIL_LOSS";
+                else outcome = beActive ? "BE_STOP" : "LOSS";
+                return new ExitResult(outcome, toDateTime(fb.getTimestamp()), pnlPct);
+            }
+
+            // ── TP check (intrabar, only before trail arms) ──────────────────────
             if (!trailActive) {
-                boolean tpHit = isLong ? close >= tp : close <= tp;
+                boolean tpHit = isLong ? high >= tp : low <= tp;
                 if (tpHit) {
                     double pnlPct = isLong
-                            ? round2((close - entry) / entry * 100)
-                            : round2((entry - close) / entry * 100);
+                            ? round2((tp - entry) / entry * 100)
+                            : round2((entry - tp) / entry * 100);
                     return new ExitResult("WIN", toDateTime(fb.getTimestamp()), pnlPct);
                 }
             }
@@ -1385,21 +1403,8 @@ public class BacktestService {
                 if (!isLong && peakClose <= trailArmLevel) trailActive = true;
                 if (trailActive) {
                     peakClose = close;
-                    // Floor at 1.5R — once trail arms, minimum exit is always 1.5R profit
                     activeSl = trailArmLevel;
                 }
-            }
-
-            double currentStop = trailActive ? activeSl : (beActive ? entry : sl);
-            boolean stopBreached = isLong ? close <= currentStop : close >= currentStop;
-            if (stopBreached) {
-                double pnlPct = isLong
-                        ? round2((close - entry) / entry * 100)
-                        : round2((entry - close) / entry * 100);
-                String outcome;
-                if (trailActive) outcome = pnlPct > 0 ? "TRAIL_WIN" : "TRAIL_LOSS";
-                else outcome = beActive ? "BE_STOP" : "LOSS";
-                return new ExitResult(outcome, toDateTime(fb.getTimestamp()), pnlPct);
             }
 
             if (trailActive) {
@@ -1413,12 +1418,10 @@ public class BacktestService {
 
                 double atrMult = reversalCount >= REVERSAL_CLOSES ? ATR_TRAIL_REVERSAL : ATR_TRAIL_NORMAL;
                 double targetStop = isLong ? peakClose - atr * atrMult : peakClose + atr * atrMult;
-                // Enforce 1.5R floor — trail stop never retreats below trailArmLevel
                 if (isLong) targetStop = Math.max(targetStop, trailArmLevel);
                 else         targetStop = Math.min(targetStop, trailArmLevel);
                 boolean improving = isLong ? targetStop > activeSl : targetStop < activeSl;
                 if (improving) activeSl = targetStop;
-
             }
         }
 
@@ -1457,19 +1460,38 @@ public class BacktestService {
             atrWindow.add(fb);
             if (atrWindow.size() > 30) atrWindow.remove(0);
 
+            double high  = fb.getHigh();
+            double low   = fb.getLow();
             double close = fb.getClose();
-            if (isLong && close > peakClose) peakClose = close;
-            if (!isLong && close < peakClose) peakClose = close;
+
+            // Track intrabar high/low — live sees actual wicks, not just closes
+            if (isLong  && high  > peakClose) peakClose = high;
+            if (!isLong && low   < peakClose) peakClose = low;
 
             if (!beActive && (isLong ? peakClose >= beLevel : peakClose <= beLevel)) beActive = true;
 
-            // Classic TP alive until trail arms
+            double currentStop = trailActive ? activeSl : (beActive ? entry : sl);
+
+            // ── SL check (intrabar) ───────────────────────────────────────────────
+            boolean stopBreached = isLong ? low <= currentStop : high >= currentStop;
+            if (stopBreached) {
+                double exitPrice = currentStop;
+                double pnlPct = isLong
+                        ? round2((exitPrice - entry) / entry * 100)
+                        : round2((entry - exitPrice) / entry * 100);
+                String outcome;
+                if (trailActive) outcome = pnlPct > 0 ? "TRAIL_WIN" : "TRAIL_LOSS";
+                else outcome = beActive ? "BE_STOP" : "LOSS";
+                return new ExitResult(outcome, toDateTime(fb.getTimestamp()), pnlPct);
+            }
+
+            // ── TP check (intrabar, only before trail arms) ──────────────────────
             if (!trailActive) {
-                boolean tpHit = isLong ? close >= tp : close <= tp;
+                boolean tpHit = isLong ? high >= tp : low <= tp;
                 if (tpHit) {
                     double pnlPct = isLong
-                            ? round2((close - entry) / entry * 100)
-                            : round2((entry - close) / entry * 100);
+                            ? round2((tp - entry) / entry * 100)
+                            : round2((entry - tp) / entry * 100);
                     return new ExitResult("WIN", toDateTime(fb.getTimestamp()), pnlPct);
                 }
             }
@@ -1479,20 +1501,8 @@ public class BacktestService {
                 if (isLong ? peakClose >= trailArmLevel : peakClose <= trailArmLevel) {
                     trailActive = true;
                     peakClose   = close;
-                    activeSl    = trailArmLevel; // 2.0R floor
+                    activeSl    = trailArmLevel;
                 }
-            }
-
-            double currentStop = trailActive ? activeSl : (beActive ? entry : sl);
-            boolean stopBreached = isLong ? close <= currentStop : close >= currentStop;
-            if (stopBreached) {
-                double pnlPct = isLong
-                        ? round2((close - entry) / entry * 100)
-                        : round2((entry - close) / entry * 100);
-                String outcome;
-                if (trailActive) outcome = pnlPct > 0 ? "TRAIL_WIN" : "TRAIL_LOSS";
-                else outcome = beActive ? "BE_STOP" : "LOSS";
-                return new ExitResult(outcome, toDateTime(fb.getTimestamp()), pnlPct);
             }
 
             if (trailActive) {
@@ -1506,12 +1516,10 @@ public class BacktestService {
 
                 double atrMult   = reversalCount >= REVERSAL_CLOSES ? ATR_TRAIL_REVERSAL : SCALP_TRAIL_NORMAL;
                 double targetStop = isLong ? peakClose - atr * atrMult : peakClose + atr * atrMult;
-                // 1.5R floor — trail stop never retreats below trailArmLevel
                 if (isLong) targetStop = Math.max(targetStop, trailArmLevel);
                 else        targetStop = Math.min(targetStop, trailArmLevel);
                 boolean improving = isLong ? targetStop > activeSl : targetStop < activeSl;
                 if (improving) activeSl = targetStop;
-
             }
         }
 
