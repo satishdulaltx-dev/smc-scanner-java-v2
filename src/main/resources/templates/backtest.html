@@ -1695,7 +1695,13 @@ function runCapitalSim() {
         const balanceBeforeTrade = settledCash + Object.values(pendingByDate).reduce((a, b) => a + b, 0);
 
         const contracts    = t.contracts || 1;
-        const costPerContr = t.opt_entry_premium * 100; // one contract = 100 shares
+        // Realistic contract cost: use MAX of backtest model estimate and 1.5% of underlying price.
+        // The backtest model (dailyAtr × 0.5) underestimates real option premiums — SOFI comes out
+        // at $28/contract vs real ~$150, AMD at $155 vs real ~$350. Using 1.5% of entry price
+        // (standard rule of thumb for 10-DTE ATM options) gives realistic capital constraints.
+        const modelCost    = t.opt_entry_premium * 100;
+        const realisticCost = t.entry > 0 ? t.entry * 0.015 * 100 : modelCost;
+        const costPerContr = Math.max(modelCost, realisticCost);
 
         // How many contracts can we afford right now?
         const affordable   = Math.floor(settledCash / costPerContr);
@@ -1707,9 +1713,10 @@ function runCapitalSim() {
         if (actual < contracts) tradesScaledDown++;
 
         const actualCost  = costPerContr * actual;
-        // opt_pnl_scaled is already total for all 'contracts' contracts
-        const pnlPerContr = (t.opt_pnl_scaled || 0) / contracts;
-        const actualPnl   = pnlPerContr * actual;
+        // P&L scaled proportionally: same return % on realistic cost base
+        const modelPnlPerContr = (t.opt_pnl_scaled || 0) / contracts;
+        const pnlRatio    = modelCost > 0 ? costPerContr / modelCost : 1;
+        const actualPnl   = modelPnlPerContr * pnlRatio * actual;
         const proceeds    = actualCost + actualPnl;
 
         // Deduct cost immediately; proceeds settle T+1
@@ -1754,12 +1761,15 @@ function runCapitalSim() {
             const xd = t.exit_ts  ? new Date(t.exit_ts ).toISOString().split('T')[0] : ed;
             if (!ed) return;
             Object.keys(pending).sort().forEach(d => { if (d <= ed) { cash += pending[d]; delete pending[d]; } });
-            const cpc = t.opt_entry_premium * 100;
+            const mc  = t.opt_entry_premium * 100;
+            const rc  = t.entry > 0 ? t.entry * 0.015 * 100 : mc;
+            const cpc = Math.max(mc, rc);
             const aff = Math.floor(cash / cpc);
             if (aff === 0) { skips++; return; }
             const act = Math.min(aff, t.contracts || 1);
             cash -= cpc * act;
-            const ppl = ((t.opt_pnl_scaled || 0) / (t.contracts || 1)) * act;
+            const ratio = mc > 0 ? cpc / mc : 1;
+            const ppl = ((t.opt_pnl_scaled || 0) / (t.contracts || 1)) * ratio * act;
             const sd = getNextBusinessDay(xd || ed);
             pending[sd] = (pending[sd] || 0) + cpc * act + ppl;
         });
