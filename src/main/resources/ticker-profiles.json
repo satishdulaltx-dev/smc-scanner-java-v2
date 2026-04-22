@@ -26,7 +26,8 @@
         "skipReason": "All strategies negative on HYBRID exits"
       },
       "swing": {
-        "skip": false,
+        "skip": true,
+        "skipReason": "Catalyst-gated STABLE_LARGE_CAP swing still -$76 — slow stock, options decay exceeds move",
         "strategyType": "smc"
       }
     },
@@ -52,7 +53,7 @@
       "skipHours": [
         14
       ],
-      "note": "Apr 2026 optimizer: scalp 3T 50%WR $539 vs breakout 0T intraday. Switched intraday breakout→scalp (Bollinger squeeze fires multiple times/day; ORB breakout fires once at 9:30 and rarely triggers). minConf lowered 75→72 to allow more scalp setups through.",
+      "note": "Apr 2026 optimizer: scalp 3T 50%WR $539 vs breakout 0T intraday. scalp mode kept for Bollinger squeeze. intraday switched scalp→smc: VWAP-band rejection model never fires for trending stocks — only 1 trade in 180d at lunch dead zone. SMC (FVG/OB) is appropriate for AMD's trending structure.",
       "scalp": {
         "skip": false,
         "strategyType": "scalp",
@@ -60,8 +61,8 @@
       },
       "intraday": {
         "skip": false,
-        "strategyType": "scalp",
-        "minConfidence": 72
+        "strategyType": "smc",
+        "minConfidence": 70
       },
       "swing": {
         "skip": false
@@ -278,7 +279,7 @@
     },
     {
       "ticker": "GOOGL",
-      "character": "STABLE_LARGE_CAP",
+      "character": "MOMENTUM",
       "strategyType": "vwap",
       "minConfidence": 70,
       "maxConfidence": 84,
@@ -449,7 +450,8 @@
         "skipReason": "All strategies negative on HYBRID exits"
       },
       "swing": {
-        "skip": false
+        "skip": true,
+        "skipReason": "Catalyst-day swing still -$270 — no structural edge on STABLE_LARGE_CAP multi-day holds"
       }
     },
     {
@@ -482,7 +484,7 @@
       "minConfidence": 78,
       "maxConfidence": 100,
       "slAtrMult": 1.0,
-      "tpRrRatio": 2.0,
+      "tpRrRatio": 2.5,
       "note": "Apr 2026 30d optimizer: smc minC=78 SL=1.0 TP=2.0 → 6T 83.3%WR $797. Prior vwap generated 1T -$16 in 30d. 180d vwap was near-zero but 30d smc dominates.",
       "scalp": {
         "skip": false,
@@ -587,7 +589,7 @@
       "scalp": {
         "skip": false,
         "strategyType": "scalp",
-        "minConfidence": 70
+        "minConfidence": 75
       },
       "intraday": {
         "skip": true,
@@ -693,8 +695,9 @@
       "scalp": {
         "skip": false,
         "strategyType": "scalp",
-        "minConfidence": 72,
-        "note": "Apr 2026 VWAP scalp validation: 56.7% WR +0.36% exp on 31 trades — stock now $15-17, edge confirmed"
+        "minConfidence": 62,
+        "tpRrRatio": 1.5,
+        "note": "Apr 2026 VWAP scalp validation: 56.7% WR +0.36% exp on 31 trades — stock now $15-17, edge confirmed. minConf lowered 72→62 to offset SPECULATIVE_LOW_PRICE -10 penalty (raw 72 was too restrictive)"
       },
       "intraday": {
         "skip": true,
