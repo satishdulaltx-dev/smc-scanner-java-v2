@@ -139,11 +139,7 @@ public class SetupDetector {
             return new DetectResult(List.of(),state);
         }
 
-        // Only check for BOS/CHOCH in bars starting from just before the sweep.
-        // Searching the full bar set allows an unrelated old structure break (weeks ago) to
-        // falsely validate a fresh setup — the break must be causally tied to this sweep/FVG.
-        int structureFrom = Math.max(0, state.getSweepBar() - 2);
-        boolean[] str=detectStructure(bars.subList(structureFrom, bars.size()));
+        boolean[] str=detectStructure(bars);
         boolean hasStructure=str[0]||str[1];
         if (!hasStructure) {
             log.debug("{} filtered: NO_STRUCTURE — sweep without BOS/CHOCH is noise, not SMC", ticker);
