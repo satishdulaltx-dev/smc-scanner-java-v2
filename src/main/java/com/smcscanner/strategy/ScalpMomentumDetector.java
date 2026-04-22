@@ -45,12 +45,15 @@ public class ScalpMomentumDetector {
     private static final double MIN_VOL_RATIO   = 1.4;
     // Reject obvious chase entries after two same-direction expansion bars
 
-    private final PolygonClient           polygon;
-    private final VolumeProfileCalculator vpCalc;
+    private final PolygonClient              polygon;
+    private final VolumeProfileCalculator    vpCalc;
+    private final MicrostructureQualifier    microQ;
 
-    public ScalpMomentumDetector(PolygonClient polygon, VolumeProfileCalculator vpCalc) {
+    public ScalpMomentumDetector(PolygonClient polygon, VolumeProfileCalculator vpCalc,
+                                 MicrostructureQualifier microQ) {
         this.polygon = polygon;
         this.vpCalc  = vpCalc;
+        this.microQ  = microQ;
     }
 
     public List<TradeSetup> detect(List<OHLCV> bars, String ticker, double dailyAtr) {
@@ -236,65 +239,38 @@ public class ScalpMomentumDetector {
         }
 
         // ══════════════════════════════════════════════════════════════════════
-        // LAYER 3 — Order-flow delta (buy/sell pressure from last 5 bars)
+        // LAYERS 3-5 — MicrostructureQualifier
+        //
+        // Replaces three shallow proxies:
+        //   • fake OHLCV delta (candle position ≠ tape pressure)
+        //   • single NBBO snapshot (one quote ≠ persistent imbalance)
+        //   • single large-print sweep (size threshold ≠ burst clustering)
+        //
+        // In backtest mode these layers are skipped — live tape data is not
+        // available for historical bars.  Base confidence drives backtest results.
         // ══════════════════════════════════════════════════════════════════════
-        double deltaRatio = computeDelta(sessionBars, n - 6, n - 2);
-        String deltaLabel;
-        if (isLong) {
-            if      (deltaRatio >  0.35) { confidence += 5; deltaLabel = String.format("BULL %+.2f ✓", deltaRatio); }
-            else if (deltaRatio >  0.10) { confidence += 2; deltaLabel = String.format("MILD BULL %+.2f", deltaRatio); }
-            else if (deltaRatio < -0.35) { confidence -= 6; deltaLabel = String.format("BEAR %+.2f ✗", deltaRatio); }
-            else                         {                   deltaLabel = String.format("NEUTRAL %+.2f", deltaRatio); }
-        } else {
-            if      (deltaRatio < -0.35) { confidence += 5; deltaLabel = String.format("BEAR %+.2f ✓", deltaRatio); }
-            else if (deltaRatio < -0.10) { confidence += 2; deltaLabel = String.format("MILD BEAR %+.2f", deltaRatio); }
-            else if (deltaRatio >  0.35) { confidence -= 6; deltaLabel = String.format("BULL %+.2f ✗", deltaRatio); }
-            else                         {                   deltaLabel = String.format("NEUTRAL %+.2f", deltaRatio); }
+        MicrostructureQualifier.MicroScore micro =
+                new MicrostructureQualifier.MicroScore(0, "backtest-skip");
+
+        if (!backtestMode) {
+            List<PolygonClient.TradeRecord> trades = List.of();
+            List<PolygonClient.QuoteRecord> quotes = List.of();
+            try { trades = polygon.getRecentTrades(ticker, 200); } catch (Exception ignored) {}
+            try { quotes = polygon.getRecentQuotes(ticker, 30);  } catch (Exception ignored) {}
+            micro = microQ.qualify(isLong, entry, atr, trades, quotes, sessionBars);
+            // Hard gate: microstructure strongly contradicts the setup — skip entirely.
+            // Threshold -12 fires on: failed breakout alone (-12), or any two moderate negatives.
+            if (micro.total() <= -12) return result;
         }
 
-        // ══════════════════════════════════════════════════════════════════════
-        // LAYER 4 — Bid/ask imbalance (live NBBO from Polygon)
-        // ══════════════════════════════════════════════════════════════════════
-        String nbboLabel = "unavailable";
-        try {
-            PolygonClient.NbboSnapshot nbbo = polygon.getNbbo(ticker);
-            if (nbbo != null && (nbbo.bidSize() + nbbo.askSize()) > 0) {
-                double imbal = nbbo.imbalance();
-                if (isLong) {
-                    if      (imbal > 0.68) { confidence += 6; nbboLabel = String.format("BIDS STACKED %.0f%% ✓", imbal * 100); }
-                    else if (imbal > 0.55) { confidence += 2; nbboLabel = String.format("BID-LEAN %.0f%%", imbal * 100); }
-                    else if (imbal < 0.38) { confidence -= 4; nbboLabel = String.format("ASKS STACKED %.0f%% ✗", imbal * 100); }
-                    else                   {                   nbboLabel = String.format("NEUTRAL %.0f%%", imbal * 100); }
-                } else {
-                    if      (imbal < 0.32) { confidence += 6; nbboLabel = String.format("ASKS STACKED %.0f%% ✓", imbal * 100); }
-                    else if (imbal < 0.45) { confidence += 2; nbboLabel = String.format("ASK-LEAN %.0f%%", imbal * 100); }
-                    else if (imbal > 0.62) { confidence -= 4; nbboLabel = String.format("BIDS STACKED %.0f%% ✗", imbal * 100); }
-                    else                   {                   nbboLabel = String.format("NEUTRAL %.0f%%", imbal * 100); }
-                }
-            }
-        } catch (Exception ignored) {}
-
-        // ══════════════════════════════════════════════════════════════════════
-        // LAYER 5 — Large-print / institutional sweep detection
-        // ══════════════════════════════════════════════════════════════════════
-        String sweepLabel = "none";
-        try {
-            List<PolygonClient.TradeRecord> trades = polygon.getRecentTrades(ticker, 50);
-            SweepResult sweep = detectSweep(trades);
-            if      (isLong  && sweep.bullish()) { confidence += 7; sweepLabel = "BULL SWEEP ✓"; }
-            else if (!isLong && sweep.bearish()) { confidence += 7; sweepLabel = "BEAR SWEEP ✓"; }
-            else if (isLong  && sweep.bearish()) { confidence -= 5; sweepLabel = "BEAR SWEEP ✗"; }
-            else if (!isLong && sweep.bullish()) { confidence -= 5; sweepLabel = "BULL SWEEP ✗"; }
-        } catch (Exception ignored) {}
-
-        confidence = Math.min(95, Math.max(50, confidence));
+        confidence = Math.min(95, Math.max(50, confidence + micro.total()));
 
         String factors = String.format(
                 "%s | vol x%.1f | RS %+.2f%% | VWAP=%.2f ±1SD=[%.2f/%.2f] ±2SD=[%.2f/%.2f]" +
-                " | VP: %s | delta: %s | nbbo: %s | sweep: %s",
+                " | VP: %s | %s",
                 setupType, volRatio, rsLead * 100.0,
                 vb.vwap, vb.v1d, vb.v1u, vb.v2d, vb.v2u,
-                vpLabel, deltaLabel, nbboLabel, sweepLabel);
+                vpLabel, micro.label());
 
         result.add(TradeSetup.builder()
                 .ticker(ticker)
@@ -422,38 +398,6 @@ public class ScalpMomentumDetector {
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
-
-    private double computeDelta(List<OHLCV> bars, int from, int to) {
-        from = Math.max(0, from); to = Math.min(bars.size()-1, to);
-        if (from > to) return 0.0;
-        double net = 0, vol = 0;
-        for (int i = from; i <= to; i++) {
-            OHLCV b = bars.get(i);
-            double range = Math.max(0.0001, b.getHigh() - b.getLow());
-            net += ((b.getClose() - b.getLow()) / range * 2.0 - 1.0) * b.getVolume();
-            vol += b.getVolume();
-        }
-        return vol > 0 ? net / vol : 0.0;
-    }
-
-    private record SweepResult(boolean bullish, boolean bearish) {}
-
-    private SweepResult detectSweep(List<PolygonClient.TradeRecord> trades) {
-        if (trades == null || trades.size() < 5) return new SweepResult(false, false);
-        long cutoffNs = (System.currentTimeMillis() - 180_000L) * 1_000_000L;
-        List<PolygonClient.TradeRecord> recent = trades.stream()
-                .filter(t -> t.timestampNs() > cutoffNs && t.size() > 0).toList();
-        if (recent.size() < 3) return new SweepResult(false, false);
-        double avg = recent.stream().mapToDouble(PolygonClient.TradeRecord::size).average().orElse(0);
-        if (avg < 10) return new SweepResult(false, false);
-        boolean bull = false, bear = false;
-        for (int i = 1; i < recent.size(); i++) {
-            if (recent.get(i).size() < avg * 4) continue;
-            if (recent.get(i).price() >= recent.get(i-1).price()) bull = true;
-            else                                                    bear = true;
-        }
-        return new SweepResult(bull, bear);
-    }
 
     private List<OHLCV> regularSessionBarsForToday(List<OHLCV> bars) {
         OHLCV lastRaw = bars.get(bars.size()-1);

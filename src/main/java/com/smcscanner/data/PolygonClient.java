@@ -213,6 +213,47 @@ public class PolygonClient {
         }
     }
 
+    /**
+     * Recent NBBO quote snapshots — newest first.
+     * Used for persistent bid/ask imbalance detection (not just a single snapshot).
+     * Field names from Polygon /v3/quotes/{ticker}: bid_price, bid_size, ask_price, ask_size.
+     */
+    public record QuoteRecord(long timestampNs, double bidPrice, double bidSize, double askPrice, double askSize) {
+        /** 0 = all asks, 1 = all bids, 0.5 = neutral */
+        public double imbalance() {
+            double total = bidSize + askSize;
+            return total > 0 ? bidSize / total : 0.5;
+        }
+    }
+
+    public List<QuoteRecord> getRecentQuotes(String ticker, int limit) {
+        String apiKey = config.getPolygonApiKey();
+        if (apiKey == null || apiKey.isBlank()) return List.of();
+        try {
+            String url = String.format(
+                    "https://api.polygon.io/v3/quotes/%s?limit=%d&order=desc&apiKey=%s",
+                    ticker, Math.min(limit, 50), apiKey);
+            try (Response resp = http.newCall(new Request.Builder().url(url).build()).execute()) {
+                if (!resp.isSuccessful() || resp.body() == null) return List.of();
+                JsonNode results = mapper.readTree(resp.body().string()).path("results");
+                if (!results.isArray()) return List.of();
+                List<QuoteRecord> quotes = new ArrayList<>();
+                for (JsonNode q : results) {
+                    quotes.add(new QuoteRecord(
+                            q.path("participant_timestamp").asLong(0),
+                            q.path("bid_price").asDouble(0),
+                            q.path("bid_size").asDouble(0),
+                            q.path("ask_price").asDouble(0),
+                            q.path("ask_size").asDouble(0)));
+                }
+                return quotes;
+            }
+        } catch (Exception e) {
+            log.debug("Quotes error {}: {}", ticker, e.getMessage());
+            return List.of();
+        }
+    }
+
     private List<OHLCV> fetchPolygonRange(String ticker, String[] tf, int limit, long fromEpochMs, long toEpochMs) {
         String apiKey = config.getPolygonApiKey();
         if (apiKey == null || apiKey.isBlank()) { log.warn("POLYGON_API_KEY not set for {}", ticker); return new ArrayList<>(); }
