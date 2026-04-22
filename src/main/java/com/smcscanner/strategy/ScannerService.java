@@ -1188,9 +1188,16 @@ public class ScannerService {
                                     tracker.recordStrategySignal(stratType, s.getConfidence());
                                     // ── Auto-trade via Alpaca (if enabled) ──────────
                                     if (alpaca.isEnabled()) {
-                                        String orderId = alpaca.placeOrder(s);
-                                        if (orderId != null) {
-                                            log.info("ALPACA ORDER {} {} orderId={}", ticker, s.getDirection(), orderId);
+                                        double rr = s.rrRatio();
+                                        if (rr < config.getAlpacaMinRR()) {
+                                            log.info("ALPACA SKIPPED {} {} rr={} < minRR={} — alert only",
+                                                    ticker, s.getDirection().toUpperCase(),
+                                                    String.format("%.2f", rr), config.getAlpacaMinRR());
+                                        } else {
+                                            String orderId = alpaca.placeOrder(s);
+                                            if (orderId != null) {
+                                                log.info("ALPACA ORDER {} {} orderId={}", ticker, s.getDirection(), orderId);
+                                            }
                                         }
                                     }
                                 }

@@ -58,6 +58,12 @@ public class ScannerConfig {
     // ── Strategy toggles ────────────────────────────────────────────────────
     private boolean gapOvernightEnabled = false; // pre-close overnight gap prediction (disabled — poor WR)
 
+    // ── Auto-trade quality gates ─────────────────────────────────────────────
+    // Minimum underlying R:R ratio to allow Alpaca auto-execution.
+    // SMC detector sets TP at market structure — can produce 0.7x or 1.0x setups
+    // that are structurally unprofitable for options at current win rates.
+    private double  alpacaMinRR = 1.5;
+
     // getters
     public String getPolygonApiKey()         { return polygonApiKey; }
     public String getDiscordWebhookUrl()     { return discordWebhookUrl; }
@@ -101,6 +107,7 @@ public class ScannerConfig {
     public int     getAlpacaMaxDailyOrders() { return alpacaMaxDailyOrders; }
     public int     getAlpacaMinConfidence()  { return alpacaMinConfidence; }
     public boolean isGapOvernightEnabled()   { return gapOvernightEnabled; }
+    public double  getAlpacaMinRR()          { return alpacaMinRR; }
 
     // setters (required by @ConfigurationProperties)
     public void setPolygonApiKey(String v)          { this.polygonApiKey = v; }
@@ -132,6 +139,7 @@ public class ScannerConfig {
     public void setAlpacaMaxDailyOrders(int v)    { this.alpacaMaxDailyOrders = v; }
     public void setAlpacaMinConfidence(int v)      { this.alpacaMinConfidence = v; }
     public void setGapOvernightEnabled(boolean v)  { this.gapOvernightEnabled = v; }
+    public void setAlpacaMinRR(double v)           { this.alpacaMinRR = v; }
 
     // ── Per-ticker profiles ───────────────────────────────────────────────────
     private final Map<String, TickerProfile> profileCache = new ConcurrentHashMap<>();
