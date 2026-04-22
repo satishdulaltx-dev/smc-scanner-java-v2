@@ -281,7 +281,7 @@
       "ticker": "GOOGL",
       "character": "MOMENTUM",
       "strategyType": "vwap",
-      "minConfidence": 70,
+      "minConfidence": 65,
       "maxConfidence": 84,
       "slAtrMult": 1.0,
       "tpRrRatio": 1.5,
@@ -747,7 +747,7 @@
       "ticker": "TSLA",
       "character": "MOMENTUM",
       "strategyType": "vwap",
-      "minConfidence": 74,
+      "minConfidence": 68,
       "maxConfidence": 84,
       "minFvgPct": 0.001,
       "dispAtrMult": 1.6,
@@ -760,12 +760,12 @@
       "scalp": {
         "skip": false,
         "strategyType": "scalp",
-        "minConfidence": 74
+        "minConfidence": 68
       },
       "intraday": {
         "skip": false,
         "strategyType": "vwap",
-        "minConfidence": 74,
+        "minConfidence": 68,
         "maxConfidence": 84
       },
       "swing": {

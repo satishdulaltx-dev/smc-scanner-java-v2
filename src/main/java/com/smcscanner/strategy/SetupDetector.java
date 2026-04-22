@@ -15,7 +15,7 @@ import java.util.List;
 @Service
 public class SetupDetector {
     private static final Logger log = LoggerFactory.getLogger(SetupDetector.class);
-    private static final int    SWEEP_LOOKBACK = 40, FVG_WINDOW = 12, RETEST_WINDOW = 20;
+    private static final int    SWEEP_LOOKBACK = 80, FVG_WINDOW = 12, RETEST_WINDOW = 25;
     private static final double DISP_ATR_MULT  = 1.3, MIN_FVG_PCT = 0.0002, MIN_VOL_MULT = 1.5; // global defaults — per-ticker overrides in ticker-profiles.json
     private static final double MAX_ENTRY_DISTANCE_ATR = 2.5;
     // Price-based distance floor: never reject if price is within 3.5% of FVG midpoint.
@@ -26,11 +26,12 @@ public class SetupDetector {
     private final ScannerConfig config;
     private final AtrCalculator atrCalc;
     private final StructureAnalyzer sa;
+    private final ScoringService scoring;
     private final SessionFilter sessionFilter;
 
     public SetupDetector(ScannerConfig config, AtrCalculator atrCalc, StructureAnalyzer sa,
                          ScoringService scoring, SessionFilter sessionFilter) {
-        this.config=config; this.atrCalc=atrCalc; this.sa=sa; this.sessionFilter=sessionFilter;
+        this.config=config; this.atrCalc=atrCalc; this.sa=sa; this.scoring=scoring; this.sessionFilter=sessionFilter;
     }
 
     public record DetectResult(List<TradeSetup> setups, SMCState state) {}
@@ -141,10 +142,7 @@ public class SetupDetector {
 
         boolean[] str=detectStructure(bars);
         boolean hasStructure=str[0]||str[1];
-        if (!hasStructure) {
-            log.debug("{} filtered: NO_STRUCTURE — sweep without BOS/CHOCH is noise, not SMC", ticker);
-            return new DetectResult(List.of(), state);
-        }
+        if (!hasStructure) log.debug("{} note: NO_STRUCTURE — continuing at lower confidence", ticker);
         if ("bullish".equals(htfBias)&&"short".equals(state.getDirection())) {
             log.debug("{} filtered: HTF_CONFLICT htf=bullish setup=short", ticker);
             return new DetectResult(List.of(),state);
@@ -159,32 +157,7 @@ public class SetupDetector {
             return new DetectResult(List.of(), state);
         }
 
-        // Quality-based confidence — replaces flat true/true/true/true (was always 100, filter was dead).
-        // Displacement conviction: how far close is into the bar (0.70-1.0 range for long/short).
-        OHLCV db2 = bars.get(state.getDisplacementBar());
-        double dRng = Math.max(0.0001, db2.getHigh() - db2.getLow());
-        double dClosePos = (db2.getClose() - db2.getLow()) / dRng;
-        double dispConv = "long".equals(state.getDirection()) ? dClosePos : (1.0 - dClosePos);
-        int dispBonus = (int) Math.max(0, (dispConv - 0.70) / 0.30 * 15); // 0.70→0, 1.0→15
-
-        // Retest conviction: how cleanly price rejected at the FVG zone (0.50-1.0 range).
-        OHLCV rb2 = bars.get(state.getRetestBar());
-        double rRng = Math.max(0.0001, rb2.getHigh() - rb2.getLow());
-        double rClosePos = (rb2.getClose() - rb2.getLow()) / rRng;
-        double retestConv = "long".equals(state.getDirection()) ? rClosePos : (1.0 - rClosePos);
-        int retestBonus = (int) Math.max(0, (retestConv - 0.50) / 0.50 * 10); // 0.50→0, 1.0→10
-
-        // Recency: fresher sweeps are more reliable (sweep within 8 bars = best).
-        int barsFromSweep = (bars.size() - 1) - state.getSweepBar();
-        int recencyBonus = barsFromSweep <= 8 ? 15 : (barsFromSweep <= 15 ? 8 : 0);
-
-        // Base 50 (confirmed 4-stage SMC chain) + structure 10 + vol 10 + disp 0-15 + retest 0-10 + recency 0-15 = 50-110 capped at 100
-        int conf = 50 + 10
-                + (peakVol > avgVol * MIN_VOL_MULT ? 10 : 0)
-                + Math.min(15, dispBonus)
-                + Math.min(10, retestBonus)
-                + recencyBonus;
-        conf = Math.min(100, conf);
+        int conf=scoring.scoreSetup(true,true,true,true,hasStructure,peakVol>avgVol*MIN_VOL_MULT);
         if (conf<config.getMinConfidence()) {
             log.debug("{} filtered: LOW_CONF conf={} min={}", ticker, conf, config.getMinConfidence());
             return new DetectResult(List.of(),state);

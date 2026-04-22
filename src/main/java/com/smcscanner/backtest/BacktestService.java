@@ -951,10 +951,14 @@ public class BacktestService {
                 int adjConf  = Math.max(penaltyFloor, Math.min(100, rawAdj));
 
                 // ── VIX-aware dynamic minimum confidence gate ─────────────────
-                // Mirrors live: raise min bar by 5 pts above VIX 25, another 5 above 35.
+                // Raises min bar in high-VIX environments. Skipped for vwap/scalp —
+                // those strategies already benefit from high VIX (larger Z-score deviations,
+                // tighter Bollinger squeezes) and have their own internal quality gates.
                 int vixBoost = 0;
-                if (!ticker.startsWith("X:") && context.vixLevel() > 25) vixBoost  = 5;
-                if (!ticker.startsWith("X:") && context.vixLevel() > 35) vixBoost += 2; // was +5 — total max 7, not 10
+                boolean vixEligible = !ticker.startsWith("X:")
+                        && !"vwap".equals(effectiveStrat) && !"scalp".equals(effectiveStrat);
+                if (vixEligible && context.vixLevel() > 25) vixBoost  = 5;
+                if (vixEligible && context.vixLevel() > 35) vixBoost += 2;
                 int dynamicMinConf = effectiveMinConf + vixBoost;
 
                 // Skip trade if combined filters knocked confidence below threshold.

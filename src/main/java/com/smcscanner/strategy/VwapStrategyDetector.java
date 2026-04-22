@@ -206,7 +206,7 @@ public class VwapStrategyDetector {
                 double tpRaw = r4(vwap + curAtr * 0.3);
                 double tp    = tpRaw > entry * 1.005 ? tpRaw : r4(entry + targetAtr * 0.9);
 
-                int confidence = 65;
+                int confidence = 72;
                 if (last.getVolume() > avgVol * 1.8)             confidence += 5;
                 if ((vwap - curClose) > 0.8 * curAtr)            confidence += 5;
                 if (last.getVolume() > avgVol * 2.5)             confidence += 5;
@@ -286,7 +286,7 @@ public class VwapStrategyDetector {
                 double tpRaw = r4(vwap - curAtr * 0.3);
                 double tp    = tpRaw < entry * 0.995 ? tpRaw : r4(entry - targetAtr * 0.9);
 
-                int confidence = 65;
+                int confidence = 72;
                 if (last.getVolume() > avgVol * 1.8)             confidence += 5;
                 if ((curClose - vwap) > 0.8 * curAtr)            confidence += 5;
                 if (last.getVolume() > avgVol * 2.5)             confidence += 5;
