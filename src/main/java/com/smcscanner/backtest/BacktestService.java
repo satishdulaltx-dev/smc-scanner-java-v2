@@ -982,7 +982,8 @@ public class BacktestService {
                             adjConf, setup.getAtr(), newsAdj, sentiment.label(), ctxAdj, context.rsLabel(),
                             qualityAdj, filteredLabel,
                             0, 0, 0, 0, 0)); // no options P&L or contracts for filtered trades
-                    tradePlacedToday = true;
+                    // Do NOT set tradePlacedToday — a filtered trade should not block later
+                    // valid setups on the same day. Only actual executions consume the day slot.
                     continue;
                 }
 
@@ -998,7 +999,7 @@ public class BacktestService {
                             adjConf, setup.getAtr(), newsAdj, sentiment.label(), ctxAdj, context.rsLabel(),
                             qualityAdj, "CONF_CAP",
                             0, 0, 0, 0, 0));
-                    tradePlacedToday = true;
+                    // Do NOT set tradePlacedToday — capped signals should not block later valid setups
                     continue;
                 }
 
@@ -1072,6 +1073,15 @@ public class BacktestService {
                             ticker, holdSignal.gapScore(), holdSignal.reason());
                 }
 
+                // Gap overnight: extend fwdBarsRaw into next day BEFORE building fwdBars,
+                // otherwise the cap/filter below runs on the old list and next-day bars are ignored.
+                if ("gap".equals(effectiveStrat) && di + 1 < dates.size()) {
+                    List<OHLCV> nextDayBars = byDate.get(dates.get(di + 1));
+                    if (nextDayBars != null && !fwdBarsRaw.contains(nextDayBars.get(0))) {
+                        fwdBarsRaw.addAll(nextDayBars);
+                    }
+                }
+
                 List<OHLCV> fwdBars = new ArrayList<>();
                 for (OHLCV fb : fwdBarsRaw) {
                     ZonedDateTime fbZdt = Instant.ofEpochMilli(fb.getTimestamp()).atZone(ET);
@@ -1083,12 +1093,6 @@ public class BacktestService {
                 // Mode-specific hold limit: INTRADAY/OPTIONS cap at 48 bars (~4h)
                 if (fwdBars.size() > mode.maxForwardBars()) {
                     fwdBars = fwdBars.subList(0, mode.maxForwardBars());
-                }
-
-                // Gap overnight: always extend into next day — the entry was made specifically
-                // to capture next morning's gap. Override holdSignal for this strategy.
-                if ("gap".equals(effectiveStrat) && di + 1 < dates.size() && !fwdBarsRaw.contains(byDate.get(dates.get(di + 1)).get(0))) {
-                    fwdBarsRaw.addAll(byDate.get(dates.get(di + 1)));
                 }
 
                 // ── Gap-Open Stop (Fix B) ─────────────────────────────────────────
@@ -1207,27 +1211,12 @@ public class BacktestService {
                     scaledPnlPerContract = round2(optEst.pnlPerContract() * contracts);
                 }
 
-                // Override outcome to reflect actual options P&L direction.
-                // The trader holds options, not stock — if options lose money the trade is a LOSS
-                // regardless of whether the underlying hit TP (e.g. slippage/theta ate the gain).
+                // Stock outcome is ground truth — the underlying hitting TP or SL is the real
+                // signal. The options P&L estimate uses assumed delta/theta/spread and is not
+                // backed by real historical option quotes, so it must not override the outcome.
+                // It is kept as a side metric (opt_pnl_scaled) for display only.
                 String finalOutcome = outcome;
                 double finalPnlPct  = pnlPct;
-                if (!ticker.startsWith("X:") && !"BE_STOP".equals(outcome)
-                        && !outcome.endsWith("_FILTERED") && optEst.pnlPerContract() != 0) {
-                    double rawOptPnl = optEst.pnlPerContract();
-                    boolean stockWin  = "WIN".equals(outcome)  || "TRAIL_WIN".equals(outcome);
-                    boolean stockLoss = "LOSS".equals(outcome) || "TRAIL_LOSS".equals(outcome);
-                    if (rawOptPnl < 0 && stockWin) {
-                        finalOutcome = "LOSS";
-                        finalPnlPct  = round2(optEst.optionsPnlPct());
-                    } else if (rawOptPnl > 0 && stockLoss) {
-                        finalOutcome = "WIN";
-                        finalPnlPct  = round2(optEst.optionsPnlPct());
-                    } else if ("TIMEOUT".equals(outcome)) {
-                        // TIMEOUT win/loss classification comes from pnlPct sign — sync with options
-                        finalPnlPct = round2(optEst.optionsPnlPct());
-                    }
-                }
 
                 trades.add(new TradeResult(ticker, dir, effectiveStrat, entry, sl, tp, finalOutcome, finalPnlPct,
                         entryTime, exitTime != null ? exitTime : entryTime,
