@@ -129,7 +129,7 @@
       "maxConfidence": 84,
       "slAtrMult": 1.0,
       "tpRrRatio": 1.5,
-      "skip": false,
+      "skip": true,
       "note": "Apr 2026 full sweep: smc 4/5 intraday (fails 30d only \u2014 6 consecutive losses were a bad 30d window, not structural). vwap/keylevel also 4/5. Swing 3/3 ($930). Scalp PnL tiny ($3-$172) \u2014 skip scalp. | Apr 2026 SMC disabled: Chinese ADR \u2014 different market structure, US sessions not aligned with institutional flow. 30d: 28.6% WR, -$73.",
       "scalp": {
         "skip": true,
@@ -141,7 +141,8 @@
       },
       "swing": {
         "skip": false
-      }
+      },
+      "skipReason": "Chinese ADR \u2014 thin US session flow, unreliable SMC setups."
     },
     {
       "ticker": "COIN",
@@ -240,7 +241,7 @@
         9,
         14
       ],
-      "skip": false,
+      "skip": true,
       "note": "Apr 2026: added GLD (SPDR Gold ETF). Gold is macro-driven (DXY, Fed, geopolitical risk) \u2014 not manipulable by individuals. VWAP reversion is the primary edge: gold is a VWAP-magnet on non-announcement days, trends hard when macro catalysts hit. slAtrMult=0.8 (wider than avg \u2014 gold bars are noisy from 24h futures carry). skipHours=[9] blocks first 30 min. skipHours=[14] blocks 2-3pm window where VWAP and keylevel signals consistently time out on GLD (90d backtest: $182 losses vs $48 wins in hour 14). BTC correlation: none \u2014 gold is anti-BTC (risk-off vs risk-on). Currently in confirmed bull run (all-time highs Apr 2026) so LONG VWAP reversion setups will have highest edge. | Apr 2026 SMC disabled: Gold ETF \u2014 commodity macro-driven, no institutional SMC footprint. 30d: 0W/1L, -$159.",
       "scalp": {
         "skip": false,
@@ -256,7 +257,8 @@
         "strategyType": "keylevel",
         "minConfidence": 68,
         "tpRrRatio": 2.0
-      }
+      },
+      "skipReason": "Commodity ETF \u2014 no institutional SMC footprint in any mode."
     },
     {
       "ticker": "GOOGL",
@@ -416,8 +418,8 @@
       "slAtrMult": 1.0,
       "tpRrRatio": 2.0,
       "intradayRsGate": false,
-      "skip": false,
-      "skipReason": null,
+      "skip": true,
+      "skipReason": "Confirmed negative at 30d and 180d across all strategies.",
       "note": "Apr 2026 HYBRID backtest: SMC ALL-mode $595 (8T 62.5%WR) \u2014 0 trades in SCALP mode because regime+RS gates block most MSFT signals in tariff-recession period. Removed intradayRsGate to allow signal generation. | Apr 2026 SMC disabled: Apr 2026 30d: 0W/1L -$183. Previously confirmed negative on all strategies at 180d in hybrid exits.",
       "scalp": {
         "skip": true,
@@ -562,7 +564,7 @@
       "skipHours": [
         15
       ],
-      "skip": false,
+      "skip": true,
       "note": "Apr 2026 full sweep: smc intraday 365d 62.3%WR $2638. Scalp exceptionally strong \u2014 73.5%WR 365d, 100%WR 30d. Was wrongly skipped on VWAP only \u2014 SMC is the right strategy for QQQ. 60d/90d windows thin (regime-sensitive), reliable at 30d and 180d+. | Apr 2026 SMC disabled: Index ETF \u2014 same as SPY. 30d: 14.3% WR -$195, 180d: 33.3% WR -$482. Zero edge on SMC.",
       "scalp": {
         "skip": false,
@@ -575,7 +577,8 @@
       },
       "swing": {
         "skip": false
-      }
+      },
+      "skipReason": "Index ETF \u2014 no SMC edge across any mode. 30d: 14.3% WR -$195."
     },
     {
       "ticker": "RIOT",
@@ -697,8 +700,8 @@
         9,
         15
       ],
-      "skip": false,
-      "skipReason": null,
+      "skip": true,
+      "skipReason": "Index ETF \u2014 no SMC edge across any mode. 30d: 28.6% WR -$482.",
       "note": "Apr 2026 HYBRID backtest switch: smc $212 > breakout -$107 > keylevel -$175 > vwap -$327. SMC 78.6% WR on SPY at 180d HYBRID \u2014 FVG sweeps on index are driven by futures/macro imbalances that create clean institutional order flow. | Apr 2026 SMC disabled: Index ETF \u2014 macro-driven, SMC zones get steamrolled by broad market moves. 30d: 28.6% WR, -$482.",
       "scalp": {
         "skip": true,
