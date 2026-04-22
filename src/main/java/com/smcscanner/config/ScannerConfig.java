@@ -55,6 +55,9 @@ public class ScannerConfig {
     private int     alpacaMaxDailyOrders= 10;
     private int     alpacaMinConfidence = 75;    // only auto-trade this confidence+
 
+    // ── Strategy toggles ────────────────────────────────────────────────────
+    private boolean gapOvernightEnabled = false; // pre-close overnight gap prediction (disabled — poor WR)
+
     // getters
     public String getPolygonApiKey()         { return polygonApiKey; }
     public String getDiscordWebhookUrl()     { return discordWebhookUrl; }
@@ -97,6 +100,7 @@ public class ScannerConfig {
     public double  getAlpacaDailyLossLimit() { return alpacaDailyLossLimit; }
     public int     getAlpacaMaxDailyOrders() { return alpacaMaxDailyOrders; }
     public int     getAlpacaMinConfidence()  { return alpacaMinConfidence; }
+    public boolean isGapOvernightEnabled()   { return gapOvernightEnabled; }
 
     // setters (required by @ConfigurationProperties)
     public void setPolygonApiKey(String v)          { this.polygonApiKey = v; }
@@ -126,7 +130,8 @@ public class ScannerConfig {
     public void setAlpacaMaxPosition(double v)    { this.alpacaMaxPosition = v; }
     public void setAlpacaDailyLossLimit(double v) { this.alpacaDailyLossLimit = v; }
     public void setAlpacaMaxDailyOrders(int v)    { this.alpacaMaxDailyOrders = v; }
-    public void setAlpacaMinConfidence(int v)     { this.alpacaMinConfidence = v; }
+    public void setAlpacaMinConfidence(int v)      { this.alpacaMinConfidence = v; }
+    public void setGapOvernightEnabled(boolean v)  { this.gapOvernightEnabled = v; }
 
     // ── Per-ticker profiles ───────────────────────────────────────────────────
     private final Map<String, TickerProfile> profileCache = new ConcurrentHashMap<>();

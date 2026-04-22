@@ -1292,7 +1292,7 @@ public class ScannerService {
             // ── Pre-close overnight gap prediction (3:30–3:55 PM ET) ─────────────
             // Scan near close for stocks coiling for a next-morning gap.
             // Enter near today's close; exit tomorrow when price jumps $20-30.
-            if (!isC && dailyAtr > 0 && sessionBars5m.size() >= 20) {
+            if (config.isGapOvernightEnabled() && !isC && dailyAtr > 0 && sessionBars5m.size() >= 20) {
                 try {
                     java.time.LocalTime etNowGap = java.time.ZonedDateTime.now(
                             java.time.ZoneId.of("America/New_York")).toLocalTime();
