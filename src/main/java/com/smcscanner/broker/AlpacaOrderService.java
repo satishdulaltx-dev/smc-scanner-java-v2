@@ -63,7 +63,7 @@ public class AlpacaOrderService {
     // consecutiveReversal = number of consecutive closes moving against direction
     // optionsContract = OCC symbol (e.g. "AAPL250418C00200000") for options trades, null for equity
     // stopOrderId is reused for options-only metadata because options have no native stop order
-    // entryEpochMs: wall-clock time when order was placed — used for scalp time exit
+    // entryEpochMs: signal-bar time when known — used for scalp time exit parity
     public record TrackedPosition(String symbol, String direction, double entry, double stopLoss,
                                    double takeProfit, String orderId, String stopOrderId,
                                    double peakClose, int consecutiveReversal, String optionsContract,
@@ -86,13 +86,9 @@ public class AlpacaOrderService {
     private static final int    REVERSAL_CLOSES    = 2;    // consecutive closes against direction to confirm reversal
     private static final double HYBRID_BE_R        = 1.0;  // move SL to breakeven at 1R
     private static final double HYBRID_TRAIL_R     = 2.5;  // trend continuation: trail only arms after 2.5R (was 1.5R)
-    private static final double SCALP_BE_R         = 0.60; // scalp moves to BE faster
+    private static final double SCALP_BE_R         = 1.0;  // must match backtest scalp BE logic
     private static final double SCALP_TRAIL_R      = 2.0;  // trend continuation: scalp trail arms after 2.0R (was 0.9R)
     private static final double SCALP_TRAIL_NORMAL = 0.75; // wider scalp trail once trend is confirmed (was 0.35)
-    private static final double SCALP_TRAIL_REVERSAL = 0.30;
-    // Options P&L thresholds — trigger BE/trail based on dollar profit regardless of underlying R
-    private static final double OPTIONS_PNL_BE_THRESHOLD    = 75.0;  // $75 unrealized → move SL to breakeven
-    private static final double OPTIONS_PNL_TRAIL_THRESHOLD = 300.0; // $300 unrealized → arm trail (raised from $150 for trend continuation)
 
     // Config defaults (overridden by env vars)
     private static final double DEFAULT_MAX_POSITION = 500.0;   // max $ per trade
@@ -301,7 +297,7 @@ public class AlpacaOrderService {
                             s.getTicker(), s.getDirection(), s.getEntry(),
                             s.getStopLoss(), s.getTakeProfit(), orderId,
                             encodeHybridState(s.getStopLoss(), s.getTakeProfit(), false, false, null),
-                            s.getEntry(), 0, occSymbol, System.currentTimeMillis()));
+                            s.getEntry(), 0, occSymbol, resolveSignalEpochMs(s)));
 
                     dailyOrderCount.merge(s.getTicker(), 1, Integer::sum);
                     return orderId;
@@ -666,6 +662,8 @@ public class AlpacaOrderService {
         if (candleTs.equals(lastTs)) return;
         lastProcessedCandle.put(symbol, candleTs);
 
+        double candleHigh = confirmedBar.getHigh();
+        double candleLow = confirmedBar.getLow();
         double candleClose = confirmedBar.getClose();
         boolean isLong = "long".equals(tp.direction());
         double atr = computeAtr5m(bars); // works for any timeframe — named for legacy
@@ -684,29 +682,12 @@ public class AlpacaOrderService {
                 : tp.entry() - risk * (scalpManaged ? SCALP_TRAIL_R : HYBRID_TRAIL_R);
         boolean breakEvenArmed = hybrid.breakEvenArmed();
         boolean trailArmed = hybrid.trailArmed();
-
-        // ── Options P&L override: arm BE/trail based on dollar profit, not just underlying R ──
-        // Underlying price moves slowly but options P&L can spike fast. Without this,
-        // a $355 options gain can sit with the original SL because the underlying hasn't
-        // reached the 1R / 1.5R threshold in price terms yet.
         boolean isOptionsPosition = tp.optionsContract() != null && !tp.optionsContract().isBlank();
-        if (isOptionsPosition && optionsPnlDollars > 0) {
-            if (!breakEvenArmed && optionsPnlDollars >= OPTIONS_PNL_BE_THRESHOLD) {
-                breakEvenArmed = true;
-                log.info("TRAIL OPTIONS_PNL_BE {}: unrealized P&L=${} >= ${}  — arming breakeven (underlying R not yet reached)",
-                        symbol, String.format("%.2f", optionsPnlDollars), OPTIONS_PNL_BE_THRESHOLD);
-            }
-            if (!trailArmed && optionsPnlDollars >= OPTIONS_PNL_TRAIL_THRESHOLD) {
-                trailArmed = true;
-                log.info("TRAIL OPTIONS_PNL_TRAIL {}: unrealized P&L=${} >= ${} — arming ATR trail (underlying R not yet reached)",
-                        symbol, String.format("%.2f", optionsPnlDollars), OPTIONS_PNL_TRAIL_THRESHOLD);
-            }
-        }
 
-        // ── 1. Update peak close ──────────────────────────────────────────────
+        // ── 1. Update peak from confirmed bar range ──────────────────────────
         double newPeak = tp.peakClose();
-        if (isLong  && candleClose > newPeak) newPeak = candleClose;
-        if (!isLong && candleClose < newPeak) newPeak = candleClose;
+        if (isLong  && candleHigh > newPeak) newPeak = candleHigh;
+        if (!isLong && candleLow < newPeak) newPeak = candleLow;
 
         if (!breakEvenArmed) {
             boolean touchedBe = isLong ? newPeak >= beTrigger : newPeak <= beTrigger;
@@ -727,7 +708,8 @@ public class AlpacaOrderService {
         if (!trailArmed) {
             trailArmed = isLong ? newPeak >= trailTrigger : newPeak <= trailTrigger;
             if (trailArmed) {
-                log.info("TRAIL HYBRID {}: trend continuation threshold reached — arming ATR trail (1.5 ATR wide)", symbol);
+                newPeak = candleClose;
+                log.info("TRAIL HYBRID {}: trend continuation threshold reached — arming ATR trail", symbol);
             }
         }
 
@@ -743,7 +725,7 @@ public class AlpacaOrderService {
 
         // ── 3. Calculate target stop ──────────────────────────────────────────
         double atrMult = scalpManaged
-                ? (newReversalCount >= 1 ? SCALP_TRAIL_REVERSAL : SCALP_TRAIL_NORMAL)
+                ? (newReversalCount >= REVERSAL_CLOSES ? ATR_TRAIL_REVERSAL : SCALP_TRAIL_NORMAL)
                 : ((newReversalCount >= REVERSAL_CLOSES) ? ATR_TRAIL_REVERSAL : ATR_TRAIL_NORMAL);
         double targetStop = isLong
                 ? newPeak - atr * atrMult
@@ -763,8 +745,8 @@ public class AlpacaOrderService {
         // ── 4. Pre-trail hard take profit (matches hybrid backtest) ───────────────
         if (!trailArmed) {
             boolean tpHit = isLong
-                    ? candleClose >= tp.takeProfit()
-                    : candleClose <= tp.takeProfit();
+                    ? candleHigh >= tp.takeProfit()
+                    : candleLow <= tp.takeProfit();
             if (tpHit) {
                 log.info("TRAIL HYBRID TP HIT {} underlying=${} TP=${} — closing position",
                         symbol, String.format("%.2f", candleClose), String.format("%.2f", tp.takeProfit()));
@@ -781,8 +763,8 @@ public class AlpacaOrderService {
 
         // ── 5. Check if underlying has breached the current stop level ────────────
         boolean slBreached = isLong
-                ? candleClose <= tp.stopLoss()
-                : candleClose >= tp.stopLoss();
+                ? candleLow <= tp.stopLoss()
+                : candleHigh >= tp.stopLoss();
 
         if (slBreached) {
             log.info("TRAIL SL HIT {} underlying=${} vs SL=${} — closing position",
@@ -832,27 +814,7 @@ public class AlpacaOrderService {
             return;
         }
 
-        // ── 7. Dynamic TP: tracks SL with the same original bracket spread ─────────
-        // As SL moves up, TP moves up by the same amount — neither is a fixed number.
-        double bracketSpread = Math.abs(hybrid.originalTakeProfit() - hybrid.originalStopLoss());
-        double dynamicTp = isLong ? targetStop + bracketSpread : targetStop - bracketSpread;
-
-        // Check if price hit the dynamic TP
-        boolean tpHit = isLong ? candleClose >= dynamicTp : candleClose <= dynamicTp;
-        if (tpHit) {
-            log.info("TRAIL TP HIT {} close=${} dynamicTP=${} — closing position",
-                    symbol, String.format("%.2f", candleClose), String.format("%.2f", dynamicTp));
-            if (isOptionsPosition) {
-                closeOptionsPosition(symbol, tp.optionsContract());
-            } else {
-                closeEquityPosition(symbol);
-            }
-            removeTrackedPosition(symbol);
-            lastProcessedCandle.remove(symbol);
-            return;
-        }
-
-        // ── 8. Once trail is armed, use ATR trailing only if improving ───────────
+        // ── 7. Once trail is armed, use ATR trailing only if improving ───────────
         boolean inProfit  = isLong ? targetStop > tp.entry() : targetStop < tp.entry();
         boolean improving = isLong ? targetStop > tp.stopLoss() : targetStop < tp.stopLoss();
 
@@ -865,10 +827,10 @@ public class AlpacaOrderService {
                         symbol, mode,
                         String.format("%.2f", newPeak), String.format("%.2f", candleClose),
                         String.format("%.2f", tp.stopLoss()), String.format("%.2f", targetStop),
-                        String.format("%.2f", dynamicTp), atrMult);
+                        String.format("%.2f", tp.takeProfit()), atrMult);
                 putTrackedPosition(symbol, new TrackedPosition(
                         tp.symbol(), tp.direction(), tp.entry(), targetStop,
-                        dynamicTp, tp.orderId(),
+                        tp.takeProfit(), tp.orderId(),
                         encodeHybridState(originalStop, hybrid.originalTakeProfit(), true, true, hybrid.brokerStopOrderId()),
                         newPeak, newReversalCount, tp.optionsContract(), tp.entryEpochMs()));
                 return;
@@ -882,26 +844,26 @@ public class AlpacaOrderService {
                         String.format("%.2f", candleClose),
                         String.format("%.2f", tp.stopLoss()),
                         String.format("%.2f", targetStop),
-                        String.format("%.2f", dynamicTp),
+                        String.format("%.2f", tp.takeProfit()),
                         atrMult);
                 putTrackedPosition(symbol, new TrackedPosition(
                         tp.symbol(), tp.direction(), tp.entry(), targetStop,
-                        dynamicTp, tp.orderId(),
+                        tp.takeProfit(), tp.orderId(),
                         encodeHybridState(originalStop, hybrid.originalTakeProfit(), true, true, hybrid.brokerStopOrderId()),
                         newPeak, newReversalCount, tp.optionsContract(), tp.entryEpochMs()));
                 return;
             }
         }
 
-        // No SL move — just update peak, reversal counter, and dynamic TP
-        if (newPeak != tp.peakClose() || newReversalCount != tp.consecutiveReversal() || dynamicTp != tp.takeProfit()) {
+        // No SL move — just update peak and reversal counter
+        if (newPeak != tp.peakClose() || newReversalCount != tp.consecutiveReversal()) {
             if (newReversalCount >= REVERSAL_CLOSES) {
                 log.info("TRAIL: {} reversal confirmed ({} closes) — waiting for profit zone to tighten SL",
                         symbol, newReversalCount);
             }
             putTrackedPosition(symbol, new TrackedPosition(
                     tp.symbol(), tp.direction(), tp.entry(), tp.stopLoss(),
-                    dynamicTp, tp.orderId(),
+                    tp.takeProfit(), tp.orderId(),
                     encodeHybridState(originalStop, hybrid.originalTakeProfit(), true, true, hybrid.brokerStopOrderId()),
                     newPeak, newReversalCount, tp.optionsContract(), tp.entryEpochMs()));
         }
@@ -1033,19 +995,24 @@ public class AlpacaOrderService {
      */
     public boolean recoverTrackedPosition(String occSymbol, String underlying,
                                           String direction, double entry,
-                                          double sl, double tp) {
+                                          double sl, double tp, long entryEpochMs) {
         if (trackedPositions.containsKey(underlying)) return false; // already tracked
         if (entry <= 0 || sl <= 0 || tp <= 0) return false;
         TrackedPosition recovered = new TrackedPosition(
                 underlying, direction, entry, sl, tp,
                 null,
                 encodeHybridState(sl, tp, false, false, null),
-                entry, 0, occSymbol, System.currentTimeMillis());
+                entry, 0, occSymbol, entryEpochMs > 0 ? entryEpochMs : System.currentTimeMillis());
         putTrackedPosition(underlying, recovered);
         log.info("STARTUP_RECOVER {}: restored from trade log entry={} sl={} tp={} contract={}",
                 underlying, String.format("%.2f", entry),
                 String.format("%.2f", sl), String.format("%.2f", tp), occSymbol);
         return true;
+    }
+
+    private long resolveSignalEpochMs(TradeSetup setup) {
+        if (setup == null || setup.getTimestamp() == null) return System.currentTimeMillis();
+        return setup.getTimestamp().atZone(ET).toInstant().toEpochMilli();
     }
 
     private double computeAtrFromBars(List<OHLCV> bars, int period) {

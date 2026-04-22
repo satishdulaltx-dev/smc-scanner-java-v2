@@ -259,7 +259,8 @@ public class ScannerService {
             // ── Universal intraday time gate ──────────────────────────────────
             // Pre-compute so capReversal/fallback overlays share the same gate.
             java.time.LocalTime etNowIntraday = isC ? java.time.LocalTime.NOON
-                    : java.time.ZonedDateTime.now(java.time.ZoneId.of("America/New_York")).toLocalTime();
+                    : java.time.Instant.ofEpochMilli(lastBarTs)
+                            .atZone(java.time.ZoneId.of("America/New_York")).toLocalTime();
             boolean intradayTooEarly = !isC && etNowIntraday.isBefore(java.time.LocalTime.of(9, 45));
             boolean intradayTooLate  = !isC && !etNowIntraday.isBefore(java.time.LocalTime.of(15, 30));
 
@@ -809,8 +810,7 @@ public class ScannerService {
                 // ── Per-ticker dead zone hard block ───────────────────────────────
                 // skipHours set per-ticker in ticker-profiles.json from backtest loss data.
                 // Hard skip — signal silently suppressed for this scan cycle.
-                if (!isC && profile.isSkipHour(
-                        java.time.ZonedDateTime.now(java.time.ZoneId.of("America/New_York")).toLocalTime().getHour())) {
+                if (!isC && profile.isSkipHour(etNowIntraday.getHour())) {
                     log.info("{} SKIP_HOUR_BLOCK: ticker has this hour blocked in profile", ticker);
                     setTs(ticker, "idle", null, 0, "⊘ Blocked hour — no entry this window");
                     removeSetup(ticker);
@@ -824,8 +824,7 @@ public class ScannerService {
                 int deadZoneAdj = 0;
                 boolean lateDay = false;
                 if (!isC) {
-                    java.time.LocalTime etNow = java.time.ZonedDateTime.now(
-                            java.time.ZoneId.of("America/New_York")).toLocalTime();
+                    java.time.LocalTime etNow = etNowIntraday;
                     int etHour = etNow.getHour();
                     if (etHour == 11 || etHour == 13) {
                         deadZoneAdj = -15;
@@ -971,13 +970,11 @@ public class ScannerService {
                 // Only block when UNUSUAL institutional activity conflicts (vol > 3× OI).
                 // Normal directional disagreement already penalised by -10 conf above.
                 if (flow.hasData() && flow.unusualActivity() && flow.isConflicting(s.getDirection())) {
-                    log.info("{} FLOW_BLOCKED: unusual {} flow vs {} setup (P/C ratio {})",
+                    log.info("{} FLOW_WARNING: unusual {} flow vs {} setup (P/C ratio {}) — informational only for parity",
                             ticker, flow.flowDirection(), s.getDirection().toUpperCase(),
                             String.format("%.2f", flow.pcRatioVol()));
-                    setTs(ticker, "idle", null, 0,
-                            "⛔ Blocked — unusual institutional flow conflicts (" + flow.flowDirection() + ")");
-                    removeSetup(ticker);
-                } else {
+                }
+                {
                     setTs(ticker,"long".equals(s.getDirection())?"setup-long":"setup-short",s.getDirection(),s.getConfidence(),
                         String.format("ENTRY %s | Score %d | $%.2f",s.getDirection().toUpperCase(),s.getConfidence(),s.getEntry()));
                     // ── Dynamic quality gate (VIX-aware) ──────────────────────────
@@ -1176,11 +1173,11 @@ public class ScannerService {
                                     log.info("ALERT SUPPRESSED {} {} conf={} — {} mode disabled for this ticker",
                                             ticker, s.getDirection().toUpperCase(), s.getConfidence(),
                                             isScalpSetup ? "scalp" : "intraday");
-                                // Options-only gate: suppress alert entirely if no contract found
-                                } else if (!s.hasOptionsData()) {
-                                    log.info("ALERT SUPPRESSED {} {} conf={} — no options contract available (options-only mode)",
-                                            ticker, s.getDirection().toUpperCase(), s.getConfidence());
                                 } else {
+                                    if (!s.hasOptionsData()) {
+                                        log.info("ALERT OPTIONS_UNRESOLVED {} {} conf={} — recording parity signal; Alpaca may skip order placement",
+                                                ticker, s.getDirection().toUpperCase(), s.getConfidence());
+                                    }
                                     log.info("INTRADAY ALERT {} {} conf={} entry={} adj=news{}/ctx{}/qual{}/flow{}/regime{}/corr{}/align{}/sma200{}/rsi{}/candle{}/vol{} vixBoost={} dynamicMin={}",
                                             ticker, s.getDirection().toUpperCase(), s.getConfidence(), s.getEntry(),
                                             newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj, alignmentAdj, sma200Adj, rsiAdj, candleAdj, volAdj, vixBoost, dynamicMinConf);
@@ -1310,8 +1307,7 @@ public class ScannerService {
             // Enter near today's close; exit tomorrow when price jumps $20-30.
             if (config.isGapOvernightEnabled() && !isC && dailyAtr > 0 && sessionBars5m.size() >= 20) {
                 try {
-                    java.time.LocalTime etNowGap = java.time.ZonedDateTime.now(
-                            java.time.ZoneId.of("America/New_York")).toLocalTime();
+                    java.time.LocalTime etNowGap = etNowIntraday;
                     boolean isPreCloseWindow = !etNowGap.isBefore(java.time.LocalTime.of(15, 30))
                             && etNowGap.isBefore(java.time.LocalTime.of(16, 0));
                     if (isPreCloseWindow && !liveLog.hasOvernightFiredToday(ticker)) {
@@ -1404,8 +1400,7 @@ public class ScannerService {
             if (!isC && dailyAtr > 0 && sessionBars5m.size() >= 3
                     && dailyBars != null && dailyBars.size() >= 22) {
                 try {
-                    java.time.LocalTime etNowPeg = java.time.ZonedDateTime.now(
-                            java.time.ZoneId.of("America/New_York")).toLocalTime();
+                    java.time.LocalTime etNowPeg = etNowIntraday;
                     boolean isPegWindow = !etNowPeg.isBefore(java.time.LocalTime.of(9, 30))
                             && etNowPeg.isBefore(java.time.LocalTime.of(10, 1));
                     if (isPegWindow) {

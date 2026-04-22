@@ -405,7 +405,7 @@ public class BacktestService {
                 } else if ("vwap".equals(effectiveStrat)) {
                     bSetups = vwapDetector.detect(window, ticker, dailyAtr, true);
                 } else if ("breakout".equals(effectiveStrat)) {
-                    bSetups = breakoutDetector.detect(window, ticker, dailyAtr);
+                    bSetups = breakoutDetector.detect(window, ticker, dailyAtr, true);
                 } else if ("gap".equals(effectiveStrat)) {
                     // Pre-close overnight entry: scan at 3:30–3:55 PM ET for stocks
                     // predicted to gap the next morning. Enter near close, hold overnight,
@@ -495,9 +495,9 @@ public class BacktestService {
                     }
                 } else if ("keylevel".equals(effectiveStrat)) {
                     // Pass daily bars up to this date (htfSlice) as the level-detection source
-                    bSetups = keyLevelDetector.detect(window, htfSlice, ticker, dailyAtr, bp);
+                    bSetups = keyLevelDetector.detect(window, htfSlice, ticker, dailyAtr, bp, true);
                 } else if ("vsqueeze".equals(effectiveStrat)) {
-                    bSetups = vSqueezeDetector.detect(window, ticker, dailyAtr);
+                    bSetups = vSqueezeDetector.detect(window, ticker, dailyAtr, true);
                 } else if ("vwap3d".equals(effectiveStrat)) {
                     List<OHLCV> multiDay = new ArrayList<>(prevDaysBars);
                     multiDay.addAll(window);
@@ -550,8 +550,8 @@ public class BacktestService {
                                         window, htfBias, ticker, false, dailyAtr, true);
                                 yield fr.setups();
                             }
-                            case "keylevel" -> keyLevelDetector.detect(window, htfSlice, ticker, dailyAtr, bp);
-                            case "vsqueeze" -> vSqueezeDetector.detect(window, ticker, dailyAtr);
+                            case "keylevel" -> keyLevelDetector.detect(window, htfSlice, ticker, dailyAtr, bp, true);
+                            case "vsqueeze" -> vSqueezeDetector.detect(window, ticker, dailyAtr, true);
                             default -> java.util.List.of();
                         };
                         if (!bSetups.isEmpty()) log.debug("{} BT_FALLBACK: {} → {}", ticker, effectiveStrat, fallbackStrat);

@@ -9,12 +9,17 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.List;
 
 @Service
 public class SetupDetector {
     private static final Logger log = LoggerFactory.getLogger(SetupDetector.class);
+    private static final ZoneId ET = ZoneId.of("America/New_York");
     private static final int    SWEEP_LOOKBACK = 80, FVG_WINDOW = 12, RETEST_WINDOW = 25;
     private static final double DISP_ATR_MULT  = 1.3, MIN_FVG_PCT = 0.0002, MIN_VOL_MULT = 1.5; // global defaults — per-ticker overrides in ticker-profiles.json
     private static final double MAX_ENTRY_DISTANCE_ATR = 2.5;
@@ -44,13 +49,14 @@ public class SetupDetector {
     public DetectResult detectSetups(List<OHLCV> bars, String htfBias, String ticker, boolean isCrypto, double dailyAtr, boolean backtestMode) {
         SMCState state = new SMCState();
         if (bars==null||bars.size()<20) return new DetectResult(List.of(),state);
+        long lastBarTs = bars.get(bars.size()-1).getTimestamp();
+        LocalDate lastBarDate = Instant.ofEpochMilli(lastBarTs).atZone(ET).toLocalDate();
+        LocalTime lastBarTime = Instant.ofEpochMilli(lastBarTs).atZone(ET).toLocalTime();
         if (!backtestMode) {
-            if (isCrypto&&!sessionFilter.isInCryptoSession()) { state.setPhase(SetupPhase.OUTSIDE_SESSION); return new DetectResult(List.of(),state); }
-            if (!isCrypto&&!sessionFilter.isInNySession())    { state.setPhase(SetupPhase.OUTSIDE_SESSION); return new DetectResult(List.of(),state); }
+            if (isCrypto&&!sessionFilter.isInCryptoSession(lastBarTime)) { state.setPhase(SetupPhase.OUTSIDE_SESSION); return new DetectResult(List.of(),state); }
+            if (!isCrypto&&!sessionFilter.isInNySession(lastBarTime))    { state.setPhase(SetupPhase.OUTSIDE_SESSION); return new DetectResult(List.of(),state); }
             // Staleness guard: reject if the last bar is from a prior calendar day
-            java.time.ZoneId et = java.time.ZoneId.of("America/New_York");
-            java.time.LocalDate lastBarDate = java.time.Instant.ofEpochMilli(bars.get(bars.size()-1).getTimestamp()).atZone(et).toLocalDate();
-            if (!lastBarDate.equals(java.time.LocalDate.now(et))) { state.setPhase(SetupPhase.OUTSIDE_SESSION); return new DetectResult(List.of(),state); }
+            if (!lastBarDate.equals(LocalDate.now(ET))) { state.setPhase(SetupPhase.OUTSIDE_SESSION); return new DetectResult(List.of(),state); }
         }
 
         double[] atrArr=atrCalc.computeAtr(bars,14);
@@ -64,7 +70,7 @@ public class SetupDetector {
         }
 
         String vol=lastClose>0&&curAtr/lastClose*100<0.5?"low":(curAtr/lastClose*100<1.5?"medium":"high");
-        String session=isCrypto?sessionFilter.cryptoSessionName():sessionFilter.sessionName();
+        String session=isCrypto?sessionFilter.cryptoSessionName(lastBarTime):sessionFilter.sessionName(lastBarTime);
 
         // Load per-ticker overrides early — dispAtrMult needed inside runStateMachine
         TickerProfile profile    = config.getTickerProfile(ticker);
@@ -214,7 +220,7 @@ public class SetupDetector {
             .entry(entry).stopLoss(sl).takeProfit(tp).confidence(conf).session(session).volatility(vol)
             .atr(r4(curAtr)).hasBos(str[0]).hasChoch(str[1]).fvgTop(r4(state.getFvgTop())).fvgBottom(r4(state.getFvgBottom()))
             .factorBreakdown(smcBreakdown)
-            .timestamp(LocalDateTime.now()).build();
+            .timestamp(Instant.ofEpochMilli(lastBarTs).atZone(ET).toLocalDateTime()).build();
         return new DetectResult(List.of(setup),state);
     }
 

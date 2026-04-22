@@ -245,7 +245,7 @@ public class VwapStrategyDetector {
                             .fvgTop(r4(vwap))
                             .fvgBottom(r4(lowestClose))
                             .factorBreakdown(factors)
-                            .timestamp(LocalDateTime.now())
+                            .timestamp(Instant.ofEpochMilli(last.getTimestamp()).atZone(ET).toLocalDateTime())
                             .build());
                     // Don't return here — continue to evaluate SHORT side.
                     // If both fire, pick the higher-confidence one at the end.
@@ -323,7 +323,7 @@ public class VwapStrategyDetector {
                             .fvgTop(r4(highestClose))
                             .fvgBottom(r4(vwap))
                             .factorBreakdown(factors)
-                            .timestamp(LocalDateTime.now())
+                            .timestamp(Instant.ofEpochMilli(last.getTimestamp()).atZone(ET).toLocalDateTime())
                             .build());
                 }
             }

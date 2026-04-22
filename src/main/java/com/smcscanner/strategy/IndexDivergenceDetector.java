@@ -115,7 +115,7 @@ public class IndexDivergenceDetector {
                             .confidence(conf).session("NYSE").volatility("idiv")
                             .atr(atr).hasBos(false).hasChoch(false)
                             .fvgTop(r4(aaplClose + atr)).fvgBottom(r4(aaplClose - atr))
-                            .timestamp(LocalDateTime.now()).build());
+                            .timestamp(Instant.ofEpochMilli(aaplLast.getTimestamp()).atZone(ET).toLocalDateTime()).build());
                 }
             }
         }
@@ -144,7 +144,7 @@ public class IndexDivergenceDetector {
                             .confidence(conf).session("NYSE").volatility("idiv")
                             .atr(atr).hasBos(false).hasChoch(false)
                             .fvgTop(r4(aaplClose + atr)).fvgBottom(r4(aaplClose - atr))
-                            .timestamp(LocalDateTime.now()).build());
+                            .timestamp(Instant.ofEpochMilli(aaplLast.getTimestamp()).atZone(ET).toLocalDateTime()).build());
                 }
             }
         }

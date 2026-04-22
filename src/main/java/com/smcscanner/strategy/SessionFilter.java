@@ -19,15 +19,23 @@ public class SessionFilter {
 
     public boolean isInNySession() { LocalTime n=ZonedDateTime.now(ET).toLocalTime(); return !n.isBefore(NY_OPEN)&&!n.isAfter(NY_CLOSE); }
     public boolean isInCryptoSession() { LocalTime n=ZonedDateTime.now(ET).toLocalTime(); return !n.isBefore(CR_OPEN)&&!n.isAfter(CR_CLOSE); }
+    public boolean isInNySession(LocalTime n) { return !n.isBefore(NY_OPEN)&&!n.isAfter(NY_CLOSE); }
+    public boolean isInCryptoSession(LocalTime n) { return !n.isBefore(CR_OPEN)&&!n.isAfter(CR_CLOSE); }
 
     public String sessionName() {
         LocalTime n=ZonedDateTime.now(ET).toLocalTime();
+        return sessionName(n);
+    }
+    public String sessionName(LocalTime n) {
         if (!n.isBefore(LocalTime.of(9,30))&&!n.isAfter(LocalTime.of(10,30))) return "ny_open";
         if (!n.isBefore(LocalTime.of(14,0))&&!n.isAfter(LocalTime.of(16,0)))  return "pm_session";
         return null;
     }
     public String cryptoSessionName() {
         LocalTime n=ZonedDateTime.now(ET).toLocalTime();
+        return cryptoSessionName(n);
+    }
+    public String cryptoSessionName(LocalTime n) {
         if (!n.isBefore(LocalTime.of(7,0))&&!n.isAfter(LocalTime.of(10,30))) return "crypto_morning";
         if (!n.isBefore(LocalTime.of(10,30))&&!n.isAfter(LocalTime.of(16,0))) return "crypto_midday";
         return "crypto_afternoon";

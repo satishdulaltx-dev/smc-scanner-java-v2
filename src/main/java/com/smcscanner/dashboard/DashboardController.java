@@ -111,7 +111,14 @@ public class DashboardController {
                 double sl    = toDouble(trade.get("stopLoss"));
                 double tp    = toDouble(trade.get("takeProfit"));
                 String dir   = String.valueOf(trade.getOrDefault("direction", "long"));
-                if (alpaca.recoverTrackedPosition(occSymbol, underlying, dir, entry, sl, tp)) recovered++;
+                long entryTs = 0L;
+                Object rawTs = trade.get("timestamp");
+                if (rawTs instanceof Number n) {
+                    entryTs = n.longValue();
+                } else if (rawTs != null) {
+                    try { entryTs = Long.parseLong(String.valueOf(rawTs)); } catch (Exception ignored) {}
+                }
+                if (alpaca.recoverTrackedPosition(occSymbol, underlying, dir, entry, sl, tp, entryTs)) recovered++;
             }
             if (recovered > 0)
                 log.info("STARTUP_RECOVER: restored {} option position(s) into live tracker", recovered);

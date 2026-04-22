@@ -26,6 +26,10 @@ public class VolatilitySqueezeDetector {
     private static final int     MIN_SQUEEZE = 3; // must have been squeezed ≥ 3 bars
 
     public List<TradeSetup> detect(List<OHLCV> bars, String ticker, double dailyAtr) {
+        return detect(bars, ticker, dailyAtr, false);
+    }
+
+    public List<TradeSetup> detect(List<OHLCV> bars, String ticker, double dailyAtr, boolean backtestMode) {
         List<TradeSetup> result = new ArrayList<>();
         if (bars == null || bars.size() < PERIOD + 5) return result;
 
@@ -33,7 +37,7 @@ public class VolatilitySqueezeDetector {
         OHLCV lastRaw = bars.get(bars.size() - 1);
         LocalDate today = Instant.ofEpochMilli(lastRaw.getTimestamp())
                 .atZone(ET).toLocalDate();
-        if (!today.equals(LocalDate.now(ET))) return result; // staleness guard
+        if (!backtestMode && !today.equals(LocalDate.now(ET))) return result; // staleness guard
         LocalTime mktOpen  = LocalTime.of(9, 30);
         LocalTime mktClose = LocalTime.of(16, 0);
 
@@ -114,7 +118,7 @@ public class VolatilitySqueezeDetector {
                         .atr(atr).hasBos(false).hasChoch(false)
                         .fvgTop(r4(bbUpper)).fvgBottom(r4(bbLower))
                         .factorBreakdown(factors)
-                        .timestamp(LocalDateTime.now()).build());
+                        .timestamp(Instant.ofEpochMilli(last.getTimestamp()).atZone(ET).toLocalDateTime()).build());
             }
         } else if (shortDir && shortMom && volSpike) {
             double entry       = r4(curClose);
@@ -141,7 +145,7 @@ public class VolatilitySqueezeDetector {
                         .atr(atr).hasBos(false).hasChoch(false)
                         .fvgTop(r4(bbUpper)).fvgBottom(r4(bbLower))
                         .factorBreakdown(factors)
-                        .timestamp(LocalDateTime.now()).build());
+                        .timestamp(Instant.ofEpochMilli(last.getTimestamp()).atZone(ET).toLocalDateTime()).build());
             }
         }
         return result;

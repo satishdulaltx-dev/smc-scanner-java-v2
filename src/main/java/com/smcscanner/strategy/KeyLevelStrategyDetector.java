@@ -54,6 +54,11 @@ public class KeyLevelStrategyDetector {
      */
     public List<TradeSetup> detect(List<OHLCV> fiveMinBars, List<OHLCV> htfBars,
                                     String ticker, double dailyAtr, TickerProfile profile) {
+        return detect(fiveMinBars, htfBars, ticker, dailyAtr, profile, false);
+    }
+
+    public List<TradeSetup> detect(List<OHLCV> fiveMinBars, List<OHLCV> htfBars,
+                                    String ticker, double dailyAtr, TickerProfile profile, boolean backtestMode) {
         double slMult  = profile != null ? profile.resolveSlAtrMult() : 0.5;
         double tpRatio = profile != null ? profile.resolveTpRrRatio() : 1.5;
         List<TradeSetup> result = new ArrayList<>();
@@ -67,7 +72,7 @@ public class KeyLevelStrategyDetector {
         LocalDate today     = Instant.ofEpochMilli(
                 fiveMinBars.get(fiveMinBars.size() - 1).getTimestamp()).atZone(ET).toLocalDate();
         // Staleness guard: reject if last bar is from a prior calendar day
-        if (!today.equals(sysToday)) return result;
+        if (!backtestMode && !today.equals(sysToday)) return result;
         LocalTime mktOpen   = LocalTime.of(9, 30);
         LocalTime mktClose  = LocalTime.of(16, 0);
 
@@ -209,7 +214,7 @@ public class KeyLevelStrategyDetector {
                                     .fvgTop(r4(levelPrice))
                                     .fvgBottom(r4(levelPrice - atr))
                                     .factorBreakdown(factors)
-                                    .timestamp(LocalDateTime.now())
+                                    .timestamp(Instant.ofEpochMilli(last.getTimestamp()).atZone(ET).toLocalDateTime())
                                     .build());
                             return result;
                         }
@@ -302,7 +307,7 @@ public class KeyLevelStrategyDetector {
                                     .fvgTop(r4(levelPrice + atr))
                                     .fvgBottom(r4(levelPrice))
                                     .factorBreakdown(factors)
-                                    .timestamp(LocalDateTime.now())
+                                    .timestamp(Instant.ofEpochMilli(last.getTimestamp()).atZone(ET).toLocalDateTime())
                                     .build());
                             return result;
                         }

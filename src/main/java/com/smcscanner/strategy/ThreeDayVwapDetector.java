@@ -110,7 +110,7 @@ public class ThreeDayVwapDetector {
                             .confidence(conf).session("NYSE").volatility("vwap3d")
                             .atr(atr).hasBos(false).hasChoch(false)
                             .fvgTop(r4(vwap3d)).fvgBottom(r4(close - atr))
-                            .timestamp(LocalDateTime.now()).build());
+                            .timestamp(Instant.ofEpochMilli(last.getTimestamp()).atZone(ET).toLocalDateTime()).build());
                 }
             }
         }
@@ -144,7 +144,7 @@ public class ThreeDayVwapDetector {
                             .confidence(conf).session("NYSE").volatility("vwap3d")
                             .atr(atr).hasBos(false).hasChoch(false)
                             .fvgTop(r4(close + atr)).fvgBottom(r4(vwap3d))
-                            .timestamp(LocalDateTime.now()).build());
+                            .timestamp(Instant.ofEpochMilli(last.getTimestamp()).atZone(ET).toLocalDateTime()).build());
                 }
             }
         }

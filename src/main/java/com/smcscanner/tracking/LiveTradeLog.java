@@ -109,7 +109,7 @@ public class LiveTradeLog {
 
     /** Record a new live trade alert. Called from ScannerService after Discord alert sent. */
     public void recordTrade(TradeSetup s, String strategyType) {
-        ZonedDateTime now = ZonedDateTime.now(ET);
+        ZonedDateTime signalTime = resolveSignalTime(s);
         Map<String, Object> record = new LinkedHashMap<>();
         record.put("id", UUID.randomUUID().toString().substring(0, 8));
         record.put("ticker", s.getTicker());
@@ -122,9 +122,9 @@ public class LiveTradeLog {
         record.put("atr", s.getAtr());
         record.put("optionsContract", s.getOptionsContract());
         record.put("optionsPremium", s.getOptionsPremium());
-        record.put("date", now.format(DATE_FMT));
-        record.put("time", now.format(TIME_FMT));
-        record.put("timestamp", now.toInstant().toEpochMilli());
+        record.put("date", signalTime.format(DATE_FMT));
+        record.put("time", signalTime.format(TIME_FMT));
+        record.put("timestamp", signalTime.toInstant().toEpochMilli());
         record.put("outcome", "OPEN");
         record.put("pnlPct", 0.0);
         record.put("pnlAmount", null);
@@ -400,22 +400,23 @@ public class LiveTradeLog {
         Set<String> usedOrderIds = new HashSet<>();
 
         int resolved = 0;
+        int pendingBrokerMatch = 0;
         for (Map.Entry<String, List<Map<String, Object>>> e : byTicker.entrySet()) {
             String ticker = e.getKey();
             try {
-                // Fetch 5m bars to get intraday high/low/close for accurate SL/TP check
-                List<OHLCV> bars = client.getBars(ticker, "5m", 80); // ~6.5h = full session
-                if (bars == null || bars.isEmpty()) continue;
-
-                // Session high, low, and latest close
-                double sessionHigh = bars.stream().mapToDouble(OHLCV::getHigh).max().orElse(0);
-                double sessionLow  = bars.stream().mapToDouble(OHLCV::getLow).min().orElse(0);
-                double lastPrice   = bars.get(bars.size() - 1).getClose();
+                Double lastPrice = null;
+                boolean needsLastPrice = e.getValue().stream()
+                        .anyMatch(t -> brokerOpenTickers.contains(ticker)
+                                || "BROKER_RECON_PENDING".equals(String.valueOf(t.get("resolutionSource"))));
+                if (needsLastPrice) {
+                    List<OHLCV> bars = client.getBars(ticker, "5m", 80);
+                    if (bars != null && !bars.isEmpty()) {
+                        lastPrice = bars.get(bars.size() - 1).getClose();
+                    }
+                }
 
                 for (Map<String, Object> t : e.getValue()) {
                     double entry = ((Number) t.get("entry")).doubleValue();
-                    double sl    = ((Number) t.get("stopLoss")).doubleValue();
-                    double tp    = ((Number) t.get("takeProfit")).doubleValue();
                     String dir   = (String) t.get("direction");
                     boolean isLong = "long".equalsIgnoreCase(dir);
 
@@ -435,46 +436,10 @@ public class LiveTradeLog {
                         if (resolvedFromOrders) {
                             outcome = (String) t.get("outcome");
                             pnlPct = ((Number) t.getOrDefault("pnlPct", 0.0)).doubleValue();
-                        }
-                    }
-
-                    // ── Stock-price fallback (used only when broker data is unavailable) ────
-                    if (outcome == null) {
-                        if (isLong) {
-                            if (sessionLow <= sl) {
-                                outcome = "LOSS";
-                                pnlPct = (sl - entry) / entry * 100.0;
-                            } else if (sessionHigh >= tp) {
-                                outcome = "WIN";
-                                pnlPct = (tp - entry) / entry * 100.0;
-                            } else {
-                                // Still holding — mark with current P&L
-                                pnlPct = (lastPrice - entry) / entry * 100.0;
-                            }
-                        } else { // short
-                            if (sessionHigh >= sl) {
-                                outcome = "LOSS";
-                                pnlPct = (entry - sl) / entry * 100.0;
-                            } else if (sessionLow <= tp) {
-                                outcome = "WIN";
-                                pnlPct = (entry - tp) / entry * 100.0;
-                            } else {
-                                // Still holding — mark with current P&L
-                                pnlPct = (entry - lastPrice) / entry * 100.0;
-                            }
-                        }
-
-                        // Broker closed it but no P&L data — classify by stock price direction
-                        if (outcome == null && !brokerStillOpen) {
-                            if (Math.abs(pnlPct) < 0.10) {
-                                outcome = "BE_STOP";
-                                pnlPct = 0.0;
-                            } else if (pnlPct > 0) {
-                                outcome = "WIN";
-                            } else {
-                                outcome = "LOSS";
-                            }
-                            t.put("resolutionSource", "ALPACA_FLAT");
+                        } else {
+                            t.put("resolutionSource", "BROKER_RECON_PENDING");
+                            t.put("brokerReconcileStatus", "NO_MATCHED_FILL");
+                            pendingBrokerMatch++;
                         }
                     }
 
@@ -486,19 +451,29 @@ public class LiveTradeLog {
                         if ("NOT_FILLED".equals(outcome)) {
                             t.remove("exitPrice");
                         } else if (t.containsKey("resolutionSource")) {
-                            t.put("exitPrice", lastPrice);
+                            Object existingExit = t.get("exitPrice");
+                            if ((existingExit == null || String.valueOf(existingExit).isBlank()) && lastPrice != null) {
+                                t.put("exitPrice", lastPrice);
+                            }
                         } else {
-                            t.put("exitPrice", outcome.equals("WIN") ? tp : sl);
+                            t.remove("exitPrice");
                         }
                         resolved++;
                         log.info("Auto-resolved {} {} → {} (pnl={}%)", ticker, dir, outcome,
                                 Math.round(pnlPct * 100.0) / 100.0);
                     } else {
-                        // Still open — update unrealized P&L for display
-                        t.put("unrealizedPnl", Math.round(pnlPct * 100.0) / 100.0);
-                        t.put("lastPrice", lastPrice);
-                        log.info("Still OPEN: {} {} entry={} last={} unrealPnl={}%",
-                                ticker, dir, entry, lastPrice, Math.round(pnlPct * 100.0) / 100.0);
+                        if (brokerStillOpen && lastPrice != null) {
+                            pnlPct = isLong
+                                    ? (lastPrice - entry) / entry * 100.0
+                                    : (entry - lastPrice) / entry * 100.0;
+                            t.put("unrealizedPnl", Math.round(pnlPct * 100.0) / 100.0);
+                            t.put("lastPrice", lastPrice);
+                            log.info("Still OPEN: {} {} entry={} last={} unrealPnl={}%",
+                                    ticker, dir, entry, lastPrice, Math.round(pnlPct * 100.0) / 100.0);
+                        } else {
+                            log.info("Still OPEN pending broker reconciliation: {} {} entry={} source={}",
+                                    ticker, dir, entry, t.get("resolutionSource"));
+                        }
                     }
                 }
                 Thread.sleep(150); // rate limit between tickers
@@ -506,11 +481,18 @@ public class LiveTradeLog {
                 log.warn("Failed to resolve {} trades: {}", ticker, ex.getMessage());
             }
         }
-        if (resolved > 0) {
+        if (resolved > 0 || pendingBrokerMatch > 0) {
             persist();
-            log.info("Auto-resolved {} open trades via price check", resolved);
+            log.info("Live trade reconciliation updated: resolved={} pendingBrokerMatch={}", resolved, pendingBrokerMatch);
         }
         backfillBrokerResolvedPnL();
+    }
+
+    private ZonedDateTime resolveSignalTime(TradeSetup setup) {
+        if (setup == null || setup.getTimestamp() == null) {
+            return ZonedDateTime.now(ET);
+        }
+        return setup.getTimestamp().atZone(ET);
     }
 
     private void backfillBrokerResolvedPnL() {

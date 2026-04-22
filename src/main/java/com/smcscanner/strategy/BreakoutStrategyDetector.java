@@ -32,6 +32,10 @@ public class BreakoutStrategyDetector {
      * @return list of detected setups (0 or 1 element)
      */
     public List<TradeSetup> detect(List<OHLCV> bars, String ticker, double dailyAtr) {
+        return detect(bars, ticker, dailyAtr, false);
+    }
+
+    public List<TradeSetup> detect(List<OHLCV> bars, String ticker, double dailyAtr, boolean backtestMode) {
         List<TradeSetup> result = new ArrayList<>();
         if (bars == null || bars.isEmpty()) return result;
 
@@ -40,7 +44,7 @@ public class BreakoutStrategyDetector {
         OHLCV lastRaw = bars.get(bars.size() - 1);
         LocalDate today = Instant.ofEpochMilli(lastRaw.getTimestamp())
                 .atZone(ET).toLocalDate();
-        if (!today.equals(LocalDate.now(ET))) return result; // staleness guard
+        if (!backtestMode && !today.equals(LocalDate.now(ET))) return result; // staleness guard
         LocalTime mktOpen  = LocalTime.of(9, 30);
         LocalTime mktClose = LocalTime.of(16, 0);
 
@@ -167,7 +171,7 @@ public class BreakoutStrategyDetector {
                             .fvgTop(r4(orbHigh))
                             .fvgBottom(r4(orbLow))
                             .factorBreakdown(factors)
-                            .timestamp(LocalDateTime.now())
+                            .timestamp(Instant.ofEpochMilli(last.getTimestamp()).atZone(ET).toLocalDateTime())
                             .build());
                     return result;
                 }
@@ -220,7 +224,7 @@ public class BreakoutStrategyDetector {
                             .fvgTop(r4(orbHigh))
                             .fvgBottom(r4(orbLow))
                             .factorBreakdown(factors)
-                            .timestamp(LocalDateTime.now())
+                            .timestamp(Instant.ofEpochMilli(last.getTimestamp()).atZone(ET).toLocalDateTime())
                             .build());
                 }
             }

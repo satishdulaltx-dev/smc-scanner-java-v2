@@ -101,7 +101,7 @@ public class GammaPinDetector {
                         .confidence(conf).session("NYSE").volatility("gammapin")
                         .atr(atr).hasBos(false).hasChoch(false)
                         .fvgTop(r4(nearestStrike)).fvgBottom(r4(nearestStrike - STRIKE_INCREMENT))
-                        .timestamp(LocalDateTime.now()).build());
+                        .timestamp(Instant.ofEpochMilli(last.getTimestamp()).atZone(ET).toLocalDateTime()).build());
             }
         } else if (shortSignal && volOk) {
             double entry = r4(close);
@@ -124,7 +124,7 @@ public class GammaPinDetector {
                         .confidence(conf).session("NYSE").volatility("gammapin")
                         .atr(atr).hasBos(false).hasChoch(false)
                         .fvgTop(r4(nearestStrike + STRIKE_INCREMENT)).fvgBottom(r4(nearestStrike))
-                        .timestamp(LocalDateTime.now()).build());
+                        .timestamp(Instant.ofEpochMilli(last.getTimestamp()).atZone(ET).toLocalDateTime()).build());
             }
         }
         return result;

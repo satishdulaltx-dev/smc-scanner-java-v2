@@ -250,7 +250,7 @@ public class ScalpMomentumDetector {
         // available for historical bars.  Base confidence drives backtest results.
         // ══════════════════════════════════════════════════════════════════════
         MicrostructureQualifier.MicroScore micro =
-                new MicrostructureQualifier.MicroScore(0, "backtest-skip");
+                new MicrostructureQualifier.MicroScore(0, backtestMode ? "backtest-parity" : "live-parity");
 
         if (!backtestMode) {
             List<PolygonClient.TradeRecord> trades = List.of();
@@ -258,12 +258,7 @@ public class ScalpMomentumDetector {
             try { trades = polygon.getRecentTrades(ticker, 200); } catch (Exception ignored) {}
             try { quotes = polygon.getRecentQuotes(ticker, 30);  } catch (Exception ignored) {}
             micro = microQ.qualify(isLong, entry, atr, trades, quotes, sessionBars);
-            // Hard gate: microstructure strongly contradicts the setup — skip entirely.
-            // Threshold -12 fires on: failed breakout alone (-12), or any two moderate negatives.
-            if (micro.total() <= -12) return result;
         }
-
-        confidence = Math.min(95, Math.max(50, confidence + micro.total()));
 
         String factors = String.format(
                 "%s | vol x%.1f | RS %+.2f%% | VWAP=%.2f ±1SD=[%.2f/%.2f] ±2SD=[%.2f/%.2f]" +
