@@ -26,12 +26,11 @@ public class SetupDetector {
     private final ScannerConfig config;
     private final AtrCalculator atrCalc;
     private final StructureAnalyzer sa;
-    private final ScoringService scoring;
     private final SessionFilter sessionFilter;
 
     public SetupDetector(ScannerConfig config, AtrCalculator atrCalc, StructureAnalyzer sa,
                          ScoringService scoring, SessionFilter sessionFilter) {
-        this.config=config; this.atrCalc=atrCalc; this.sa=sa; this.scoring=scoring; this.sessionFilter=sessionFilter;
+        this.config=config; this.atrCalc=atrCalc; this.sa=sa; this.sessionFilter=sessionFilter;
     }
 
     public record DetectResult(List<TradeSetup> setups, SMCState state) {}
@@ -140,7 +139,11 @@ public class SetupDetector {
             return new DetectResult(List.of(),state);
         }
 
-        boolean[] str=detectStructure(bars);
+        // Only check for BOS/CHOCH in bars starting from just before the sweep.
+        // Searching the full bar set allows an unrelated old structure break (weeks ago) to
+        // falsely validate a fresh setup — the break must be causally tied to this sweep/FVG.
+        int structureFrom = Math.max(0, state.getSweepBar() - 2);
+        boolean[] str=detectStructure(bars.subList(structureFrom, bars.size()));
         boolean hasStructure=str[0]||str[1];
         if (!hasStructure) {
             log.debug("{} filtered: NO_STRUCTURE — sweep without BOS/CHOCH is noise, not SMC", ticker);
@@ -160,7 +163,32 @@ public class SetupDetector {
             return new DetectResult(List.of(), state);
         }
 
-        int conf=scoring.scoreSetup(true,true,true,true,hasStructure,peakVol>avgVol*MIN_VOL_MULT);
+        // Quality-based confidence — replaces flat true/true/true/true (was always 100, filter was dead).
+        // Displacement conviction: how far close is into the bar (0.70-1.0 range for long/short).
+        OHLCV db2 = bars.get(state.getDisplacementBar());
+        double dRng = Math.max(0.0001, db2.getHigh() - db2.getLow());
+        double dClosePos = (db2.getClose() - db2.getLow()) / dRng;
+        double dispConv = "long".equals(state.getDirection()) ? dClosePos : (1.0 - dClosePos);
+        int dispBonus = (int) Math.max(0, (dispConv - 0.70) / 0.30 * 15); // 0.70→0, 1.0→15
+
+        // Retest conviction: how cleanly price rejected at the FVG zone (0.50-1.0 range).
+        OHLCV rb2 = bars.get(state.getRetestBar());
+        double rRng = Math.max(0.0001, rb2.getHigh() - rb2.getLow());
+        double rClosePos = (rb2.getClose() - rb2.getLow()) / rRng;
+        double retestConv = "long".equals(state.getDirection()) ? rClosePos : (1.0 - rClosePos);
+        int retestBonus = (int) Math.max(0, (retestConv - 0.50) / 0.50 * 10); // 0.50→0, 1.0→10
+
+        // Recency: fresher sweeps are more reliable (sweep within 8 bars = best).
+        int barsFromSweep = (bars.size() - 1) - state.getSweepBar();
+        int recencyBonus = barsFromSweep <= 8 ? 15 : (barsFromSweep <= 15 ? 8 : 0);
+
+        // Base 50 (confirmed 4-stage SMC chain) + structure 10 + vol 10 + disp 0-15 + retest 0-10 + recency 0-15 = 50-110 capped at 100
+        int conf = 50 + 10
+                + (peakVol > avgVol * MIN_VOL_MULT ? 10 : 0)
+                + Math.min(15, dispBonus)
+                + Math.min(10, retestBonus)
+                + recencyBonus;
+        conf = Math.min(100, conf);
         if (conf<config.getMinConfidence()) {
             log.debug("{} filtered: LOW_CONF conf={} min={}", ticker, conf, config.getMinConfidence());
             return new DetectResult(List.of(),state);
@@ -224,9 +252,10 @@ public class SetupDetector {
     private SMCState runStateMachine(List<OHLCV> bars, double[] atrArr, SMCState state, double dispAtrMult) {
         int n = bars.size();
         int scanFrom = Math.max(0, n - SWEEP_LOOKBACK);
-        // Slide a 20-bar window to find local swing H/L; look for sweep in bars after each window
+        // Slide a 20-bar window newest→oldest so the first complete chain found is the most recent setup.
+        // Scanning oldest→newest returned the first (stale) match, not the tradeable one.
         int swingWindow = 20;
-        for (int winStart = scanFrom; winStart < n - swingWindow - 3; winStart++) {
+        for (int winStart = n - swingWindow - 4; winStart >= scanFrom; winStart--) {
             int winEnd = winStart + swingWindow;
             double swHigh = -Double.MAX_VALUE, swLow = Double.MAX_VALUE;
             for (int k = winStart; k < winEnd; k++) {
