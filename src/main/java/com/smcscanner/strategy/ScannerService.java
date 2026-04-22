@@ -1053,9 +1053,20 @@ public class ScannerService {
                 // ── Max-confidence gate (blocks over-extended signals) ────────────
                 // For tickers where 85+ bucket historically underperforms 75-84 bucket
                 // (reversed confidence pattern), cap signals above maxConf.
+                double intradayCurrentPrice = bars.isEmpty() ? 0 : bars.get(bars.size() - 1).getClose();
+                double maxIntradayEntryDrift = s.getAtr() > 0 ? s.getAtr() * 1.5 : dailyAtr * 0.5;
+                boolean intradayEntryReachable = intradayCurrentPrice > 0
+                        && Math.abs(intradayCurrentPrice - s.getEntry()) <= maxIntradayEntryDrift;
+
                 if (s.getConfidence() > effectiveMaxConf) {
                     log.debug("{} OVEREXTENDED conf={} maxConf={} — skipping over-extended signal",
                             ticker, s.getConfidence(), effectiveMaxConf);
+                } else if (!intradayEntryReachable) {
+                    log.info("INTRADAY STALE {} {} entry={} currentPrice={} drift={} > 1.5×ATR({}), skipping",
+                            ticker, s.getDirection(), s.getEntry(), intradayCurrentPrice,
+                            String.format("%.2f", Math.abs(intradayCurrentPrice - s.getEntry())),
+                            String.format("%.2f", s.getAtr()));
+                    removeSetup(ticker); setTs(ticker, "idle", null, 0, "stale entry — price moved away");
                 } else if (s.getConfidence() >= dynamicMinConf && !dedup.isDuplicate(ticker,s.getDirection(),s.getEntry())) {
                         if (dedup.isStartupQuiet()) {
                             // Startup quiet window — seed entry key only, not ticker cooldown.
