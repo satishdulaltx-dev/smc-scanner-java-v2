@@ -985,8 +985,9 @@ public class ScannerService {
                 // Only take highest-conviction setups: raise bar by 5 pts above 25,
                 // another 5 pts above 35 (crisis). Prevents marginal calls in chaos.
                 int vixBoost = 0;
-                if (!isC && context.vixLevel() > 25) vixBoost  = 5;
-                if (!isC && context.vixLevel() > 35) vixBoost += 2; // was +5 — total max 7, not 10; ATR sizing already tightens SL/TP in high VIX
+                boolean vixEligible = !isC && !"vwap".equals(stratType) && !"scalp".equals(stratType);
+                if (vixEligible && context.vixLevel() > 25) vixBoost  = 5;
+                if (vixEligible && context.vixLevel() > 35) vixBoost += 2;
                 int dynamicMinConf = effectiveMinConf + vixBoost;
 
                 // ── Attribution string (factor breakdown) ──────────────────────
@@ -1187,9 +1188,9 @@ public class ScannerService {
                                     liveLog.recordTrade(s, stratType);
                                     tracker.recordStrategySignal(stratType, s.getConfidence());
                                     // ── Auto-trade via Alpaca (if enabled) ──────────
-                                    // Two gates: R:R must be ≥ alpacaMinRR AND confidence must be ≥ alpacaMinConfidence.
-                                    // alpacaMinConfidence is intentionally higher than scanner.min-confidence —
-                                    // backtest threshold filters noise, live threshold enforces A+ setups only.
+                                    // Two gates: R:R must be ≥ alpacaMinRR AND confidence must be ≥ dynamicMinConf.
+                                    // dynamicMinConf = effectiveMinConf + vixBoost — same threshold backtest uses,
+                                    // so live auto-executes exactly the same signals backtest would trade.
                                     if (alpaca.isEnabled()) {
                                         double rr = s.rrRatio();
                                         int    liveConf = s.getConfidence();
@@ -1197,10 +1198,10 @@ public class ScannerService {
                                             log.info("ALPACA SKIPPED {} {} rr={} < minRR={} — alert only",
                                                     ticker, s.getDirection().toUpperCase(),
                                                     String.format("%.2f", rr), config.getAlpacaMinRR());
-                                        } else if (liveConf < config.getAlpacaMinConfidence()) {
-                                            log.info("ALPACA SKIPPED {} {} conf={} < liveMinConf={} — alert only",
+                                        } else if (liveConf < dynamicMinConf) {
+                                            log.info("ALPACA SKIPPED {} {} conf={} < dynamicMinConf={} — alert only",
                                                     ticker, s.getDirection().toUpperCase(),
-                                                    liveConf, config.getAlpacaMinConfidence());
+                                                    liveConf, dynamicMinConf);
                                         } else {
                                             String orderId = alpaca.placeOrder(s);
                                             if (orderId != null) {
