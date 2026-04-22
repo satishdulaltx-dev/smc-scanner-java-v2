@@ -465,7 +465,14 @@ public class DashboardController {
         return watchlist.stream()
                 .filter(t -> {
                     com.smcscanner.model.TickerProfile p = config.getTickerProfile(t);
-                    if ("any".equals(mode)) return !p.isSkip();
+                    // mode=any: visible if ANY mode is enabled — root skip no longer suppresses
+                    // a ticker whose intraday/scalp/swing explicitly sets skip=false.
+                    // Resolution: mode config > root config > global default.
+                    if ("any".equals(mode)) {
+                        return !p.resolveMode("scalp").isEffectiveSkip(p.isSkip())
+                            || !p.resolveMode("intraday").isEffectiveSkip(p.isSkip())
+                            || !p.resolveMode("swing").isEffectiveSkip(p.isSkip());
+                    }
                     com.smcscanner.model.TickerProfile.ModeProfile mp = p.resolveMode(mode);
                     return !mp.isEffectiveSkip(p.isSkip());
                 })

@@ -231,34 +231,48 @@
     },
     {
       "ticker": "GLD",
-      "character": "MOMENTUM",
-      "strategyType": "smc",
-      "minConfidence": 78,
-      "maxConfidence": 100,
-      "slAtrMult": 1.0,
-      "tpRrRatio": 2.0,
+      "skip": true,
+      "strategyType": "vwap",
+      "skipReason": "Disabled by default. GLD is not an SMC ticker. Only trade through explicitly enabled VWAP-reversion logic.",
+      "note": "Macro/commodity ETF — clean underlying does not imply fit for SMC. Best edge: selective VWAP reversion 09:50-11:30 only. Avoid midday macro drift (hours 12-14). Avoid impulse/headline bars. Low trade count expected (5-12 clean trades per period) — that is the correct behavior. stopAtrMult=0.9, tpRrRatio=1.4, timeStopBars=4 — take the clean smaller move fast.",
+      "minConfidence": 80,
+      "maxConfidence": 92,
+      "slAtrMult": 0.9,
+      "tpRrRatio": 1.4,
       "skipHours": [
         9,
+        12,
+        13,
         14
       ],
-      "skip": false,
-      "note": "Apr 2026: added GLD (SPDR Gold ETF). Gold is macro-driven (DXY, Fed, geopolitical risk) — not manipulable by individuals. VWAP reversion is the primary edge: gold is a VWAP-magnet on non-announcement days, trends hard when macro catalysts hit. slAtrMult=0.8 (wider than avg — gold bars are noisy from 24h futures carry). skipHours=[9] blocks first 30 min. skipHours=[14] blocks 2-3pm window where VWAP and keylevel signals consistently time out on GLD (90d backtest: $182 losses vs $48 wins in hour 14). BTC correlation: none — gold is anti-BTC (risk-off vs risk-on). Currently in confirmed bull run (all-time highs Apr 2026) so LONG VWAP reversion setups will have highest edge. | Apr 2026 SMC disabled: Gold ETF — commodity macro-driven, no institutional SMC footprint. 30d: 0W/1L, -$159.",
       "scalp": {
-        "skip": false,
-        "strategyType": "scalp",
-        "minConfidence": 72
+        "skip": true,
+        "skipReason": "GLD too slow for scalp options edge after spread/slippage."
       },
       "intraday": {
-        "skip": true,
-        "skipReason": "Commodity ETF — no SMC edge"
+        "skip": false,
+        "strategyType": "vwap",
+        "skipReason": "Selective VWAP-reversion only. Not SMC.",
+        "minConfidence": 80,
+        "maxConfidence": 92,
+        "slAtrMult": 0.9,
+        "tpRrRatio": 1.4,
+        "requireVwapStretch": true,
+        "vwapStretchAtr": 0.8,
+        "requireReclaimOrReject": true,
+        "requireClosedBarConfirmation": true,
+        "requireTrendAlignment": true,
+        "trendLookback": 3,
+        "avoidNewsLikeImpulseBars": true,
+        "maxImpulseAtr": 1.4,
+        "timeStopBars": 4,
+        "sizeMultiplier": 0.6,
+        "entryBias": "reversion"
       },
       "swing": {
-        "skip": false,
-        "strategyType": "keylevel",
-        "minConfidence": 68,
-        "tpRrRatio": 2.0
-      },
-      "skipReason": "Commodity ETF — no institutional SMC footprint in any mode."
+        "skip": true,
+        "skipReason": "Swing underdeveloped for GLD macro behavior — revisit when swing engine matures."
+      }
     },
     {
       "ticker": "GOOGL",

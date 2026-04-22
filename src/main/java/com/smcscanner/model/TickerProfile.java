@@ -5,6 +5,7 @@ import java.time.Instant;
 import java.time.LocalTime;
 import java.time.ZoneId;
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 /**
  * Per-ticker detection overrides loaded from ticker-profiles.json.
  * Any field left null falls back to the global default.
