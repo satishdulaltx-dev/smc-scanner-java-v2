@@ -1,5 +1,6 @@
 package com.smcscanner.model;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.time.Instant;
 import java.time.LocalTime;
 import java.time.ZoneId;
@@ -22,6 +23,7 @@ public class TickerProfile {
      * Per-mode override block.  Any null field inherits the parent TickerProfile value.
      * Only fields explicitly set in the JSON override; everything else falls through.
      */
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class ModeProfile {
         private Boolean skip;           // null = inherit parent skip
         private String  skipReason;
