@@ -179,11 +179,11 @@
       "ticker": "CRWD",
       "character": "MOMENTUM",
       "strategyType": "smc",
-      "minConfidence": 70,
+      "minConfidence": 78,
       "maxConfidence": 100,
-      "slAtrMult": 1.0,
+      "slAtrMult": 0.4,
       "tpRrRatio": 2.0,
-      "note": "Apr 2026 30d optimizer: smc minC=70 SL=1.0 TP=2.0 → 10T 70%WR $2399. Reverted vwap→smc (vwap generated 0 trades in 30d).",
+      "note": "Apr 2026 180d optimizer: smc mc=78 SL=0.4 TP=2:1 → 14T 91.7%WR +$3996. Tightened mc 70→78, SL 1.0→0.4×ATR (tighter entry, higher quality chains). 34 viable combos — strongest SMC signal in watchlist.",
       "scalp": {
         "skip": false,
         "strategyType": "scalp",
@@ -192,7 +192,9 @@
       "intraday": {
         "skip": false,
         "strategyType": "smc",
-        "minConfidence": 70
+        "minConfidence": 78,
+        "slAtrMult": 0.4,
+        "tpRrRatio": 2.0
       },
       "swing": {
         "skip": false,
@@ -509,12 +511,12 @@
       "ticker": "NVDA",
       "character": "MOMENTUM",
       "strategyType": "smc",
-      "minConfidence": 78,
-      "maxConfidence": 84,
+      "minConfidence": 70,
+      "maxConfidence": 92,
       "slAtrMult": 0.4,
-      "tpRrRatio": 1.0,
+      "tpRrRatio": 1.5,
       "intradayRsGate": false,
-      "note": "Apr 2026 HYBRID backtest: SMC ALL-mode $81 (3T 66.7%WR) — 0 trades in SCALP mode, RS gate too restrictive. Removed intradayRsGate. Very thin sample (3 trades), keep on watchlist but low confidence.",
+      "note": "Apr 2026 180d optimizer: 1 viable combo — maxConf=84 + mc=78 window too narrow for new quality scoring system. Lowered mc 78→70, widened maxConf 84→92, raised TP 1.0→1.5:1. Apr 2026 HYBRID backtest: 3T 66.7%WR +$81 (previously). Removed intradayRsGate (was 0 scalp trades).",
       "scalp": {
         "skip": true,
         "skipReason": "0 scalp trades — RS gate blocks all entries in current AI-cycle slowdown"
@@ -547,9 +549,8 @@
       "strategyType": "smc",
       "minConfidence": 62,
       "minFvgPct": 0.0006,
-      "dispAtrMult": 1.3,
-      "maxConfidence": 84,
-      "note": "Apr 2026 SMC confirmed best for PLTR. Full scalp comparison showed SMC in SCALP mode $908 > Bollinger Scalp $591 — PLTR's intraday FVG sweeps are stronger entries than Bollinger compression. Retained previous settings: mc=62, minFvgPct=0.0006, dispAtrMult=1.3, maxConf=84.",
+      "maxConfidence": 92,
+      "note": "Apr 2026 180d optimizer: 0 viable combos — dispAtrMult=1.3 was pre-filtering displacement before quality scoring, leaving no chains. Removed dispAtrMult override (let default apply). Widened maxConf 84→92 to allow quality scores from new scoring system. Apr 2026 SMC confirmed best: SCALP mode $908 > Bollinger Scalp $591.",
       "scalp": {
         "skip": false,
         "strategyType": "scalp",
