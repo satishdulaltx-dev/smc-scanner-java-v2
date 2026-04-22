@@ -15,7 +15,7 @@ import java.util.List;
 @Service
 public class SetupDetector {
     private static final Logger log = LoggerFactory.getLogger(SetupDetector.class);
-    private static final int    SWEEP_LOOKBACK = 80, FVG_WINDOW = 12, RETEST_WINDOW = 25;
+    private static final int    SWEEP_LOOKBACK = 40, FVG_WINDOW = 12, RETEST_WINDOW = 20;
     private static final double DISP_ATR_MULT  = 1.3, MIN_FVG_PCT = 0.0002, MIN_VOL_MULT = 1.5; // global defaults — per-ticker overrides in ticker-profiles.json
     private static final double MAX_ENTRY_DISTANCE_ATR = 2.5;
     // Price-based distance floor: never reject if price is within 3.5% of FVG midpoint.
@@ -142,7 +142,10 @@ public class SetupDetector {
 
         boolean[] str=detectStructure(bars);
         boolean hasStructure=str[0]||str[1];
-        if (!hasStructure) log.debug("{} note: NO_STRUCTURE — continuing at lower confidence", ticker);
+        if (!hasStructure) {
+            log.debug("{} filtered: NO_STRUCTURE — sweep without BOS/CHOCH is noise, not SMC", ticker);
+            return new DetectResult(List.of(), state);
+        }
         if ("bullish".equals(htfBias)&&"short".equals(state.getDirection())) {
             log.debug("{} filtered: HTF_CONFLICT htf=bullish setup=short", ticker);
             return new DetectResult(List.of(),state);
@@ -270,9 +273,17 @@ public class SetupDetector {
     private int findDisp(List<OHLCV> bars,double[] atr,int from,String dir,int n,double dispAtrMult) {
         for (int i=from;i<Math.min(from+15,n);i++) {
             OHLCV b=bars.get(i); double av=atr[i]>0?atr[i]:(b.getHigh()-b.getLow());
-            if ((b.getHigh()-b.getLow())<av*dispAtrMult) continue;
-            if ("long".equals(dir)&&b.getClose()>b.getOpen()) return i;
-            if ("short".equals(dir)&&b.getClose()<b.getOpen()) return i;
+            double barRange=b.getHigh()-b.getLow();
+            if (barRange<av*dispAtrMult) continue;
+            if ("long".equals(dir)&&b.getClose()>b.getOpen()) {
+                // Conviction: close in top 30% of the bar (not just barely above open)
+                double closePos=barRange>0?(b.getClose()-b.getLow())/barRange:0;
+                if (closePos>=0.70) return i;
+            }
+            if ("short".equals(dir)&&b.getClose()<b.getOpen()) {
+                double closePos=barRange>0?(b.getClose()-b.getLow())/barRange:1;
+                if (closePos<=0.30) return i;
+            }
         }
         return -1;
     }
@@ -301,10 +312,11 @@ public class SetupDetector {
         double range = Math.max(0.0001, retest.getHigh() - retest.getLow());
         double closePos = (retest.getClose() - retest.getLow()) / range;
         double mid = (state.getFvgTop() + state.getFvgBottom()) / 2.0;
+        // Require close in top/bottom half of the bar — confirms real rejection at the zone, not just a wick touch
         if ("long".equals(state.getDirection())) {
-            return retest.getClose() >= mid && closePos >= 0.35;
+            return retest.getClose() >= mid && closePos >= 0.50;
         }
-        return retest.getClose() <= mid && closePos <= 0.65;
+        return retest.getClose() <= mid && closePos <= 0.50;
     }
     private boolean[] detectStructure(List<OHLCV> bars) {
         try {
