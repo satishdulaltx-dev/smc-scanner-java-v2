@@ -1187,12 +1187,20 @@ public class ScannerService {
                                     liveLog.recordTrade(s, stratType);
                                     tracker.recordStrategySignal(stratType, s.getConfidence());
                                     // ── Auto-trade via Alpaca (if enabled) ──────────
+                                    // Two gates: R:R must be ≥ alpacaMinRR AND confidence must be ≥ alpacaMinConfidence.
+                                    // alpacaMinConfidence is intentionally higher than scanner.min-confidence —
+                                    // backtest threshold filters noise, live threshold enforces A+ setups only.
                                     if (alpaca.isEnabled()) {
                                         double rr = s.rrRatio();
+                                        int    liveConf = s.getConfidence();
                                         if (rr < config.getAlpacaMinRR()) {
                                             log.info("ALPACA SKIPPED {} {} rr={} < minRR={} — alert only",
                                                     ticker, s.getDirection().toUpperCase(),
                                                     String.format("%.2f", rr), config.getAlpacaMinRR());
+                                        } else if (liveConf < config.getAlpacaMinConfidence()) {
+                                            log.info("ALPACA SKIPPED {} {} conf={} < liveMinConf={} — alert only",
+                                                    ticker, s.getDirection().toUpperCase(),
+                                                    liveConf, config.getAlpacaMinConfidence());
                                         } else {
                                             String orderId = alpaca.placeOrder(s);
                                             if (orderId != null) {

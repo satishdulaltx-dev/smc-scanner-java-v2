@@ -54,10 +54,14 @@ public class ScalpMomentumDetector {
     }
 
     public List<TradeSetup> detect(List<OHLCV> bars, String ticker, double dailyAtr) {
-        return detect(bars, List.of(), ticker, dailyAtr);
+        return detect(bars, List.of(), ticker, dailyAtr, false);
     }
 
     public List<TradeSetup> detect(List<OHLCV> bars, List<OHLCV> spyBars, String ticker, double dailyAtr) {
+        return detect(bars, spyBars, ticker, dailyAtr, false);
+    }
+
+    public List<TradeSetup> detect(List<OHLCV> bars, List<OHLCV> spyBars, String ticker, double dailyAtr, boolean backtestMode) {
         List<TradeSetup> result = new ArrayList<>();
         if (bars == null || bars.size() < 25) return result;
 
@@ -66,10 +70,9 @@ public class ScalpMomentumDetector {
 
         OHLCV last = sessionBars.get(sessionBars.size() - 1);
 
-        // Staleness guard: last session bar must be from today's wall-clock date.
-        // Without this, a scan running before today's bars arrive uses yesterday's
-        // (or last Friday's) session as "today" and fires signals with stale prices.
-        if (!Instant.ofEpochMilli(last.getTimestamp()).atZone(ET).toLocalDate().equals(LocalDate.now(ET))) {
+        // Staleness guard: skipped in backtest — the last bar date is historical by design.
+        // Live: last session bar must be from today's wall-clock date (prevents stale scans).
+        if (!backtestMode && !Instant.ofEpochMilli(last.getTimestamp()).atZone(ET).toLocalDate().equals(LocalDate.now(ET))) {
             return result;
         }
 

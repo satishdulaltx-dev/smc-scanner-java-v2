@@ -401,9 +401,9 @@ public class BacktestService {
                             .filter(this::isRegularSessionBar)
                             .filter(b -> b.getTimestamp() <= barEpochMs)
                             .collect(Collectors.toList());
-                    bSetups = scalpDetector.detect(window, spySlice, ticker, dailyAtr);
+                    bSetups = scalpDetector.detect(window, spySlice, ticker, dailyAtr, true);
                 } else if ("vwap".equals(effectiveStrat)) {
-                    bSetups = vwapDetector.detect(window, ticker, dailyAtr);
+                    bSetups = vwapDetector.detect(window, ticker, dailyAtr, true);
                 } else if ("breakout".equals(effectiveStrat)) {
                     bSetups = breakoutDetector.detect(window, ticker, dailyAtr);
                 } else if ("gap".equals(effectiveStrat)) {

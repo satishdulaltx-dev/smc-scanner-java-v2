@@ -252,51 +252,66 @@ public class SetupDetector {
     private SMCState runStateMachine(List<OHLCV> bars, double[] atrArr, SMCState state, double dispAtrMult) {
         int n = bars.size();
         int scanFrom = Math.max(0, n - SWEEP_LOOKBACK);
-        // Slide a 20-bar window newest→oldest so the first complete chain found is the most recent setup.
-        // Scanning oldest→newest returned the first (stale) match, not the tradeable one.
         int swingWindow = 20;
-        for (int winStart = n - swingWindow - 4; winStart >= scanFrom; winStart--) {
+        SMCState best = null;
+        double bestScore = -1.0;
+
+        // Scan ALL windows, collect every complete sweep→disp→FVG→retest chain, return highest-ranked.
+        // Previously returned first match (stale old pattern); now returns the best candidate.
+        for (int winStart = scanFrom; winStart < n - swingWindow - 3; winStart++) {
             int winEnd = winStart + swingWindow;
             double swHigh = -Double.MAX_VALUE, swLow = Double.MAX_VALUE;
             for (int k = winStart; k < winEnd; k++) {
                 if (bars.get(k).getHigh() > swHigh) swHigh = bars.get(k).getHigh();
                 if (bars.get(k).getLow()  < swLow)  swLow  = bars.get(k).getLow();
             }
-            // Look for sweep in next 5 bars after the window
             for (int i = winEnd; i < Math.min(winEnd + 5, n); i++) {
                 OHLCV bar = bars.get(i);
-                // 1-bar sweep
                 boolean bull = bar.getLow() < swLow  && bar.getClose() > swLow;
                 boolean bear = bar.getHigh() > swHigh && bar.getClose() < swHigh;
-                // 2-bar sweep
                 if (!bull && !bear && i > winEnd) {
                     OHLCV prev = bars.get(i - 1);
                     if (prev.getLow()  < swLow  && bar.getClose() > swLow)  bull = true;
                     if (prev.getHigh() > swHigh && bar.getClose() < swHigh) bear = true;
                 }
                 if (!bull && !bear) continue;
-                state.setPhase(SetupPhase.SWEEP_DETECTED);
-                state.setDirection(bull ? "long" : "short");
-                state.setSweepBar(i);
-                int dBar = findDisp(bars, atrArr, i + 1, state.getDirection(), n, dispAtrMult);
-                if (dBar < 0) { state.setPhase(SetupPhase.INVALID_NO_DISP); break; }
-                state.setPhase(SetupPhase.DISPLACEMENT_DETECTED);
-                state.setDisplacementBar(dBar);
-                double[] fvg = findFvg(bars, Math.max(dBar - 1, i + 1), state.getDirection(), FVG_WINDOW);
-                if (fvg == null) { state.setPhase(SetupPhase.INVALID_NO_FVG); break; }
-                state.setPhase(SetupPhase.FVG_DETECTED);
-                state.setFvgTop(fvg[0]); state.setFvgBottom(fvg[1]); state.setFvgBar((int) fvg[2]);
-                int rb = findRetestBar(bars, state.getFvgTop(), state.getFvgBottom(), state.getFvgBar(), state.getDirection(), RETEST_WINDOW, n);
-                if (rb < 0) {
-                    state.setPhase(SetupPhase.INVALID_NO_RETEST);
-                    break; // keep searching more recent windows
+                String dir = bull ? "long" : "short";
+                int dBar = findDisp(bars, atrArr, i + 1, dir, n, dispAtrMult);
+                if (dBar < 0) break; // no displacement in this window
+                double[] fvg = findFvg(bars, Math.max(dBar - 1, i + 1), dir, FVG_WINDOW);
+                if (fvg == null) break;
+                int rb = findRetestBar(bars, fvg[0], fvg[1], (int) fvg[2], dir, RETEST_WINDOW, n);
+                if (rb < 0) break; // incomplete chain — move to next window
+                double score = rankCandidate(bars, i, dBar, rb, dir, n);
+                if (score > bestScore) {
+                    bestScore = score;
+                    SMCState cand = new SMCState();
+                    cand.setPhase(SetupPhase.RETEST_DETECTED);
+                    cand.setDirection(dir);
+                    cand.setSweepBar(i);
+                    cand.setDisplacementBar(dBar);
+                    cand.setFvgTop(fvg[0]); cand.setFvgBottom(fvg[1]); cand.setFvgBar((int) fvg[2]);
+                    cand.setRetestBar(rb);
+                    best = cand;
                 }
-                state.setRetestBar(rb);
-                state.setPhase(SetupPhase.RETEST_DETECTED);
-                return state;
+                break; // one candidate per swing window
             }
         }
-        return state;
+        return best != null ? best : state;
+    }
+
+    /** Ranks a complete SMC candidate: recency (50%) + displacement conviction (30%) + retest conviction (20%). */
+    private double rankCandidate(List<OHLCV> bars, int sweepBar, int dispBar, int retestBar, String dir, int n) {
+        double recency = Math.max(0.0, 1.0 - (n - 1 - retestBar) / (double) RETEST_WINDOW);
+        OHLCV db = bars.get(dispBar);
+        double dRng = Math.max(0.0001, db.getHigh() - db.getLow());
+        double dPos  = (db.getClose() - db.getLow()) / dRng;
+        double dispConv   = "long".equals(dir) ? dPos : (1.0 - dPos);
+        OHLCV rb = bars.get(retestBar);
+        double rRng = Math.max(0.0001, rb.getHigh() - rb.getLow());
+        double rPos  = (rb.getClose() - rb.getLow()) / rRng;
+        double retestConv = "long".equals(dir) ? rPos : (1.0 - rPos);
+        return recency * 0.5 + dispConv * 0.3 + retestConv * 0.2;
     }
 
     private int findDisp(List<OHLCV> bars,double[] atr,int from,String dir,int n,double dispAtrMult) {

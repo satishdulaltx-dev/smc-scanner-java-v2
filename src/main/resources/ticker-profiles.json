@@ -16,7 +16,7 @@
       ],
       "skip": true,
       "skipReason": "Apr 2026 HYBRID backtest: all 4 strategies negative (best vwap -$189, smc -$384). AAPL avg move 0.57-0.85% on $200+ stock = small dollar move vs options premium cost. Structurally not viable for intraday options in current mega-cap low-vol regime.",
-      "note": "Apr 2026 deep strategy scan: switched smc\u2192vwap. Full 5-timeframe matrix: vwap 5/5. AAPL is VWAP-magnet mega-cap but options cost exceeds move size in current regime.",
+      "note": "Apr 2026 deep strategy scan: switched smc→vwap. Full 5-timeframe matrix: vwap 5/5. AAPL is VWAP-magnet mega-cap but options cost exceeds move size in current regime.",
       "scalp": {
         "skip": true,
         "skipReason": "Options cost > intraday move size on $200+ stock"
@@ -39,7 +39,7 @@
       "tpRrRatio": 1.25,
       "intradayRsGate": true,
       "skip": true,
-      "skipReason": "Apr 2026: removed. Consistently 2 trades/year, -0.5% expectancy. Research said retest but sample never grows \u2014 ABNB has too little intraday activity for 5m SMC strategy.",
+      "skipReason": "Apr 2026: removed. Consistently 2 trades/year, -0.5% expectancy. Research said retest but sample never grows — ABNB has too little intraday activity for 5m SMC strategy.",
       "note": "Apr 2026 live-parity retune: keep ABNB on SMC but make it more selective. Raised minConf to 78, enabled RS gating, and trimmed TP ratio to 1.25. Live-parity exits were positive, but the edge was still not clean enough to trust loose entries."
     },
     {
@@ -52,7 +52,7 @@
       "skipHours": [
         14
       ],
-      "note": "Apr 2026 optimizer: scalp 3T 50%WR $539 vs breakout 0T intraday. Switched intraday breakout\u2192scalp (Bollinger squeeze fires multiple times/day; ORB breakout fires once at 9:30 and rarely triggers). minConf lowered 75\u219272 to allow more scalp setups through.",
+      "note": "Apr 2026 optimizer: scalp 3T 50%WR $539 vs breakout 0T intraday. Switched intraday breakout→scalp (Bollinger squeeze fires multiple times/day; ORB breakout fires once at 9:30 and rarely triggers). minConf lowered 75→72 to allow more scalp setups through.",
       "scalp": {
         "skip": false,
         "strategyType": "scalp",
@@ -75,7 +75,7 @@
       "slAtrMult": 0.4,
       "tpRrRatio": 2.0,
       "skip": true,
-      "skipReason": "Apr 2026 HYBRID backtest: all 4 strategies negative (best breakout -$56, keylevel -$58). AMZN moves are too steady/gradual for intraday options edge \u2014 no strategy generates positive P&L on HYBRID exits.",
+      "skipReason": "Apr 2026 HYBRID backtest: all 4 strategies negative (best breakout -$56, keylevel -$58). AMZN moves are too steady/gradual for intraday options edge — no strategy generates positive P&L on HYBRID exits.",
       "note": "Apr 2026 optimizer rank#1 (180d): KEYLEVEL mc=70 sl=0.4 tp=2:1. Skipped after HYBRID validation showed all strategies negative.",
       "scalp": {
         "skip": true,
@@ -105,7 +105,7 @@
         11
       ],
       "skip": false,
-      "note": "Apr 2026 full sweep: smc 5/5 timeframes intraday (87T 61%WR $1760 at 365d), swing 3/3 ($1630), scalp 4/5. Was wrongly skipped on 3 bad trades in one 90d window. Aerospace moves DO follow SMC patterns \u2014 the original test was too small a sample.",
+      "note": "Apr 2026 full sweep: smc 5/5 timeframes intraday (87T 61%WR $1760 at 365d), swing 3/3 ($1630), scalp 4/5. Was wrongly skipped on 3 bad trades in one 90d window. Aerospace moves DO follow SMC patterns — the original test was too small a sample.",
       "scalp": {
         "skip": false,
         "strategyType": "scalp",
@@ -130,19 +130,19 @@
       "slAtrMult": 1.0,
       "tpRrRatio": 1.5,
       "skip": false,
-      "note": "Apr 2026 full sweep: smc 4/5 intraday (fails 30d only \u2014 6 consecutive losses were a bad 30d window, not structural). vwap/keylevel also 4/5. Swing 3/3 ($930). Scalp PnL tiny ($3-$172) \u2014 skip scalp. | Apr 2026 SMC disabled: Chinese ADR \u2014 different market structure, US sessions not aligned with institutional flow. 30d: 28.6% WR, -$73.",
+      "note": "Apr 2026 full sweep: smc 4/5 intraday (fails 30d only — 6 consecutive losses were a bad 30d window, not structural). vwap/keylevel also 4/5. Swing 3/3 ($930). Scalp PnL tiny ($3-$172) — skip scalp. | Apr 2026 SMC disabled: Chinese ADR — different market structure, US sessions not aligned with institutional flow. 30d: 28.6% WR, -$73.",
       "scalp": {
         "skip": true,
-        "skipReason": "Scalp PnL near-zero ($3-$172) \u2014 not worth options risk on Chinese ADR"
+        "skipReason": "Scalp PnL near-zero ($3-$172) — not worth options risk on Chinese ADR"
       },
       "intraday": {
         "skip": true,
-        "skipReason": "Chinese ADR \u2014 institutional flow not SMC-readable"
+        "skipReason": "Chinese ADR — institutional flow not SMC-readable"
       },
       "swing": {
         "skip": false
       },
-      "skipReason": "Chinese ADR \u2014 thin US session flow, unreliable SMC setups."
+      "skipReason": "Chinese ADR — thin US session flow, unreliable SMC setups."
     },
     {
       "ticker": "COIN",
@@ -158,7 +158,7 @@
       ],
       "skip": false,
       "skipReason": null,
-      "note": "Apr 2026: reverted intraday keylevel\u2192smc (keylevel generated 0 trades in 60d \u2014 COIN breaks levels too fast). scalp minConf reverted 82\u219272 (R:R concern already handled by tpRrRatio=1.5). skipHours=[13,14] kept \u2014 data-driven, valid.",
+      "note": "Apr 2026: reverted intraday keylevel→smc (keylevel generated 0 trades in 60d — COIN breaks levels too fast). scalp minConf reverted 82→72 (R:R concern already handled by tpRrRatio=1.5). skipHours=[13,14] kept — data-driven, valid.",
       "scalp": {
         "skip": false,
         "strategyType": "scalp",
@@ -183,7 +183,7 @@
       "maxConfidence": 100,
       "slAtrMult": 1.0,
       "tpRrRatio": 2.0,
-      "note": "Apr 2026 30d optimizer: smc minC=70 SL=1.0 TP=2.0 \u2192 10T 70%WR $2399. Reverted vwap\u2192smc (vwap generated 0 trades in 30d).",
+      "note": "Apr 2026 30d optimizer: smc minC=70 SL=1.0 TP=2.0 → 10T 70%WR $2399. Reverted vwap→smc (vwap generated 0 trades in 30d).",
       "scalp": {
         "skip": false,
         "strategyType": "scalp",
@@ -207,11 +207,11 @@
       "slAtrMult": 1.0,
       "tpRrRatio": 1.0,
       "skip": true,
-      "skipReason": "Apr 2026: skipped after full strategy sweep. All 6 strategies negative on LIVE_PARITY 180d \u2014 best was keylevel -$196. 42% WR, avg win $24 vs avg loss $26, no edge. DDOG moves are AI-sentiment driven, not technically clean enough for intraday options.",
+      "skipReason": "Apr 2026: skipped after full strategy sweep. All 6 strategies negative on LIVE_PARITY 180d — best was keylevel -$196. 42% WR, avg win $24 vs avg loss $26, no edge. DDOG moves are AI-sentiment driven, not technically clean enough for intraday options.",
       "note": "Apr 2026 outside-research retune: keep DDOG on VWAP, but tighten execution.",
       "scalp": {
         "skip": true,
-        "skipReason": "No intraday edge \u2014 AI-sentiment driven"
+        "skipReason": "No intraday edge — AI-sentiment driven"
       },
       "intraday": {
         "skip": true,
@@ -226,7 +226,7 @@
     {
       "ticker": "DIS",
       "skip": true,
-      "skipReason": "0% WR 90d (3 trades, 1 loss + 2 BE). Slow-moving entertainment stock \u2014 no intraday SMC edge.",
+      "skipReason": "0% WR 90d (3 trades, 1 loss + 2 BE). Slow-moving entertainment stock — no intraday SMC edge.",
       "strategyType": "breakout"
     },
     {
@@ -242,7 +242,7 @@
         14
       ],
       "skip": false,
-      "note": "Apr 2026: added GLD (SPDR Gold ETF). Gold is macro-driven (DXY, Fed, geopolitical risk) \u2014 not manipulable by individuals. VWAP reversion is the primary edge: gold is a VWAP-magnet on non-announcement days, trends hard when macro catalysts hit. slAtrMult=0.8 (wider than avg \u2014 gold bars are noisy from 24h futures carry). skipHours=[9] blocks first 30 min. skipHours=[14] blocks 2-3pm window where VWAP and keylevel signals consistently time out on GLD (90d backtest: $182 losses vs $48 wins in hour 14). BTC correlation: none \u2014 gold is anti-BTC (risk-off vs risk-on). Currently in confirmed bull run (all-time highs Apr 2026) so LONG VWAP reversion setups will have highest edge. | Apr 2026 SMC disabled: Gold ETF \u2014 commodity macro-driven, no institutional SMC footprint. 30d: 0W/1L, -$159.",
+      "note": "Apr 2026: added GLD (SPDR Gold ETF). Gold is macro-driven (DXY, Fed, geopolitical risk) — not manipulable by individuals. VWAP reversion is the primary edge: gold is a VWAP-magnet on non-announcement days, trends hard when macro catalysts hit. slAtrMult=0.8 (wider than avg — gold bars are noisy from 24h futures carry). skipHours=[9] blocks first 30 min. skipHours=[14] blocks 2-3pm window where VWAP and keylevel signals consistently time out on GLD (90d backtest: $182 losses vs $48 wins in hour 14). BTC correlation: none — gold is anti-BTC (risk-off vs risk-on). Currently in confirmed bull run (all-time highs Apr 2026) so LONG VWAP reversion setups will have highest edge. | Apr 2026 SMC disabled: Gold ETF — commodity macro-driven, no institutional SMC footprint. 30d: 0W/1L, -$159.",
       "scalp": {
         "skip": false,
         "strategyType": "scalp",
@@ -250,7 +250,7 @@
       },
       "intraday": {
         "skip": true,
-        "skipReason": "Commodity ETF \u2014 no SMC edge"
+        "skipReason": "Commodity ETF — no SMC edge"
       },
       "swing": {
         "skip": false,
@@ -258,7 +258,7 @@
         "minConfidence": 68,
         "tpRrRatio": 2.0
       },
-      "skipReason": "Commodity ETF \u2014 no institutional SMC footprint in any mode."
+      "skipReason": "Commodity ETF — no institutional SMC footprint in any mode."
     },
     {
       "ticker": "GOOGL",
@@ -269,7 +269,7 @@
       "slAtrMult": 1.0,
       "tpRrRatio": 1.5,
       "skip": false,
-      "note": "Apr 2026 full sweep: passes ALL 8 strategies \u00d7 ALL 5 timeframes. Best intraday: vwap 90d 82.4%WR $1470, vsqueeze 90d 84.6%WR $1363. Was wrongly skipped \u2014 SMC 5m was weak but VWAP is dominant (mega-cap VWAP-magnet). Scalp 83.3%WR 30d. Swing 76.5%WR 90d.",
+      "note": "Apr 2026 full sweep: passes ALL 8 strategies × ALL 5 timeframes. Best intraday: vwap 90d 82.4%WR $1470, vsqueeze 90d 84.6%WR $1363. Was wrongly skipped — SMC 5m was weak but VWAP is dominant (mega-cap VWAP-magnet). Scalp 83.3%WR 30d. Swing 76.5%WR 90d.",
       "scalp": {
         "skip": false,
         "strategyType": "scalp",
@@ -294,7 +294,7 @@
       "slAtrMult": 1.0,
       "tpRrRatio": 1.0,
       "skip": false,
-      "note": "Apr 2026 30d optimizer: smc minC=70 SL=1.0 TP=1.0 \u2192 3T 100%WR $2394. Changed FINANCIAL\u2192MOMENTUM: SMC strategy doesn't have the options premium problem (delta follows price), FINANCIAL -20 penalty was blocking 90% of valid signals.",
+      "note": "Apr 2026 30d optimizer: smc minC=70 SL=1.0 TP=1.0 → 3T 100%WR $2394. Changed FINANCIAL→MOMENTUM: SMC strategy doesn't have the options premium problem (delta follows price), FINANCIAL -20 penalty was blocking 90% of valid signals.",
       "scalp": {
         "skip": true,
         "skipReason": "Only 2/5 scalp timeframes pass"
@@ -307,7 +307,7 @@
       },
       "swing": {
         "skip": true,
-        "skipReason": "50%WR at 365d \u2014 below threshold"
+        "skipReason": "50%WR at 365d — below threshold"
       }
     },
     {
@@ -316,9 +316,9 @@
       "minFvgPct": 0.0015,
       "dispAtrMult": 1.8,
       "minVolMult": 2.2,
-      "note": "Tightened Mar 2026: 20% WR 90d -1.58% exp. Raised minConf to 85 \u2014 only take ultra-clean SMC sweeps with strong volume.",
+      "note": "Tightened Mar 2026: 20% WR 90d -1.58% exp. Raised minConf to 85 — only take ultra-clean SMC sweeps with strong volume.",
       "skip": true,
-      "skipReason": "Removed from watchlist Mar 2026 \u2014 0% WR or negative expectancy over 90d."
+      "skipReason": "Removed from watchlist Mar 2026 — 0% WR or negative expectancy over 90d."
     },
     {
       "ticker": "JPM",
@@ -337,7 +337,7 @@
       },
       "intraday": {
         "skip": true,
-        "skipReason": "22.2% WR \u2014 no viable intraday strategy"
+        "skipReason": "22.2% WR — no viable intraday strategy"
       },
       "swing": {
         "skip": false,
@@ -353,7 +353,7 @@
       "slAtrMult": 1.0,
       "tpRrRatio": 1.5,
       "skip": true,
-      "skipReason": "Apr 2026 HYBRID backtest: all 4 strategies negative (best keylevel -$130, smc -$228). High WR (74-76%) but options P&L negative \u2014 MARA's BTC-driven moves are too erratic for options premium recovery. Small underlying price (~$15) limits options dollar gains.",
+      "skipReason": "Apr 2026 HYBRID backtest: all 4 strategies negative (best keylevel -$130, smc -$228). High WR (74-76%) but options P&L negative — MARA's BTC-driven moves are too erratic for options premium recovery. Small underlying price (~$15) limits options dollar gains.",
       "note": "Apr 2026 90d optimizer rank#1: SMC mc=78 sl=1.0 tp=1.5. Skipped after HYBRID validation confirmed all strategies negative despite 74%+ WR.",
       "scalp": {
         "skip": true,
@@ -373,27 +373,30 @@
       "ticker": "META",
       "character": "MOMENTUM",
       "strategyType": "smc",
-      "minConfidence": 70,
-      "maxConfidence": 84,
+      "minConfidence": 78,
+      "maxConfidence": 90,
       "slAtrMult": 1.0,
-      "tpRrRatio": 1.5,
+      "tpRrRatio": 2.0,
       "intradayRsGate": true,
       "skip": false,
       "skipReason": null,
-      "note": "Apr 2026 optimize loop \u2192 deep scan: SMC strategy confirmed (5T 100%WR@90d in optimizer). mc=70 without extra filters generates more signals. META makes large intraday FVG+OB sweeps on AI/earnings catalysts.",
+      "note": "Apr 2026: tightened mc 70→78, dispAtrMult=1.5, tpRrRatio=2.0. Mega-cap — only A+ displacement setups. mc=70 generated mediocre FVG retests on a slow tape. intradayRsGate=true kept to require RS vs SPY.",
       "scalp": {
         "skip": true,
-        "skipReason": "Apr 2026 VWAP scalp validation: 36.8% WR -0.12% exp \u2014 negative edge"
+        "skipReason": "Apr 2026 VWAP scalp validation: 36.8% WR -0.12% exp — negative edge"
       },
       "intraday": {
         "skip": false,
         "strategyType": "smc",
-        "minConfidence": 70,
-        "maxConfidence": 84
+        "minConfidence": 78,
+        "maxConfidence": 90,
+        "dispAtrMult": 1.5,
+        "tpRrRatio": 2.0
       },
       "swing": {
         "skip": false
-      }
+      },
+      "dispAtrMult": 1.5
     },
     {
       "ticker": "NET",
@@ -406,7 +409,7 @@
       "tpRrRatio": 1.25,
       "skip": true,
       "skipReason": "Apr 2026 research: disable. Negative expectancy across all 3 windows (90d -1.97%, 180d -0.49%, 365d -0.42%). No strategy showed eligible positive expectancy.",
-      "note": "Added Apr 2026: Cloudflare \u2014 PLTR analogy did not hold."
+      "note": "Added Apr 2026: Cloudflare — PLTR analogy did not hold."
     },
     {
       "ticker": "MSFT",
@@ -419,8 +422,8 @@
       "tpRrRatio": 2.0,
       "intradayRsGate": false,
       "skip": false,
-      "skipReason": "Confirmed negative at 30d and 180d across all strategies.",
-      "note": "Apr 2026 HYBRID backtest: SMC ALL-mode $595 (8T 62.5%WR) \u2014 0 trades in SCALP mode because regime+RS gates block most MSFT signals in tariff-recession period. Removed intradayRsGate to allow signal generation. | Apr 2026 SMC disabled: Apr 2026 30d: 0W/1L -$183. Previously confirmed negative on all strategies at 180d in hybrid exits.",
+      "skipReason": "STABLE_LARGE_CAP — confirmed negative intraday across all strategies and timeframes.",
+      "note": "Apr 2026: intraday.skip=true — all strategies negative on HYBRID exits (30d: 0W/1L -$183, 180d negative). STABLE_LARGE_CAP — slow tape does not produce clean SMC displacements. swing.skip=false kept for multi-day setups.",
       "scalp": {
         "skip": true,
         "skipReason": "Regime/RS gates produce 0 scalp trades in current tariff environment"
@@ -441,19 +444,19 @@
       "slAtrMult": 1.0,
       "tpRrRatio": 2.0,
       "skip": true,
-      "skipReason": "Apr 2026 full sweep: only 2/5 timeframes pass intraday \u2014 BTC-cycle dependent. Revisit when BTC enters sustained trend.",
+      "skipReason": "Apr 2026 full sweep: only 2/5 timeframes pass intraday — BTC-cycle dependent. Revisit when BTC enters sustained trend.",
       "note": "Apr 2026 full sweep: intraday only 2/5 timeframes (180d and 365d). Too BTC-cycle dependent for reliable activation. Keep skipped until BTC enters sustained trend where more windows pass.",
       "scalp": {
         "skip": true,
-        "skipReason": "BTC gaps \u2014 too few setups"
+        "skipReason": "BTC gaps — too few setups"
       },
       "intraday": {
         "skip": true,
-        "skipReason": "Only 2/5 timeframes pass \u2014 not consistent enough across windows"
+        "skipReason": "Only 2/5 timeframes pass — not consistent enough across windows"
       },
       "swing": {
         "skip": true,
-        "skipReason": "Swing 53.8%WR at 365d \u2014 below 55% threshold"
+        "skipReason": "Swing 53.8%WR at 365d — below 55% threshold"
       }
     },
     {
@@ -464,7 +467,7 @@
       "maxConfidence": 100,
       "slAtrMult": 1.0,
       "tpRrRatio": 2.0,
-      "note": "Apr 2026 30d optimizer: smc minC=78 SL=1.0 TP=2.0 \u2192 6T 83.3%WR $797. Prior vwap generated 1T -$16 in 30d. 180d vwap was near-zero but 30d smc dominates.",
+      "note": "Apr 2026 30d optimizer: smc minC=78 SL=1.0 TP=2.0 → 6T 83.3%WR $797. Prior vwap generated 1T -$16 in 30d. 180d vwap was near-zero but 30d smc dominates.",
       "scalp": {
         "skip": false,
         "strategyType": "scalp",
@@ -483,7 +486,7 @@
     {
       "ticker": "NIO",
       "skip": true,
-      "skipReason": "0% WR 90d (2 trades, 2 losses). Chinese EV \u2014 moves on ADR premium and Beijing policy, not SMC patterns.",
+      "skipReason": "0% WR 90d (2 trades, 2 losses). Chinese EV — moves on ADR premium and Beijing policy, not SMC patterns.",
       "minConfidence": 72,
       "minFvgPct": 0.0008,
       "strategyType": "breakout"
@@ -497,10 +500,10 @@
       "slAtrMult": 0.4,
       "tpRrRatio": 1.0,
       "intradayRsGate": false,
-      "note": "Apr 2026 HYBRID backtest: SMC ALL-mode $81 (3T 66.7%WR) \u2014 0 trades in SCALP mode, RS gate too restrictive. Removed intradayRsGate. Very thin sample (3 trades), keep on watchlist but low confidence.",
+      "note": "Apr 2026 HYBRID backtest: SMC ALL-mode $81 (3T 66.7%WR) — 0 trades in SCALP mode, RS gate too restrictive. Removed intradayRsGate. Very thin sample (3 trades), keep on watchlist but low confidence.",
       "scalp": {
         "skip": true,
-        "skipReason": "0 scalp trades \u2014 RS gate blocks all entries in current AI-cycle slowdown"
+        "skipReason": "0 scalp trades — RS gate blocks all entries in current AI-cycle slowdown"
       },
       "intraday": {
         "skip": false,
@@ -532,7 +535,7 @@
       "minFvgPct": 0.0006,
       "dispAtrMult": 1.3,
       "maxConfidence": 84,
-      "note": "Apr 2026 SMC confirmed best for PLTR. Full scalp comparison showed SMC in SCALP mode $908 > Bollinger Scalp $591 \u2014 PLTR's intraday FVG sweeps are stronger entries than Bollinger compression. Retained previous settings: mc=62, minFvgPct=0.0006, dispAtrMult=1.3, maxConf=84.",
+      "note": "Apr 2026 SMC confirmed best for PLTR. Full scalp comparison showed SMC in SCALP mode $908 > Bollinger Scalp $591 — PLTR's intraday FVG sweeps are stronger entries than Bollinger compression. Retained previous settings: mc=62, minFvgPct=0.0006, dispAtrMult=1.3, maxConf=84.",
       "scalp": {
         "skip": false,
         "strategyType": "scalp",
@@ -550,7 +553,7 @@
     {
       "ticker": "PYPL",
       "skip": true,
-      "skipReason": "12% WR 90d across 17 trades \u2014 statistically confirmed no edge. Fintech range-bound, SMC patterns unreliable.",
+      "skipReason": "12% WR 90d across 17 trades — statistically confirmed no edge. Fintech range-bound, SMC patterns unreliable.",
       "minConfidence": 62
     },
     {
@@ -565,7 +568,7 @@
         15
       ],
       "skip": false,
-      "note": "Apr 2026 full sweep: smc intraday 365d 62.3%WR $2638. Scalp exceptionally strong \u2014 73.5%WR 365d, 100%WR 30d. Was wrongly skipped on VWAP only \u2014 SMC is the right strategy for QQQ. 60d/90d windows thin (regime-sensitive), reliable at 30d and 180d+. | Apr 2026 SMC disabled: Index ETF \u2014 same as SPY. 30d: 14.3% WR -$195, 180d: 33.3% WR -$482. Zero edge on SMC.",
+      "note": "Apr 2026 full sweep: smc intraday 365d 62.3%WR $2638. Scalp exceptionally strong — 73.5%WR 365d, 100%WR 30d. Was wrongly skipped on VWAP only — SMC is the right strategy for QQQ. 60d/90d windows thin (regime-sensitive), reliable at 30d and 180d+. | Apr 2026 SMC disabled: Index ETF — same as SPY. 30d: 14.3% WR -$195, 180d: 33.3% WR -$482. Zero edge on SMC.",
       "scalp": {
         "skip": false,
         "strategyType": "scalp",
@@ -573,12 +576,12 @@
       },
       "intraday": {
         "skip": true,
-        "skipReason": "Index ETF \u2014 no SMC edge"
+        "skipReason": "Index ETF — no SMC edge"
       },
       "swing": {
         "skip": false
       },
-      "skipReason": "Index ETF \u2014 no SMC edge across any mode. 30d: 14.3% WR -$195."
+      "skipReason": "Index ETF — no SMC edge across any mode. 30d: 14.3% WR -$195."
     },
     {
       "ticker": "RIOT",
@@ -589,8 +592,8 @@
       "slAtrMult": 1.0,
       "tpRrRatio": 1.0,
       "skip": true,
-      "skipReason": "Apr 2026 HYBRID backtest: -$22, only 5 trades. Too thin to trade reliably. BTC-beta miner with erratic gaps \u2014 similar issue to MARA. Small underlying price limits options dollar gains.",
-      "note": "Apr 2026 retune: SMC mc=80 maxConf=84. Skipped after HYBRID validation \u2014 too few trades and negative options P&L."
+      "skipReason": "Apr 2026 HYBRID backtest: -$22, only 5 trades. Too thin to trade reliably. BTC-beta miner with erratic gaps — similar issue to MARA. Small underlying price limits options dollar gains.",
+      "note": "Apr 2026 retune: SMC mc=80 maxConf=84. Skipped after HYBRID validation — too few trades and negative options P&L."
     },
     {
       "ticker": "RIVN",
@@ -601,7 +604,7 @@
       "minVolMult": 1.8,
       "tpRrRatio": 1.25,
       "skip": true,
-      "skipReason": "Apr 2026 research: disable. 90d -2.76% exp, 180d -0.63% exp. No strategy eligible. EV startup with erratic news-driven gaps \u2014 no SMC edge confirmed.",
+      "skipReason": "Apr 2026 research: disable. 90d -2.76% exp, 180d -0.63% exp. No strategy eligible. EV startup with erratic news-driven gaps — no SMC edge confirmed.",
       "note": "Apr 2026 live-parity retune.",
       "maxConfidence": 84
     },
@@ -613,7 +616,7 @@
       "strategyType": "smc",
       "note": "Tightened Mar 2026: 0% WR 90d (-1.93% exp, 5 trades). Threshold set near-impossible (92) to de-facto block until 90d WR improves.",
       "skip": true,
-      "skipReason": "Removed from watchlist Mar 2026 \u2014 0% WR or negative expectancy over 90d."
+      "skipReason": "Removed from watchlist Mar 2026 — 0% WR or negative expectancy over 90d."
     },
     {
       "ticker": "SHOP",
@@ -624,10 +627,10 @@
       "slAtrMult": 1.0,
       "tpRrRatio": 1.5,
       "skip": false,
-      "note": "Apr 2026 full sweep: passes ALL 8 strategies \u00d7 ALL 5 timeframes (5/5 intraday smc, swing 3/3). Best intraday: smc 30d 85.7%WR $404, swing 90d 77.8%WR $977. Scalp only 2/5 timeframes \u2014 not consistent enough. Was wrongly skipped on old SMC profile.",
+      "note": "Apr 2026 full sweep: passes ALL 8 strategies × ALL 5 timeframes (5/5 intraday smc, swing 3/3). Best intraday: smc 30d 85.7%WR $404, swing 90d 77.8%WR $977. Scalp only 2/5 timeframes — not consistent enough. Was wrongly skipped on old SMC profile.",
       "scalp": {
         "skip": true,
-        "skipReason": "Only 2/5 timeframes pass scalp (30d and 90d only) \u2014 not consistent"
+        "skipReason": "Only 2/5 timeframes pass scalp (30d and 90d only) — not consistent"
       },
       "intraday": {
         "skip": false,
@@ -647,13 +650,13 @@
       "slAtrMult": 1.0,
       "tpRrRatio": 1.5,
       "skip": true,
-      "skipReason": "Apr 2026 HYBRID backtest: all 4 strategies negative (best vwap -$69, keylevel -$108). SMCI in accounting/delisting headline regime \u2014 technical patterns dominated by news gaps. No intraday edge on HYBRID exits.",
+      "skipReason": "Apr 2026 HYBRID backtest: all 4 strategies negative (best vwap -$69, keylevel -$108). SMCI in accounting/delisting headline regime — technical patterns dominated by news gaps. No intraday edge on HYBRID exits.",
       "note": "Apr 2026 deep strategy scan: keylevel only strategy with any passing window (90d 10T 60%). Skipped after HYBRID validation confirmed all strategies negative in current regime."
     },
     {
       "ticker": "SNAP",
       "skip": true,
-      "skipReason": "0% WR 90d (-1.54% expectancy). 30d showed 50% but was only 4 trades \u2014 too small a sample. Full 90d picture shows no edge.",
+      "skipReason": "0% WR 90d (-1.54% expectancy). 30d showed 50% but was only 4 trades — too small a sample. Full 90d picture shows no edge.",
       "minConfidence": 68,
       "note": "skip=true again Mar 2026. Re-evaluate after consistent 90d WR >45%."
     },
@@ -670,17 +673,17 @@
         12
       ],
       "skip": false,
-      "skipReason": "Apr 2026: skipped after full strategy sweep. All 6 strategies negative on LIVE_PARITY 180d \u2014 best was vwap -$303 at 80% WR. Root cause: SOFI ~$13 stock, avg win move 0.85% = ~$0.11/share. Options premium (~$10-15) cannot be overcome by such small moves regardless of WR. Not viable for options trading until price >$20.",
-      "note": "Apr 2026 90d: skipHours=[11,12] added \u2014 loss analysis showed 11am=100% loss rate (3/3), 12pm=75% loss rate (12/16). Other hours unaffected.",
+      "skipReason": "Apr 2026: skipped after full strategy sweep. All 6 strategies negative on LIVE_PARITY 180d — best was vwap -$303 at 80% WR. Root cause: SOFI ~$13 stock, avg win move 0.85% = ~$0.11/share. Options premium (~$10-15) cannot be overcome by such small moves regardless of WR. Not viable for options trading until price >$20.",
+      "note": "Apr 2026 90d: skipHours=[11,12] added — loss analysis showed 11am=100% loss rate (3/3), 12pm=75% loss rate (12/16). Other hours unaffected.",
       "scalp": {
         "skip": false,
         "strategyType": "scalp",
         "minConfidence": 72,
-        "note": "Apr 2026 VWAP scalp validation: 56.7% WR +0.36% exp on 31 trades \u2014 stock now $15-17, edge confirmed"
+        "note": "Apr 2026 VWAP scalp validation: 56.7% WR +0.36% exp on 31 trades — stock now $15-17, edge confirmed"
       },
       "intraday": {
         "skip": true,
-        "skipReason": "Options P&L structurally negative \u2014 stock too cheap"
+        "skipReason": "Options P&L structurally negative — stock too cheap"
       },
       "swing": {
         "skip": false,
@@ -701,15 +704,15 @@
         15
       ],
       "skip": false,
-      "skipReason": "Index ETF \u2014 no SMC edge across any mode. 30d: 28.6% WR -$482.",
-      "note": "Apr 2026 HYBRID backtest switch: smc $212 > breakout -$107 > keylevel -$175 > vwap -$327. SMC 78.6% WR on SPY at 180d HYBRID \u2014 FVG sweeps on index are driven by futures/macro imbalances that create clean institutional order flow. | Apr 2026 SMC disabled: Index ETF \u2014 macro-driven, SMC zones get steamrolled by broad market moves. 30d: 28.6% WR, -$482.",
+      "skipReason": "Index ETF — no SMC edge across any mode. 30d: 28.6% WR -$482.",
+      "note": "Apr 2026 HYBRID backtest switch: smc $212 > breakout -$107 > keylevel -$175 > vwap -$327. SMC 78.6% WR on SPY at 180d HYBRID — FVG sweeps on index are driven by futures/macro imbalances that create clean institutional order flow. | Apr 2026 SMC disabled: Index ETF — macro-driven, SMC zones get steamrolled by broad market moves. 30d: 28.6% WR, -$482.",
       "scalp": {
         "skip": true,
-        "skipReason": "Apr 2026 VWAP scalp validation: 33.3% WR near-zero exp \u2014 no edge"
+        "skipReason": "Apr 2026 VWAP scalp validation: 33.3% WR near-zero exp — no edge"
       },
       "intraday": {
         "skip": true,
-        "skipReason": "Index ETF \u2014 SMC zones not structural"
+        "skipReason": "Index ETF — SMC zones not structural"
       },
       "swing": {
         "skip": false
@@ -718,9 +721,9 @@
     {
       "ticker": "SQ",
       "minConfidence": 62,
-      "note": "Strong performer (60% WR) \u2014 relaxed",
+      "note": "Strong performer (60% WR) — relaxed",
       "skip": true,
-      "skipReason": "Removed from watchlist Mar 2026 \u2014 0% WR or negative expectancy over 90d."
+      "skipReason": "Removed from watchlist Mar 2026 — 0% WR or negative expectancy over 90d."
     },
     {
       "ticker": "TSLA",
@@ -735,7 +738,7 @@
       "skipHours": [
         15
       ],
-      "note": "Apr 2026 VWAP confirmed best for TSLA. Full scalp sweep showed VWAP in SCALP mode $2397 > Bollinger Scalp $2062 \u2014 TSLA's intraday VWAP magnets are stronger than Bollinger compression entries.",
+      "note": "Apr 2026 VWAP confirmed best for TSLA. Full scalp sweep showed VWAP in SCALP mode $2397 > Bollinger Scalp $2062 — TSLA's intraday VWAP magnets are stronger than Bollinger compression entries.",
       "scalp": {
         "skip": false,
         "strategyType": "scalp",
@@ -760,10 +763,10 @@
       "slAtrMult": 1.0,
       "tpRrRatio": 1.5,
       "skip": false,
-      "note": "Apr 2026 full sweep: intraday smc 4/5 timeframes (fails 30d only), swing 3/3. Scalp only 2/5 (90d and 180d). Was killed by 0%WR in one 30d bad window \u2014 regime artifact, not structural failure.",
+      "note": "Apr 2026 full sweep: intraday smc 4/5 timeframes (fails 30d only), swing 3/3. Scalp only 2/5 (90d and 180d). Was killed by 0%WR in one 30d bad window — regime artifact, not structural failure.",
       "scalp": {
         "skip": true,
-        "skipReason": "Only 2/5 timeframes pass scalp \u2014 not consistent"
+        "skipReason": "Only 2/5 timeframes pass scalp — not consistent"
       },
       "intraday": {
         "skip": false,
@@ -779,7 +782,7 @@
       "ticker": "V",
       "character": "FINANCIAL",
       "skip": true,
-      "skipReason": "Neither VWAP (0% WR) nor Key Level (18% WR, -0.01% expectancy) produced reliable intraday edge \u2014 too slow-moving for 5m strategy",
+      "skipReason": "Neither VWAP (0% WR) nor Key Level (18% WR, -0.01% expectancy) produced reliable intraday edge — too slow-moving for 5m strategy",
       "strategyType": "keylevel",
       "skipHours": [
         13

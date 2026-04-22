@@ -32,6 +32,10 @@ public class VwapStrategyDetector {
      * @return list of detected setups (0 or 1 element)
      */
     public List<TradeSetup> detect(List<OHLCV> bars, String ticker, double dailyAtr) {
+        return detect(bars, ticker, dailyAtr, false);
+    }
+
+    public List<TradeSetup> detect(List<OHLCV> bars, String ticker, double dailyAtr, boolean backtestMode) {
         List<TradeSetup> result = new ArrayList<>();
         if (bars == null || bars.isEmpty()) return result;
 
@@ -40,7 +44,8 @@ public class VwapStrategyDetector {
         OHLCV lastRaw = bars.get(bars.size() - 1);
         LocalDate today = Instant.ofEpochMilli(lastRaw.getTimestamp())
                 .atZone(ET).toLocalDate();
-        if (!today.equals(LocalDate.now(ET))) return result; // staleness guard
+        // Staleness guard skipped in backtest — the last bar date is historical by design
+        if (!backtestMode && !today.equals(LocalDate.now(ET))) return result;
         LocalTime mktOpen  = LocalTime.of(9, 30);
         LocalTime mktClose = LocalTime.of(16, 0);
 
