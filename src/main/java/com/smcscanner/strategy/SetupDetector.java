@@ -352,11 +352,12 @@ public class SetupDetector {
         double range = Math.max(0.0001, retest.getHigh() - retest.getLow());
         double closePos = (retest.getClose() - retest.getLow()) / range;
         double mid = (state.getFvgTop() + state.getFvgBottom()) / 2.0;
-        // Require close in top/bottom half of the bar — confirms real rejection at the zone, not just a wick touch
+        // Require close in top/bottom 35% of bar — excludes doji-only wicks but allows normal rejection bodies.
+        // 50% was too tight: cut valid setups where retest bar closed at 40-49% (small-body rejections).
         if ("long".equals(state.getDirection())) {
-            return retest.getClose() >= mid && closePos >= 0.50;
+            return retest.getClose() >= mid && closePos >= 0.35;
         }
-        return retest.getClose() <= mid && closePos <= 0.50;
+        return retest.getClose() <= mid && closePos <= 0.65;
     }
     private boolean[] detectStructure(List<OHLCV> bars) {
         try {

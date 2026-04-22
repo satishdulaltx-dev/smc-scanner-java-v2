@@ -752,7 +752,7 @@
       "minFvgPct": 0.001,
       "dispAtrMult": 1.6,
       "slAtrMult": 1.0,
-      "tpRrRatio": 1.0,
+      "tpRrRatio": 1.5,
       "skipHours": [
         15
       ],
