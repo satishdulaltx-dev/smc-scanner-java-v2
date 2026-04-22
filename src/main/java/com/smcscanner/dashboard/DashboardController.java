@@ -452,8 +452,9 @@ public class DashboardController {
     }
 
     /**
-     * GET /api/profiles/enabled?mode=scalp|intraday|swing
+     * GET /api/profiles/enabled?mode=scalp|intraday|swing|any
      * Returns ticker symbols from the watchlist where the given mode is NOT skipped.
+     * mode=any excludes only tickers with top-level skip=true (used by ALL-mode batch backtest).
      * Used by the batch backtest to auto-filter disabled tickers per mode.
      */
     @GetMapping("/api/profiles/enabled")
@@ -464,6 +465,7 @@ public class DashboardController {
         return watchlist.stream()
                 .filter(t -> {
                     com.smcscanner.model.TickerProfile p = config.getTickerProfile(t);
+                    if ("any".equals(mode)) return !p.isSkip();
                     com.smcscanner.model.TickerProfile.ModeProfile mp = p.resolveMode(mode);
                     return !mp.isEffectiveSkip(p.isSkip());
                 })
