@@ -28,8 +28,6 @@ public class SetupDetector {
     // and SOFI ($17, ATR $0.05 → 2.5×ATR=$0.125 < $0.19 gap → filtered unfairly).
     private static final double MAX_ENTRY_DISTANCE_PRICE_PCT = 0.035;
     // FVG older than this many bars (100 min on 5m) is considered price-discovered intraday
-    private static final int    MAX_FVG_AGE_BARS = 20;
-
     private final ScannerConfig config;
     private final AtrCalculator atrCalc;
     private final StructureAnalyzer sa;
@@ -151,13 +149,9 @@ public class SetupDetector {
             return new DetectResult(List.of(),state);
         }
 
-        // ── FVG age filter: stale intraday FVGs are price-discovered ────────────
+        // FVG age: no hard cutoff — ScoringService penalizes freshness via fvgAgeBars.
+        // A morning FVG retested in the afternoon is 24+ bars old but still valid S/R.
         int fvgAgeBars = (bars.size() - 1) - state.getFvgBar();
-        if (fvgAgeBars > MAX_FVG_AGE_BARS) {
-            log.debug("{} filtered: STALE_FVG age={} bars > max={}", ticker, fvgAgeBars, MAX_FVG_AGE_BARS);
-            state.setPhase(SetupPhase.IDLE);
-            return new DetectResult(List.of(), state);
-        }
 
         boolean[] str=detectStructure(bars);
         boolean hasStructure=str[0]||str[1];
@@ -372,19 +366,21 @@ public class SetupDetector {
         } else {
             if (!(retest.getClose() <= mid && closePos <= 0.65)) return false;
         }
-        // Consolidation guard: require at least 2 bars of pullback between displacement and retest.
-        // Without this, a 3-bar continuation move that clips the FVG zone counts as a "retest".
+        // Consolidation guard: between displacement and retest, at least 2 bars must not extend
+        // beyond the displacement candle's extreme. Sideways consolidation counts — we don't
+        // require a visible lower-high staircase, just that price isn't still running.
         int dispBar   = state.getDisplacementBar();
         int retestBar = state.getRetestBar();
         String dir    = state.getDirection();
-        if (dispBar >= 0 && retestBar - dispBar >= 3) {
-            int pullbackBars = 0;
+        if (dispBar >= 0 && dispBar < bars.size() && retestBar - dispBar >= 3) {
+            double dispExtreme = "long".equals(dir) ? bars.get(dispBar).getHigh() : bars.get(dispBar).getLow();
+            int nonExtendingBars = 0;
             for (int i = dispBar + 1; i < retestBar && i < bars.size(); i++) {
-                OHLCV curr = bars.get(i), prev = bars.get(i - 1);
-                if ("long".equals(dir)  && curr.getHigh() < prev.getHigh()) pullbackBars++;
-                if ("short".equals(dir) && curr.getLow()  > prev.getLow())  pullbackBars++;
+                OHLCV curr = bars.get(i);
+                if ("long".equals(dir)  && curr.getHigh() <= dispExtreme) nonExtendingBars++;
+                if ("short".equals(dir) && curr.getLow()  >= dispExtreme) nonExtendingBars++;
             }
-            if (pullbackBars < 2) return false;
+            if (nonExtendingBars < 2) return false;
         }
         return true;
     }
