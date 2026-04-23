@@ -180,7 +180,7 @@ public class ScannerScheduler {
         } catch (Exception e) { log.error("Daily trade report failed: {}", e.getMessage()); }
     }
 
-    /** Force-close all open positions at 3:55 PM ET to prevent unintended overnight holds. */
+    /** Force-close ALL open intraday positions at 3:55 PM ET — no overnight holds for intraday trades. */
     @Scheduled(fixedRate=30_000)
     public void forceEodClose() {
         if (!alpaca.isEnabled()) return;
@@ -188,13 +188,11 @@ public class ScannerScheduler {
         LocalTime time = nowET.toLocalTime();
         if (nowET.getDayOfWeek().getValue() >= 6 || forceCloseDoneToday || isNyseHoliday(nowET.toLocalDate())) return;
         if (time.isBefore(FORCE_CLOSE_TRIGGER) || time.isAfter(FORCE_CLOSE_CUTOFF)) return;
-        log.info("EOD FORCE-CLOSE: 3:55 PM ET — liquidating all open positions");
+        log.info("EOD FORCE-CLOSE: 3:55 PM ET — closing ALL open positions, no overnight holds");
         forceCloseDoneToday = true;
         try {
-            int count = alpaca.closeLosingPositions();
-            if (count > 0) {
-                discord.sendAlert(":bell: **EOD Smart-Close** — closed **" + count + " position(s)** at 3:55 PM ET (losers closed, winners kept running).");
-            }
+            int count = alpaca.closeAllPositions();
+            discord.sendAlert(":bell: **EOD Close** — closed **" + count + " position(s)** at 3:55 PM ET. No overnight holds.");
         } catch (Exception e) {
             log.error("EOD force-close failed: {}", e.getMessage());
         }
