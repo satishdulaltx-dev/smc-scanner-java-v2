@@ -388,6 +388,109 @@ public class SetupDetector {
         }
         return true;
     }
+    /**
+     * CHOCH primary: fires when CHOCH is detected in the last MAX_AGE bars but the full SMC
+     * chain (sweep→disp→FVG→retest) is not complete. Entry = CHOCH bar close, SL = structural
+     * swing on the prior side, TP = 2:1 R. Base confidence 70 — lower than full SMC chain.
+     */
+    public List<TradeSetup> detectChochPrimary(List<OHLCV> bars, String ticker, double dailyAtr,
+                                                boolean backtestMode) {
+        if (bars == null || bars.size() < 20) return List.of();
+        int n = bars.size();
+        long lastBarTs = bars.get(n - 1).getTimestamp();
+        if (!backtestMode) {
+            java.time.LocalDate today = Instant.ofEpochMilli(lastBarTs).atZone(ET).toLocalDate();
+            if (!today.equals(java.time.LocalDate.now(ET))) return List.of();
+            java.time.LocalTime t = Instant.ofEpochMilli(lastBarTs).atZone(ET).toLocalTime();
+            if (t.isBefore(java.time.LocalTime.of(9, 45)) || !t.isBefore(java.time.LocalTime.of(15, 30)))
+                return List.of();
+        }
+
+        double[] atrArr = atrCalc.computeAtr(bars, 14);
+        double curAtr = lastNz(atrArr);
+        double lastClose = bars.get(n - 1).getClose();
+        curAtr = Math.max(curAtr, lastClose * 0.002);
+
+        try {
+            List<SwingPoint> swings = sa.detectSwings(bars, 5);
+            List<StructureBreak> breaks = sa.detectStructureBreaks(bars, swings);
+            if (breaks.isEmpty()) return List.of();
+
+            // Find the most recent CHOCH within last 5 bars
+            StructureBreak choch = null;
+            for (int i = breaks.size() - 1; i >= 0; i--) {
+                StructureBreak b = breaks.get(i);
+                if (b.getBreakType() == StructureType.CHOCH && (n - 1 - b.getIndex()) <= 5) {
+                    choch = b;
+                    break;
+                }
+            }
+            if (choch == null) return List.of();
+
+            int    chochIdx  = choch.getIndex();
+            OHLCV  chochBar  = bars.get(chochIdx);
+            double entry     = r4(chochBar.getClose());
+
+            // Determine direction: CHOCH on a swing HIGH break = bullish flip = long
+            //                      CHOCH on a swing LOW break  = bearish flip = short
+            // The swing at priorSwingIdx tells us: if it's a HIGH that was broken → long
+            int    priorIdx  = choch.getPriorSwingIdx();
+            if (priorIdx < 0 || priorIdx >= bars.size()) return List.of();
+            boolean priorIsHigh = swings.stream()
+                    .filter(s -> s.getIndex() == priorIdx)
+                    .anyMatch(s -> s.getSwingType() == SwingType.HIGH);
+            String dir = priorIsHigh ? "long" : "short";
+
+            // SL = most recent swing on the opposite side within 30 bars before the CHOCH
+            double sl;
+            if ("long".equals(dir)) {
+                // SL below: find nearest swing LOW before the CHOCH bar
+                double swingLow = swings.stream()
+                        .filter(s -> s.getSwingType() == SwingType.LOW && s.getIndex() < chochIdx
+                                  && s.getIndex() >= Math.max(0, chochIdx - 30))
+                        .mapToDouble(SwingPoint::getPrice)
+                        .min().orElse(entry - curAtr);
+                sl = r4(swingLow - curAtr * 0.15);
+            } else {
+                // SL above: find nearest swing HIGH before the CHOCH bar
+                double swingHigh = swings.stream()
+                        .filter(s -> s.getSwingType() == SwingType.HIGH && s.getIndex() < chochIdx
+                                  && s.getIndex() >= Math.max(0, chochIdx - 30))
+                        .mapToDouble(SwingPoint::getPrice)
+                        .max().orElse(entry + curAtr);
+                sl = r4(swingHigh + curAtr * 0.15);
+            }
+
+            double risk = "long".equals(dir) ? entry - sl : sl - entry;
+            if (risk <= 0 || risk > curAtr * 3.0) return List.of();
+
+            double tp = "long".equals(dir) ? r4(entry + risk * 2.0) : r4(entry - risk * 2.0);
+            double avgVol = bars.stream().skip(Math.max(0, n - 30))
+                               .mapToDouble(OHLCV::getVolume).average().orElse(1);
+            int conf = 70;
+            if (chochBar.getVolume() > avgVol * 1.5) conf += 6;
+            if (chochBar.getVolume() > avgVol * 2.5) conf += 4;
+
+            String session  = sessionFilter.sessionName(Instant.ofEpochMilli(lastBarTs).atZone(ET).toLocalTime());
+            double atrPct   = lastClose > 0 ? curAtr / lastClose * 100 : 0;
+            String volLabel = atrPct < 0.5 ? "low" : (atrPct < 1.5 ? "medium" : "high");
+            String factors  = String.format(
+                    "choch-primary-%s | breakLevel=%.2f | age=%d bars | vol=%.1f×avg",
+                    dir, choch.getPrice(), n - 1 - chochIdx, chochBar.getVolume() / Math.max(avgVol, 1));
+
+            return List.of(TradeSetup.builder()
+                    .ticker(ticker).direction(dir).entry(entry).stopLoss(sl).takeProfit(tp)
+                    .confidence(conf).session(session).volatility(volLabel).atr(r4(curAtr))
+                    .hasBos(false).hasChoch(true).fvgTop(0).fvgBottom(0)
+                    .factorBreakdown(factors)
+                    .timestamp(Instant.ofEpochMilli(lastBarTs).atZone(ET).toLocalDateTime())
+                    .build());
+        } catch (Exception e) {
+            log.debug("{} CHOCH_PRIMARY error: {}", ticker, e.getMessage());
+            return List.of();
+        }
+    }
+
     private boolean[] detectStructure(List<OHLCV> bars) {
         try {
             List<SwingPoint> sw=sa.detectSwings(bars,5);

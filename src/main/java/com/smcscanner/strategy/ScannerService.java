@@ -67,6 +67,8 @@ public class ScannerService {
     private final OvernightMomentumService overnightService;
     private final PowerEarningsGapDetector        pegDetector;
     private final CapitulationReversalDetector    capReversal;
+    private final LiquiditySweepFlipDetector      sweepFlip;
+    private final PdhPdlDetector                  pdhPdl;
 
     public ScannerService(ScannerConfig config, PolygonClient client, SetupDetector setupDetector,
                           CryptoStrategyService crypto, MultiTimeframeAnalyzer mtf,
@@ -86,7 +88,9 @@ public class ScannerService {
                           MarketRegimeDetector regimeDetector, PivotPointService pivotService,
                           PressureService pressureService, OvernightMomentumService overnightService,
                           PowerEarningsGapDetector pegDetector,
-                          CapitulationReversalDetector capReversal) {
+                          CapitulationReversalDetector capReversal,
+                          LiquiditySweepFlipDetector sweepFlip,
+                          PdhPdlDetector pdhPdl) {
         this.config=config; this.client=client; this.setupDetector=setupDetector; this.crypto=crypto;
         this.mtf=mtf; this.discord=discord; this.dedup=dedup; this.tracker=tracker; this.liveLog=liveLog; this.state=state;
         this.atrCalc=atrCalc; this.vwap=vwap; this.breakout=breakout; this.scalpMomentum=scalpMomentum; this.keyLevel=keyLevel;
@@ -97,6 +101,7 @@ public class ScannerService {
         this.gapDetector=gapDetector; this.regimeDetector=regimeDetector; this.pivotService=pivotService;
         this.pressureService=pressureService; this.overnightService=overnightService;
         this.pegDetector=pegDetector; this.capReversal=capReversal;
+        this.sweepFlip=sweepFlip; this.pdhPdl=pdhPdl;
     }
 
     public boolean isCrypto(String t) { return t.startsWith("X:"); }
@@ -405,6 +410,23 @@ public class ScannerService {
                             profile.hasTimeRouting() ? profile.resolveStrategyForTime(lastBarTs) : profile.getStrategyType());
                     setups = capSetups;
                     phaseMsg = "";
+                }
+            }
+
+            // ── Pattern overlays: sweep-flip, PDH/PDL, CHOCH primary ──────────
+            // Run for all non-crypto NYSE tickers after primary strategy + cap overlay.
+            // These detect setups that don't require a full SMC chain.
+            if (setups.isEmpty() && !isC && !intradayTooEarly && !intradayTooLate) {
+                List<TradeSetup> overlaySetups = new java.util.ArrayList<>();
+                overlaySetups.addAll(sweepFlip.detect(bars, ticker, dailyAtr));
+                overlaySetups.addAll(pdhPdl.detect(bars, ticker, dailyAtr));
+                overlaySetups.addAll(setupDetector.detectChochPrimary(bars, ticker, dailyAtr, false));
+                if (!overlaySetups.isEmpty()) {
+                    overlaySetups.sort(java.util.Comparator.comparingInt(TradeSetup::getConfidence).reversed());
+                    setups = List.of(overlaySetups.get(0));
+                    phaseMsg = "";
+                    log.info("{} OVERLAY_SIGNAL: {} (conf={})", ticker,
+                            setups.get(0).getFactorBreakdown(), setups.get(0).getConfidence());
                 }
             }
 

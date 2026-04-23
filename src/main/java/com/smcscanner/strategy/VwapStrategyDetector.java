@@ -329,6 +329,95 @@ public class VwapStrategyDetector {
             }
         }
 
+        // ── VWAP continuation pullback ────────────────────────────────────────
+        // On a trending day (60%+ of session bars closed on the trend side of VWAP),
+        // the first pullback back TO VWAP is a with-trend entry, not a mean-reversion.
+        // This fires only when the reversion logic did NOT already fire (avoids conflict).
+        if (result.isEmpty() && sessionBars.size() >= 15) {
+            long aboveVwapBars = sessionBars.stream().filter(b -> b.getClose() > vwap).count();
+            double abovePct = (double) aboveVwapBars / sessionBars.size();
+            long belowVwapBars = sessionBars.size() - aboveVwapBars;
+            double belowPct = (double) belowVwapBars / sessionBars.size();
+
+            OHLCV contBar = last;
+            // 2-bar window: if previous bar was the actual pullback touch, current bar confirms
+            if (sessionBars.size() >= 2) {
+                OHLCV prev = sessionBars.get(sessionBars.size() - 2);
+                if (prev.getVolume() > avgVol * 1.1) {
+                    if (abovePct >= 0.60 && prev.getClose() > prev.getOpen()
+                            && last.getClose() >= prev.getClose() * 0.998) contBar = prev;
+                    if (belowPct >= 0.60 && prev.getClose() < prev.getOpen()
+                            && last.getClose() <= prev.getClose() * 1.002) contBar = prev;
+                }
+            }
+
+            boolean volOk = contBar.getVolume() > avgVol * 1.0;
+
+            // Continuation LONG: stock trending above VWAP all day, first dip to VWAP
+            if (abovePct >= 0.60 && !trendStronglyBearish) {
+                boolean atVwap      = Math.abs(lastClose - vwap) <= curAtr * 0.5;
+                boolean bullishBar2 = contBar.getClose() > contBar.getOpen();
+                boolean notBelow    = lastClose >= vwap - curAtr * 0.3;
+                if (atVwap && bullishBar2 && volOk && notBelow && zScore > -1.0) {
+                    double entry = r4(lastClose);
+                    double atrFb = r4(entry - curAtr * 0.5);
+                    double sl    = r4(SwingLevelFinder.swingLowSl(sessionBars, entry, curAtr, 15, atrFb));
+                    double risk  = entry - sl;
+                    if (risk > 0) {
+                        double tp   = r4(entry + risk * 2.5);
+                        int    conf = 73;
+                        if (abovePct >= 0.75)                conf += 5;
+                        if (last.getVolume() > avgVol * 1.5) conf += 5;
+                        if (trendBearish)                    conf -= 10;
+                        if (sl < entry && tp > entry) {
+                            String factors = String.format(
+                                    "vwap-continuation-long | VWAP=$%.2f | above=%.0f%% | Z=%.2f | vol=%.1f×avg",
+                                    vwap, abovePct * 100, zScore, last.getVolume() / Math.max(avgVol, 1));
+                            result.add(TradeSetup.builder()
+                                    .ticker(ticker).direction("long").entry(entry).stopLoss(sl).takeProfit(tp)
+                                    .confidence(conf).session("NYSE").volatility("normal").atr(curAtr)
+                                    .hasBos(false).hasChoch(false).fvgTop(r4(vwap)).fvgBottom(r4(sl))
+                                    .factorBreakdown(factors)
+                                    .timestamp(Instant.ofEpochMilli(last.getTimestamp()).atZone(ET).toLocalDateTime())
+                                    .build());
+                        }
+                    }
+                }
+            }
+
+            // Continuation SHORT: stock trending below VWAP all day, first bounce to VWAP
+            if (belowPct >= 0.60 && !trendStronglyBullish && result.isEmpty()) {
+                boolean atVwap      = Math.abs(lastClose - vwap) <= curAtr * 0.5;
+                boolean bearishBar2 = contBar.getClose() < contBar.getOpen();
+                boolean notAbove    = lastClose <= vwap + curAtr * 0.3;
+                if (atVwap && bearishBar2 && volOk && notAbove && zScore < 1.0) {
+                    double entry = r4(lastClose);
+                    double atrFb = r4(entry + curAtr * 0.5);
+                    double sl    = r4(SwingLevelFinder.swingHighSl(sessionBars, entry, curAtr, 15, atrFb));
+                    double risk  = sl - entry;
+                    if (risk > 0) {
+                        double tp   = r4(entry - risk * 2.5);
+                        int    conf = 73;
+                        if (belowPct >= 0.75)                conf += 5;
+                        if (last.getVolume() > avgVol * 1.5) conf += 5;
+                        if (trendBullish)                    conf -= 10;
+                        if (sl > entry && tp < entry) {
+                            String factors = String.format(
+                                    "vwap-continuation-short | VWAP=$%.2f | below=%.0f%% | Z=%.2f | vol=%.1f×avg",
+                                    vwap, belowPct * 100, zScore, last.getVolume() / Math.max(avgVol, 1));
+                            result.add(TradeSetup.builder()
+                                    .ticker(ticker).direction("short").entry(entry).stopLoss(sl).takeProfit(tp)
+                                    .confidence(conf).session("NYSE").volatility("normal").atr(curAtr)
+                                    .hasBos(false).hasChoch(false).fvgTop(r4(sl)).fvgBottom(r4(vwap))
+                                    .factorBreakdown(factors)
+                                    .timestamp(Instant.ofEpochMilli(last.getTimestamp()).atZone(ET).toLocalDateTime())
+                                    .build());
+                        }
+                    }
+                }
+            }
+        }
+
         // If both LONG and SHORT fired (rare — range-bound day), keep only the
         // higher-confidence setup. Prevents sending conflicting signals.
         if (result.size() > 1) {

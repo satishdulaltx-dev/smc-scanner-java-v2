@@ -15,6 +15,8 @@ import com.smcscanner.news.NewsService;
 import com.smcscanner.options.OptionsFlowAnalyzer;
 import com.smcscanner.strategy.BreakoutStrategyDetector;
 import com.smcscanner.strategy.CapitulationReversalDetector;
+import com.smcscanner.strategy.LiquiditySweepFlipDetector;
+import com.smcscanner.strategy.PdhPdlDetector;
 import com.smcscanner.strategy.GapDetector;
 import com.smcscanner.strategy.GammaPinDetector;
 import com.smcscanner.strategy.IndexDivergenceDetector;
@@ -90,6 +92,8 @@ public class BacktestService {
     private final PowerEarningsGapDetector        pegDetector;
     private final MultiTimeframeAnalyzer          mtf;
     private final CapitulationReversalDetector    capReversalDetector;
+    private final LiquiditySweepFlipDetector      sweepFlipDetector;
+    private final PdhPdlDetector                  pdhPdlDetector;
 
     public BacktestService(PolygonClient client, AtrCalculator atrCalc, SetupDetector setupDetector,
                            VwapStrategyDetector vwapDetector, BreakoutStrategyDetector breakoutDetector,
@@ -106,7 +110,9 @@ public class BacktestService {
                            PressureService pressureService, OvernightMomentumService overnightService,
                            PowerEarningsGapDetector pegDetector,
                            MultiTimeframeAnalyzer mtf,
-                           CapitulationReversalDetector capReversalDetector) {
+                           CapitulationReversalDetector capReversalDetector,
+                           LiquiditySweepFlipDetector sweepFlipDetector,
+                           PdhPdlDetector pdhPdlDetector) {
         this.client = client; this.atrCalc = atrCalc; this.setupDetector = setupDetector;
         this.vwapDetector = vwapDetector; this.breakoutDetector = breakoutDetector; this.scalpDetector = scalpDetector;
         this.gapDetector = gapDetector;
@@ -120,6 +126,7 @@ public class BacktestService {
         this.pressureService = pressureService; this.overnightService = overnightService;
         this.pegDetector = pegDetector; this.mtf = mtf;
         this.capReversalDetector = capReversalDetector;
+        this.sweepFlipDetector = sweepFlipDetector; this.pdhPdlDetector = pdhPdlDetector;
     }
 
     public BacktestResult run(String ticker, int lookbackDays) {
@@ -522,6 +529,19 @@ public class BacktestService {
                 if (bSetups.isEmpty() && !ticker.startsWith("X:")
                         && btRegime != MarketRegimeDetector.Regime.VOLATILE) {
                     bSetups = capReversalDetector.detect(window, ticker, dailyAtr);
+                }
+
+                // ── Pattern overlays: sweep-flip, PDH/PDL, CHOCH primary ────────
+                // Mirrors live ScannerService overlay block — fires for all non-crypto tickers.
+                if (bSetups.isEmpty() && !ticker.startsWith("X:")) {
+                    java.util.List<TradeSetup> ov = new java.util.ArrayList<>();
+                    ov.addAll(sweepFlipDetector.detect(window, ticker, dailyAtr, true));
+                    ov.addAll(pdhPdlDetector.detect(window, ticker, dailyAtr, true));
+                    ov.addAll(setupDetector.detectChochPrimary(window, ticker, dailyAtr, true));
+                    if (!ov.isEmpty()) {
+                        ov.sort(java.util.Comparator.comparingInt(TradeSetup::getConfidence).reversed());
+                        bSetups = java.util.List.of(ov.get(0));
+                    }
                 }
 
                 if (btRegime == MarketRegimeDetector.Regime.LOW_LIQUIDITY) {
