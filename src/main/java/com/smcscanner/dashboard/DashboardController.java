@@ -118,7 +118,31 @@ public class DashboardController {
                 } else if (rawTs != null) {
                     try { entryTs = Long.parseLong(String.valueOf(rawTs)); } catch (Exception ignored) {}
                 }
-                if (alpaca.recoverTrackedPosition(occSymbol, underlying, dir, entry, sl, tp, entryTs)) recovered++;
+                if (alpaca.recoverTrackedPosition(occSymbol, underlying, dir, entry, sl, tp, entryTs)) {
+                    recovered++;
+                    // Immediately check if current price already breached SL or hit TP.
+                    // If the app was down when the level crossed, we missed the close — fix it now.
+                    try {
+                        List<OHLCV> bars = polygon.getBars(underlying, "5m", 5);
+                        if (bars != null && !bars.isEmpty()) {
+                            double currentPrice = bars.get(bars.size() - 1).getClose();
+                            boolean isLong    = "long".equalsIgnoreCase(dir);
+                            boolean slBreached = isLong ? currentPrice <= sl : currentPrice >= sl;
+                            boolean tpHit      = isLong ? currentPrice >= tp : currentPrice <= tp;
+                            if (slBreached || tpHit) {
+                                String reason = slBreached ? "SL already breached on recovery" : "TP already hit on recovery";
+                                log.warn("STARTUP_RECOVER {}: {} — current={} sl={} tp={} → closing now",
+                                        underlying, reason,
+                                        String.format("%.2f", currentPrice),
+                                        String.format("%.2f", sl),
+                                        String.format("%.2f", tp));
+                                alpaca.closePositionByUnderlying(underlying, reason);
+                            }
+                        }
+                    } catch (Exception ex) {
+                        log.warn("STARTUP_RECOVER {}: price check failed — {}", underlying, ex.getMessage());
+                    }
+                }
             }
             if (recovered > 0)
                 log.info("STARTUP_RECOVER: restored {} option position(s) into live tracker", recovered);

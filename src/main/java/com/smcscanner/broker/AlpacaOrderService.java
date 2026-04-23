@@ -1010,6 +1010,18 @@ public class AlpacaOrderService {
         return true;
     }
 
+    /** Close a tracked options position by its underlying symbol (e.g. "CRWD"). */
+    public void closePositionByUnderlying(String underlying, String reason) {
+        TrackedPosition tp = trackedPositions.get(underlying);
+        if (tp == null) {
+            log.warn("closePositionByUnderlying {}: not in tracker — {}", underlying, reason);
+            return;
+        }
+        log.info("closePositionByUnderlying {}: {} contract={}", underlying, reason, tp.optionsContract());
+        closeOptionsPosition(underlying, tp.optionsContract());
+        trackedPositions.remove(underlying);
+    }
+
     private long resolveSignalEpochMs(TradeSetup setup) {
         if (setup == null || setup.getTimestamp() == null) return System.currentTimeMillis();
         return setup.getTimestamp().atZone(ET).toInstant().toEpochMilli();
