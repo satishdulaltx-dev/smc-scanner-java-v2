@@ -148,18 +148,18 @@
     {
       "ticker": "COIN",
       "character": "MOMENTUM",
-      "strategyType": "smc",
+      "strategyType": "breakout",
       "minConfidence": 70,
       "maxConfidence": 84,
       "slAtrMult": 0.5,
-      "tpRrRatio": 1.5,
+      "tpRrRatio": 2.5,
       "skipHours": [
         13,
         14
       ],
       "skip": false,
       "skipReason": null,
-      "note": "Apr 2026: reverted intraday keylevel→smc (keylevel generated 0 trades in 60d — COIN breaks levels too fast). scalp minConf reverted 82→72 (R:R concern already handled by tpRrRatio=1.5). skipHours=[13,14] kept — data-driven, valid.",
+      "note": "Apr 2026: switched intraday smc→breakout. COIN consistently moves $2-5 post-ORB (Apr 22: +$6 breakout, Apr 23: -$5 breakdown). SMC was firing random setups mid-session not aligned with ORB structure. tpRrRatio raised 1.5→2.5 to capture the full ORB extension move. skipHours=[13,14] kept — dead zone still valid.",
       "scalp": {
         "skip": false,
         "strategyType": "scalp",
@@ -167,10 +167,10 @@
       },
       "intraday": {
         "skip": false,
-        "strategyType": "smc",
+        "strategyType": "breakout",
         "minConfidence": 70,
         "maxConfidence": 84,
-        "tpRrRatio": 1.5
+        "tpRrRatio": 2.5
       },
       "swing": {
         "skip": false
