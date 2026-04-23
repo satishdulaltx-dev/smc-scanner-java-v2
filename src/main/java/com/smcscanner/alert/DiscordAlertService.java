@@ -205,11 +205,12 @@ public class DiscordAlertService {
         }
 
         Map<String,Object> e=new HashMap<>();
+        String devTag = config.isDev() ? "[DEV] " : "";
         String title = s.hasOptionsData()
-                ? arrow + " " + s.getTicker() + " — BUY " + s.getOptionsType().toUpperCase()
+                ? devTag + arrow + " " + s.getTicker() + " — BUY " + s.getOptionsType().toUpperCase()
                   + " $" + String.format("%.0f", s.getOptionsStrike())
                   + " " + s.getOptionsExpiry()
-                : arrow + " " + s.getTicker() + " — " + s.getDirection().toUpperCase() + " Setup";
+                : devTag + arrow + " " + s.getTicker() + " — " + s.getDirection().toUpperCase() + " Setup";
         e.put("title", title);
         e.put("color",isLong?0x2ECC71:0xE74C3C); e.put("fields",fields); e.put("footer",Map.of("text","SD Scanner | "+ts));
         return e;
@@ -254,9 +255,10 @@ public class DiscordAlertService {
         fields.add(f("Confidence", grade + " " + s.getConfidence() + "/100", true));
 
         Map<String,Object> e = new HashMap<>();
+        String devTagS = config.isDev() ? "[DEV] " : "";
         String title = isRange
-                ? "🔲 " + s.getTicker() + " — RANGE (Iron Condor / Straddle)"
-                : arrow + " " + s.getTicker() + " — SWING " + s.getDirection().toUpperCase();
+                ? devTagS + "🔲 " + s.getTicker() + " — RANGE (Iron Condor / Straddle)"
+                : devTagS + arrow + " " + s.getTicker() + " — SWING " + s.getDirection().toUpperCase();
         e.put("title",  title);
         e.put("description", desc.toString());
         e.put("color",  isRange ? 0x3498DB : (isLong ? 0xFF8C00 : 0x6A5ACD));
@@ -308,7 +310,8 @@ public class DiscordAlertService {
         fields.add(f("Gap Score",  grade + " " + gapScore + "/100", true));
 
         Map<String,Object> e = new HashMap<>();
-        e.put("title", arrow + " " + s.getTicker() + " — OVERNIGHT HOLD " + s.getDirection().toUpperCase());
+        String devTagO = config.isDev() ? "[DEV] " : "";
+        e.put("title", devTagO + arrow + " " + s.getTicker() + " — OVERNIGHT HOLD " + s.getDirection().toUpperCase());
         e.put("description", desc);
         e.put("color",  isLong ? 0xF39C12 : 0x8E44AD);  // amber for long, purple for short
         e.put("fields", fields);

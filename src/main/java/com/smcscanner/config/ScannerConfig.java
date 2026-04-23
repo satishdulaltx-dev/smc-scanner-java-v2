@@ -18,6 +18,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ScannerConfig {
     private static final Logger log = LoggerFactory.getLogger(ScannerConfig.class);
 
+    private String environment            = "prod"; // "dev" or "prod" — set via ENVIRONMENT env var
     private String polygonApiKey          = "";
     private String discordWebhookUrl      = "";
     private String discordEodWebhookUrl   = "";  // dedicated EOD report channel
@@ -65,6 +66,8 @@ public class ScannerConfig {
     private double  alpacaMinRR = 1.5;
 
     // getters
+    public String getEnvironment()           { return environment; }
+    public boolean isDev()                   { return "dev".equalsIgnoreCase(environment); }
     public String getPolygonApiKey()         { return polygonApiKey; }
     public String getDiscordWebhookUrl()     { return discordWebhookUrl; }
     public String getDiscordEodWebhookUrl()  { return discordEodWebhookUrl; }
@@ -110,6 +113,7 @@ public class ScannerConfig {
     public double  getAlpacaMinRR()          { return alpacaMinRR; }
 
     // setters (required by @ConfigurationProperties)
+    public void setEnvironment(String v)             { this.environment = v; }
     public void setPolygonApiKey(String v)          { this.polygonApiKey = v; }
     public void setDiscordWebhookUrl(String v)      { this.discordWebhookUrl = v; }
     public void setDiscordEodWebhookUrl(String v)   { this.discordEodWebhookUrl = v; }

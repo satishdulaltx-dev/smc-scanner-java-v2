@@ -126,9 +126,9 @@ public class DashboardController {
                         List<OHLCV> bars = polygon.getBars(underlying, "5m", 5);
                         if (bars != null && !bars.isEmpty()) {
                             double currentPrice = bars.get(bars.size() - 1).getClose();
-                            boolean isLong    = "long".equalsIgnoreCase(dir);
-                            boolean slBreached = isLong ? currentPrice <= sl : currentPrice >= sl;
-                            boolean tpHit      = isLong ? currentPrice >= tp : currentPrice <= tp;
+                            boolean isLong = "long".equalsIgnoreCase(dir);
+                            boolean slBreached = isLong  ? currentPrice <= sl : currentPrice >= sl;
+                            boolean tpHit      = isLong  ? currentPrice >= tp : currentPrice <= tp;
                             if (slBreached || tpHit) {
                                 String reason = slBreached ? "SL already breached on recovery" : "TP already hit on recovery";
                                 log.warn("STARTUP_RECOVER {}: {} — current={} sl={} tp={} → closing now",

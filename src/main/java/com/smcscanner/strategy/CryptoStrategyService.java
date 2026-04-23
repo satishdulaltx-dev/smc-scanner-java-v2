@@ -44,7 +44,7 @@ public class CryptoStrategyService {
         else                    { sl=r4(entry+curAtr); tp=r4(entry-curAtr*3); }
         double atrPct=lastClose>0?curAtr/lastClose*100:0;
         setups.add(TradeSetup.builder().ticker(ticker).direction(dir).entry(entry).stopLoss(sl).takeProfit(tp)
-            .confidence(scoring.scoreSetup(false,true,false,false,false,true))
+            .confidence(scoring.scoreSetup(false, 2.0, 5, 0.7, false, true))
             .session(session.cryptoSessionName()).volatility(atrPct<0.5?"low":(atrPct<1.5?"medium":"high"))
             .atr(r4(curAtr)).hasBos(false).hasChoch(false).fvgTop(0).fvgBottom(0).timestamp(LocalDateTime.now()).build());
         return setups;

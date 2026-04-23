@@ -230,6 +230,73 @@ public class BreakoutStrategyDetector {
             }
         }
 
+        // ── ORB retest (long): price already broke above orbHigh, now pulling back to test it ──
+        // This is a second-chance entry — the first break is fresh momentum; the retest is cleaner.
+        // Only fires when: (a) a prior breakout above orbHigh exists, (b) last bar dipped to orbHigh
+        // zone, (c) last bar closed back above orbHigh.
+        if (result.isEmpty() && prevBrokeHigh
+                && last.getLow() <= orbHigh * (1 + 0.001)
+                && last.getClose() > orbHigh
+                && last.getClose() >= last.getOpen()) {
+            double entry = r4(last.getClose());
+            double sl    = r4(orbLow + orbWidth * 0.10);
+            if (sl >= entry) sl = r4(entry - atr * 0.3);
+            double tp = r4(entry + (entry - sl) * 2.5);
+            if (sl < entry && tp > entry) {
+                double risk   = entry - sl;
+                double reward = tp - entry;
+                double rr     = risk > 0 ? reward / risk : 0;
+                if (rr >= 1.2) {
+                    int confidence = 72; // retest = slightly higher base vs initial breakout
+                    if (last.getVolume() > avgVol * 2.0) confidence += 5;
+                    if (orbWidth < atr * 0.8)            confidence += 5;
+                    if (sessionRvol >= 1.5)              confidence += 5;
+                    String factors = String.format(
+                            "orb-retest-long | ORB=[%.2f/%.2f] | width=$%.2f | vol=%.1f×avg | RVOL=%.1f | R:R=%.1f",
+                            orbLow, orbHigh, orbWidth, last.getVolume() / Math.max(avgVol, 1), sessionRvol, rr);
+                    result.add(TradeSetup.builder()
+                            .ticker(ticker).direction("long").entry(entry).stopLoss(sl).takeProfit(tp)
+                            .confidence(confidence).session("NYSE").volatility("high").atr(atr)
+                            .hasBos(false).hasChoch(false).fvgTop(r4(orbHigh)).fvgBottom(r4(orbLow))
+                            .factorBreakdown(factors)
+                            .timestamp(Instant.ofEpochMilli(last.getTimestamp()).atZone(ET).toLocalDateTime())
+                            .build());
+                }
+            }
+        }
+
+        // ── ORB retest (short): price already broke below orbLow, now bouncing up to test it ──
+        if (result.isEmpty() && prevBrokeLow
+                && last.getHigh() >= orbLow * (1 - 0.001)
+                && last.getClose() < orbLow
+                && last.getClose() <= last.getOpen()) {
+            double entry = r4(last.getClose());
+            double sl    = r4(orbHigh - orbWidth * 0.10);
+            if (sl <= entry) sl = r4(entry + atr * 0.3);
+            double tp = r4(entry - (sl - entry) * 2.5);
+            if (sl > entry && tp < entry) {
+                double risk   = sl - entry;
+                double reward = entry - tp;
+                double rr     = risk > 0 ? reward / risk : 0;
+                if (rr >= 1.2) {
+                    int confidence = 72;
+                    if (last.getVolume() > avgVol * 2.0) confidence += 5;
+                    if (orbWidth < atr * 0.8)            confidence += 5;
+                    if (sessionRvol >= 1.5)              confidence += 5;
+                    String factors = String.format(
+                            "orb-retest-short | ORB=[%.2f/%.2f] | width=$%.2f | vol=%.1f×avg | RVOL=%.1f | R:R=%.1f",
+                            orbLow, orbHigh, orbWidth, last.getVolume() / Math.max(avgVol, 1), sessionRvol, rr);
+                    result.add(TradeSetup.builder()
+                            .ticker(ticker).direction("short").entry(entry).stopLoss(sl).takeProfit(tp)
+                            .confidence(confidence).session("NYSE").volatility("high").atr(atr)
+                            .hasBos(false).hasChoch(false).fvgTop(r4(orbHigh)).fvgBottom(r4(orbLow))
+                            .factorBreakdown(factors)
+                            .timestamp(Instant.ofEpochMilli(last.getTimestamp()).atZone(ET).toLocalDateTime())
+                            .build());
+                }
+            }
+        }
+
         return result;
     }
 

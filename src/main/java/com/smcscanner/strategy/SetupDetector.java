@@ -3,6 +3,7 @@ package com.smcscanner.strategy;
 import com.smcscanner.config.ScannerConfig;
 import com.smcscanner.indicator.AtrCalculator;
 import com.smcscanner.model.*;
+import com.smcscanner.smc.LiquidityAnalyzer;
 import com.smcscanner.smc.StructureAnalyzer;
 import com.smcscanner.model.TickerProfile;
 import org.slf4j.Logger;
@@ -11,7 +12,6 @@ import org.springframework.stereotype.Service;
 
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.List;
@@ -27,16 +27,19 @@ public class SetupDetector {
     // Fixes COIN ($209, ATR $1.75 → 2.5×ATR=$4.38 < $6.45 gap → filtered unfairly)
     // and SOFI ($17, ATR $0.05 → 2.5×ATR=$0.125 < $0.19 gap → filtered unfairly).
     private static final double MAX_ENTRY_DISTANCE_PRICE_PCT = 0.035;
-
+    // FVG older than this many bars (100 min on 5m) is considered price-discovered intraday
     private final ScannerConfig config;
     private final AtrCalculator atrCalc;
     private final StructureAnalyzer sa;
     private final ScoringService scoring;
     private final SessionFilter sessionFilter;
+    private final LiquidityAnalyzer liquidityAnalyzer;
 
     public SetupDetector(ScannerConfig config, AtrCalculator atrCalc, StructureAnalyzer sa,
-                         ScoringService scoring, SessionFilter sessionFilter) {
-        this.config=config; this.atrCalc=atrCalc; this.sa=sa; this.scoring=scoring; this.sessionFilter=sessionFilter;
+                         ScoringService scoring, SessionFilter sessionFilter,
+                         LiquidityAnalyzer liquidityAnalyzer) {
+        this.config=config; this.atrCalc=atrCalc; this.sa=sa; this.scoring=scoring;
+        this.sessionFilter=sessionFilter; this.liquidityAnalyzer=liquidityAnalyzer;
     }
 
     public record DetectResult(List<TradeSetup> setups, SMCState state) {}
@@ -146,6 +149,10 @@ public class SetupDetector {
             return new DetectResult(List.of(),state);
         }
 
+        // FVG age: no hard cutoff — ScoringService penalizes freshness via fvgAgeBars.
+        // A morning FVG retested in the afternoon is 24+ bars old but still valid S/R.
+        int fvgAgeBars = (bars.size() - 1) - state.getFvgBar();
+
         boolean[] str=detectStructure(bars);
         boolean hasStructure=str[0]||str[1];
         if (!hasStructure) log.debug("{} note: NO_STRUCTURE — continuing at lower confidence", ticker);
@@ -163,7 +170,39 @@ public class SetupDetector {
             return new DetectResult(List.of(), state);
         }
 
-        int conf=scoring.scoreSetup(true,true,true,true,hasStructure,peakVol>avgVol*MIN_VOL_MULT);
+        // ── Equal-level sweep detection (via LiquidityAnalyzer) ─────────────────
+        // Equal highs/lows = where stop orders actually cluster. Sweeping those levels
+        // is far more meaningful than sweeping a single swing.
+        boolean isEqualSweep = false;
+        int sweepBarIdx = state.getSweepBar();
+        if (sweepBarIdx >= 0) {
+            try {
+                List<SwingPoint> swings = sa.detectSwings(bars, 5);
+                List<LiquiditySweep> liqSweeps = liquidityAnalyzer.detectLiquiditySweeps(bars, swings);
+                isEqualSweep = liqSweeps.stream()
+                        .filter(ls -> ls.getIndex() == sweepBarIdx)
+                        .anyMatch(ls -> "equal".equals(ls.getLevelType()));
+            } catch (Exception ignored) {}
+        }
+
+        // ── Displacement ATR ratio ───────────────────────────────────────────────
+        double dispAtrRatio = 0;
+        if (state.getDisplacementBar() >= 0 && state.getDisplacementBar() < bars.size()) {
+            OHLCV db2 = bars.get(state.getDisplacementBar());
+            dispAtrRatio = curAtr > 0 ? (db2.getHigh() - db2.getLow()) / curAtr : 0;
+        }
+
+        // ── Retest wick quality ──────────────────────────────────────────────────
+        double retestWickQuality = 0.5;
+        if (state.getRetestBar() >= 0 && state.getRetestBar() < bars.size()) {
+            OHLCV rb2  = bars.get(state.getRetestBar());
+            double rng = Math.max(0.0001, rb2.getHigh() - rb2.getLow());
+            double pos = (rb2.getClose() - rb2.getLow()) / rng;
+            retestWickQuality = "long".equals(state.getDirection()) ? pos : (1.0 - pos);
+        }
+
+        int conf=scoring.scoreSetup(isEqualSweep, dispAtrRatio, fvgAgeBars, retestWickQuality,
+                                    hasStructure, peakVol > avgVol * MIN_VOL_MULT);
         if (conf<config.getMinConfidence()) {
             log.debug("{} filtered: LOW_CONF conf={} min={}", ticker, conf, config.getMinConfidence());
             return new DetectResult(List.of(),state);
@@ -195,18 +234,8 @@ public class SetupDetector {
         int n = bars.size();
         String sweepDir  = "long".equals(state.getDirection()) ? "BULL" : "BEAR";
         int    sweepBarsBack = state.getSweepBar() >= 0 ? (n - 1 - state.getSweepBar()) : -1;
-        double dispRange = 0, dispAtrRatio = 0;
-        if (state.getDisplacementBar() >= 0 && state.getDisplacementBar() < n) {
-            OHLCV db = bars.get(state.getDisplacementBar());
-            dispRange    = db.getHigh() - db.getLow();
-            dispAtrRatio = curAtr > 0 ? dispRange / curAtr : 0;
-        }
-        double retestClosePos = 0;
-        if (state.getRetestBar() >= 0 && state.getRetestBar() < n) {
-            OHLCV rb    = bars.get(state.getRetestBar());
-            double range = Math.max(0.0001, rb.getHigh() - rb.getLow());
-            retestClosePos = (rb.getClose() - rb.getLow()) / range * 100.0;
-        }
+        // dispAtrRatio already computed above for scoring — reuse here
+        double retestClosePos = retestWickQuality * 100.0; // already computed for scoring
         double volRatio = avgVol > 0 ? peakVol / avgVol : 0;
         String smcBreakdown = String.format(
                 "smc-%s | sweep=%s(%d bars back) | disp=%.1f×ATR | FVG=[%.2f/%.2f] | retest=%.0f%% | BOS=%s CHOCH=%s | vol=%.1f×avg",
@@ -332,12 +361,132 @@ public class SetupDetector {
         double closePos = (retest.getClose() - retest.getLow()) / range;
         double mid = (state.getFvgTop() + state.getFvgBottom()) / 2.0;
         // Require close in top/bottom 35% of bar — excludes doji-only wicks but allows normal rejection bodies.
-        // 50% was too tight: cut valid setups where retest bar closed at 40-49% (small-body rejections).
         if ("long".equals(state.getDirection())) {
-            return retest.getClose() >= mid && closePos >= 0.35;
+            if (!(retest.getClose() >= mid && closePos >= 0.35)) return false;
+        } else {
+            if (!(retest.getClose() <= mid && closePos <= 0.65)) return false;
         }
-        return retest.getClose() <= mid && closePos <= 0.65;
+        // Consolidation guard: between displacement and retest, at least 2 bars must not extend
+        // beyond the displacement candle's extreme. Sideways consolidation counts — we don't
+        // require a visible lower-high staircase, just that price isn't still running.
+        int dispBar   = state.getDisplacementBar();
+        int retestBar = state.getRetestBar();
+        String dir    = state.getDirection();
+        if (dispBar >= 0 && dispBar < bars.size() && retestBar - dispBar >= 3) {
+            double dispExtreme = "long".equals(dir) ? bars.get(dispBar).getHigh() : bars.get(dispBar).getLow();
+            int nonExtendingBars = 0;
+            for (int i = dispBar + 1; i < retestBar && i < bars.size(); i++) {
+                OHLCV curr = bars.get(i);
+                if ("long".equals(dir)  && curr.getHigh() <= dispExtreme) nonExtendingBars++;
+                if ("short".equals(dir) && curr.getLow()  >= dispExtreme) nonExtendingBars++;
+            }
+            if (nonExtendingBars < 2) return false;
+        }
+        return true;
     }
+    /**
+     * CHOCH primary: fires when CHOCH is detected in the last MAX_AGE bars but the full SMC
+     * chain (sweep→disp→FVG→retest) is not complete. Entry = CHOCH bar close, SL = structural
+     * swing on the prior side, TP = 2:1 R. Base confidence 70 — lower than full SMC chain.
+     */
+    public List<TradeSetup> detectChochPrimary(List<OHLCV> bars, String ticker, double dailyAtr,
+                                                boolean backtestMode) {
+        if (bars == null || bars.size() < 20) return List.of();
+        int n = bars.size();
+        long lastBarTs = bars.get(n - 1).getTimestamp();
+        if (!backtestMode) {
+            java.time.LocalDate today = Instant.ofEpochMilli(lastBarTs).atZone(ET).toLocalDate();
+            if (!today.equals(java.time.LocalDate.now(ET))) return List.of();
+            java.time.LocalTime t = Instant.ofEpochMilli(lastBarTs).atZone(ET).toLocalTime();
+            if (t.isBefore(java.time.LocalTime.of(9, 45)) || !t.isBefore(java.time.LocalTime.of(15, 30)))
+                return List.of();
+        }
+
+        double[] atrArr = atrCalc.computeAtr(bars, 14);
+        double curAtr = lastNz(atrArr);
+        double lastClose = bars.get(n - 1).getClose();
+        curAtr = Math.max(curAtr, lastClose * 0.002);
+
+        try {
+            List<SwingPoint> swings = sa.detectSwings(bars, 5);
+            List<StructureBreak> breaks = sa.detectStructureBreaks(bars, swings);
+            if (breaks.isEmpty()) return List.of();
+
+            // Find the most recent CHOCH within last 5 bars
+            StructureBreak choch = null;
+            for (int i = breaks.size() - 1; i >= 0; i--) {
+                StructureBreak b = breaks.get(i);
+                if (b.getBreakType() == StructureType.CHOCH && (n - 1 - b.getIndex()) <= 5) {
+                    choch = b;
+                    break;
+                }
+            }
+            if (choch == null) return List.of();
+
+            int    chochIdx  = choch.getIndex();
+            OHLCV  chochBar  = bars.get(chochIdx);
+            double entry     = r4(chochBar.getClose());
+
+            // Determine direction: CHOCH on a swing HIGH break = bullish flip = long
+            //                      CHOCH on a swing LOW break  = bearish flip = short
+            // The swing at priorSwingIdx tells us: if it's a HIGH that was broken → long
+            int    priorIdx  = choch.getPriorSwingIdx();
+            if (priorIdx < 0 || priorIdx >= bars.size()) return List.of();
+            boolean priorIsHigh = swings.stream()
+                    .filter(s -> s.getIndex() == priorIdx)
+                    .anyMatch(s -> s.getSwingType() == SwingType.HIGH);
+            String dir = priorIsHigh ? "long" : "short";
+
+            // SL = most recent swing on the opposite side within 30 bars before the CHOCH
+            double sl;
+            if ("long".equals(dir)) {
+                // SL below: find nearest swing LOW before the CHOCH bar
+                double swingLow = swings.stream()
+                        .filter(s -> s.getSwingType() == SwingType.LOW && s.getIndex() < chochIdx
+                                  && s.getIndex() >= Math.max(0, chochIdx - 30))
+                        .mapToDouble(SwingPoint::getPrice)
+                        .min().orElse(entry - curAtr);
+                sl = r4(swingLow - curAtr * 0.15);
+            } else {
+                // SL above: find nearest swing HIGH before the CHOCH bar
+                double swingHigh = swings.stream()
+                        .filter(s -> s.getSwingType() == SwingType.HIGH && s.getIndex() < chochIdx
+                                  && s.getIndex() >= Math.max(0, chochIdx - 30))
+                        .mapToDouble(SwingPoint::getPrice)
+                        .max().orElse(entry + curAtr);
+                sl = r4(swingHigh + curAtr * 0.15);
+            }
+
+            double risk = "long".equals(dir) ? entry - sl : sl - entry;
+            if (risk <= 0 || risk > curAtr * 3.0) return List.of();
+
+            double tp = "long".equals(dir) ? r4(entry + risk * 2.0) : r4(entry - risk * 2.0);
+            double avgVol = bars.stream().skip(Math.max(0, n - 30))
+                               .mapToDouble(OHLCV::getVolume).average().orElse(1);
+            int conf = 70;
+            if (chochBar.getVolume() > avgVol * 1.5) conf += 6;
+            if (chochBar.getVolume() > avgVol * 2.5) conf += 4;
+
+            String session  = sessionFilter.sessionName(Instant.ofEpochMilli(lastBarTs).atZone(ET).toLocalTime());
+            double atrPct   = lastClose > 0 ? curAtr / lastClose * 100 : 0;
+            String volLabel = atrPct < 0.5 ? "low" : (atrPct < 1.5 ? "medium" : "high");
+            String factors  = String.format(
+                    "choch-primary-%s | breakLevel=%.2f | age=%d bars | vol=%.1f×avg",
+                    dir, choch.getPrice(), n - 1 - chochIdx, chochBar.getVolume() / Math.max(avgVol, 1));
+
+            return List.of(TradeSetup.builder()
+                    .ticker(ticker).direction(dir).entry(entry).stopLoss(sl).takeProfit(tp)
+                    .confidence(conf).session(session).volatility(volLabel).atr(r4(curAtr))
+                    .hasBos(false).hasChoch(true).fvgTop(0).fvgBottom(0)
+                    .factorBreakdown(factors)
+                    .timestamp(Instant.ofEpochMilli(lastBarTs).atZone(ET).toLocalDateTime())
+                    .build());
+        } catch (Exception e) {
+            log.debug("{} CHOCH_PRIMARY error: {}", ticker, e.getMessage());
+            return List.of();
+        }
+    }
+
     private boolean[] detectStructure(List<OHLCV> bars) {
         try {
             List<SwingPoint> sw=sa.detectSwings(bars,5);
