@@ -17,6 +17,7 @@ import com.smcscanner.strategy.BreakoutStrategyDetector;
 import com.smcscanner.strategy.CapitulationReversalDetector;
 import com.smcscanner.strategy.LiquiditySweepFlipDetector;
 import com.smcscanner.strategy.PdhPdlDetector;
+import com.smcscanner.strategy.OpeningRangeVwapDetector;
 import com.smcscanner.strategy.GapDetector;
 import com.smcscanner.strategy.GammaPinDetector;
 import com.smcscanner.strategy.IndexDivergenceDetector;
@@ -94,6 +95,7 @@ public class BacktestService {
     private final CapitulationReversalDetector    capReversalDetector;
     private final LiquiditySweepFlipDetector      sweepFlipDetector;
     private final PdhPdlDetector                  pdhPdlDetector;
+    private final OpeningRangeVwapDetector        orVwapDetector;
 
     public BacktestService(PolygonClient client, AtrCalculator atrCalc, SetupDetector setupDetector,
                            VwapStrategyDetector vwapDetector, BreakoutStrategyDetector breakoutDetector,
@@ -112,7 +114,8 @@ public class BacktestService {
                            MultiTimeframeAnalyzer mtf,
                            CapitulationReversalDetector capReversalDetector,
                            LiquiditySweepFlipDetector sweepFlipDetector,
-                           PdhPdlDetector pdhPdlDetector) {
+                           PdhPdlDetector pdhPdlDetector,
+                           OpeningRangeVwapDetector orVwapDetector) {
         this.client = client; this.atrCalc = atrCalc; this.setupDetector = setupDetector;
         this.vwapDetector = vwapDetector; this.breakoutDetector = breakoutDetector; this.scalpDetector = scalpDetector;
         this.gapDetector = gapDetector;
@@ -127,6 +130,7 @@ public class BacktestService {
         this.pegDetector = pegDetector; this.mtf = mtf;
         this.capReversalDetector = capReversalDetector;
         this.sweepFlipDetector = sweepFlipDetector; this.pdhPdlDetector = pdhPdlDetector;
+        this.orVwapDetector = orVwapDetector;
     }
 
     public BacktestResult run(String ticker, int lookbackDays) {
@@ -519,6 +523,8 @@ public class BacktestService {
                     bSetups = gammaPinDetector.detect(window, ticker, dailyAtr);
                 } else if ("cap_reversal".equals(effectiveStrat)) {
                     bSetups = capReversalDetector.detect(window, ticker, dailyAtr);
+                } else if ("or-vwap".equals(effectiveStrat)) {
+                    bSetups = orVwapDetector.detect(window, ticker, dailyAtr, true);
                 } else {
                     SetupDetector.DetectResult dr = setupDetector.detectSetups(
                             window, htfBias, ticker, false, dailyAtr, true); // backtestMode=true, real dailyAtr for TP/SL

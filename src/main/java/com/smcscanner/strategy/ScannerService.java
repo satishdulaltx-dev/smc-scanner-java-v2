@@ -69,6 +69,7 @@ public class ScannerService {
     private final CapitulationReversalDetector    capReversal;
     private final LiquiditySweepFlipDetector      sweepFlip;
     private final PdhPdlDetector                  pdhPdl;
+    private final OpeningRangeVwapDetector        orVwap;
 
     public ScannerService(ScannerConfig config, PolygonClient client, SetupDetector setupDetector,
                           CryptoStrategyService crypto, MultiTimeframeAnalyzer mtf,
@@ -90,7 +91,8 @@ public class ScannerService {
                           PowerEarningsGapDetector pegDetector,
                           CapitulationReversalDetector capReversal,
                           LiquiditySweepFlipDetector sweepFlip,
-                          PdhPdlDetector pdhPdl) {
+                          PdhPdlDetector pdhPdl,
+                          OpeningRangeVwapDetector orVwap) {
         this.config=config; this.client=client; this.setupDetector=setupDetector; this.crypto=crypto;
         this.mtf=mtf; this.discord=discord; this.dedup=dedup; this.tracker=tracker; this.liveLog=liveLog; this.state=state;
         this.atrCalc=atrCalc; this.vwap=vwap; this.breakout=breakout; this.scalpMomentum=scalpMomentum; this.keyLevel=keyLevel;
@@ -101,7 +103,7 @@ public class ScannerService {
         this.gapDetector=gapDetector; this.regimeDetector=regimeDetector; this.pivotService=pivotService;
         this.pressureService=pressureService; this.overnightService=overnightService;
         this.pegDetector=pegDetector; this.capReversal=capReversal;
-        this.sweepFlip=sweepFlip; this.pdhPdl=pdhPdl;
+        this.sweepFlip=sweepFlip; this.pdhPdl=pdhPdl; this.orVwap=orVwap;
     }
 
     public boolean isCrypto(String t) { return t.startsWith("X:"); }
@@ -272,9 +274,15 @@ public class ScannerService {
             List<TradeSetup> setups; String phaseMsg;
             if (isC) { setups=crypto.detectCryptoSetup(bars,ticker); phaseMsg=setups.isEmpty()?"Waiting for breakout + volume spike...":""; }
             else if (intradayTooEarly) {
-                // First 15 min: opening bars are volatile, direction unreliable — wait for 09:45
-                setups = List.of();
-                phaseMsg = "⏳ Open volatility — no entries before 09:45 ET";
+                // OR-VWAP is exempt from the 9:45 gate — it fires specifically in the opening flush window
+                List<TradeSetup> orEarlySetups = orVwap.detect(bars, ticker, dailyAtr);
+                if (!orEarlySetups.isEmpty()) {
+                    setups   = List.of(orEarlySetups.get(0));
+                    phaseMsg = "";
+                } else {
+                    setups   = List.of();
+                    phaseMsg = "⏳ Opening range — watching for VWAP flush recovery...";
+                }
                 setTs(ticker, "idle", null, 0, phaseMsg);
             } else if (intradayTooLate) {
                 // Last 30 min: approaching close, spreads widen, new intraday entries unreliable
@@ -378,6 +386,9 @@ public class ScannerService {
                     } else if ("cap_reversal".equals(strat)) {
                         stratSetups = capReversal.detect(bars, ticker, dailyAtr);
                         if (stratSetups.isEmpty() && phaseMsg.isEmpty()) phaseMsg = "Watching for capitulation waterfall + reversal...";
+                    } else if ("or-vwap".equals(strat)) {
+                        stratSetups = orVwap.detect(bars, ticker, dailyAtr);
+                        if (stratSetups.isEmpty() && phaseMsg.isEmpty()) phaseMsg = "Waiting for opening VWAP flush recovery...";
                     } else {
                         // smc (default)
                         SetupDetector.DetectResult r = setupDetector.detectSetups(bars, htfBias, ticker, false, dailyAtr);
