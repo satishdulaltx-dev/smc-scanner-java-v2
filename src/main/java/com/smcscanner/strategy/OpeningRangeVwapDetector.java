@@ -15,32 +15,39 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Opening Range VWAP Detector — 9:30–10:30 ET only.
+ * Session VWAP Bounce Detector — fires throughout the day aligned with daily bias.
  *
- * Catches the flush-and-recover pattern that the regular ScalpMomentumDetector
- * misses because:
- *   1. VWAP SD bands are too narrow early in session (TP = $0.20 away)
- *   2. SwingLowSl anchors to the distant session low (violates max-risk check)
- *   3. Volume ratio unreliable vs. a 6-bar average that includes the opening spike
+ * The regular ScalpMomentumDetector misses these setups because:
+ *   1. VWAP SD bands are too narrow to give a meaningful TP target
+ *   2. SwingLowSl after an opening flush exceeds the ATR×1.5 risk cap
+ *   3. Volume ratio is unreliable vs. a short lookback avg
  *
- * Setup: Opening bar makes a thrust AWAY from VWAP (gap fill direction OR
- * opening drive). Within the first hour, price returns to VWAP and the first
- * bar to close back on the correct side = entry.
- *
- * SL: bar's own low/high + 0.20×dailyATR (tight, not session swing low)
- * TP:  max(entry ± dailyATR × 0.30, entry ± risk × 2.0)  — meaningful target
- * No volume filter — opening volume distribution is too uneven to use reliably.
+ * Core logic:
+ *   1. After the first 7 bars (~10:05 ET) determine session bias:
+ *      - price above VWAP at bar 7 → bullish day → only LONG setups
+ *      - price below VWAP at bar 7 → bearish day → only SHORT setups
+ *   2. Throughout the day (9:35–14:30, dead zone 11:30–13:30 skipped)
+ *      look for the FIRST bar that touches VWAP and closes back on the
+ *      bias side with a decent body.
+ *   3. SL = bar's own extreme + 0.20×dailyATR (not the distant session low)
+ *   4. TP = max(2R, dailyATR×0.30) — meaningful move for options
  */
 @Service
 public class OpeningRangeVwapDetector {
     private static final Logger log = LoggerFactory.getLogger(OpeningRangeVwapDetector.class);
     private static final ZoneId ET = ZoneId.of("America/New_York");
 
-    private static final LocalTime OR_START  = LocalTime.of(9,  35); // skip the chaotic first bar
-    private static final LocalTime OR_END    = LocalTime.of(10, 30); // opening range window
-    private static final double    MIN_TP_PCT = 0.0035;              // 0.35% min TP (options viability)
-    private static final double    MIN_SL_PCT = 0.0012;              // 0.12% min SL
-    private static final double    MAX_RISK_DAILY_ATR = 0.40;        // SL <= 40% of daily ATR
+    private static final LocalTime SESSION_START  = LocalTime.of(9,  35);
+    private static final LocalTime DEAD_ZONE_START = LocalTime.of(11, 30);
+    private static final LocalTime DEAD_ZONE_END   = LocalTime.of(13, 30);
+    private static final LocalTime SESSION_END     = LocalTime.of(14, 30);
+
+    // Minimum bars before we trust the session bias (~10:05 ET on 5m bars)
+    private static final int  BIAS_LOCK_BARS = 7;
+
+    private static final double MIN_TP_PCT         = 0.0035; // 0.35% — options viability
+    private static final double MIN_SL_PCT         = 0.0012; // 0.12%
+    private static final double MAX_RISK_DAILY_ATR = 0.40;   // SL ≤ 40% daily ATR
 
     public List<TradeSetup> detect(List<OHLCV> bars, String ticker, double dailyAtr) {
         return detect(bars, ticker, dailyAtr, false);
@@ -66,135 +73,132 @@ public class OpeningRangeVwapDetector {
                 session.add(b);
             }
         }
-        if (session.size() < 3) return result;
+        if (session.size() < BIAS_LOCK_BARS + 1) return result;
 
         OHLCV last = session.get(session.size() - 1);
         LocalTime now = Instant.ofEpochMilli(last.getTimestamp()).atZone(ET).toLocalTime();
 
-        // Only fire inside the opening range window
-        if (now.isBefore(OR_START) || now.isAfter(OR_END)) return result;
+        // Time gate: active windows only
+        if (now.isBefore(SESSION_START)) return result;
+        if (now.isAfter(SESSION_END)) return result;
+        if (!now.isBefore(DEAD_ZONE_START) && now.isBefore(DEAD_ZONE_END)) return result;
 
         int n = session.size();
 
-        // ── Running VWAP up to current bar ────────────────────────────────────
+        // ── Running VWAP ──────────────────────────────────────────────────────
         double[] vwapArr = computeVwap(session);
         double vwap = vwapArr[n - 1];
 
-        // ── Determine opening thrust direction ────────────────────────────────
-        // Look at the aggregate move of the first 1-3 bars vs VWAP.
-        // If early bars were mostly BELOW vwap → opening was bearish → recovery = LONG
-        // If early bars were mostly ABOVE vwap → opening was bullish → failure = SHORT
-        int earlyBars = Math.min(3, n - 1);
-        int belowCount = 0, aboveCount = 0;
-        for (int i = 0; i < earlyBars; i++) {
-            double earlyVwap = vwapArr[i];
-            OHLCV b = session.get(i);
-            if (b.getClose() < earlyVwap) belowCount++;
-            else aboveCount++;
-        }
-        // Also look at absolute open-to-current move for confirmation
-        double openPrice    = session.get(0).getOpen();
-        double sessionLow   = session.stream().mapToDouble(OHLCV::getLow).min().orElse(openPrice);
-        double sessionHigh  = session.stream().mapToDouble(OHLCV::getHigh).max().orElse(openPrice);
-        double openFlushDown = (openPrice - sessionLow)  / openPrice; // how far below open did we flush
-        double openFlushUp   = (sessionHigh - openPrice) / openPrice; // how far above open did we spike
+        // ── Session bias: determined from bar 7 (~10:05 ET) ──────────────────
+        // After the first 35 min, price position relative to VWAP is a reliable
+        // indicator of the day's direction. Early open (< 7 bars) is too noisy.
+        int biasIdx = Math.min(BIAS_LOCK_BARS, n - 2);
+        OHLCV biasBar = session.get(biasIdx);
+        double biasVwap = vwapArr[biasIdx];
+        boolean sessionBullish = biasBar.getClose() > biasVwap;
+        boolean sessionBearish = biasBar.getClose() < biasVwap;
 
-        // Require a meaningful opening move so we're not trading noise (>= 0.25%)
-        boolean hadOpenFlushDown = openFlushDown >= 0.0025 || belowCount >= 2;
-        boolean hadOpenFlushUp   = openFlushUp   >= 0.0025 || aboveCount >= 2;
+        // Require clear bias (not hugging VWAP — within 0.05% is ambiguous)
+        double biasPct = Math.abs(biasBar.getClose() - biasVwap) / biasVwap;
+        if (biasPct < 0.0005) return result; // ambiguous day, skip
 
-        OHLCV prev = session.get(n - 2);
+        // ── VWAP touch: current or previous bar entered VWAP zone ─────────────
+        OHLCV prev  = session.get(n - 2);
         double prevVwap = vwapArr[n - 2];
+        double atrRef   = dailyAtr > 0 ? dailyAtr : estimateAtr(session);
+        double touch    = atrRef * 0.10; // within 10% of ATR = "at VWAP"
 
         boolean lastGreen = last.getClose() > last.getOpen();
         boolean lastRed   = last.getClose() < last.getOpen();
         double  body      = Math.abs(last.getClose() - last.getOpen())
                           / Math.max(last.getHigh() - last.getLow(), 0.001);
 
-        // ── LONG: price was below VWAP, now closing back above ────────────────
-        boolean longSetup = hadOpenFlushDown
-                && prev.getClose() < prevVwap          // prior bar was below VWAP
-                && last.getLow()   <= vwap * 1.002     // current bar touched VWAP zone
-                && last.getClose() > vwap              // closed back above VWAP
+        // ── LONG: bullish day, price dipped to VWAP, closed back above ────────
+        boolean longSetup = sessionBullish
+                && (last.getLow() <= vwap + touch || prev.getLow() <= prevVwap + touch)
+                && last.getClose() > vwap
                 && lastGreen
                 && body >= 0.35;
 
-        // ── SHORT: price was above VWAP, now closing back below ───────────────
-        boolean shortSetup = hadOpenFlushUp
-                && prev.getClose() > prevVwap          // prior bar was above VWAP
-                && last.getHigh()  >= vwap * 0.998     // current bar touched VWAP zone
-                && last.getClose() < vwap              // closed back below VWAP
+        // ── SHORT: bearish day, price bounced to VWAP, closed back below ──────
+        boolean shortSetup = sessionBearish
+                && (last.getHigh() >= vwap - touch || prev.getHigh() >= prevVwap - touch)
+                && last.getClose() < vwap
                 && lastRed
                 && body >= 0.35;
+
+        // Only fire once per session — if price has repeatedly been at VWAP in the
+        // last 8 bars it's just ranging, not a clean first-touch bounce
+        if (longSetup || shortSetup) {
+            int vwapCrossings = 0;
+            int lookback = Math.min(8, n - 1);
+            for (int i = n - lookback; i < n - 1; i++) {
+                double bVwap = vwapArr[i];
+                OHLCV b = session.get(i), bNext = session.get(i + 1);
+                if (b.getClose() > bVwap && bNext.getClose() < vwapArr[i + 1]) vwapCrossings++;
+                if (b.getClose() < bVwap && bNext.getClose() > vwapArr[i + 1]) vwapCrossings++;
+            }
+            // More than 2 crossings in last 8 bars = choppy, not a clean bounce
+            if (vwapCrossings > 2) return result;
+        }
 
         if (!longSetup && !shortSetup) return result;
 
         boolean isLong = longSetup;
         double  entry  = round4(last.getClose());
-        double  atrRef = dailyAtr > 0 ? dailyAtr : estimateAtr(session);
 
-        // ── SL: bar's own extreme + 0.20×atr ─────────────────────────────────
-        double stop;
-        if (isLong) {
-            stop = round4(last.getLow() - atrRef * 0.20);
-        } else {
-            stop = round4(last.getHigh() + atrRef * 0.20);
-        }
+        // ── SL: bar's own extreme + 0.20×dailyATR ────────────────────────────
+        double stop = isLong
+                ? round4(last.getLow()  - atrRef * 0.20)
+                : round4(last.getHigh() + atrRef * 0.20);
 
         double risk = Math.abs(entry - stop);
         if (risk <= 0) return result;
-
-        // Cap: no more than 40% of daily ATR as risk (keeps options viable)
         if (atrRef > 0 && risk > atrRef * MAX_RISK_DAILY_ATR) {
-            log.debug("{} OR-VWAP filtered — risk {} > {} (40% dailyATR)",
-                    ticker, String.format("%.2f", risk), String.format("%.2f", atrRef * MAX_RISK_DAILY_ATR));
+            log.debug("{} OR-VWAP risk {} > 40% dailyATR — skip", ticker, String.format("%.2f", risk));
             return result;
         }
 
-        // ── TP: larger of 2R or 30% of daily ATR ─────────────────────────────
-        double tp;
-        double tpMinMove = Math.max(risk * 2.0, atrRef * 0.30);
-        if (isLong) {
-            tp = round4(entry + tpMinMove);
-        } else {
-            tp = round4(entry - tpMinMove);
-        }
+        // ── TP: max(2R, 30% of dailyATR) ─────────────────────────────────────
+        double tpMove = Math.max(risk * 2.0, atrRef * 0.30);
+        double tp = isLong ? round4(entry + tpMove) : round4(entry - tpMove);
 
-        // Options viability gate (same as ScalpMomentumDetector)
         double tpPct = Math.abs(tp   - entry) / entry;
         double slPct = Math.abs(stop - entry) / entry;
-        if (tpPct < MIN_TP_PCT || slPct < MIN_SL_PCT) {
-            log.debug("{} OR-VWAP filtered — TP {}% SL {}% too tight for options",
-                    ticker, String.format("%.2f", tpPct * 100), String.format("%.2f", slPct * 100));
-            return result;
-        }
+        if (tpPct < MIN_TP_PCT || slPct < MIN_SL_PCT) return result;
 
         // ── Confidence ────────────────────────────────────────────────────────
-        int confidence = 72;
+        int confidence = 70;
 
-        // Strong body = conviction bar
-        if (body >= 0.65) confidence += 5;
-        else if (body >= 0.50) confidence += 2;
+        if (body >= 0.65)       confidence += 5;
+        else if (body >= 0.50)  confidence += 2;
 
-        // Bigger opening flush = more trapped traders = bigger recovery
-        double flushSize = isLong ? openFlushDown : openFlushUp;
-        if (flushSize >= 0.008) confidence += 6; // 0.8%+ flush
-        else if (flushSize >= 0.005) confidence += 3; // 0.5%+ flush
+        // Larger bias gap = stronger trend = more conviction on the bounce
+        if (biasPct >= 0.005)      confidence += 6;
+        else if (biasPct >= 0.002) confidence += 3;
 
-        // Earlier in the window = cleaner (first VWAP touch after flush)
-        if (now.isBefore(LocalTime.of(9, 55)))  confidence += 5;
-        else if (now.isBefore(LocalTime.of(10, 15))) confidence += 2;
+        // Morning session = stronger momentum
+        if (now.isBefore(LocalTime.of(10, 30))) confidence += 5;
+        else if (now.isBefore(LocalTime.of(11, 30))) confidence += 2;
 
-        // If the prior bar was also showing a recovery attempt (wick toward VWAP)
-        if (isLong && prev.getLow() <= vwap * 1.003) confidence += 3;
-        if (!isLong && prev.getHigh() >= vwap * 0.997) confidence += 3;
+        // Prior bar also touching VWAP = confirmed level
+        if (isLong  && prev.getLow()  <= prevVwap + touch) confidence += 3;
+        if (!isLong && prev.getHigh() >= prevVwap - touch) confidence += 3;
 
-        double rr  = Math.abs(tp - entry) / risk;
+        // Opening flush size (how hard the initial move was away from open)
+        double openPrice = session.get(0).getOpen();
+        double flushSize = isLong
+                ? (openPrice - session.stream().mapToDouble(OHLCV::getLow).min().orElse(openPrice)) / openPrice
+                : (session.stream().mapToDouble(OHLCV::getHigh).max().orElse(openPrice) - openPrice) / openPrice;
+        if (flushSize >= 0.008) confidence += 5;
+        else if (flushSize >= 0.004) confidence += 2;
+
+        double rr = tpMove / risk;
         String factors = String.format(
-                "or-vwap | %s | entry=%.2f vwap=%.2f | flush=%.2f%% | body=%.0f%% | risk=%.2f tp=%.2f (R:R %.1f) | dailyATR=%.2f",
+                "or-vwap | %s | entry=%.2f vwap=%.2f | biasPct=%.2f%% %s | body=%.0f%% | R:R %.1f | dailyATR=%.2f",
                 isLong ? "LONG" : "SHORT", entry, vwap,
-                flushSize * 100, body * 100,
-                risk, Math.abs(tp - entry), rr, atrRef);
+                biasPct * 100, sessionBullish ? "BULL" : "BEAR",
+                body * 100, rr, atrRef);
 
         result.add(TradeSetup.builder()
                 .ticker(ticker)
@@ -212,9 +216,9 @@ public class OpeningRangeVwapDetector {
                 .timestamp(Instant.ofEpochMilli(last.getTimestamp()).atZone(ET).toLocalDateTime())
                 .build());
 
-        log.info("{} OR-VWAP {} conf={} entry={} sl={} tp={} flush={}%",
+        log.info("{} OR-VWAP {} conf={} entry={} sl={} tp={} bias={}% {}",
                 ticker, isLong ? "LONG" : "SHORT", confidence, entry, stop, tp,
-                String.format("%.2f", flushSize * 100));
+                String.format("%.2f", biasPct * 100), sessionBullish ? "BULL" : "BEAR");
 
         return result;
     }
