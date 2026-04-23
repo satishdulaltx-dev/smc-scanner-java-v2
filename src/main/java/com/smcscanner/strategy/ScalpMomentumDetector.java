@@ -32,6 +32,7 @@ import java.util.List;
  */
 @Service
 public class ScalpMomentumDetector {
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ScalpMomentumDetector.class);
     private static final ZoneId ET = ZoneId.of("America/New_York");
 
     private static final LocalTime SESSION_OPEN    = LocalTime.of(9,  35);
@@ -213,6 +214,20 @@ public class ScalpMomentumDetector {
         if (!isLong && isBearSwing(sessionBars, n)) confidence += 4;
         // Bonus for touching VWAP itself (cleaner level than SD band)
         if ("vwap".equals(levelName))    confidence += 3;
+        // VWAP + key level confluence: when VWAP band and prev-day H/L coincide,
+        // institutional orders stack at the same price from two independent reasons.
+        double[] pdhl = prevDayHighLow(bars);
+        if (pdhl != null) {
+            double confluencePct = 0.003; // within 0.3%
+            boolean atPdHigh = Math.abs(entry - pdhl[0]) / entry < confluencePct;
+            boolean atPdLow  = Math.abs(entry - pdhl[1]) / entry < confluencePct;
+            if (atPdHigh || atPdLow) {
+                confidence += 8;
+                log.debug("{} VWAP+KEYLEVEL confluence at {} (pdH={} pdL={})",
+                        ticker, String.format("%.2f", entry),
+                        String.format("%.2f", pdhl[0]), String.format("%.2f", pdhl[1]));
+            }
+        }
 
         // ══════════════════════════════════════════════════════════════════════
         // LAYER 2 — Volume Profile
@@ -442,4 +457,21 @@ public class ScalpMomentumDetector {
     }
 
     private double round4(double v) { return Math.round(v * 10_000.0) / 10_000.0; }
+
+    /** Returns [prevDayHigh, prevDayLow] from the most recent completed session, or null if unavailable. */
+    private double[] prevDayHighLow(List<OHLCV> bars) {
+        if (bars == null || bars.isEmpty()) return null;
+        LocalDate today = Instant.ofEpochMilli(bars.get(bars.size() - 1).getTimestamp()).atZone(ET).toLocalDate();
+        double ph = -1, pl = Double.MAX_VALUE;
+        LocalDate prevDay = null;
+        for (int i = bars.size() - 1; i >= 0; i--) {
+            LocalDate d = Instant.ofEpochMilli(bars.get(i).getTimestamp()).atZone(ET).toLocalDate();
+            if (d.equals(today)) continue;
+            if (prevDay == null) prevDay = d;
+            if (!d.equals(prevDay)) break;
+            ph = Math.max(ph, bars.get(i).getHigh());
+            pl = Math.min(pl, bars.get(i).getLow());
+        }
+        return (ph > 0 && pl < Double.MAX_VALUE) ? new double[]{ph, pl} : null;
+    }
 }
