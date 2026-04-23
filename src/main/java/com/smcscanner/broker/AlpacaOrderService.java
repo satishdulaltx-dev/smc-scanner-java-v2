@@ -120,8 +120,9 @@ public class AlpacaOrderService {
         return info;
     }
 
-    /** Check if Alpaca trading is enabled and configured. */
+    /** Check if Alpaca trading is enabled and configured. Dev environment hard-disables auto-trading. */
     public boolean isEnabled() {
+        if (config.isDev()) return false;
         String key = config.getAlpacaApiKey();
         return key != null && !key.isBlank() && config.isAlpacaEnabled();
     }
