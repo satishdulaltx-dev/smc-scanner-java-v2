@@ -204,6 +204,16 @@ public class ScalpMomentumDetector {
             tp = round4(Math.min(tpBand, entry - risk * 1.5));
         }
 
+        // Options viability gate: underlying must move enough for options premium to be recoverable.
+        // TP < 0.35% or SL < 0.12% on a $300+ stock = options R:R structurally negative after spread.
+        double tpMovePct = Math.abs(tp   - entry) / entry;
+        double slMovePct = Math.abs(stop - entry) / entry;
+        if (tpMovePct < 0.0035 || slMovePct < 0.0012) {
+            log.debug("{} scalp filtered — TP {}% SL {}% too tight for options (need TP>=0.35% SL>=0.12%)",
+                    ticker, String.format("%.2f", tpMovePct * 100), String.format("%.2f", slMovePct * 100));
+            return result;
+        }
+
         // ── Base confidence ───────────────────────────────────────────────────
         int confidence = 72;
         if (volRatio >= 2.0)             confidence += 5;
