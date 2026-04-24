@@ -591,15 +591,23 @@ public class BacktestService {
 
                 TradeSetup setup = bSetups.get(0);
 
-                // or-bounce setups (Mode B) are unreliable in VOLATILE regime: VWAP loses
-                // gravity during crash conditions and prices blow through it instead of
-                // respecting it. Only or-flush (Mode A) is allowed in VOLATILE markets.
+                // or-bounce setups (Mode B) are unreliable in crash conditions: VWAP loses
+                // gravity when the stock has declined sharply over multiple days. The VWAP
+                // regime detector can't catch this since it only sees same-day bars.
+                // Instead, use the 5-day daily return: if > 7% decline in 5 sessions,
+                // skip or-bounce (crash mode — bounces are dead cats, shorts are overextended).
                 if ("or-vwap".equals(effectiveStrat)
-                        && btRegime == MarketRegimeDetector.Regime.VOLATILE
                         && setup.getFactorBreakdown() != null
-                        && setup.getFactorBreakdown().contains("or-bounce")) {
-                    log.debug("{} OR_BOUNCE_VOLATILE_SKIP {}: regime=VOLATILE, skipping Mode B", ticker, date);
-                    continue;
+                        && setup.getFactorBreakdown().contains("or-bounce")
+                        && htfSlice.size() >= 6) {
+                    OHLCV htfLast = htfSlice.get(htfSlice.size() - 1);
+                    OHLCV htfPast = htfSlice.get(htfSlice.size() - 6);
+                    double fiveDayReturn = (htfLast.getClose() - htfPast.getClose()) / htfPast.getClose();
+                    if (fiveDayReturn < -0.07) {
+                        log.debug("{} OR_BOUNCE_CRASH_SKIP {}: 5d return={:.1f}%% — crash regime, skipping Mode B",
+                                ticker, date, fiveDayReturn * 100);
+                        continue;
+                    }
                 }
 
                 // ── VOLATILE regime SL widening — mirrors live ScannerService ─
