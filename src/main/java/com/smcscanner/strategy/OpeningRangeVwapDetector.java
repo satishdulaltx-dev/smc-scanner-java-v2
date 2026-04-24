@@ -45,8 +45,8 @@ public class OpeningRangeVwapDetector {
     // Bias lock: bar 7 (~10:05 ET on 5m bars)
     private static final int    BIAS_LOCK_BARS   = 7;
 
-    // Opening flush: low must be ≥ 0.30% below open to qualify as a flush
-    private static final double MIN_FLUSH_PCT    = 0.0030;
+    // Opening flush: price must drop ≥ 0.70% below open to qualify (filters weak noise)
+    private static final double MIN_FLUSH_PCT    = 0.0070;
 
     // Sizing limits
     private static final double MIN_TP_PCT         = 0.0035; // 0.35% min TP for options
@@ -100,25 +100,25 @@ public class OpeningRangeVwapDetector {
         boolean isLong;
         String  modeTag;
 
-        // ── MODE A: Opening Flush Recovery (9:35–9:55) ───────────────────────
+        // ── MODE A: Opening Flush Recovery (9:35–9:55), LONG only ───────────
+        // Short-side opening flush (spike up + failure) is unreliable without
+        // HTF bias confirmation. Only trade the flush-down → VWAP recovery pattern.
         if (!now.isAfter(EARLY_END)) {
             double openPrice  = session.get(0).getOpen();
             double sessionLow = session.stream().mapToDouble(OHLCV::getLow).min().orElse(openPrice);
-            double sessionHigh= session.stream().mapToDouble(OHLCV::getHigh).max().orElse(openPrice);
-            double flushDown  = (openPrice - sessionLow)  / openPrice;
-            double flushUp    = (sessionHigh - openPrice) / openPrice;
+            double flushDown  = (openPrice - sessionLow) / openPrice;
 
-            boolean flushLong  = flushDown >= MIN_FLUSH_PCT
+            // Bar must have tested the VWAP zone (low ≤ vwap + 1.5×touch)
+            boolean testedVwap = last.getLow() <= vwap + touch * 1.5;
+
+            boolean flushLong = flushDown >= MIN_FLUSH_PCT
+                    && testedVwap
                     && last.getClose() > vwap
-                    && lastGreen && body >= 0.40;
+                    && lastGreen && body >= 0.45;
 
-            boolean flushShort = flushUp   >= MIN_FLUSH_PCT
-                    && last.getClose() < vwap
-                    && lastRed  && body >= 0.40;
+            if (!flushLong) return result;
 
-            if (!flushLong && !flushShort) return result;
-
-            isLong  = flushLong;
+            isLong  = true;
             modeTag = "or-flush";
 
         // ── MODE B: Session VWAP Bounce (10:00–14:30, skip 12:00–13:00) ──────

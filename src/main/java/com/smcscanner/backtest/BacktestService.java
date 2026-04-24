@@ -993,7 +993,7 @@ public class BacktestService {
                 // Skip trade if combined filters knocked confidence below threshold.
                 // Gap strategy: score is already gated by OvernightMomentumService.shouldHold()
                 // which enforces its own 55/45 threshold — skip the intraday conf gate.
-                if (adjConf < dynamicMinConf && !"gap".equals(effectiveStrat) && !"peg".equals(effectiveStrat)) {
+                if (adjConf < dynamicMinConf && !"gap".equals(effectiveStrat) && !"peg".equals(effectiveStrat) && !"or-vwap".equals(effectiveStrat)) {
                     log.debug("{} CONF_FILTERED: base={} news={} ctx={} qual={} iRS={} regime={} corr={} dz={} → adj={} floor={} (min={} vixBoost={})",
                             ticker, setup.getConfidence(), newsAdj, ctxAdj, qualityAdj, intradayRsAdj, regimeAdj, corrAdj, deadZoneAdj, adjConf, penaltyFloor, effectiveMinConf, vixBoost);
                     String filteredOutcome = confluenceVetoAdj < 0 ? "CONFLUENCE_FILTERED"
@@ -1022,7 +1022,7 @@ public class BacktestService {
 
                 // Over-extended gate: skip signals above per-ticker maxConfidence
                 // Reverses the reversed-confidence pattern (PLTR/SOFI/NFLX: 85+ underperforms 75-84)
-                if (adjConf > effectiveMaxConf) {
+                if (adjConf > effectiveMaxConf && !"or-vwap".equals(effectiveStrat)) {
                     trades.add(new TradeResult(ticker, setup.getDirection(), effectiveStrat,
                             setup.getEntry(), setup.getStopLoss(), setup.getTakeProfit(),
                             "CONF_CAP_FILTERED", 0.0,
