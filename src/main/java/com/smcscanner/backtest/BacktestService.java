@@ -591,6 +591,17 @@ public class BacktestService {
 
                 TradeSetup setup = bSetups.get(0);
 
+                // or-bounce setups (Mode B) are unreliable in VOLATILE regime: VWAP loses
+                // gravity during crash conditions and prices blow through it instead of
+                // respecting it. Only or-flush (Mode A) is allowed in VOLATILE markets.
+                if ("or-vwap".equals(effectiveStrat)
+                        && btRegime == MarketRegimeDetector.Regime.VOLATILE
+                        && setup.getFactorBreakdown() != null
+                        && setup.getFactorBreakdown().contains("or-bounce")) {
+                    log.debug("{} OR_BOUNCE_VOLATILE_SKIP {}: regime=VOLATILE, skipping Mode B", ticker, date);
+                    continue;
+                }
+
                 // ── VOLATILE regime SL widening — mirrors live ScannerService ─
                 // Root cause of 66% sub-1:1 R:R: SL was widened by slFactor but TP
                 // was left unchanged, converting 1.5:1 trades to <1:1 in volatile
@@ -612,6 +623,7 @@ public class BacktestService {
                             .confidence(setup.getConfidence()).session(setup.getSession()).volatility(setup.getVolatility())
                             .atr(setup.getAtr()).hasBos(setup.isHasBos()).hasChoch(setup.isHasChoch())
                             .fvgTop(setup.getFvgTop()).fvgBottom(setup.getFvgBottom()).timestamp(setup.getTimestamp())
+                            .factorBreakdown(setup.getFactorBreakdown())
                             .build();
                 }
 
@@ -993,7 +1005,10 @@ public class BacktestService {
                 // Skip trade if combined filters knocked confidence below threshold.
                 // Gap strategy: score is already gated by OvernightMomentumService.shouldHold()
                 // which enforces its own 55/45 threshold — skip the intraday conf gate.
-                if (adjConf < dynamicMinConf && !"gap".equals(effectiveStrat) && !"peg".equals(effectiveStrat) && !"or-vwap".equals(effectiveStrat)) {
+                // or-vwap bypasses the low-conf gate ONLY when adjConf >= 52; trades with
+                // deeply negative RS/news adjustments (adjConf < 52) are still filtered.
+                boolean orVwapConfBypass = "or-vwap".equals(effectiveStrat) && adjConf >= 52;
+                if (adjConf < dynamicMinConf && !"gap".equals(effectiveStrat) && !"peg".equals(effectiveStrat) && !orVwapConfBypass) {
                     log.debug("{} CONF_FILTERED: base={} news={} ctx={} qual={} iRS={} regime={} corr={} dz={} → adj={} floor={} (min={} vixBoost={})",
                             ticker, setup.getConfidence(), newsAdj, ctxAdj, qualityAdj, intradayRsAdj, regimeAdj, corrAdj, deadZoneAdj, adjConf, penaltyFloor, effectiveMinConf, vixBoost);
                     String filteredOutcome = confluenceVetoAdj < 0 ? "CONFLUENCE_FILTERED"
