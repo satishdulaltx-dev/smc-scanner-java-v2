@@ -350,7 +350,8 @@ public class BacktestService {
                                   || "vsqueeze".equals(stratType)
                                   || "vwap3d".equals(stratType)
                                   || "idiv".equals(stratType)
-                                  || "gammapin".equals(stratType);
+                                  || "gammapin".equals(stratType)
+                                  || "or-vwap".equals(stratType);
             // Minimum bars before we start checking each strategy
             int minBars = "breakout".equals(stratType)  ? 8
                         : "scalp".equals(stratType)     ? 22
@@ -362,6 +363,7 @@ public class BacktestService {
                         : "vwap3d".equals(stratType)    ? 20
                         : "idiv".equals(stratType)      ? 12
                         : "gammapin".equals(stratType)  ? 15
+                        : "or-vwap".equals(stratType)   ? 8   // need ≥8 RTH bars for bias lock at ~10:05
                         : 20; // smc
             // Build previous 2 days' bars for 3-day VWAP strategy (computed once per day)
             final List<OHLCV> prevDaysBars;
@@ -532,14 +534,15 @@ public class BacktestService {
                 }
 
                 // ── Capitulation reversal overlay — mirrors live ScannerService ──
-                if (bSetups.isEmpty() && !ticker.startsWith("X:")
+                // Skip for or-vwap: overlays would fill in wrong-direction trades labeled as or-vwap
+                if (bSetups.isEmpty() && !ticker.startsWith("X:") && !"or-vwap".equals(effectiveStrat)
                         && btRegime != MarketRegimeDetector.Regime.VOLATILE) {
                     bSetups = capReversalDetector.detect(window, ticker, dailyAtr);
                 }
 
                 // ── Pattern overlays: sweep-flip, PDH/PDL, CHOCH primary ────────
                 // Mirrors live ScannerService overlay block — fires for all non-crypto tickers.
-                if (bSetups.isEmpty() && !ticker.startsWith("X:")) {
+                if (bSetups.isEmpty() && !ticker.startsWith("X:") && !"or-vwap".equals(effectiveStrat)) {
                     java.util.List<TradeSetup> ov = new java.util.ArrayList<>();
                     ov.addAll(sweepFlipDetector.detect(window, ticker, dailyAtr, true));
                     ov.addAll(pdhPdlDetector.detect(window, ticker, dailyAtr, true));
