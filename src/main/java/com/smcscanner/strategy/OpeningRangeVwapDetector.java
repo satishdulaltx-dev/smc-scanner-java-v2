@@ -45,8 +45,8 @@ public class OpeningRangeVwapDetector {
     // Bias lock: bar 7 (~10:05 ET on 5m bars)
     private static final int    BIAS_LOCK_BARS   = 7;
 
-    // Opening flush: price must drop ≥ 0.70% below open to qualify (filters weak noise)
-    private static final double MIN_FLUSH_PCT    = 0.0070;
+    // Opening flush: price must drop ≥ 0.50% below open to qualify
+    private static final double MIN_FLUSH_PCT    = 0.0050;
 
     // Sizing limits
     private static final double MIN_TP_PCT         = 0.0035; // 0.35% min TP for options
@@ -111,8 +111,17 @@ public class OpeningRangeVwapDetector {
             // Bar must have tested the VWAP zone (low ≤ vwap + 1.5×touch)
             boolean testedVwap = last.getLow() <= vwap + touch * 1.5;
 
+            // This must be the FIRST bar to close above VWAP since the session started.
+            // If any prior bar already closed above VWAP, this is a second/third bounce
+            // attempt (unreliable dead-cat pattern), not a clean flush recovery.
+            boolean firstRecovery = true;
+            for (int i = 0; i < n - 1; i++) {
+                if (session.get(i).getClose() > vwapArr[i]) { firstRecovery = false; break; }
+            }
+
             boolean flushLong = flushDown >= MIN_FLUSH_PCT
                     && testedVwap
+                    && firstRecovery
                     && last.getClose() > vwap
                     && lastGreen && body >= 0.45;
 
