@@ -147,7 +147,7 @@ public class OpeningRangeVwapDetector {
             boolean sessionBearish = biasBar.getClose() < biasVwap;
 
             double biasPct = Math.abs(biasBar.getClose() - biasVwap) / biasVwap;
-            if (biasPct < 0.0005) return result; // ambiguous day
+            if (biasPct < 0.0015) return result; // ambiguous day — raised from 0.05% to 0.15%
 
             OHLCV  prev     = session.get(n - 2);
             double prevVwap = vwapArr[n - 2];
@@ -155,12 +155,12 @@ public class OpeningRangeVwapDetector {
             boolean longSetup = sessionBullish
                     && (last.getLow()  <= vwap + touch || prev.getLow()  <= prevVwap + touch)
                     && last.getClose() > vwap
-                    && lastGreen && body >= 0.35;
+                    && lastGreen && body >= 0.45;
 
             boolean shortSetup = sessionBearish
                     && (last.getHigh() >= vwap - touch || prev.getHigh() >= prevVwap - touch)
                     && last.getClose() < vwap
-                    && lastRed  && body >= 0.35;
+                    && lastRed  && body >= 0.45;
 
             // Chop filter: >2 crossings in last 8 bars = ranging
             if (longSetup || shortSetup) {
@@ -172,7 +172,7 @@ public class OpeningRangeVwapDetector {
                     if (b.getClose() > bV  && bNext.getClose() < bVn) vwapCrossings++;
                     if (b.getClose() < bV  && bNext.getClose() > bVn) vwapCrossings++;
                 }
-                if (vwapCrossings > 2) return result;
+                if (vwapCrossings > 1) return result;
             }
 
             if (!longSetup && !shortSetup) return result;
