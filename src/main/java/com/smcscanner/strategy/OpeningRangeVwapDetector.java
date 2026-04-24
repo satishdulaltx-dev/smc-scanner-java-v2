@@ -295,3 +295,4 @@ public class OpeningRangeVwapDetector {
 
     private double round4(double v) { return Math.round(v * 10_000.0) / 10_000.0; }
 }
+
