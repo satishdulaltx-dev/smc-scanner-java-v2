@@ -363,7 +363,7 @@ public class BacktestService {
                         : "vwap3d".equals(stratType)    ? 20
                         : "idiv".equals(stratType)      ? 12
                         : "gammapin".equals(stratType)  ? 15
-                        : "or-vwap".equals(stratType)   ? 8   // need ≥8 RTH bars for bias lock at ~10:05
+                        : "or-vwap".equals(stratType)   ? 2   // Mode A fires from 2nd RTH bar (9:35)
                         : 20; // smc
             // Build previous 2 days' bars for 3-day VWAP strategy (computed once per day)
             final List<OHLCV> prevDaysBars;
