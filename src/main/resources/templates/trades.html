@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
     <meta name="dashboard-token" th:content="${dashboardToken}" content=""/>
     <title>SD Scanner — Live Trades</title>
+    <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
     <style>
         :root {
             --bg:#0d1117; --surface:#161b22; --border:#30363d;
@@ -58,6 +59,22 @@
         .tab-btn.active[data-cat="swing"]    { border-color:var(--purple); color:var(--purple); background:rgba(188,140,255,.1); }
         .tab-btn.active[data-cat="notfilled"]{ border-color:var(--muted);  color:var(--text);   background:rgba(139,148,158,.1); }
         .tab-count { font-size:10px; opacity:.75; margin-left:3px; }
+        tr.clickable-row:hover td { background:rgba(88,166,255,.06); cursor:pointer; }
+        /* Trade chart modal */
+        .trade-modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.7); z-index:1000; align-items:center; justify-content:center; }
+        .trade-modal-overlay.show { display:flex; }
+        .trade-modal { background:var(--surface); border:1px solid var(--border); border-radius:12px; width:min(960px,95vw); max-height:90vh; overflow:hidden; display:flex; flex-direction:column; }
+        .trade-modal-header { display:flex; align-items:center; justify-content:space-between; padding:14px 18px; border-bottom:1px solid var(--border); }
+        .trade-modal-title { font-size:14px; font-weight:700; color:var(--text); }
+        .trade-modal-meta { font-size:11px; color:var(--muted); margin-top:2px; }
+        .trade-modal-close { background:none; border:none; color:var(--muted); font-size:20px; cursor:pointer; padding:0 4px; line-height:1; }
+        .trade-modal-close:hover { color:var(--text); }
+        .trade-modal-body { padding:16px; flex:1; overflow:auto; }
+        .chart-wrap-live { position:relative; height:420px; }
+        #live-trade-chart { width:100%; height:100%; }
+        .trade-modal-info { display:flex; gap:16px; flex-wrap:wrap; margin-top:14px; font-size:11px; color:var(--muted); }
+        .trade-modal-info span { padding:3px 8px; background:#0d1117; border-radius:4px; border:1px solid var(--border); }
+        .chart-loading { display:flex; align-items:center; justify-content:center; height:420px; color:var(--muted); font-size:13px; }
     </style>
 </head>
 <body>
@@ -154,8 +171,27 @@
 
 </div>
 
+<!-- Live trade chart modal -->
+<div class="trade-modal-overlay" id="live-trade-modal" onclick="if(event.target===this)closeLiveChart()">
+    <div class="trade-modal">
+        <div class="trade-modal-header">
+            <div>
+                <div class="trade-modal-title" id="ltc-title">Trade Chart</div>
+                <div class="trade-modal-meta" id="ltc-meta"></div>
+            </div>
+            <button class="trade-modal-close" onclick="closeLiveChart()">✕</button>
+        </div>
+        <div class="trade-modal-body">
+            <div class="chart-wrap-live"><div id="live-trade-chart"><div class="chart-loading">Loading chart…</div></div></div>
+            <div class="trade-modal-info" id="ltc-info"></div>
+        </div>
+    </div>
+</div>
+
 <script>
 // ── Category state ──────────────────────────────────────────────────────────
+let _tradeChartMap = {};  // id/key → trade object for chart drill-in
+let _liveChart = null, _liveResizeObserver = null;
 let _todayBroker   = [];
 let _todayAlerts   = [];
 let _brokerHistory = [];
@@ -386,7 +422,9 @@ function buildTable(trades, summary, groupByDate) {
         }
         tradeNum++;
         const dir = t.direction === 'long' ? '<span style="color:var(--green)">▲ LONG</span>' : '<span style="color:var(--red)">▼ SHORT</span>';
-        rows += `<tr>
+        const tradeKey = t.id || (t.ticker + '_' + t.timestamp);
+        _tradeChartMap[tradeKey] = t;
+        rows += `<tr class="clickable-row" onclick="showLiveChart('${tradeKey}')">
             <td style="color:var(--muted)">${tradeNum}</td>
             <td style="font-weight:600">${t.ticker||'—'}</td>
             <td>${dir}</td>
@@ -427,6 +465,153 @@ async function resolveTrade() {
         msg.textContent = 'Request failed';
         msg.style.color = 'var(--red)';
     }
+}
+
+// ── Live trade chart ────────────────────────────────────────────────────────
+async function showLiveChart(key) {
+    const t = _tradeChartMap[key];
+    if (!t) return;
+
+    const isLong   = t.direction === 'long';
+    const outcome  = t.outcome || 'OPEN';
+    const outcomeColor = ['WIN','TRAIL_WIN'].includes(outcome) ? '#3fb950'
+                       : ['LOSS','TRAIL_LOSS'].includes(outcome) ? '#f85149' : '#d29922';
+
+    document.getElementById('ltc-title').textContent =
+        `${t.ticker} ${isLong ? '▲ LONG' : '▼ SHORT'} — ${outcome}`;
+    document.getElementById('ltc-meta').textContent =
+        `${t.date} ${t.time} ET · ${t.strategy||'smc'} · conf ${t.confidence||0}`;
+
+    const infoBox = document.getElementById('ltc-info');
+    const pnlStr = t.pnlAmount != null ? `P&L $${parseFloat(t.pnlAmount).toFixed(2)}` : 'OPEN';
+    const pnlColor = (t.pnlAmount||0) >= 0 ? '#3fb950' : '#f85149';
+    infoBox.innerHTML = `
+        <span style="color:#58a6ff">Entry $${parseFloat(t.entry||0).toFixed(2)}</span>
+        <span style="color:#f85149">SL $${parseFloat(t.stopLoss||0).toFixed(2)}</span>
+        <span style="color:#d29922">TP $${parseFloat(t.takeProfit||0).toFixed(2)}</span>
+        <span style="color:${pnlColor}">${pnlStr}</span>
+        ${t.optionsContract ? `<span style="color:var(--muted)">${t.optionsContract.replace('O:','')}</span>` : ''}
+    `;
+
+    const container = document.getElementById('live-trade-chart');
+    container.innerHTML = '<div class="chart-loading">Loading chart…</div>';
+    document.getElementById('live-trade-modal').classList.add('show');
+
+    const entryTs = t.timestamp || 0;
+    // Compute exit timestamp: prefer brokerExitAt, fallback to entry+2h
+    let exitTs = entryTs + 2 * 3600_000;
+    if (t.brokerExitAt) {
+        try { exitTs = new Date(t.brokerExitAt).getTime(); } catch(e) {}
+    } else if (t.resolvedAt && t.resolvedAt < entryTs + 8 * 3600_000) {
+        exitTs = t.resolvedAt;
+    }
+
+    try {
+        const resp = await fetch(`/api/backtest/trade-chart?ticker=${encodeURIComponent(t.ticker)}&entryTs=${entryTs}&exitTs=${exitTs}`);
+        const data = await resp.json();
+        drawLiveChart(data, t, entryTs, exitTs, isLong, outcome, outcomeColor);
+    } catch(e) {
+        container.innerHTML = `<div class="chart-loading" style="color:var(--red)">Chart load failed: ${e.message}</div>`;
+    }
+}
+
+function closeLiveChart() {
+    document.getElementById('live-trade-modal').classList.remove('show');
+    if (_liveResizeObserver) { _liveResizeObserver.disconnect(); _liveResizeObserver = null; }
+    if (_liveChart) { _liveChart.remove(); _liveChart = null; }
+}
+
+function drawLiveChart(data, trade, entryTs, exitTs, isLong, outcome, outcomeColor) {
+    const bars = data.bars || [];
+    const container = document.getElementById('live-trade-chart');
+    container.innerHTML = '';
+
+    if (!bars.length) {
+        container.innerHTML = `<div class="chart-loading">No historical bars for this trade window.</div>`;
+        return;
+    }
+
+    const lwc = window.LightweightCharts;
+    if (!lwc || typeof lwc.createChart !== 'function') {
+        container.innerHTML = `<div class="chart-loading" style="color:var(--red)">Chart library failed to load.</div>`;
+        return;
+    }
+
+    if (_liveChart) { _liveChart.remove(); _liveChart = null; }
+
+    _liveChart = lwc.createChart(container, {
+        width: container.clientWidth || 900,
+        height: container.clientHeight || 420,
+        layout: { background: { type: 'solid', color: '#0d1117' }, textColor: '#8b949e', fontSize: 11 },
+        grid: { vertLines: { color: '#161b22' }, horzLines: { color: '#161b22' } },
+        crosshair: { mode: lwc.CrosshairMode.Normal },
+        rightPriceScale: { borderColor: '#21262d', minimumWidth: 64 },
+        timeScale: { borderColor: '#21262d', timeVisible: true, secondsVisible: false, barSpacing: 10 },
+        localization: {
+            timeFormatter: ts => new Date(ts * 1000).toLocaleTimeString('en-US', {
+                timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hour12: false
+            })
+        }
+    });
+
+    const candleSeries = _liveChart.addCandlestickSeries({
+        upColor: '#3fb950', downColor: '#f85149',
+        borderUpColor: '#3fb950', borderDownColor: '#f85149',
+        wickUpColor: '#4d9460', wickDownColor: '#b54040'
+    });
+
+    const volSeries = _liveChart.addHistogramSeries({ priceFormat: { type: 'volume' }, priceScaleId: 'vol' });
+    _liveChart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.88, bottom: 0 } });
+
+    candleSeries.setData(bars.map(b => ({ time: b.time, open: b.open, high: b.high, low: b.low, close: b.close })));
+    volSeries.setData(bars.map(b => ({
+        time: b.time, value: b.volume,
+        color: b.close >= b.open ? 'rgba(63,185,80,0.18)' : 'rgba(248,81,73,0.18)'
+    })));
+
+    // Price lines
+    candleSeries.createPriceLine({ price: parseFloat(trade.entry), color: '#58a6ff', lineWidth: 2, lineStyle: lwc.LineStyle.Dashed, axisLabelVisible: true, title: 'Entry' });
+    if (trade.stopLoss)   candleSeries.createPriceLine({ price: parseFloat(trade.stopLoss),   color: '#f85149', lineWidth: 1, lineStyle: lwc.LineStyle.Dotted, axisLabelVisible: true, title: 'SL' });
+    if (trade.takeProfit) candleSeries.createPriceLine({ price: parseFloat(trade.takeProfit), color: '#d29922', lineWidth: 1, lineStyle: lwc.LineStyle.Dotted, axisLabelVisible: true, title: 'TP' });
+
+    // Entry/exit markers
+    const entryBarTs = Math.floor(entryTs / 1000);
+    const exitBarTs  = Math.floor(exitTs  / 1000);
+    const entryBar = bars.find(b => b.time === entryBarTs) || bars.find(b => b.time >= entryBarTs);
+    const exitBar  = bars.find(b => b.time === exitBarTs)  || bars.find(b => b.time >= exitBarTs);
+
+    const markers = [{
+        time: entryBar ? entryBar.time : entryBarTs,
+        position: isLong ? 'belowBar' : 'aboveBar',
+        color: '#58a6ff',
+        shape: isLong ? 'arrowUp' : 'arrowDown',
+        text: `${isLong ? '▲' : '▼'} Entry $${parseFloat(trade.entry).toFixed(2)}`
+    }];
+    if (outcome !== 'OPEN' && exitBar) {
+        const exitStockPrice = ['WIN','TRAIL_WIN'].includes(outcome) ? trade.takeProfit
+                             : ['LOSS','TRAIL_LOSS'].includes(outcome) ? trade.stopLoss : null;
+        markers.push({
+            time: exitBar.time,
+            position: isLong ? 'aboveBar' : 'belowBar',
+            color: outcomeColor,
+            shape: isLong ? 'arrowDown' : 'arrowUp',
+            text: `Exit (${outcome})${exitStockPrice ? ' $'+parseFloat(exitStockPrice).toFixed(2) : ''}`
+        });
+    }
+    candleSeries.setMarkers(markers);
+
+    // Zoom to trade window ±8 bars
+    const barTimes  = bars.map(b => b.time);
+    const entryIdx  = barTimes.findIndex(t => t >= entryBarTs);
+    const exitIdx   = barTimes.findLastIndex(t => t <= exitBarTs);
+    const fromIdx   = Math.max(0, (entryIdx >= 0 ? entryIdx : 0) - 8);
+    const toIdx     = Math.min(bars.length - 1, (exitIdx >= 0 ? exitIdx : bars.length - 1) + 6);
+    _liveChart.timeScale().setVisibleLogicalRange({ from: fromIdx, to: toIdx });
+
+    _liveResizeObserver = new ResizeObserver(entries => {
+        if (_liveChart) _liveChart.applyOptions({ width: entries[0].contentRect.width });
+    });
+    _liveResizeObserver.observe(container);
 }
 
 loadData();
