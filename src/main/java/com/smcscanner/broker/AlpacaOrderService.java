@@ -663,6 +663,15 @@ public class AlpacaOrderService {
         if (candleTs.equals(lastTs)) return;
         lastProcessedCandle.put(symbol, candleTs);
 
+        // Guard: never act on a bar that closed before the position was entered.
+        // This prevents a pre-entry flush candle (e.g. the OR-flush dip) from
+        // immediately triggering the SL on the very first trailing-stop check.
+        if (confirmedBar.getTimestamp() < tp.entryEpochMs()) {
+            log.debug("TRAIL: {} — confirmedBar {} predates entry {} — skipping pre-entry candle",
+                    symbol, confirmedBar.getTimestamp(), tp.entryEpochMs());
+            return;
+        }
+
         double candleHigh = confirmedBar.getHigh();
         double candleLow = confirmedBar.getLow();
         double candleClose = confirmedBar.getClose();
@@ -1009,6 +1018,18 @@ public class AlpacaOrderService {
                 underlying, String.format("%.2f", entry),
                 String.format("%.2f", sl), String.format("%.2f", tp), occSymbol);
         return true;
+    }
+
+    /** Close a tracked options position by its underlying symbol (e.g. "CRWD"). */
+    public void closePositionByUnderlying(String underlying, String reason) {
+        TrackedPosition tp = trackedPositions.get(underlying);
+        if (tp == null) {
+            log.warn("closePositionByUnderlying {}: not in tracker — {}", underlying, reason);
+            return;
+        }
+        log.info("closePositionByUnderlying {}: {} contract={}", underlying, reason, tp.optionsContract());
+        closeOptionsPosition(underlying, tp.optionsContract());
+        trackedPositions.remove(underlying);
     }
 
     private long resolveSignalEpochMs(TradeSetup setup) {
