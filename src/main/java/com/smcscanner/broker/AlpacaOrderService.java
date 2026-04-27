@@ -663,6 +663,15 @@ public class AlpacaOrderService {
         if (candleTs.equals(lastTs)) return;
         lastProcessedCandle.put(symbol, candleTs);
 
+        // Guard: never act on a bar that closed before the position was entered.
+        // This prevents a pre-entry flush candle (e.g. the OR-flush dip) from
+        // immediately triggering the SL on the very first trailing-stop check.
+        if (confirmedBar.getTimestamp() < tp.entryEpochMs()) {
+            log.debug("TRAIL: {} — confirmedBar {} predates entry {} — skipping pre-entry candle",
+                    symbol, confirmedBar.getTimestamp(), tp.entryEpochMs());
+            return;
+        }
+
         double candleHigh = confirmedBar.getHigh();
         double candleLow = confirmedBar.getLow();
         double candleClose = confirmedBar.getClose();
