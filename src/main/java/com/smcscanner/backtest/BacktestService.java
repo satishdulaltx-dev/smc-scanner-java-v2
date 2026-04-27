@@ -1013,9 +1013,9 @@ public class BacktestService {
                 // Skip trade if combined filters knocked confidence below threshold.
                 // Gap strategy: score is already gated by OvernightMomentumService.shouldHold()
                 // which enforces its own 55/45 threshold — skip the intraday conf gate.
-                // or-vwap bypasses the low-conf gate ONLY when adjConf >= 52; trades with
-                // deeply negative RS/news adjustments (adjConf < 52) are still filtered.
-                boolean orVwapConfBypass = "or-vwap".equals(effectiveStrat) && adjConf >= 52;
+                // or-vwap bypasses the low-conf gate ONLY when market context is positive (ctxAdj > 0).
+                // Negative or neutral ctx (crash regime, misaligned RS) means we still apply the conf gate.
+                boolean orVwapConfBypass = "or-vwap".equals(effectiveStrat) && ctxAdj > 0;
                 if (adjConf < dynamicMinConf && !"gap".equals(effectiveStrat) && !"peg".equals(effectiveStrat) && !orVwapConfBypass) {
                     log.debug("{} CONF_FILTERED: base={} news={} ctx={} qual={} iRS={} regime={} corr={} dz={} → adj={} floor={} (min={} vixBoost={})",
                             ticker, setup.getConfidence(), newsAdj, ctxAdj, qualityAdj, intradayRsAdj, regimeAdj, corrAdj, deadZoneAdj, adjConf, penaltyFloor, effectiveMinConf, vixBoost);
