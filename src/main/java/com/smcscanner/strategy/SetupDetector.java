@@ -228,6 +228,8 @@ public class SetupDetector {
         double tpRatio = profile.resolveTpRrRatio();
         if ("long".equals(state.getDirection()))  { sl=r4(entry-targetAtr*slMult); tp=r4(entry+targetAtr*slMult*tpRatio); }
         else                                       { sl=r4(entry+targetAtr*slMult); tp=r4(entry-targetAtr*slMult*tpRatio); }
+        // Minimum SL floor: risk < 0.35% of entry means options spread eats the entire move
+        if (Math.abs(entry - sl) < entry * 0.0035) return new DetectResult(List.of(), state);
 
         // ── SMC signal breakdown (shown in "WHY THIS TRADE?" panel) ────────────
         // Format: "smc-{dir} | sweep=BEAR(N bars back) | disp=2.4×ATR | FVG=[top/bot] | retest=X% | BOS=✓/✗ CHOCH=✓/✗ | vol=X×avg"
@@ -458,7 +460,8 @@ public class SetupDetector {
             }
 
             double risk = "long".equals(dir) ? entry - sl : sl - entry;
-            if (risk <= 0 || risk > curAtr * 3.0) return List.of();
+            // Minimum SL floor: risk < 0.35% of entry means options spread eats the entire move
+            if (risk <= 0 || risk > curAtr * 3.0 || risk < entry * 0.0035) return List.of();
 
             double tp = "long".equals(dir) ? r4(entry + risk * 2.0) : r4(entry - risk * 2.0);
             double avgVol = bars.stream().skip(Math.max(0, n - 30))
