@@ -70,6 +70,7 @@ public class ScannerService {
     private final LiquiditySweepFlipDetector      sweepFlip;
     private final PdhPdlDetector                  pdhPdl;
     private final OpeningRangeVwapDetector        orVwap;
+    private final LiquidityMapService             liquidityMap;
 
     public ScannerService(ScannerConfig config, PolygonClient client, SetupDetector setupDetector,
                           CryptoStrategyService crypto, MultiTimeframeAnalyzer mtf,
@@ -92,7 +93,8 @@ public class ScannerService {
                           CapitulationReversalDetector capReversal,
                           LiquiditySweepFlipDetector sweepFlip,
                           PdhPdlDetector pdhPdl,
-                          OpeningRangeVwapDetector orVwap) {
+                          OpeningRangeVwapDetector orVwap,
+                          LiquidityMapService liquidityMap) {
         this.config=config; this.client=client; this.setupDetector=setupDetector; this.crypto=crypto;
         this.mtf=mtf; this.discord=discord; this.dedup=dedup; this.tracker=tracker; this.liveLog=liveLog; this.state=state;
         this.atrCalc=atrCalc; this.vwap=vwap; this.breakout=breakout; this.scalpMomentum=scalpMomentum; this.keyLevel=keyLevel;
@@ -104,6 +106,7 @@ public class ScannerService {
         this.pressureService=pressureService; this.overnightService=overnightService;
         this.pegDetector=pegDetector; this.capReversal=capReversal;
         this.sweepFlip=sweepFlip; this.pdhPdl=pdhPdl; this.orVwap=orVwap;
+        this.liquidityMap=liquidityMap;
     }
 
     public boolean isCrypto(String t) { return t.startsWith("X:"); }
@@ -1243,6 +1246,14 @@ public class ScannerService {
                                             log.info("ALPACA SKIPPED {} {} conf={} < dynamicMinConf={} — alert only",
                                                     ticker, s.getDirection().toUpperCase(),
                                                     liveConf, dynamicMinConf);
+                                        } else if (!ticker.startsWith("X:") && !liquidityMap.isNearLevel(ticker, s.getEntry(), dailyAtr)) {
+                                            log.info("ALPACA SKIPPED {} {} entry={} — not near a liquidity level (location gate)",
+                                                    ticker, s.getDirection().toUpperCase(),
+                                                    String.format("%.2f", s.getEntry()));
+                                        } else if (!ticker.startsWith("X:") && !liquidityMap.isLevelFresh(ticker, s.getEntry(), dailyAtr)) {
+                                            log.info("ALPACA SKIPPED {} {} entry={} — level already tested 2× this session (third-push filter)",
+                                                    ticker, s.getDirection().toUpperCase(),
+                                                    String.format("%.2f", s.getEntry()));
                                         } else {
                                             String orderId = alpaca.placeOrder(s);
                                             if (orderId != null) {

@@ -812,6 +812,26 @@ public class AlpacaOrderService {
             }
         }
 
+        // ── Fast failure: all options positions, not just scalp ──────────────
+        // If no follow-through after 2 bars (10 min on 5m, 2 min on 1m), scratch.
+        // Converts "slow losers" to breakevens rather than full SL hits.
+        if (isOptionsPosition && !scalpManaged) {
+            boolean noFollowThrough = heldMinutes >= 10 && progress < risk * 0.20;
+            boolean immediateFailure = heldMinutes >= 5 && weakClose && progress < risk * 0.10;
+            if (noFollowThrough || immediateFailure) {
+                String reason = noFollowThrough ? "NO_FOLLOW_THROUGH" : "IMMEDIATE_FAILURE";
+                log.info("FAST_FAILURE {} [{}] close=${} held={}m progressR={} — scratching options to protect capital",
+                        symbol, reason,
+                        String.format("%.2f", candleClose),
+                        heldMinutes,
+                        String.format("%.2f", progress / risk));
+                closeOptionsPosition(symbol, tp.optionsContract());
+                removeTrackedPosition(symbol);
+                lastProcessedCandle.remove(symbol);
+                return;
+            }
+        }
+
         // ── 6. Before trail activation, only keep BE + state updates ─────────────
         if (!trailArmed) {
             if (newPeak != tp.peakClose() || newReversalCount != tp.consecutiveReversal() || breakEvenArmed != hybrid.breakEvenArmed()) {
