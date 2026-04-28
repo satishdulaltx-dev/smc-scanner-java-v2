@@ -175,7 +175,7 @@ public class BacktestService {
                 modeKey = switch (strategyOverride.toLowerCase()) {
                     case "scalp"                                     -> "scalp";
                     case "smc","vwap","keylevel","breakout","gap",
-                         "peg","vsqueeze","vwap3d","idiv","gammapin" -> "intraday";
+                         "peg","vsqueeze","vwap3d","idiv","gammapin","choch-primary" -> "intraday";
                     default                                          -> null;
                 };
             } else {
@@ -527,6 +527,8 @@ public class BacktestService {
                     bSetups = capReversalDetector.detect(window, ticker, dailyAtr);
                 } else if ("or-vwap".equals(effectiveStrat)) {
                     bSetups = orVwapDetector.detect(window, ticker, dailyAtr, true);
+                } else if ("choch-primary".equals(effectiveStrat)) {
+                    bSetups = setupDetector.detectChochPrimary(window, ticker, dailyAtr, true);
                 } else {
                     SetupDetector.DetectResult dr = setupDetector.detectSetups(
                             window, htfBias, ticker, false, dailyAtr, true); // backtestMode=true, real dailyAtr for TP/SL
@@ -542,7 +544,8 @@ public class BacktestService {
 
                 // ── Pattern overlays: sweep-flip, PDH/PDL, CHOCH primary ────────
                 // Mirrors live ScannerService overlay block — fires for all non-crypto tickers.
-                if (bSetups.isEmpty() && !ticker.startsWith("X:") && !"or-vwap".equals(effectiveStrat)) {
+                if (bSetups.isEmpty() && !ticker.startsWith("X:") && !"or-vwap".equals(effectiveStrat)
+                        && !"choch-primary".equals(effectiveStrat)) {
                     java.util.List<TradeSetup> ov = new java.util.ArrayList<>();
                     ov.addAll(sweepFlipDetector.detect(window, ticker, dailyAtr, true));
                     ov.addAll(pdhPdlDetector.detect(window, ticker, dailyAtr, true));
