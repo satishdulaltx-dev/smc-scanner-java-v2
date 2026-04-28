@@ -85,13 +85,17 @@ public class LiquidityMapService {
         double bucketSize = Math.max(dailyAtr * 0.5, price * 0.005);
         int bucket = (int) Math.round(price / bucketSize);
         Map<Integer, Integer> counts = touchCounts.computeIfAbsent(ticker, k -> new ConcurrentHashMap<>());
-        int count = counts.getOrDefault(bucket, 0);
-        if (count >= 2) {
+        // Atomic read-then-conditional-increment: caps the counter at 2, thread-safe
+        int[] prev = {0};
+        counts.compute(bucket, (k, v) -> {
+            prev[0] = v == null ? 0 : v;
+            return prev[0] < 2 ? prev[0] + 1 : prev[0];
+        });
+        if (prev[0] >= 2) {
             log.info("LEVEL_EXHAUSTED {} price={} touched {}× already — skip (third push filter)",
-                    ticker, String.format("%.2f", price), count);
+                    ticker, String.format("%.2f", price), prev[0]);
             return false;
         }
-        counts.put(bucket, count + 1);
         return true;
     }
 
@@ -125,7 +129,7 @@ public class LiquidityMapService {
 
                 // Round numbers based on price magnitude
                 double lastClose = daily.get(daily.size() - 1).getClose();
-                double step = lastClose >= 200 ? 10.0 : lastClose >= 50 ? 5.0 : lastClose >= 20 ? 2.0 : 1.0;
+                double step = lastClose >= 200 ? 50.0 : lastClose >= 50 ? 25.0 : lastClose >= 20 ? 10.0 : 5.0;
                 double base = Math.round(lastClose / step) * step;
                 for (int i = -4; i <= 4; i++) {
                     double rn = base + i * step;
@@ -151,15 +155,8 @@ public class LiquidityMapService {
                     levels.add(or.stream().mapToDouble(OHLCV::getLow).min().orElse(0));  // ORL
                 }
 
-                if (!todayBars.isEmpty()) {
-                    double sumPV = 0, sumV = 0;
-                    for (OHLCV b : todayBars) {
-                        double tp = (b.getHigh() + b.getLow() + b.getClose()) / 3.0;
-                        sumPV += tp * b.getVolume();
-                        sumV  += b.getVolume();
-                    }
-                    if (sumV > 0) levels.add(sumPV / sumV); // VWAP
-                }
+                // VWAP intentionally excluded — it is dynamic throughout the session
+                // and caching it once-per-day would give stale values by the afternoon.
             }
         } catch (Exception e) {
             log.warn("LiquidityMapService: level build failed for {}: {}", ticker, e.getMessage());

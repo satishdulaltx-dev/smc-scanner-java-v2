@@ -466,6 +466,23 @@ public class SetupDetector {
             double tp = "long".equals(dir) ? r4(entry + risk * 2.0) : r4(entry - risk * 2.0);
             double avgVol = bars.stream().skip(Math.max(0, n - 30))
                                .mapToDouble(OHLCV::getVolume).average().orElse(1);
+
+            // Wick quality gate: CHOCH bar must show conviction via rejection wick ≥ 1.5× body OR volume > 1.5× avg
+            double chochBody = Math.abs(chochBar.getClose() - chochBar.getOpen());
+            double rejectionWick = "long".equals(dir)
+                    ? (Math.min(chochBar.getOpen(), chochBar.getClose()) - chochBar.getLow())
+                    : (chochBar.getHigh() - Math.max(chochBar.getOpen(), chochBar.getClose()));
+            boolean wickOk = chochBody > 0 && rejectionWick >= chochBody * 1.5;
+            boolean volOk  = chochBar.getVolume() > avgVol * 1.5;
+            if (!wickOk && !volOk) {
+                log.debug("{} filtered: CHOCH_WEAK_WICK dir={} body={} rejWick={} vol={}×avg",
+                        ticker, dir,
+                        String.format("%.4f", chochBody),
+                        String.format("%.4f", Math.max(0, rejectionWick)),
+                        String.format("%.2f", chochBar.getVolume() / Math.max(avgVol, 1)));
+                return List.of();
+            }
+
             int conf = 70;
             if (chochBar.getVolume() > avgVol * 1.5) conf += 6;
             if (chochBar.getVolume() > avgVol * 2.5) conf += 4;
