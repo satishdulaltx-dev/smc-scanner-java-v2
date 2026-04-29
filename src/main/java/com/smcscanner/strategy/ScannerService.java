@@ -361,8 +361,16 @@ public class ScannerService {
                         stratSetups = scalpMomentum.detect(bars, spyBars5m, ticker, dailyAtr);
                         if (stratSetups.isEmpty() && phaseMsg.isEmpty()) phaseMsg = "Waiting for Bollinger reclaim or squeeze break...";
                     } else if ("vwap".equals(strat)) {
-                        stratSetups = vwap.detect(bars, ticker, dailyAtr);
-                        if (stratSetups.isEmpty() && phaseMsg.isEmpty()) phaseMsg = "Waiting for VWAP reversion...";
+                        // 1-per-day cap: once a VWAP trade fires on this ticker today, skip all
+                        // subsequent VWAP scans for the rest of the session (prevents "death by
+                        // a thousand cuts" where TSLA fires 3× on the same choppy day).
+                        if (liveLog.hasStrategyFiredToday(ticker, "vwap")) {
+                            stratSetups = List.of();
+                            if (phaseMsg.isEmpty()) phaseMsg = "⊘ VWAP trade already placed today";
+                        } else {
+                            stratSetups = vwap.detect(bars, ticker, dailyAtr);
+                            if (stratSetups.isEmpty() && phaseMsg.isEmpty()) phaseMsg = "Waiting for VWAP reversion...";
+                        }
                     } else if ("breakout".equals(strat)) {
                         stratSetups = breakout.detect(bars, ticker, dailyAtr);
                         if (stratSetups.isEmpty() && phaseMsg.isEmpty()) phaseMsg = "Waiting for ORB breakout...";

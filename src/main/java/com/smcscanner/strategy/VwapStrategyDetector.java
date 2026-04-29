@@ -61,6 +61,13 @@ public class VwapStrategyDetector {
 
         if (sessionBars.size() < 12) return result;
 
+        // Early-session gate: VWAP is statistically unreliable during the first 30 minutes
+        // of price discovery (9:30–10:00 ET). The volume-weighted mean is still forming and
+        // any Z-score deviation is noise, not signal. Hard block before 10:00 ET.
+        LocalTime lastBarTime = Instant.ofEpochMilli(sessionBars.get(sessionBars.size() - 1).getTimestamp())
+                .atZone(ET).toLocalTime();
+        if (lastBarTime.isBefore(LocalTime.of(10, 0))) return result;
+
         // Compute rolling session VWAP: sum(typical_price * volume) / sum(volume)
         double sumTpVol = 0.0;
         double sumVol   = 0.0;
@@ -149,6 +156,17 @@ public class VwapStrategyDetector {
         boolean smaDeclining = hasSmaEarlier && sma20 < sma20Earlier;
         boolean smaRising    = hasSmaEarlier && sma20 > sma20Earlier;
 
+        // VWAP slope gate: if the intraday SMA is trending with enough velocity, the stock
+        // is in a directional move — mean-reversion against it has very low win rate.
+        // Slope = % change in SMA20 over the last 5 bars (25 minutes).
+        // > +0.20% slope → clearly bullish intraday trend → block SHORT reversion entries.
+        // < -0.20% slope → clearly bearish intraday trend → block LONG reversion entries.
+        // Threshold chosen so AAPL drifts (+0.05%) don't trigger; TSLA trending (+0.30%) does.
+        double smaSlopePct = (hasSmaEarlier && sma20Earlier > 0)
+                ? (sma20 - sma20Earlier) / sma20Earlier * 100.0 : 0.0;
+        boolean steepBullishSlope = smaSlopePct >  0.20;
+        boolean steepBearishSlope = smaSlopePct < -0.20;
+
         // Composite trend flags
         boolean trendBearish         = dayChangePct < -0.8  && smaDeclining;
         boolean trendStronglyBearish = dayChangePct < -1.5;
@@ -171,9 +189,9 @@ public class VwapStrategyDetector {
         // Lowered from 1.5→1.2: 1.5 SD was starving AMZN/SPY (0 signals in 180d).
         // 1.2 SD catches more "rubber band snap" setups while still filtering noise.
         //
-        // Hard block: trendStronglyBearish only blocks LONG, NOT the whole method.
+        // Hard block: trendStronglyBearish OR steep bearish slope only blocks LONG.
         // SHORT evaluation continues below regardless.
-        if (!trendStronglyBearish && lowestClose < vwap - 0.5 * curAtr && zScore < -1.2) {
+        if (!trendStronglyBearish && !steepBearishSlope && lowestClose < vwap - 0.5 * curAtr && zScore < -1.2) {
             // ── 2-bar confirmation window ────────────────────────────────────
             // Check last 2 bars, not just the final one. If the real reversal
             // started 1 bar earlier (bullish bar + volume spike), we pick it up
@@ -256,9 +274,9 @@ public class VwapStrategyDetector {
         // ── SHORT setup ───────────────────────────────────────────────────────
         // Price must have spiked meaningfully above VWAP (Z-Score > 1.2)
         //
-        // Hard block: trendStronglyBullish only blocks SHORT, NOT the whole method.
+        // Hard block: trendStronglyBullish OR steep bullish slope only blocks SHORT.
         // LONG evaluation above runs independently.
-        if (!trendStronglyBullish && highestClose > vwap + 0.5 * curAtr && zScore > 1.2) {
+        if (!trendStronglyBullish && !steepBullishSlope && highestClose > vwap + 0.5 * curAtr && zScore > 1.2) {
             // ── 2-bar confirmation window (SHORT side) ───────────────────────
             OHLCV confirmBarShort = last;
             if (sessionBars.size() >= 2) {
