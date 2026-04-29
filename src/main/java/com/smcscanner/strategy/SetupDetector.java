@@ -211,6 +211,16 @@ public class SetupDetector {
             double pos = (rb2.getClose() - rb2.getLow()) / rng;
             retestWickQuality = "long".equals(state.getDirection()) ? pos : (1.0 - pos);
         }
+        if (retestWickQuality < 0.50) {
+            log.debug("{} filtered: WEAK_DIRECTIONAL_RETEST retestQuality={} dir={}",
+                    ticker, String.format("%.2f", retestWickQuality), state.getDirection());
+            return new DetectResult(List.of(), state);
+        }
+        if (!str[0] && dispAtrRatio < 1.8) {
+            log.debug("{} filtered: WEAK_CHOCH_ONLY no BOS and dispAtrRatio={}",
+                    ticker, String.format("%.2f", dispAtrRatio));
+            return new DetectResult(List.of(), state);
+        }
 
         int conf=scoring.scoreSetup(isEqualSweep, dispAtrRatio, fvgAgeBars, retestWickQuality,
                                     hasStructure, peakVol > avgVol * MIN_VOL_MULT);

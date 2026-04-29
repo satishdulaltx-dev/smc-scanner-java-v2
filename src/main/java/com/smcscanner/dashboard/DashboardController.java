@@ -259,6 +259,33 @@ public class DashboardController {
         return ResponseEntity.ok(candles);
     }
 
+    /** GET /api/chart/history?ticker=AAPL&tf=5m&days=90 — capped historical OHLCV candles from Polygon */
+    @GetMapping("/api/chart/history")
+    @ResponseBody
+    public ResponseEntity<List<Map<String,Object>>> apiChartHistory(
+            @org.springframework.web.bind.annotation.RequestParam String ticker,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "5m") String tf,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "30") int days,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue = "10000") int limit) {
+        String normalizedTf = tf.equals("D") ? "1d" : tf;
+        int cappedDays = Math.max(1, Math.min(days, 180));
+        int cappedLimit = Math.max(1, Math.min(limit, 50000));
+        List<OHLCV> bars = polygon.getBarsWithLookback(ticker, normalizedTf, cappedLimit, cappedDays);
+        List<Map<String,Object>> candles = new ArrayList<>();
+        for (OHLCV b : bars) {
+            Map<String,Object> c = new LinkedHashMap<>();
+            long ts = b.getTimestamp();
+            c.put("time", ts > 9999999999L ? ts / 1000 : ts);
+            c.put("open", b.getOpen());
+            c.put("high", b.getHigh());
+            c.put("low", b.getLow());
+            c.put("close", b.getClose());
+            c.put("volume", b.getVolume());
+            candles.add(c);
+        }
+        return ResponseEntity.ok(candles);
+    }
+
     @GetMapping("/api/performance")
     @ResponseBody
     public ResponseEntity<Map<String,Object>> apiPerformance() {
