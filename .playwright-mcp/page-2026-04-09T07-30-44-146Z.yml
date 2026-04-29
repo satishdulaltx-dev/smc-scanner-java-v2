@@ -1,0 +1,420 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e5]:
+      - heading "SD SCANNER — BACKTEST" [level=1] [ref=e6]
+      - paragraph [ref=e7]: SMC strategy historical performance
+    - generic [ref=e8]:
+      - link "← Dashboard" [ref=e9] [cursor=pointer]:
+        - /url: /
+      - link "🧪 Research" [ref=e10] [cursor=pointer]:
+        - /url: /research
+      - link "⚡ Adaptive" [ref=e11] [cursor=pointer]:
+        - /url: /#adaptive-panel
+      - link "📊 EOD Report" [ref=e12] [cursor=pointer]:
+        - /url: /eod
+      - link "📋 Live Trades" [ref=e13] [cursor=pointer]:
+        - /url: /trades
+  - generic [ref=e14]:
+    - generic [ref=e15]:
+      - generic [ref=e16]: Mode
+      - combobox [ref=e17]:
+        - option "Single Ticker" [selected]
+        - option "All Watchlist"
+    - generic [ref=e18]:
+      - generic [ref=e19]: Ticker
+      - combobox [ref=e20]:
+        - option "AAPL"
+        - option "AMD"
+        - option "AMZN"
+        - option "BABA"
+        - option "COIN"
+        - option "CRWD"
+        - option "DDOG"
+        - option "DIS"
+        - option "GOOGL"
+        - option "GS"
+        - option "HOOD"
+        - option "MARA" [selected]
+        - option "META"
+        - option "MSFT"
+        - option "NFLX"
+        - option "NIO"
+        - option "NVDA"
+        - option "PLTR"
+        - option "PYPL"
+        - option "QQQ"
+        - option "RIOT"
+        - option "ROKU"
+        - option "SHOP"
+        - option "SMCI"
+        - option "SNAP"
+        - option "SOFI"
+        - option "SPY"
+        - option "SQ"
+        - option "TSLA"
+        - option "UBER"
+        - option "V"
+        - option "X:BTCUSD"
+        - option "X:ETHUSD"
+        - option "X:SOLUSD"
+        - option "X:XRPUSD"
+    - generic [ref=e21]:
+      - generic [ref=e22]: Mode
+      - combobox [ref=e23]:
+        - option "All (default)" [selected]
+        - option "Intraday (4h max hold)"
+        - option "Swing (multi-day)"
+        - option "Options (4h + P&L focus)"
+    - generic [ref=e24]:
+      - generic [ref=e25]: Strategy Type
+      - combobox [ref=e26]:
+        - option "Profile default" [selected]
+        - option "SMC (sweep+FVG)"
+        - option "VWAP (1-day reversion)"
+        - option "Key Level rejection"
+        - option "ORB breakout"
+        - option "Gap Momentum / Overnight"
+        - option "Power Earnings Gap (PEG)"
+        - option "Volatility Squeeze (BB/KC)"
+        - option "3-Day VWAP reversion"
+        - option "Index Divergence (SPY lag)"
+        - option "Gamma Pin ($5 strike)"
+    - generic [ref=e27]:
+      - generic [ref=e28]: Exit Model
+      - combobox [ref=e29]:
+        - option "Classic TP / SL" [selected]
+        - option "Hybrid Trail After 1.5R"
+        - option "Live Parity Trail"
+    - generic [ref=e30]:
+      - generic [ref=e31]: Lookback
+      - combobox [ref=e32]:
+        - option "30 days"
+        - option "60 days"
+        - option "90 days"
+        - option "180 days" [selected]
+        - option "1 year"
+        - option "2 years"
+    - button "▶ Run Backtest" [ref=e33] [cursor=pointer]
+    - button "🧠 Optimize" [ref=e34] [cursor=pointer]
+  - generic [ref=e43]:
+    - heading "🧠 Profile Optimizer Results" [level=3] [ref=e44]
+    - paragraph [ref=e45]: "SOFI · 180d lookback · Current strategy: BREAKOUT · 76 viable combos found (min 3 trades)"
+    - table [ref=e47]:
+      - rowgroup [ref=e48]:
+        - row "Rank Strategy MinConf SL (ATR×) TP (R:R) Trades W L BE WR% Avg Win% Avg Loss% Expectancy Opt P&L" [ref=e49]:
+          - columnheader "Rank" [ref=e50]
+          - columnheader "Strategy" [ref=e51]
+          - columnheader "MinConf" [ref=e52]
+          - columnheader "SL (ATR×)" [ref=e53]
+          - columnheader "TP (R:R)" [ref=e54]
+          - columnheader "Trades" [ref=e55]
+          - columnheader "W" [ref=e56]
+          - columnheader "L" [ref=e57]
+          - columnheader "BE" [ref=e58]
+          - columnheader "WR%" [ref=e59]
+          - columnheader "Avg Win%" [ref=e60]
+          - columnheader "Avg Loss%" [ref=e61]
+          - columnheader "Expectancy" [ref=e62]
+          - columnheader "Opt P&L" [ref=e63]
+      - rowgroup [ref=e64]:
+        - row "🏆 VWAP 78 1 2:1 19 13 6 0 68.4% +1.92% -0.73% +1.08% $-21" [ref=e365]:
+          - cell "🏆" [ref=e366]
+          - cell "VWAP" [ref=e367]
+          - cell "78" [ref=e368]
+          - cell "1" [ref=e369]
+          - cell "2:1" [ref=e370]
+          - cell "19" [ref=e371]
+          - cell "13" [ref=e372]
+          - cell "6" [ref=e373]
+          - cell "0" [ref=e374]
+          - cell "68.4%" [ref=e375]
+          - cell "+1.92%" [ref=e376]
+          - cell "-0.73%" [ref=e377]
+          - cell "+1.08%" [ref=e378]
+          - cell "$-21" [ref=e379]
+        - row "2 VWAP 78 1 1.5:1 17 11 6 0 64.7% +1.95% -0.73% +1.01% $-29" [ref=e380]:
+          - cell "2" [ref=e381]
+          - cell "VWAP" [ref=e382]
+          - cell "78" [ref=e383]
+          - cell "1" [ref=e384]
+          - cell "1.5:1" [ref=e385]
+          - cell "17" [ref=e386]
+          - cell "11" [ref=e387]
+          - cell "6" [ref=e388]
+          - cell "0" [ref=e389]
+          - cell "64.7%" [ref=e390]
+          - cell "+1.95%" [ref=e391]
+          - cell "-0.73%" [ref=e392]
+          - cell "+1.01%" [ref=e393]
+          - cell "$-29" [ref=e394]
+        - row "3 BREAKOUT ◀ 78 1 1:1 25 17 8 0 68% +2.00% -1.15% +0.99% $-4" [ref=e395]:
+          - cell "3" [ref=e396]
+          - cell "BREAKOUT ◀" [ref=e397]
+          - cell "78" [ref=e398]
+          - cell "1" [ref=e399]
+          - cell "1:1" [ref=e400]
+          - cell "25" [ref=e401]
+          - cell "17" [ref=e402]
+          - cell "8" [ref=e403]
+          - cell "0" [ref=e404]
+          - cell "68%" [ref=e405]
+          - cell "+2.00%" [ref=e406]
+          - cell "-1.15%" [ref=e407]
+          - cell "+0.99%" [ref=e408]
+          - cell "$-4" [ref=e409]
+        - row "4 VWAP 78 1 1:1 14 9 5 0 64.3% +1.96% -0.76% +0.99% $-20" [ref=e410]:
+          - cell "4" [ref=e411]
+          - cell "VWAP" [ref=e412]
+          - cell "78" [ref=e413]
+          - cell "1" [ref=e414]
+          - cell "1:1" [ref=e415]
+          - cell "14" [ref=e416]
+          - cell "9" [ref=e417]
+          - cell "5" [ref=e418]
+          - cell "0" [ref=e419]
+          - cell "64.3%" [ref=e420]
+          - cell "+1.96%" [ref=e421]
+          - cell "-0.76%" [ref=e422]
+          - cell "+0.99%" [ref=e423]
+          - cell "$-20" [ref=e424]
+        - row "5 KEYLEVEL 78 0.4 1:1 19 14 5 0 73.7% +1.74% -1.24% +0.96% $-31" [ref=e425]:
+          - cell "5" [ref=e426]
+          - cell "KEYLEVEL" [ref=e427]
+          - cell "78" [ref=e428]
+          - cell "0.4" [ref=e429]
+          - cell "1:1" [ref=e430]
+          - cell "19" [ref=e431]
+          - cell "14" [ref=e432]
+          - cell "5" [ref=e433]
+          - cell "0" [ref=e434]
+          - cell "73.7%" [ref=e435]
+          - cell "+1.74%" [ref=e436]
+          - cell "-1.24%" [ref=e437]
+          - cell "+0.96%" [ref=e438]
+          - cell "$-31" [ref=e439]
+        - row "6 BREAKOUT ◀ 78 0.4 1:1 26 18 8 0 69.2% +1.82% -1.14% +0.91% $-39" [ref=e440]:
+          - cell "6" [ref=e441]
+          - cell "BREAKOUT ◀" [ref=e442]
+          - cell "78" [ref=e443]
+          - cell "0.4" [ref=e444]
+          - cell "1:1" [ref=e445]
+          - cell "26" [ref=e446]
+          - cell "18" [ref=e447]
+          - cell "8" [ref=e448]
+          - cell "0" [ref=e449]
+          - cell "69.2%" [ref=e450]
+          - cell "+1.82%" [ref=e451]
+          - cell "-1.14%" [ref=e452]
+          - cell "+0.91%" [ref=e453]
+          - cell "$-39" [ref=e454]
+        - row "7 BREAKOUT ◀ 78 1 1.5:1 27 17 10 0 63% +2.00% -1.13% +0.84% $-32" [ref=e455]:
+          - cell "7" [ref=e456]
+          - cell "BREAKOUT ◀" [ref=e457]
+          - cell "78" [ref=e458]
+          - cell "1" [ref=e459]
+          - cell "1.5:1" [ref=e460]
+          - cell "27" [ref=e461]
+          - cell "17" [ref=e462]
+          - cell "10" [ref=e463]
+          - cell "0" [ref=e464]
+          - cell "63%" [ref=e465]
+          - cell "+2.00%" [ref=e466]
+          - cell "-1.13%" [ref=e467]
+          - cell "+0.84%" [ref=e468]
+          - cell "$-32" [ref=e469]
+        - row "8 BREAKOUT ◀ 78 1 2:1 29 18 11 0 62.1% +1.94% -1.10% +0.79% $-47" [ref=e470]:
+          - cell "8" [ref=e471]
+          - cell "BREAKOUT ◀" [ref=e472]
+          - cell "78" [ref=e473]
+          - cell "1" [ref=e474]
+          - cell "2:1" [ref=e475]
+          - cell "29" [ref=e476]
+          - cell "18" [ref=e477]
+          - cell "11" [ref=e478]
+          - cell "0" [ref=e479]
+          - cell "62.1%" [ref=e480]
+          - cell "+1.94%" [ref=e481]
+          - cell "-1.10%" [ref=e482]
+          - cell "+0.79%" [ref=e483]
+          - cell "$-47" [ref=e484]
+        - row "9 VWAP 78 0.4 1:1 16 10 6 0 62.5% +1.86% -1.08% +0.76% $-38" [ref=e485]:
+          - cell "9" [ref=e486]
+          - cell "VWAP" [ref=e487]
+          - cell "78" [ref=e488]
+          - cell "0.4" [ref=e489]
+          - cell "1:1" [ref=e490]
+          - cell "16" [ref=e491]
+          - cell "10" [ref=e492]
+          - cell "6" [ref=e493]
+          - cell "0" [ref=e494]
+          - cell "62.5%" [ref=e495]
+          - cell "+1.86%" [ref=e496]
+          - cell "-1.08%" [ref=e497]
+          - cell "+0.76%" [ref=e498]
+          - cell "$-38" [ref=e499]
+        - row "10 VWAP 78 0.4 2:1 19 12 6 1 66.7% +1.59% -1.08% +0.70% $-68" [ref=e500]:
+          - cell "10" [ref=e501]
+          - cell "VWAP" [ref=e502]
+          - cell "78" [ref=e503]
+          - cell "0.4" [ref=e504]
+          - cell "2:1" [ref=e505]
+          - cell "19" [ref=e506]
+          - cell "12" [ref=e507]
+          - cell "6" [ref=e508]
+          - cell "1" [ref=e509]
+          - cell "66.7%" [ref=e510]
+          - cell "+1.59%" [ref=e511]
+          - cell "-1.08%" [ref=e512]
+          - cell "+0.70%" [ref=e513]
+          - cell "$-68" [ref=e514]
+        - row "11 BREAKOUT ◀ 78 0.4 1.5:1 26 16 9 1 64% +1.69% -1.08% +0.69% $-87" [ref=e515]:
+          - cell "11" [ref=e516]
+          - cell "BREAKOUT ◀" [ref=e517]
+          - cell "78" [ref=e518]
+          - cell "0.4" [ref=e519]
+          - cell "1.5:1" [ref=e520]
+          - cell "26" [ref=e521]
+          - cell "16" [ref=e522]
+          - cell "9" [ref=e523]
+          - cell "1" [ref=e524]
+          - cell "64%" [ref=e525]
+          - cell "+1.69%" [ref=e526]
+          - cell "-1.08%" [ref=e527]
+          - cell "+0.69%" [ref=e528]
+          - cell "$-87" [ref=e529]
+        - row "12 SMC 78 0.4 1.5:1 22 13 9 0 59.1% +1.93% -1.15% +0.67% $-63" [ref=e530]:
+          - cell "12" [ref=e531]
+          - cell "SMC" [ref=e532]
+          - cell "78" [ref=e533]
+          - cell "0.4" [ref=e534]
+          - cell "1.5:1" [ref=e535]
+          - cell "22" [ref=e536]
+          - cell "13" [ref=e537]
+          - cell "9" [ref=e538]
+          - cell "0" [ref=e539]
+          - cell "59.1%" [ref=e540]
+          - cell "+1.93%" [ref=e541]
+          - cell "-1.15%" [ref=e542]
+          - cell "+0.67%" [ref=e543]
+          - cell "$-63" [ref=e544]
+        - row "13 KEYLEVEL 78 0.4 1.5:1 22 14 7 1 66.7% +1.48% -1.01% +0.65% $-106" [ref=e545]:
+          - cell "13" [ref=e546]
+          - cell "KEYLEVEL" [ref=e547]
+          - cell "78" [ref=e548]
+          - cell "0.4" [ref=e549]
+          - cell "1.5:1" [ref=e550]
+          - cell "22" [ref=e551]
+          - cell "14" [ref=e552]
+          - cell "7" [ref=e553]
+          - cell "1" [ref=e554]
+          - cell "66.7%" [ref=e555]
+          - cell "+1.48%" [ref=e556]
+          - cell "-1.01%" [ref=e557]
+          - cell "+0.65%" [ref=e558]
+          - cell "$-106" [ref=e559]
+        - row "14 SMC 78 0.4 1:1 14 9 5 0 64.3% +1.77% -1.41% +0.63% $-17" [ref=e560]:
+          - cell "14" [ref=e561]
+          - cell "SMC" [ref=e562]
+          - cell "78" [ref=e563]
+          - cell "0.4" [ref=e564]
+          - cell "1:1" [ref=e565]
+          - cell "14" [ref=e566]
+          - cell "9" [ref=e567]
+          - cell "5" [ref=e568]
+          - cell "0" [ref=e569]
+          - cell "64.3%" [ref=e570]
+          - cell "+1.77%" [ref=e571]
+          - cell "-1.41%" [ref=e572]
+          - cell "+0.63%" [ref=e573]
+          - cell "$-17" [ref=e574]
+        - row "15 VWAP 62 1 1:1 43 28 15 0 65.1% +1.61% -1.26% +0.60% $-173" [ref=e575]:
+          - cell "15" [ref=e576]
+          - cell "VWAP" [ref=e577]
+          - cell "62" [ref=e578]
+          - cell "1" [ref=e579]
+          - cell "1:1" [ref=e580]
+          - cell "43" [ref=e581]
+          - cell "28" [ref=e582]
+          - cell "15" [ref=e583]
+          - cell "0" [ref=e584]
+          - cell "65.1%" [ref=e585]
+          - cell "+1.61%" [ref=e586]
+          - cell "-1.26%" [ref=e587]
+          - cell "+0.60%" [ref=e588]
+          - cell "$-173" [ref=e589]
+        - row "16 VWAP 62 1 1.5:1 43 28 15 0 65.1% +1.61% -1.26% +0.60% $-173" [ref=e590]:
+          - cell "16" [ref=e591]
+          - cell "VWAP" [ref=e592]
+          - cell "62" [ref=e593]
+          - cell "1" [ref=e594]
+          - cell "1.5:1" [ref=e595]
+          - cell "43" [ref=e596]
+          - cell "28" [ref=e597]
+          - cell "15" [ref=e598]
+          - cell "0" [ref=e599]
+          - cell "65.1%" [ref=e600]
+          - cell "+1.61%" [ref=e601]
+          - cell "-1.26%" [ref=e602]
+          - cell "+0.60%" [ref=e603]
+          - cell "$-173" [ref=e604]
+        - row "17 VWAP 62 1 2:1 43 28 15 0 65.1% +1.61% -1.26% +0.60% $-173" [ref=e605]:
+          - cell "17" [ref=e606]
+          - cell "VWAP" [ref=e607]
+          - cell "62" [ref=e608]
+          - cell "1" [ref=e609]
+          - cell "2:1" [ref=e610]
+          - cell "43" [ref=e611]
+          - cell "28" [ref=e612]
+          - cell "15" [ref=e613]
+          - cell "0" [ref=e614]
+          - cell "65.1%" [ref=e615]
+          - cell "+1.61%" [ref=e616]
+          - cell "-1.26%" [ref=e617]
+          - cell "+0.60%" [ref=e618]
+          - cell "$-173" [ref=e619]
+        - row "18 SMC 78 1 1:1 13 8 5 0 61.5% +1.72% -1.20% +0.60% $-29" [ref=e620]:
+          - cell "18" [ref=e621]
+          - cell "SMC" [ref=e622]
+          - cell "78" [ref=e623]
+          - cell "1" [ref=e624]
+          - cell "1:1" [ref=e625]
+          - cell "13" [ref=e626]
+          - cell "8" [ref=e627]
+          - cell "5" [ref=e628]
+          - cell "0" [ref=e629]
+          - cell "61.5%" [ref=e630]
+          - cell "+1.72%" [ref=e631]
+          - cell "-1.20%" [ref=e632]
+          - cell "+0.60%" [ref=e633]
+          - cell "$-29" [ref=e634]
+        - row "19 VWAP 78 0.4 1.5:1 18 11 6 1 64.7% +1.51% -1.08% +0.60% $-84" [ref=e635]:
+          - cell "19" [ref=e636]
+          - cell "VWAP" [ref=e637]
+          - cell "78" [ref=e638]
+          - cell "0.4" [ref=e639]
+          - cell "1.5:1" [ref=e640]
+          - cell "18" [ref=e641]
+          - cell "11" [ref=e642]
+          - cell "6" [ref=e643]
+          - cell "1" [ref=e644]
+          - cell "64.7%" [ref=e645]
+          - cell "+1.51%" [ref=e646]
+          - cell "-1.08%" [ref=e647]
+          - cell "+0.60%" [ref=e648]
+          - cell "$-84" [ref=e649]
+        - row "20 KEYLEVEL 78 0.4 2:1 23 14 8 1 63.6% +1.48% -1.00% +0.58% $-117" [ref=e650]:
+          - cell "20" [ref=e651]
+          - cell "KEYLEVEL" [ref=e652]
+          - cell "78" [ref=e653]
+          - cell "0.4" [ref=e654]
+          - cell "2:1" [ref=e655]
+          - cell "23" [ref=e656]
+          - cell "14" [ref=e657]
+          - cell "8" [ref=e658]
+          - cell "1" [ref=e659]
+          - cell "63.6%" [ref=e660]
+          - cell "+1.48%" [ref=e661]
+          - cell "-1.00%" [ref=e662]
+          - cell "+0.58%" [ref=e663]
+          - cell "$-117" [ref=e664]
+  - generic [ref=e39]: SD Scanner — Backtest Engine · Intraday 5m replay · Same logic as live alerts · Real-time Polygon data

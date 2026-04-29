@@ -1,0 +1,421 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e5]:
+      - heading "SD SCANNER — BACKTEST" [level=1] [ref=e6]
+      - paragraph [ref=e7]: SMC strategy historical performance
+    - generic [ref=e8]:
+      - link "← Dashboard" [ref=e9] [cursor=pointer]:
+        - /url: /
+      - link "🧪 Research" [ref=e10] [cursor=pointer]:
+        - /url: /research
+      - link "⚡ Adaptive" [ref=e11] [cursor=pointer]:
+        - /url: /#adaptive-panel
+      - link "📊 EOD Report" [ref=e12] [cursor=pointer]:
+        - /url: /eod
+      - link "📋 Live Trades" [ref=e13] [cursor=pointer]:
+        - /url: /trades
+  - generic [ref=e14]:
+    - generic [ref=e15]:
+      - generic [ref=e16]: Mode
+      - combobox [ref=e17]:
+        - option "Single Ticker" [selected]
+        - option "All Watchlist"
+    - generic [ref=e18]:
+      - generic [ref=e19]: Ticker
+      - combobox [ref=e20]:
+        - option "AAPL"
+        - option "AMD"
+        - option "AMZN"
+        - option "BA"
+        - option "BABA"
+        - option "COIN"
+        - option "CRWD"
+        - option "DDOG"
+        - option "DIS"
+        - option "GLD"
+        - option "GOOGL"
+        - option "GS"
+        - option "HOOD"
+        - option "JPM"
+        - option "MARA"
+        - option "META"
+        - option "MSFT"
+        - option "NFLX"
+        - option "NIO"
+        - option "NVDA"
+        - option "PLTR" [selected]
+        - option "PYPL"
+        - option "QQQ"
+        - option "ROKU"
+        - option "SHOP"
+        - option "SNAP"
+        - option "SOFI"
+        - option "SPY"
+        - option "SQ"
+        - option "TSLA"
+        - option "UBER"
+        - option "V"
+        - option "X:SOLUSD"
+        - option "X:XRPUSD"
+    - generic [ref=e21]:
+      - generic [ref=e22]: Mode
+      - combobox [ref=e23]:
+        - option "All (scalp + intraday + swing)" [selected]
+        - option "Scalp (dynamic hold)"
+        - option "Intraday (4h max hold)"
+        - option "Swing (multi-day)"
+        - option "Options (4h + P&L focus)"
+    - generic [ref=e24]:
+      - generic [ref=e25]: Strategy Type
+      - combobox [ref=e26]:
+        - option "Profile default" [selected]
+        - option "Bollinger Scalp"
+        - option "SMC (sweep+FVG)"
+        - option "VWAP (1-day reversion)"
+        - option "Key Level rejection"
+        - option "ORB breakout"
+        - option "Gap Momentum / Overnight"
+        - option "Power Earnings Gap (PEG)"
+        - option "Volatility Squeeze (BB/KC)"
+        - option "3-Day VWAP reversion"
+        - option "Index Divergence (SPY lag)"
+        - option "Gamma Pin ($5 strike)"
+    - generic [ref=e27]:
+      - generic [ref=e28]: Exit Model
+      - combobox [ref=e29]:
+        - option "Hybrid Trail After 1.5R ✓" [selected]
+        - option "Live Parity Trail"
+        - option "Classic TP / SL"
+    - generic [ref=e30]:
+      - generic [ref=e31]: Lookback
+      - combobox [ref=e32]:
+        - option "30 days"
+        - option "60 days"
+        - option "90 days"
+        - option "180 days" [selected]
+        - option "1 year"
+        - option "2 years"
+    - button "▶ Run Backtest" [ref=e43] [cursor=pointer]
+    - button "🧠 Optimize" [ref=e34] [cursor=pointer]
+  - generic [ref=e500]:
+    - heading "🧠 Profile Optimizer Results" [level=3] [ref=e501]
+    - paragraph [ref=e502]: "CRWD · 180d lookback · Current strategy: SMC · 34 viable combos found (min 3 trades)"
+    - table [ref=e504]:
+      - rowgroup [ref=e505]:
+        - row "Rank Strategy MinConf SL (ATR×) TP (R:R) Trades W L BE WR% Avg Win% Avg Loss% Expectancy Opt P&L" [ref=e506]:
+          - columnheader "Rank" [ref=e507]
+          - columnheader "Strategy" [ref=e508]
+          - columnheader "MinConf" [ref=e509]
+          - columnheader "SL (ATR×)" [ref=e510]
+          - columnheader "TP (R:R)" [ref=e511]
+          - columnheader "Trades" [ref=e512]
+          - columnheader "W" [ref=e513]
+          - columnheader "L" [ref=e514]
+          - columnheader "BE" [ref=e515]
+          - columnheader "WR%" [ref=e516]
+          - columnheader "Avg Win%" [ref=e517]
+          - columnheader "Avg Loss%" [ref=e518]
+          - columnheader "Expectancy" [ref=e519]
+          - columnheader "Opt P&L" [ref=e520]
+      - rowgroup [ref=e521]:
+        - row "🏆 SMC ◀ 78 0.4 2:1 14 11 1 2 91.7% +1.22% -0.82% +1.05% $3996" [ref=e852]:
+          - cell "🏆" [ref=e853]
+          - cell "SMC ◀" [ref=e854]
+          - cell "78" [ref=e855]
+          - cell "0.4" [ref=e856]
+          - cell "2:1" [ref=e857]
+          - cell "14" [ref=e858]
+          - cell "11" [ref=e859]
+          - cell "1" [ref=e860]
+          - cell "2" [ref=e861]
+          - cell "91.7%" [ref=e862]
+          - cell "+1.22%" [ref=e863]
+          - cell "-0.82%" [ref=e864]
+          - cell "+1.05%" [ref=e865]
+          - cell "$3996" [ref=e866]
+        - row "2 SMC ◀ 78 0.4 1.5:1 12 10 1 1 90.9% +1.09% -0.82% +0.91% $3579" [ref=e867]:
+          - cell "2" [ref=e868]
+          - cell "SMC ◀" [ref=e869]
+          - cell "78" [ref=e870]
+          - cell "0.4" [ref=e871]
+          - cell "1.5:1" [ref=e872]
+          - cell "12" [ref=e873]
+          - cell "10" [ref=e874]
+          - cell "1" [ref=e875]
+          - cell "1" [ref=e876]
+          - cell "90.9%" [ref=e877]
+          - cell "+1.09%" [ref=e878]
+          - cell "-0.82%" [ref=e879]
+          - cell "+0.91%" [ref=e880]
+          - cell "$3579" [ref=e881]
+        - row "3 SMC ◀ 78 0.4 1:1 9 9 0 0 100% +0.91% -0.00% +0.91% $2742" [ref=e882]:
+          - cell "3" [ref=e883]
+          - cell "SMC ◀" [ref=e884]
+          - cell "78" [ref=e885]
+          - cell "0.4" [ref=e886]
+          - cell "1:1" [ref=e887]
+          - cell "9" [ref=e888]
+          - cell "9" [ref=e889]
+          - cell "0" [ref=e890]
+          - cell "0" [ref=e891]
+          - cell "100%" [ref=e892]
+          - cell "+0.91%" [ref=e893]
+          - cell "-0.00%" [ref=e894]
+          - cell "+0.91%" [ref=e895]
+          - cell "$2742" [ref=e896]
+        - row "4 SMC ◀ 65 0.5 1.5:1 24 15 6 3 71.4% +1.44% -0.89% +0.78% $4422" [ref=e897]:
+          - cell "4" [ref=e898]
+          - cell "SMC ◀" [ref=e899]
+          - cell "65" [ref=e900]
+          - cell "0.5" [ref=e901]
+          - cell "1.5:1" [ref=e902]
+          - cell "24" [ref=e903]
+          - cell "15" [ref=e904]
+          - cell "6" [ref=e905]
+          - cell "3" [ref=e906]
+          - cell "71.4%" [ref=e907]
+          - cell "+1.44%" [ref=e908]
+          - cell "-0.89%" [ref=e909]
+          - cell "+0.78%" [ref=e910]
+          - cell "$4422" [ref=e911]
+        - row "5 SMC ◀ 70 0.4 2:1 19 12 4 3 75% +1.20% -0.58% +0.76% $3190" [ref=e912]:
+          - cell "5" [ref=e913]
+          - cell "SMC ◀" [ref=e914]
+          - cell "70" [ref=e915]
+          - cell "0.4" [ref=e916]
+          - cell "2:1" [ref=e917]
+          - cell "19" [ref=e918]
+          - cell "12" [ref=e919]
+          - cell "4" [ref=e920]
+          - cell "3" [ref=e921]
+          - cell "75%" [ref=e922]
+          - cell "+1.20%" [ref=e923]
+          - cell "-0.58%" [ref=e924]
+          - cell "+0.76%" [ref=e925]
+          - cell "$3190" [ref=e926]
+        - row "6 SMC ◀ 70 0.4 1.5:1 19 12 4 3 75% +1.13% -0.58% +0.71% $2584" [ref=e927]:
+          - cell "6" [ref=e928]
+          - cell "SMC ◀" [ref=e929]
+          - cell "70" [ref=e930]
+          - cell "0.4" [ref=e931]
+          - cell "1.5:1" [ref=e932]
+          - cell "19" [ref=e933]
+          - cell "12" [ref=e934]
+          - cell "4" [ref=e935]
+          - cell "3" [ref=e936]
+          - cell "75%" [ref=e937]
+          - cell "+1.13%" [ref=e938]
+          - cell "-0.58%" [ref=e939]
+          - cell "+0.71%" [ref=e940]
+          - cell "$2584" [ref=e941]
+        - row "7 SMC ◀ 62 0.4 2:1 25 14 6 5 70% +1.24% -0.58% +0.69% $3392" [ref=e942]:
+          - cell "7" [ref=e943]
+          - cell "SMC ◀" [ref=e944]
+          - cell "62" [ref=e945]
+          - cell "0.4" [ref=e946]
+          - cell "2:1" [ref=e947]
+          - cell "25" [ref=e948]
+          - cell "14" [ref=e949]
+          - cell "6" [ref=e950]
+          - cell "5" [ref=e951]
+          - cell "70%" [ref=e952]
+          - cell "+1.24%" [ref=e953]
+          - cell "-0.58%" [ref=e954]
+          - cell "+0.69%" [ref=e955]
+          - cell "$3392" [ref=e956]
+        - row "8 SMC ◀ 70 1 2:1 18 11 7 0 61.1% +1.53% -0.64% +0.69% $2501" [ref=e957]:
+          - cell "8" [ref=e958]
+          - cell "SMC ◀" [ref=e959]
+          - cell "70" [ref=e960]
+          - cell "1" [ref=e961]
+          - cell "2:1" [ref=e962]
+          - cell "18" [ref=e963]
+          - cell "11" [ref=e964]
+          - cell "7" [ref=e965]
+          - cell "0" [ref=e966]
+          - cell "61.1%" [ref=e967]
+          - cell "+1.53%" [ref=e968]
+          - cell "-0.64%" [ref=e969]
+          - cell "+0.69%" [ref=e970]
+          - cell "$2501" [ref=e971]
+        - row "9 SMC ◀ 78 1 2:1 12 8 4 0 66.7% +1.46% -0.87% +0.68% $1681" [ref=e972]:
+          - cell "9" [ref=e973]
+          - cell "SMC ◀" [ref=e974]
+          - cell "78" [ref=e975]
+          - cell "1" [ref=e976]
+          - cell "2:1" [ref=e977]
+          - cell "12" [ref=e978]
+          - cell "8" [ref=e979]
+          - cell "4" [ref=e980]
+          - cell "0" [ref=e981]
+          - cell "66.7%" [ref=e982]
+          - cell "+1.46%" [ref=e983]
+          - cell "-0.87%" [ref=e984]
+          - cell "+0.68%" [ref=e985]
+          - cell "$1681" [ref=e986]
+        - row "10 SMC ◀ 70 1 1.5:1 18 11 7 0 61.1% +1.51% -0.64% +0.67% $2500" [ref=e987]:
+          - cell "10" [ref=e988]
+          - cell "SMC ◀" [ref=e989]
+          - cell "70" [ref=e990]
+          - cell "1" [ref=e991]
+          - cell "1.5:1" [ref=e992]
+          - cell "18" [ref=e993]
+          - cell "11" [ref=e994]
+          - cell "7" [ref=e995]
+          - cell "0" [ref=e996]
+          - cell "61.1%" [ref=e997]
+          - cell "+1.51%" [ref=e998]
+          - cell "-0.64%" [ref=e999]
+          - cell "+0.67%" [ref=e1000]
+          - cell "$2500" [ref=e1001]
+        - row "11 SMC ◀ 70 0.4 1:1 19 15 4 0 78.9% +1.00% -0.58% +0.67% $2658" [ref=e1002]:
+          - cell "11" [ref=e1003]
+          - cell "SMC ◀" [ref=e1004]
+          - cell "70" [ref=e1005]
+          - cell "0.4" [ref=e1006]
+          - cell "1:1" [ref=e1007]
+          - cell "19" [ref=e1008]
+          - cell "15" [ref=e1009]
+          - cell "4" [ref=e1010]
+          - cell "0" [ref=e1011]
+          - cell "78.9%" [ref=e1012]
+          - cell "+1.00%" [ref=e1013]
+          - cell "-0.58%" [ref=e1014]
+          - cell "+0.67%" [ref=e1015]
+          - cell "$2658" [ref=e1016]
+        - row "12 SMC ◀ 62 0.4 1.5:1 25 15 6 4 71.4% +1.16% -0.58% +0.66% $2956" [ref=e1017]:
+          - cell "12" [ref=e1018]
+          - cell "SMC ◀" [ref=e1019]
+          - cell "62" [ref=e1020]
+          - cell "0.4" [ref=e1021]
+          - cell "1.5:1" [ref=e1022]
+          - cell "25" [ref=e1023]
+          - cell "15" [ref=e1024]
+          - cell "6" [ref=e1025]
+          - cell "4" [ref=e1026]
+          - cell "71.4%" [ref=e1027]
+          - cell "+1.16%" [ref=e1028]
+          - cell "-0.58%" [ref=e1029]
+          - cell "+0.66%" [ref=e1030]
+          - cell "$2956" [ref=e1031]
+        - row "13 SMC ◀ 70 1 1:1 17 10 7 0 58.8% +1.56% -0.64% +0.65% $2154" [ref=e1032]:
+          - cell "13" [ref=e1033]
+          - cell "SMC ◀" [ref=e1034]
+          - cell "70" [ref=e1035]
+          - cell "1" [ref=e1036]
+          - cell "1:1" [ref=e1037]
+          - cell "17" [ref=e1038]
+          - cell "10" [ref=e1039]
+          - cell "7" [ref=e1040]
+          - cell "0" [ref=e1041]
+          - cell "58.8%" [ref=e1042]
+          - cell "+1.56%" [ref=e1043]
+          - cell "-0.64%" [ref=e1044]
+          - cell "+0.65%" [ref=e1045]
+          - cell "$2154" [ref=e1046]
+        - row "14 SMC ◀ 78 1 1:1 6 4 2 0 66.7% +1.42% -0.89% +0.65% $1104" [ref=e1047]:
+          - cell "14" [ref=e1048]
+          - cell "SMC ◀" [ref=e1049]
+          - cell "78" [ref=e1050]
+          - cell "1" [ref=e1051]
+          - cell "1:1" [ref=e1052]
+          - cell "6" [ref=e1053]
+          - cell "4" [ref=e1054]
+          - cell "2" [ref=e1055]
+          - cell "0" [ref=e1056]
+          - cell "66.7%" [ref=e1057]
+          - cell "+1.42%" [ref=e1058]
+          - cell "-0.89%" [ref=e1059]
+          - cell "+0.65%" [ref=e1060]
+          - cell "$1104" [ref=e1061]
+        - row "15 SMC ◀ 62 0.4 1:1 25 17 7 1 70.8% +0.99% -0.88% +0.45% $3159" [ref=e1062]:
+          - cell "15" [ref=e1063]
+          - cell "SMC ◀" [ref=e1064]
+          - cell "62" [ref=e1065]
+          - cell "0.4" [ref=e1066]
+          - cell "1:1" [ref=e1067]
+          - cell "25" [ref=e1068]
+          - cell "17" [ref=e1069]
+          - cell "7" [ref=e1070]
+          - cell "1" [ref=e1071]
+          - cell "70.8%" [ref=e1072]
+          - cell "+0.99%" [ref=e1073]
+          - cell "-0.88%" [ref=e1074]
+          - cell "+0.45%" [ref=e1075]
+          - cell "$3159" [ref=e1076]
+        - row "16 SMC ◀ 62 1 2:1 25 15 10 0 60% +1.30% -1.06% +0.35% $3201" [ref=e1077]:
+          - cell "16" [ref=e1078]
+          - cell "SMC ◀" [ref=e1079]
+          - cell "62" [ref=e1080]
+          - cell "1" [ref=e1081]
+          - cell "2:1" [ref=e1082]
+          - cell "25" [ref=e1083]
+          - cell "15" [ref=e1084]
+          - cell "10" [ref=e1085]
+          - cell "0" [ref=e1086]
+          - cell "60%" [ref=e1087]
+          - cell "+1.30%" [ref=e1088]
+          - cell "-1.06%" [ref=e1089]
+          - cell "+0.35%" [ref=e1090]
+          - cell "$3201" [ref=e1091]
+        - row "17 SMC ◀ 62 1 1.5:1 25 15 10 0 60% +1.30% -1.06% +0.35% $3253" [ref=e1092]:
+          - cell "17" [ref=e1093]
+          - cell "SMC ◀" [ref=e1094]
+          - cell "62" [ref=e1095]
+          - cell "1" [ref=e1096]
+          - cell "1.5:1" [ref=e1097]
+          - cell "25" [ref=e1098]
+          - cell "15" [ref=e1099]
+          - cell "10" [ref=e1100]
+          - cell "0" [ref=e1101]
+          - cell "60%" [ref=e1102]
+          - cell "+1.30%" [ref=e1103]
+          - cell "-1.06%" [ref=e1104]
+          - cell "+0.35%" [ref=e1105]
+          - cell "$3253" [ref=e1106]
+        - row "18 SMC ◀ 62 1 1:1 25 15 10 0 60% +1.24% -1.06% +0.32% $2914" [ref=e1107]:
+          - cell "18" [ref=e1108]
+          - cell "SMC ◀" [ref=e1109]
+          - cell "62" [ref=e1110]
+          - cell "1" [ref=e1111]
+          - cell "1:1" [ref=e1112]
+          - cell "25" [ref=e1113]
+          - cell "15" [ref=e1114]
+          - cell "10" [ref=e1115]
+          - cell "0" [ref=e1116]
+          - cell "60%" [ref=e1117]
+          - cell "+1.24%" [ref=e1118]
+          - cell "-1.06%" [ref=e1119]
+          - cell "+0.32%" [ref=e1120]
+          - cell "$2914" [ref=e1121]
+        - row "19 SMC ◀ 78 1 1.5:1 6 3 3 0 50% +1.31% -0.93% +0.19% $17" [ref=e1122]:
+          - cell "19" [ref=e1123]
+          - cell "SMC ◀" [ref=e1124]
+          - cell "78" [ref=e1125]
+          - cell "1" [ref=e1126]
+          - cell "1.5:1" [ref=e1127]
+          - cell "6" [ref=e1128]
+          - cell "3" [ref=e1129]
+          - cell "3" [ref=e1130]
+          - cell "0" [ref=e1131]
+          - cell "50%" [ref=e1132]
+          - cell "+1.31%" [ref=e1133]
+          - cell "-0.93%" [ref=e1134]
+          - cell "+0.19%" [ref=e1135]
+          - cell "$17" [ref=e1136]
+        - row "20 VWAP 70 0.4 1:1 2 0 1 1 0% +0.00% -0.65% -0.65% $-160" [ref=e1137]:
+          - cell "20" [ref=e1138]
+          - cell "VWAP" [ref=e1139]
+          - cell "70" [ref=e1140]
+          - cell "0.4" [ref=e1141]
+          - cell "1:1" [ref=e1142]
+          - cell "2" [ref=e1143]
+          - cell "0" [ref=e1144]
+          - cell "1" [ref=e1145]
+          - cell "1" [ref=e1146]
+          - cell "0%" [ref=e1147]
+          - cell "+0.00%" [ref=e1148]
+          - cell "-0.65%" [ref=e1149]
+          - cell "-0.65%" [ref=e1150]
+          - cell "$-160" [ref=e1151]
+  - generic [ref=e39]: SD Scanner — Backtest Engine · Intraday 5m replay · Same logic as live alerts · Real-time Polygon data

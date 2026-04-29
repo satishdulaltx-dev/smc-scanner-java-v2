@@ -1,0 +1,67 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e5]:
+      - heading "SD SCANNER — BACKTEST" [level=1] [ref=e6]
+      - paragraph [ref=e7]: SMC strategy historical performance
+    - generic [ref=e8]:
+      - link "← Dashboard" [ref=e9] [cursor=pointer]:
+        - /url: /
+      - link "🧪 Research" [ref=e10] [cursor=pointer]:
+        - /url: /research
+      - link "⚡ Adaptive" [ref=e11] [cursor=pointer]:
+        - /url: /#adaptive-panel
+      - link "📊 EOD Report" [ref=e12] [cursor=pointer]:
+        - /url: /eod
+      - link "📋 Live Trades" [ref=e13] [cursor=pointer]:
+        - /url: /trades
+  - generic [ref=e14]:
+    - generic [ref=e15]:
+      - generic [ref=e16]: Mode
+      - combobox [active] [ref=e17]:
+        - option "Single Ticker"
+        - option "All Watchlist" [selected]
+    - generic [ref=e21]:
+      - generic [ref=e22]: Mode
+      - combobox [ref=e23]:
+        - option "All (default)"
+        - option "Scalp (dynamic hold)" [selected]
+        - option "Intraday (4h max hold)"
+        - option "Swing (multi-day)"
+        - option "Options (4h + P&L focus)"
+    - generic [ref=e24]:
+      - generic [ref=e25]: Strategy Type
+      - combobox [ref=e26]:
+        - option "Profile default"
+        - option "Bollinger Scalp" [selected]
+        - option "SMC (sweep+FVG)"
+        - option "VWAP (1-day reversion)"
+        - option "Key Level rejection"
+        - option "ORB breakout"
+        - option "Gap Momentum / Overnight"
+        - option "Power Earnings Gap (PEG)"
+        - option "Volatility Squeeze (BB/KC)"
+        - option "3-Day VWAP reversion"
+        - option "Index Divergence (SPY lag)"
+        - option "Gamma Pin ($5 strike)"
+    - generic [ref=e27]:
+      - generic [ref=e28]: Exit Model
+      - combobox [ref=e29]:
+        - option "Classic TP / SL"
+        - option "Hybrid Trail After 1.5R" [selected]
+        - option "Live Parity Trail"
+    - generic [ref=e30]:
+      - generic [ref=e31]: Lookback
+      - combobox [ref=e32]:
+        - option "30 days"
+        - option "60 days"
+        - option "90 days"
+        - option "180 days" [selected]
+        - option "1 year"
+        - option "2 years"
+    - button "▶ Run Backtest" [ref=e33] [cursor=pointer]
+    - button "🧠 Optimize" [ref=e34] [cursor=pointer]
+  - generic [ref=e35]:
+    - generic [ref=e36]: 📈
+    - generic [ref=e37]: Select a ticker and click Run Backtest
+    - generic [ref=e38]: Replays historical price data (30d–2yr) to find setups and test outcomes
+  - generic [ref=e39]: SD Scanner — Backtest Engine · Intraday 5m replay · Same logic as live alerts · Real-time Polygon data

@@ -1,0 +1,447 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e5]:
+      - heading "SD SCANNER — BACKTEST" [level=1] [ref=e6]
+      - paragraph [ref=e7]: SMC strategy historical performance
+    - generic [ref=e8]:
+      - link "← Dashboard" [ref=e9] [cursor=pointer]:
+        - /url: /
+      - link "🧪 Research" [ref=e10] [cursor=pointer]:
+        - /url: /research
+      - link "⚡ Adaptive" [ref=e11] [cursor=pointer]:
+        - /url: /#adaptive-panel
+      - link "📊 EOD Report" [ref=e12] [cursor=pointer]:
+        - /url: /eod
+      - link "📋 Live Trades" [ref=e13] [cursor=pointer]:
+        - /url: /trades
+  - generic [ref=e14]:
+    - generic [ref=e15]:
+      - generic [ref=e16]: Mode
+      - combobox [ref=e17]:
+        - option "Single Ticker" [selected]
+        - option "All Watchlist"
+    - generic [ref=e18]:
+      - generic [ref=e19]: Ticker
+      - combobox [ref=e20]:
+        - option "AAPL"
+        - option "AMD"
+        - option "AMZN"
+        - option "BA"
+        - option "BABA"
+        - option "COIN"
+        - option "CRWD"
+        - option "DDOG"
+        - option "DIS"
+        - option "GLD"
+        - option "GOOGL"
+        - option "GS"
+        - option "HOOD"
+        - option "JPM"
+        - option "MARA"
+        - option "META" [selected]
+        - option "MSFT"
+        - option "NFLX"
+        - option "NIO"
+        - option "NVDA"
+        - option "PLTR"
+        - option "PYPL"
+        - option "QQQ"
+        - option "ROKU"
+        - option "SHOP"
+        - option "SNAP"
+        - option "SOFI"
+        - option "SPY"
+        - option "SQ"
+        - option "TSLA"
+        - option "UBER"
+        - option "V"
+        - option "X:SOLUSD"
+        - option "X:XRPUSD"
+    - generic [ref=e21]:
+      - generic [ref=e22]: Mode
+      - combobox [ref=e23]:
+        - option "All (scalp + intraday + swing)" [selected]
+        - option "Scalp (dynamic hold)"
+        - option "Intraday (4h max hold)"
+        - option "Swing (multi-day)"
+        - option "Options (4h + P&L focus)"
+    - generic [ref=e24]:
+      - generic [ref=e25]: Strategy Type
+      - combobox [ref=e26]:
+        - option "Profile default"
+        - option "Bollinger Scalp"
+        - option "SMC (sweep+FVG)"
+        - option "CHOCH Primary (structure flip)" [selected]
+        - option "VWAP (1-day reversion)"
+        - option "Key Level rejection"
+        - option "ORB breakout"
+        - option "Gap Momentum / Overnight"
+        - option "Power Earnings Gap (PEG)"
+        - option "Opening Range VWAP (9:35–14:30)"
+        - option "Volatility Squeeze (BB/KC)"
+        - option "3-Day VWAP reversion"
+        - option "Index Divergence (SPY lag)"
+        - option "Gamma Pin ($5 strike)"
+    - generic [ref=e27]:
+      - generic [ref=e28]: Exit Model
+      - combobox [ref=e29]:
+        - option "Hybrid Trail After 1.5R ✓" [selected]
+        - option "Live Parity Trail"
+        - option "Classic TP / SL"
+    - generic [ref=e30]:
+      - generic [ref=e31]: Lookback
+      - combobox [ref=e32]:
+        - option "30 days" [selected]
+        - option "60 days"
+        - option "90 days"
+        - option "180 days"
+        - option "1 year"
+        - option "2 years"
+    - button "▶ Run Backtest" [ref=e33] [cursor=pointer]
+    - button "🧠 Optimize" [ref=e34] [cursor=pointer]
+  - generic [ref=e40]:
+    - generic [ref=e41]:
+      - generic [ref=e42]:
+        - generic [ref=e43]: "2"
+        - generic [ref=e44]: Total Trades
+      - generic [ref=e45]:
+        - generic [ref=e46]: 0%
+        - generic [ref=e47]: Win Rate
+      - generic [ref=e48]:
+        - generic [ref=e49]: "0"
+        - generic [ref=e50]: Wins
+      - generic [ref=e51]:
+        - generic [ref=e52]: "2"
+        - generic [ref=e53]: Losses
+      - generic [ref=e54]:
+        - generic [ref=e55]: "-1.05%"
+        - generic [ref=e56]: Expectancy / Trade
+      - generic [ref=e57]:
+        - generic [ref=e58]: +0.00%
+        - generic [ref=e59]: Avg Win
+      - generic [ref=e60]:
+        - generic [ref=e61]: "-1.06%"
+        - generic [ref=e62]: Avg Loss
+      - generic [ref=e63]:
+        - generic [ref=e64]: "1"
+        - generic [ref=e65]: Time Stops
+      - generic [ref=e66]:
+        - generic [ref=e67]: "6"
+        - generic [ref=e68]: Quality Filtered
+      - generic [ref=e69]:
+        - generic [ref=e70]: 30d
+        - generic [ref=e71]: Lookback
+      - generic [ref=e72]:
+        - generic [ref=e73]: HYBRID
+        - generic [ref=e74]: Exit Model
+      - generic [ref=e76]: 📋 Options P&L (estimated · 1.5 avg contracts)
+      - generic [ref=e77]:
+        - generic [ref=e78]: $-285
+        - generic [ref=e79]: Options Total P&L
+      - generic [ref=e80]:
+        - generic [ref=e81]: "-98.7%"
+        - generic [ref=e82]: Options Return
+      - generic [ref=e83]:
+        - generic [ref=e84]: $-143
+        - generic [ref=e85]: Opt Expectancy/Trade
+      - generic [ref=e86]:
+        - generic [ref=e87]: +$0
+        - generic [ref=e88]: Avg Win / Contract
+      - generic [ref=e89]:
+        - generic [ref=e90]: "-$143"
+        - generic [ref=e91]: Avg Loss / Contract
+      - generic [ref=e93]: 🔬 Edge by Confidence Tier — Where does the real alpha live?
+      - generic [ref=e94]:
+        - generic [ref=e95]: ⭐ 85+ confidence
+        - generic [ref=e96]: 0%
+        - generic [ref=e97]: WR (0/1)
+        - generic [ref=e98]: "-0.61%"
+        - generic [ref=e99]: expectancy
+      - generic [ref=e100]:
+        - generic [ref=e101]: ✅ 75–84 confidence
+        - generic [ref=e102]: 0%
+        - generic [ref=e103]: WR (0/1)
+        - generic [ref=e104]: "-1.5%"
+        - generic [ref=e105]: expectancy
+    - generic [ref=e106]:
+      - generic [ref=e108]: Equity Curve (cumulative P&L %)
+      - generic [ref=e112]: Win / Loss Distribution
+    - generic [ref=e115]:
+      - generic [ref=e116]:
+        - text: TRADE LOG
+        - generic [ref=e117]: "2"
+        - generic [ref=e118]: ✓ 5m bar intraday replay — same logic as live alerts · Click entry time to view 5m chart
+      - generic [ref=e119]:
+        - button "ALL (9)" [ref=e120] [cursor=pointer]
+        - button "EXECUTED (2)" [ref=e121] [cursor=pointer]
+        - button "WINS" [ref=e122] [cursor=pointer]: WINS
+        - button "LOSSES (2)" [ref=e123] [cursor=pointer]
+        - button "FILTERED (7)" [ref=e124] [cursor=pointer]
+      - table [ref=e125]:
+        - rowgroup [ref=e126]:
+          - row "# ENTRY TIME (ET) EXIT TIME (ET) DIR STRATEGY ENTRY STOP LOSS TAKE PROFIT OUTCOME P&L % OPT ENTRY OPT EXIT OPT P&L CONF" [ref=e127]:
+            - columnheader "#" [ref=e128]
+            - columnheader "ENTRY TIME (ET)" [ref=e129]
+            - columnheader "EXIT TIME (ET)" [ref=e130]
+            - columnheader "DIR" [ref=e131]
+            - columnheader "STRATEGY" [ref=e132]
+            - columnheader "ENTRY" [ref=e133]
+            - columnheader "STOP LOSS" [ref=e134]
+            - columnheader "TAKE PROFIT" [ref=e135]
+            - columnheader "OUTCOME" [ref=e136]
+            - columnheader "P&L %" [ref=e137]
+            - columnheader "OPT ENTRY" [ref=e138]
+            - columnheader "OPT EXIT" [ref=e139]
+            - columnheader "OPT P&L" [ref=e140]
+            - columnheader "CONF" [ref=e141]
+        - rowgroup [ref=e142]:
+          - row "📅 04/08 1 trade (1 exec, 0 filtered) 0% WR -1.50%" [ref=e143]:
+            - cell "📅 04/08 1 trade (1 exec, 0 filtered) 0% WR -1.50%" [ref=e144]
+          - row "1 04/08 09:50 ET 04/08 12:10 ET ▼ SHORT choch-primary $600.20 $609.21 $591.79 LOSS -1.50% $1.07 $0.01 $-106 79/100-8📰-6📊-10⚡" [ref=e145]:
+            - cell "1" [ref=e146]
+            - cell "04/08 09:50 ET" [ref=e147]:
+              - link "04/08 09:50 ET" [ref=e148] [cursor=pointer]:
+                - /url: "#"
+            - cell "04/08 12:10 ET" [ref=e149]
+            - cell "▼ SHORT" [ref=e150]
+            - cell "choch-primary" [ref=e151]
+            - cell "$600.20" [ref=e152]
+            - cell "$609.21" [ref=e153]
+            - cell "$591.79" [ref=e154]
+            - cell "LOSS" [ref=e155]
+            - cell "-1.50%" [ref=e156]
+            - cell "$1.07" [ref=e157]
+            - cell "$0.01" [ref=e158]
+            - cell "$-106" [ref=e159]
+            - cell "79/100-8📰-6📊-10⚡" [ref=e160]
+          - row "📅 04/16 1 trade (1 exec, 0 filtered) 0% WR -0.61%" [ref=e161]:
+            - cell "📅 04/16 1 trade (1 exec, 0 filtered) 0% WR -0.61%" [ref=e162]
+          - row "2 04/16 09:50 ET 04/16 15:55 ET ▼ SHORT choch-primary $672.67 $680.09 $658.84 TIMEOUT -0.61% $0.91 $0.01 $-179 89/100-8📰-6📊" [ref=e163]:
+            - cell "2" [ref=e164]
+            - cell "04/16 09:50 ET" [ref=e165]:
+              - link "04/16 09:50 ET" [ref=e166] [cursor=pointer]:
+                - /url: "#"
+            - cell "04/16 15:55 ET" [ref=e167]
+            - cell "▼ SHORT" [ref=e168]
+            - cell "choch-primary" [ref=e169]
+            - cell "$672.67" [ref=e170]
+            - cell "$680.09" [ref=e171]
+            - cell "$658.84" [ref=e172]
+            - cell "TIMEOUT" [ref=e173]
+            - cell "-0.61%" [ref=e174]
+            - cell "$0.91" [ref=e175]
+            - cell "$0.01" [ref=e176]
+            - cell "$-179" [ref=e177]
+            - cell "89/100-8📰-6📊" [ref=e178]
+          - row "📅 04/21 6 trades (0 exec, 6 filtered)" [ref=e179]:
+            - cell "📅 04/21 6 trades (0 exec, 6 filtered)" [ref=e180]
+          - row "3 04/21 13:10 ET — ▼ SHORT choch-primary $669.43 $672.63 $666.24 QUALITY_FILTERED ⚪ Mixed/neutral news | ⚪ Mixed/neutral news | R:R 1.0 (-20) | time-of-day (lunch) (-5) | 2-loss streak (-8) — — — 57/100-33⚡" [ref=e181]:
+            - cell "3" [ref=e182]
+            - cell "04/21 13:10 ET" [ref=e183]:
+              - link "04/21 13:10 ET" [ref=e184] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e185]
+            - cell "▼ SHORT" [ref=e186]
+            - cell "choch-primary" [ref=e187]
+            - cell "$669.43" [ref=e188]
+            - cell "$672.63" [ref=e189]
+            - cell "$666.24" [ref=e190]
+            - cell "QUALITY_FILTERED" [ref=e191]
+            - cell "⚪ Mixed/neutral news | ⚪ Mixed/neutral news | R:R 1.0 (-20) | time-of-day (lunch) (-5) | 2-loss streak (-8)" [ref=e192]
+            - cell "—" [ref=e193]
+            - cell "—" [ref=e194]
+            - cell "—" [ref=e195]
+            - cell "57/100-33⚡" [ref=e196]
+          - row "4 04/21 13:15 ET — ▼ SHORT choch-primary $669.43 $672.62 $666.24 QUALITY_FILTERED ⚪ Mixed/neutral news | ⚪ Mixed/neutral news | R:R 1.0 (-20) | time-of-day (lunch) (-5) | 2-loss streak (-8) — — — 57/100-33⚡" [ref=e197]:
+            - cell "4" [ref=e198]
+            - cell "04/21 13:15 ET" [ref=e199]:
+              - link "04/21 13:15 ET" [ref=e200] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e201]
+            - cell "▼ SHORT" [ref=e202]
+            - cell "choch-primary" [ref=e203]
+            - cell "$669.43" [ref=e204]
+            - cell "$672.62" [ref=e205]
+            - cell "$666.24" [ref=e206]
+            - cell "QUALITY_FILTERED" [ref=e207]
+            - cell "⚪ Mixed/neutral news | ⚪ Mixed/neutral news | R:R 1.0 (-20) | time-of-day (lunch) (-5) | 2-loss streak (-8)" [ref=e208]
+            - cell "—" [ref=e209]
+            - cell "—" [ref=e210]
+            - cell "—" [ref=e211]
+            - cell "57/100-33⚡" [ref=e212]
+          - row "5 04/21 13:20 ET — ▼ SHORT choch-primary $669.43 $672.62 $666.24 QUALITY_FILTERED ⚪ Mixed/neutral news | ⚪ Mixed/neutral news | R:R 1.0 (-20) | time-of-day (lunch) (-5) | 2-loss streak (-8) — — — 57/100-33⚡" [ref=e213]:
+            - cell "5" [ref=e214]
+            - cell "04/21 13:20 ET" [ref=e215]:
+              - link "04/21 13:20 ET" [ref=e216] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e217]
+            - cell "▼ SHORT" [ref=e218]
+            - cell "choch-primary" [ref=e219]
+            - cell "$669.43" [ref=e220]
+            - cell "$672.62" [ref=e221]
+            - cell "$666.24" [ref=e222]
+            - cell "QUALITY_FILTERED" [ref=e223]
+            - cell "⚪ Mixed/neutral news | ⚪ Mixed/neutral news | R:R 1.0 (-20) | time-of-day (lunch) (-5) | 2-loss streak (-8)" [ref=e224]
+            - cell "—" [ref=e225]
+            - cell "—" [ref=e226]
+            - cell "—" [ref=e227]
+            - cell "57/100-33⚡" [ref=e228]
+          - row "6 04/21 13:25 ET — ▼ SHORT choch-primary $669.43 $672.62 $666.24 QUALITY_FILTERED ⚪ Mixed/neutral news | ⚪ Mixed/neutral news | R:R 1.0 (-20) | time-of-day (lunch) (-5) | 2-loss streak (-8) — — — 57/100-33⚡" [ref=e229]:
+            - cell "6" [ref=e230]
+            - cell "04/21 13:25 ET" [ref=e231]:
+              - link "04/21 13:25 ET" [ref=e232] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e233]
+            - cell "▼ SHORT" [ref=e234]
+            - cell "choch-primary" [ref=e235]
+            - cell "$669.43" [ref=e236]
+            - cell "$672.62" [ref=e237]
+            - cell "$666.24" [ref=e238]
+            - cell "QUALITY_FILTERED" [ref=e239]
+            - cell "⚪ Mixed/neutral news | ⚪ Mixed/neutral news | R:R 1.0 (-20) | time-of-day (lunch) (-5) | 2-loss streak (-8)" [ref=e240]
+            - cell "—" [ref=e241]
+            - cell "—" [ref=e242]
+            - cell "—" [ref=e243]
+            - cell "57/100-33⚡" [ref=e244]
+          - row "7 04/21 13:30 ET — ▼ SHORT choch-primary $669.43 $672.63 $666.23 QUALITY_FILTERED ⚪ Mixed/neutral news | ⚪ Mixed/neutral news | R:R 1.0 (-20) | 2-loss streak (-8) — — — 57/100-28⚡" [ref=e245]:
+            - cell "7" [ref=e246]
+            - cell "04/21 13:30 ET" [ref=e247]:
+              - link "04/21 13:30 ET" [ref=e248] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e249]
+            - cell "▼ SHORT" [ref=e250]
+            - cell "choch-primary" [ref=e251]
+            - cell "$669.43" [ref=e252]
+            - cell "$672.63" [ref=e253]
+            - cell "$666.23" [ref=e254]
+            - cell "QUALITY_FILTERED" [ref=e255]
+            - cell "⚪ Mixed/neutral news | ⚪ Mixed/neutral news | R:R 1.0 (-20) | 2-loss streak (-8)" [ref=e256]
+            - cell "—" [ref=e257]
+            - cell "—" [ref=e258]
+            - cell "—" [ref=e259]
+            - cell "57/100-28⚡" [ref=e260]
+          - row "8 04/21 13:35 ET — ▼ SHORT choch-primary $669.43 $672.63 $666.23 MULTI_FILTERED ⚪ Mixed/neutral news | ⚪ Mixed/neutral news | R:R 1.0 (-20) | 2-loss streak (-8) — — — 57/100-28⚡" [ref=e261]:
+            - cell "8" [ref=e262]
+            - cell "04/21 13:35 ET" [ref=e263]:
+              - link "04/21 13:35 ET" [ref=e264] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e265]
+            - cell "▼ SHORT" [ref=e266]
+            - cell "choch-primary" [ref=e267]
+            - cell "$669.43" [ref=e268]
+            - cell "$672.63" [ref=e269]
+            - cell "$666.23" [ref=e270]
+            - cell "MULTI_FILTERED" [ref=e271]
+            - cell "⚪ Mixed/neutral news | ⚪ Mixed/neutral news | R:R 1.0 (-20) | 2-loss streak (-8)" [ref=e272]
+            - cell "—" [ref=e273]
+            - cell "—" [ref=e274]
+            - cell "—" [ref=e275]
+            - cell "57/100-28⚡" [ref=e276]
+          - row "📅 04/24 1 trade (0 exec, 1 filtered)" [ref=e277]:
+            - cell "📅 04/24 1 trade (0 exec, 1 filtered)" [ref=e278]
+          - 'row "9 04/24 09:50 ET — ▲ LONG choch-primary $665.04 $659.73 $672.47 TRAP_FILTERED ⚪ Mixed/neutral news | ↘️ −RS: -2.5% vs SPY | ⚪ Mixed/neutral news | ↘️ −RS: -2.5% vs SPY | R:R 1.4 (-10) | 2-loss streak (-8) — — — 62/100-6📊-18⚡" [ref=e279]':
+            - cell "9" [ref=e280]
+            - cell "04/24 09:50 ET" [ref=e281]:
+              - link "04/24 09:50 ET" [ref=e282] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e283]
+            - cell "▲ LONG" [ref=e284]
+            - cell "choch-primary" [ref=e285]
+            - cell "$665.04" [ref=e286]
+            - cell "$659.73" [ref=e287]
+            - cell "$672.47" [ref=e288]
+            - cell "TRAP_FILTERED" [ref=e289]
+            - 'cell "⚪ Mixed/neutral news | ↘️ −RS: -2.5% vs SPY | ⚪ Mixed/neutral news | ↘️ −RS: -2.5% vs SPY | R:R 1.4 (-10) | 2-loss streak (-8)" [ref=e290]'
+            - cell "—" [ref=e291]
+            - cell "—" [ref=e292]
+            - cell "—" [ref=e293]
+            - cell "62/100-6📊-18⚡" [ref=e294]
+    - generic [ref=e296]:
+      - generic [ref=e297]:
+        - generic [ref=e298]: Loss Pattern Analysis — 2 losing trades
+        - generic [ref=e299]:
+          - generic [ref=e300]:
+            - text: "Long:"
+            - strong [ref=e301]: 0% loss rate
+            - text: (avg 0.00%)
+          - generic [ref=e302]:
+            - text: "Short:"
+            - strong [ref=e303]: 100% loss rate
+            - text: (avg -1.05%)
+      - generic [ref=e304]:
+        - generic [ref=e305]:
+          - generic [ref=e306]:
+            - generic [ref=e307]: Loss by Hour
+            - generic [ref=e308]:
+              - generic [ref=e309]:
+                - generic [ref=e310]: "2"
+                - generic [ref=e312]: 9am
+                - generic [ref=e313]: 100%L
+              - generic [ref=e316]: 10am
+              - generic [ref=e319]: 11am
+              - generic [ref=e322]: 12pm
+              - generic [ref=e325]: 1pm
+              - generic [ref=e328]: 2pm
+              - generic [ref=e331]: 3pm
+          - generic [ref=e332]:
+            - generic [ref=e333]: Loss by Day of Week
+            - generic [ref=e334]:
+              - generic [ref=e335]:
+                - generic [ref=e336]: Mon
+                - generic [ref=e337]: "0"
+                - generic [ref=e338]: "-"
+              - generic [ref=e339]:
+                - generic [ref=e340]: Tue
+                - generic [ref=e341]: "0"
+                - generic [ref=e342]: "-"
+              - generic [ref=e343]:
+                - generic [ref=e344]: Wed
+                - generic [ref=e345]: "1"
+                - generic [ref=e346]: 100%L
+              - generic [ref=e347]:
+                - generic [ref=e348]: Thu
+                - generic [ref=e349]: "1"
+                - generic [ref=e350]: 100%L
+              - generic [ref=e351]:
+                - generic [ref=e352]: Fri
+                - generic [ref=e353]: "0"
+                - generic [ref=e354]: "-"
+          - generic [ref=e355]:
+            - generic [ref=e356]: Exit Types
+            - generic [ref=e357]:
+              - generic [ref=e358]: "LOSS: 1"
+              - generic [ref=e359]: "TIMEOUT: 1"
+        - generic [ref=e361]:
+          - generic [ref=e362]: Loss by Strategy
+          - generic [ref=e364]:
+            - generic [ref=e365]: choch-primary
+            - generic [ref=e366]:
+              - text: 2L / 0W
+              - strong [ref=e367]: 100% loss rate
+            - generic [ref=e368]: "-1.05% avg loss"
+      - generic [ref=e369]:
+        - generic [ref=e370]: ⚠ SHORT trades lose 100% of the time — consider raising short minConf
+        - generic [ref=e371]: ⚠ 9am accounts for 100% of all losses — dead zone filter may help
+        - generic [ref=e372]: ⚠ Wed has the most losses (1) — consider skipping or reducing size on Wed
+      - generic [ref=e373]:
+        - generic [ref=e374]: Worst 10 Trades
+        - generic [ref=e375]:
+          - generic [ref=e376]:
+            - generic [ref=e377]: "#1"
+            - generic [ref=e378]: 04/08 09:50 ET
+            - generic [ref=e379]: ▼ SHORT
+            - generic [ref=e380]: choch-primary
+            - generic [ref=e381]: "-1.50%"
+            - generic [ref=e382]: conf:79
+            - link "view chart" [ref=e383] [cursor=pointer]:
+              - /url: "#"
+          - generic [ref=e384]:
+            - generic [ref=e385]: "#2"
+            - generic [ref=e386]: 04/16 09:50 ET
+            - generic [ref=e387]: ▼ SHORT
+            - generic [ref=e388]: choch-primary
+            - generic [ref=e389]: "-0.61%"
+            - generic [ref=e390]: conf:89
+            - link "view chart" [ref=e391] [cursor=pointer]:
+              - /url: "#"
+  - generic [ref=e39]: SD Scanner — Backtest Engine · Intraday 5m replay · Same logic as live alerts · Real-time Polygon data

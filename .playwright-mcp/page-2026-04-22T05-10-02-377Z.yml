@@ -1,0 +1,252 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e5]:
+      - heading "SD SCANNER — BACKTEST" [level=1] [ref=e6]
+      - paragraph [ref=e7]: SMC strategy historical performance
+    - generic [ref=e8]:
+      - link "← Dashboard" [ref=e9] [cursor=pointer]:
+        - /url: /
+      - link "🧪 Research" [ref=e10] [cursor=pointer]:
+        - /url: /research
+      - link "⚡ Adaptive" [ref=e11] [cursor=pointer]:
+        - /url: /#adaptive-panel
+      - link "📊 EOD Report" [ref=e12] [cursor=pointer]:
+        - /url: /eod
+      - link "📋 Live Trades" [ref=e13] [cursor=pointer]:
+        - /url: /trades
+  - generic [ref=e14]:
+    - generic [ref=e15]:
+      - generic [ref=e16]: Mode
+      - combobox [ref=e17]:
+        - option "Single Ticker" [selected]
+        - option "All Watchlist"
+    - generic [ref=e18]:
+      - generic [ref=e19]: Ticker
+      - combobox [ref=e20]:
+        - option "AAPL"
+        - option "AMD"
+        - option "AMZN"
+        - option "BA"
+        - option "BABA"
+        - option "COIN"
+        - option "CRWD"
+        - option "DDOG"
+        - option "DIS"
+        - option "GLD"
+        - option "GOOGL" [selected]
+        - option "GS"
+        - option "HOOD"
+        - option "JPM"
+        - option "MARA"
+        - option "META"
+        - option "MSFT"
+        - option "NFLX"
+        - option "NIO"
+        - option "NVDA"
+        - option "PLTR"
+        - option "PYPL"
+        - option "QQQ"
+        - option "ROKU"
+        - option "SHOP"
+        - option "SNAP"
+        - option "SOFI"
+        - option "SPY"
+        - option "SQ"
+        - option "TSLA"
+        - option "UBER"
+        - option "V"
+        - option "X:SOLUSD"
+        - option "X:XRPUSD"
+    - generic [ref=e21]:
+      - generic [ref=e22]: Mode
+      - combobox [ref=e23]:
+        - option "All (scalp + intraday + swing)" [selected]
+        - option "Scalp (dynamic hold)"
+        - option "Intraday (4h max hold)"
+        - option "Swing (multi-day)"
+        - option "Options (4h + P&L focus)"
+    - generic [ref=e24]:
+      - generic [ref=e25]: Strategy Type
+      - combobox [ref=e26]:
+        - option "Profile default" [selected]
+        - option "Bollinger Scalp"
+        - option "SMC (sweep+FVG)"
+        - option "VWAP (1-day reversion)"
+        - option "Key Level rejection"
+        - option "ORB breakout"
+        - option "Gap Momentum / Overnight"
+        - option "Power Earnings Gap (PEG)"
+        - option "Volatility Squeeze (BB/KC)"
+        - option "3-Day VWAP reversion"
+        - option "Index Divergence (SPY lag)"
+        - option "Gamma Pin ($5 strike)"
+    - generic [ref=e27]:
+      - generic [ref=e28]: Exit Model
+      - combobox [ref=e29]:
+        - option "Hybrid Trail After 1.5R ✓" [selected]
+        - option "Live Parity Trail"
+        - option "Classic TP / SL"
+    - generic [ref=e30]:
+      - generic [ref=e31]: Lookback
+      - combobox [ref=e32]:
+        - option "30 days"
+        - option "60 days"
+        - option "90 days"
+        - option "180 days" [selected]
+        - option "1 year"
+        - option "2 years"
+    - button "▶ Run Backtest" [ref=e115] [cursor=pointer]
+    - button "🧠 Optimize" [ref=e34] [cursor=pointer]
+  - generic [ref=e42]:
+    - heading "🧠 Profile Optimizer Results" [level=3] [ref=e43]
+    - paragraph [ref=e44]: "UBER · 90d lookback · Current strategy: SMC · 2 viable combos found (min 3 trades)"
+    - table [ref=e46]:
+      - rowgroup [ref=e47]:
+        - row "Rank Strategy MinConf SL (ATR×) TP (R:R) Trades W L BE WR% Avg Win% Avg Loss% Expectancy Opt P&L" [ref=e48]:
+          - columnheader "Rank" [ref=e49]
+          - columnheader "Strategy" [ref=e50]
+          - columnheader "MinConf" [ref=e51]
+          - columnheader "SL (ATR×)" [ref=e52]
+          - columnheader "TP (R:R)" [ref=e53]
+          - columnheader "Trades" [ref=e54]
+          - columnheader "W" [ref=e55]
+          - columnheader "L" [ref=e56]
+          - columnheader "BE" [ref=e57]
+          - columnheader "WR%" [ref=e58]
+          - columnheader "Avg Win%" [ref=e59]
+          - columnheader "Avg Loss%" [ref=e60]
+          - columnheader "Expectancy" [ref=e61]
+          - columnheader "Opt P&L" [ref=e62]
+      - rowgroup [ref=e63]:
+        - row "🏆 IDIV 74 0.4 1:1 1 0 1 0 0% +0.00% -0.34% -0.34% $-96" [ref=e79]:
+          - cell "🏆" [ref=e80]
+          - cell "IDIV" [ref=e81]
+          - cell "74" [ref=e82]
+          - cell "0.4" [ref=e83]
+          - cell "1:1" [ref=e84]
+          - cell "1" [ref=e85]
+          - cell "0" [ref=e86]
+          - cell "1" [ref=e87]
+          - cell "0" [ref=e88]
+          - cell "0%" [ref=e89]
+          - cell "+0.00%" [ref=e90]
+          - cell "-0.34%" [ref=e91]
+          - cell "-0.34%" [ref=e92]
+          - cell "$-96" [ref=e93]
+        - row "2 VWAP 74 0.4 1:1 1 0 1 0 0% +0.00% -0.56% -0.56% $-38" [ref=e94]:
+          - cell "2" [ref=e95]
+          - cell "VWAP" [ref=e96]
+          - cell "74" [ref=e97]
+          - cell "0.4" [ref=e98]
+          - cell "1:1" [ref=e99]
+          - cell "1" [ref=e100]
+          - cell "0" [ref=e101]
+          - cell "1" [ref=e102]
+          - cell "0" [ref=e103]
+          - cell "0%" [ref=e104]
+          - cell "+0.00%" [ref=e105]
+          - cell "-0.56%" [ref=e106]
+          - cell "-0.56%" [ref=e107]
+          - cell "$-38" [ref=e108]
+  - generic [ref=e570]:
+    - generic [ref=e571]:
+      - generic [ref=e572]:
+        - generic [ref=e573]: "0"
+        - generic [ref=e574]: Total Trades
+      - generic [ref=e575]:
+        - generic [ref=e576]: 0%
+        - generic [ref=e577]: Win Rate
+      - generic [ref=e578]:
+        - generic [ref=e579]: "0"
+        - generic [ref=e580]: Wins
+      - generic [ref=e581]:
+        - generic [ref=e582]: "0"
+        - generic [ref=e583]: Losses
+      - generic [ref=e584]:
+        - generic [ref=e585]: +0%
+        - generic [ref=e586]: Expectancy / Trade
+      - generic [ref=e587]:
+        - generic [ref=e588]: +0.00%
+        - generic [ref=e589]: Avg Win
+      - generic [ref=e590]:
+        - generic [ref=e591]: "-0.00%"
+        - generic [ref=e592]: Avg Loss
+      - generic [ref=e593]:
+        - generic [ref=e594]: "1"
+        - generic [ref=e595]: Quality Filtered
+      - generic [ref=e596]:
+        - generic [ref=e597]: 180d
+        - generic [ref=e598]: Lookback
+      - generic [ref=e599]:
+        - generic [ref=e600]: HYBRID
+        - generic [ref=e601]: Exit Model
+      - generic [ref=e603]: 📋 Options P&L (estimated · 1.0 avg contracts)
+      - generic [ref=e604]:
+        - generic [ref=e605]: +$0
+        - generic [ref=e606]: Options Total P&L
+      - generic [ref=e607]:
+        - generic [ref=e608]: +0%
+        - generic [ref=e609]: Options Return
+      - generic [ref=e610]:
+        - generic [ref=e611]: +$0
+        - generic [ref=e612]: Opt Expectancy/Trade
+      - generic [ref=e613]:
+        - generic [ref=e614]: +$0
+        - generic [ref=e615]: Avg Win / Contract
+      - generic [ref=e616]:
+        - generic [ref=e617]: "-$0"
+        - generic [ref=e618]: Avg Loss / Contract
+      - generic [ref=e620]: 🔬 Edge by Confidence Tier — Where does the real alpha live?
+    - generic [ref=e621]:
+      - generic [ref=e623]: Equity Curve (cumulative P&L %)
+      - generic [ref=e627]: Win / Loss Distribution
+    - generic [ref=e630]:
+      - generic [ref=e631]:
+        - text: TRADE LOG
+        - generic [ref=e632]: "0"
+        - generic [ref=e633]: ✓ 5m bar intraday replay — same logic as live alerts · Click entry time to view 5m chart
+      - generic [ref=e634]:
+        - button "ALL (1)" [ref=e635] [cursor=pointer]
+        - button "EXECUTED" [ref=e636] [cursor=pointer]: EXECUTED
+        - button "WINS" [ref=e637] [cursor=pointer]: WINS
+        - button "LOSSES" [ref=e638] [cursor=pointer]: LOSSES
+        - button "FILTERED (1)" [ref=e639] [cursor=pointer]
+      - table [ref=e640]:
+        - rowgroup [ref=e641]:
+          - row "# ENTRY TIME (ET) EXIT TIME (ET) DIR STRATEGY ENTRY STOP LOSS TAKE PROFIT OUTCOME P&L % OPT ENTRY OPT EXIT OPT P&L CONF" [ref=e642]:
+            - columnheader "#" [ref=e643]
+            - columnheader "ENTRY TIME (ET)" [ref=e644]
+            - columnheader "EXIT TIME (ET)" [ref=e645]
+            - columnheader "DIR" [ref=e646]
+            - columnheader "STRATEGY" [ref=e647]
+            - columnheader "ENTRY" [ref=e648]
+            - columnheader "STOP LOSS" [ref=e649]
+            - columnheader "TAKE PROFIT" [ref=e650]
+            - columnheader "OUTCOME" [ref=e651]
+            - columnheader "P&L %" [ref=e652]
+            - columnheader "OPT ENTRY" [ref=e653]
+            - columnheader "OPT EXIT" [ref=e654]
+            - columnheader "OPT P&L" [ref=e655]
+            - columnheader "CONF" [ref=e656]
+        - rowgroup [ref=e657]:
+          - row "📅 03/05 1 trade (0 exec, 1 filtered)" [ref=e658]:
+            - cell "📅 03/05 1 trade (0 exec, 1 filtered)" [ref=e659]
+          - row "1 03/05 13:00 ET — ▲ LONG SCALPscalp $196.25 $194.67 $197.83 MULTI_FILTERED ⚪ Mixed/neutral news | ⚪ Mixed/neutral news | R:R 1.0 (-10) | time-of-day (lunch) (-5) — — — 61/100-15⚡" [ref=e660]:
+            - cell "1" [ref=e661]
+            - cell "03/05 13:00 ET" [ref=e662]:
+              - link "03/05 13:00 ET" [ref=e663] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e664]
+            - cell "▲ LONG" [ref=e665]
+            - cell "SCALPscalp" [ref=e666]:
+              - generic [ref=e667]: SCALPscalp
+            - cell "$196.25" [ref=e668]
+            - cell "$194.67" [ref=e669]
+            - cell "$197.83" [ref=e670]
+            - cell "MULTI_FILTERED" [ref=e671]
+            - cell "⚪ Mixed/neutral news | ⚪ Mixed/neutral news | R:R 1.0 (-10) | time-of-day (lunch) (-5)" [ref=e672]
+            - cell "—" [ref=e673]
+            - cell "—" [ref=e674]
+            - cell "—" [ref=e675]
+            - cell "61/100-15⚡" [ref=e676]
+  - generic [ref=e39]: SD Scanner — Backtest Engine · Intraday 5m replay · Same logic as live alerts · Real-time Polygon data

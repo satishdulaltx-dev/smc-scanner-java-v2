@@ -1,0 +1,254 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e5]:
+      - heading "SD SCANNER" [level=1] [ref=e6]
+      - paragraph [ref=e7]: Smart Money Concepts — Real-time Intraday Scanner
+    - generic [ref=e8]:
+      - link "📈 Backtest" [ref=e9] [cursor=pointer]:
+        - /url: /backtest
+      - link "🧪 Research" [ref=e10] [cursor=pointer]:
+        - /url: /research
+      - link "🔍 Analyze" [ref=e11] [cursor=pointer]:
+        - /url: /analyze
+      - link "⚡ Adaptive" [ref=e12] [cursor=pointer]:
+        - /url: "#adaptive-panel"
+      - link "📋 Live Trades" [ref=e13] [cursor=pointer]:
+        - /url: /trades
+      - link "📊 EOD Report" [ref=e14] [cursor=pointer]:
+        - /url: /eod
+      - button "Send EOD" [ref=e15] [cursor=pointer]:
+        - img [ref=e16]
+        - text: Send EOD
+      - generic [ref=e18]: RUNNING
+  - generic [ref=e19]:
+    - generic [ref=e20]:
+      - paragraph [ref=e21]: WATCHLIST
+      - heading "19" [level=2] [ref=e22]
+    - generic [ref=e23]:
+      - paragraph [ref=e24]: ACTIVE SETUPS
+      - heading "0" [level=2] [ref=e25]
+    - generic [ref=e26]:
+      - paragraph [ref=e27]: SESSION
+      - heading "None" [level=2] [ref=e28]
+    - generic [ref=e29]:
+      - paragraph [ref=e30]: LAST SCAN
+      - heading "2:54:15 AM" [level=2] [ref=e31]
+  - generic [ref=e32]:
+    - generic [ref=e33]:
+      - generic [ref=e34]: 🔗 Quick Links & API Reference
+      - generic [ref=e35]:
+        - generic [ref=e36]:
+          - generic [ref=e37]: Pages
+          - generic [ref=e38]:
+            - link "/ Dashboard" [ref=e39] [cursor=pointer]:
+              - /url: /
+            - generic [ref=e40]: Live watchlist & setups
+          - generic [ref=e41]:
+            - link "/analyze" [ref=e42] [cursor=pointer]:
+              - /url: /analyze
+            - generic [ref=e43]: Deep ticker analysis (click any card)
+          - generic [ref=e44]:
+            - link "/backtest" [ref=e45] [cursor=pointer]:
+              - /url: /backtest
+            - generic [ref=e46]: Historical strategy replay
+          - generic [ref=e47]:
+            - link "/eod" [ref=e48] [cursor=pointer]:
+              - /url: /eod
+            - generic [ref=e49]: End-of-day report
+        - generic [ref=e50]:
+          - generic [ref=e51]: GET APIs
+          - generic [ref=e52]:
+            - generic [ref=e53]: GET
+            - link "/api/status" [ref=e54] [cursor=pointer]:
+              - /url: /api/status
+            - button "copy" [ref=e55] [cursor=pointer]
+            - generic [ref=e56]: Scanner status JSON
+          - generic [ref=e57]:
+            - generic [ref=e58]: GET
+            - link "/api/backtest?ticker=AAPL&days=90" [ref=e59] [cursor=pointer]:
+              - /url: /api/backtest?ticker=AAPL&days=90
+            - button "copy" [ref=e60] [cursor=pointer]
+            - generic [ref=e61]: Run backtest (change ticker/days)
+          - generic [ref=e62]:
+            - generic [ref=e63]: GET
+            - link "/api/adaptive" [ref=e64] [cursor=pointer]:
+              - /url: /api/adaptive
+            - button "copy" [ref=e65] [cursor=pointer]
+            - generic [ref=e66]: Streak state per ticker
+        - generic [ref=e67]:
+          - generic [ref=e68]: POST APIs
+          - generic [ref=e69]:
+            - generic [ref=e70]: POST
+            - generic [ref=e71]: /api/send-eod-discord
+            - button "copy" [ref=e72] [cursor=pointer]
+            - generic [ref=e73]: Push EOD report to Discord
+          - generic [ref=e74]:
+            - generic [ref=e75]: POST
+            - generic [ref=e76]: /api/adaptive/outcome?ticker=AAPL&outcome=loss
+            - button "copy" [ref=e77] [cursor=pointer]
+            - generic [ref=e78]: Record trade outcome manually
+          - generic [ref=e79]:
+            - generic [ref=e80]: POST
+            - generic [ref=e81]: /api/adaptive/reset?ticker=AAPL
+            - button "copy" [ref=e82] [cursor=pointer]
+            - generic [ref=e83]: Clear streak history for ticker
+    - generic [ref=e84]:
+      - text: WATCHLIST
+      - generic [ref=e85]: 19 tickers
+    - generic [ref=e86]:
+      - link "X:BTCUSD TV↗ IDLE Waiting for breakout + volume spike..." [ref=e87] [cursor=pointer]:
+        - /url: /analyze?ticker=X:BTCUSD
+        - generic [ref=e88]:
+          - generic [ref=e89]: X:BTCUSD
+          - generic [ref=e90]: TV↗
+        - generic [ref=e91]: IDLE
+        - generic [ref=e92]: Waiting for breakout + volume spike...
+      - link "X:ETHUSD TV↗ IDLE Waiting for breakout + volume spike..." [ref=e93] [cursor=pointer]:
+        - /url: /analyze?ticker=X:ETHUSD
+        - generic [ref=e94]:
+          - generic [ref=e95]: X:ETHUSD
+          - generic [ref=e96]: TV↗
+        - generic [ref=e97]: IDLE
+        - generic [ref=e98]: Waiting for breakout + volume spike...
+      - link "AAPL TV↗ IDLE Outside session — skipped" [ref=e99] [cursor=pointer]:
+        - /url: /analyze?ticker=AAPL
+        - generic [ref=e100]:
+          - generic [ref=e101]: AAPL
+          - generic [ref=e102]: TV↗
+        - generic [ref=e103]: IDLE
+        - generic [ref=e104]: Outside session — skipped
+      - link "AMD TV↗ IDLE Outside session — skipped" [ref=e105] [cursor=pointer]:
+        - /url: /analyze?ticker=AMD
+        - generic [ref=e106]:
+          - generic [ref=e107]: AMD
+          - generic [ref=e108]: TV↗
+        - generic [ref=e109]: IDLE
+        - generic [ref=e110]: Outside session — skipped
+      - link "AMZN TV↗ IDLE Outside session — skipped" [ref=e111] [cursor=pointer]:
+        - /url: /analyze?ticker=AMZN
+        - generic [ref=e112]:
+          - generic [ref=e113]: AMZN
+          - generic [ref=e114]: TV↗
+        - generic [ref=e115]: IDLE
+        - generic [ref=e116]: Outside session — skipped
+      - link "COIN TV↗ IDLE Outside session — skipped" [ref=e117] [cursor=pointer]:
+        - /url: /analyze?ticker=COIN
+        - generic [ref=e118]:
+          - generic [ref=e119]: COIN
+          - generic [ref=e120]: TV↗
+        - generic [ref=e121]: IDLE
+        - generic [ref=e122]: Outside session — skipped
+      - link "CRWD TV↗ IDLE Outside session — skipped" [ref=e123] [cursor=pointer]:
+        - /url: /analyze?ticker=CRWD
+        - generic [ref=e124]:
+          - generic [ref=e125]: CRWD
+          - generic [ref=e126]: TV↗
+        - generic [ref=e127]: IDLE
+        - generic [ref=e128]: Outside session — skipped
+      - link "DDOG TV↗ IDLE Outside session — skipped" [ref=e129] [cursor=pointer]:
+        - /url: /analyze?ticker=DDOG
+        - generic [ref=e130]:
+          - generic [ref=e131]: DDOG
+          - generic [ref=e132]: TV↗
+        - generic [ref=e133]: IDLE
+        - generic [ref=e134]: Outside session — skipped
+      - link "MARA TV↗ IDLE Outside session — skipped" [ref=e135] [cursor=pointer]:
+        - /url: /analyze?ticker=MARA
+        - generic [ref=e136]:
+          - generic [ref=e137]: MARA
+          - generic [ref=e138]: TV↗
+        - generic [ref=e139]: IDLE
+        - generic [ref=e140]: Outside session — skipped
+      - link "META TV↗ IDLE Outside session — skipped" [ref=e141] [cursor=pointer]:
+        - /url: /analyze?ticker=META
+        - generic [ref=e142]:
+          - generic [ref=e143]: META
+          - generic [ref=e144]: TV↗
+        - generic [ref=e145]: IDLE
+        - generic [ref=e146]: Outside session — skipped
+      - link "MSFT TV↗ IDLE Outside session — skipped" [ref=e147] [cursor=pointer]:
+        - /url: /analyze?ticker=MSFT
+        - generic [ref=e148]:
+          - generic [ref=e149]: MSFT
+          - generic [ref=e150]: TV↗
+        - generic [ref=e151]: IDLE
+        - generic [ref=e152]: Outside session — skipped
+      - link "NFLX TV↗ IDLE Outside session — skipped" [ref=e153] [cursor=pointer]:
+        - /url: /analyze?ticker=NFLX
+        - generic [ref=e154]:
+          - generic [ref=e155]: NFLX
+          - generic [ref=e156]: TV↗
+        - generic [ref=e157]: IDLE
+        - generic [ref=e158]: Outside session — skipped
+      - link "NVDA TV↗ IDLE Outside session — skipped" [ref=e159] [cursor=pointer]:
+        - /url: /analyze?ticker=NVDA
+        - generic [ref=e160]:
+          - generic [ref=e161]: NVDA
+          - generic [ref=e162]: TV↗
+        - generic [ref=e163]: IDLE
+        - generic [ref=e164]: Outside session — skipped
+      - link "PLTR TV↗ IDLE Outside session — skipped" [ref=e165] [cursor=pointer]:
+        - /url: /analyze?ticker=PLTR
+        - generic [ref=e166]:
+          - generic [ref=e167]: PLTR
+          - generic [ref=e168]: TV↗
+        - generic [ref=e169]: IDLE
+        - generic [ref=e170]: Outside session — skipped
+      - link "RIOT TV↗ IDLE Outside session — skipped" [ref=e171] [cursor=pointer]:
+        - /url: /analyze?ticker=RIOT
+        - generic [ref=e172]:
+          - generic [ref=e173]: RIOT
+          - generic [ref=e174]: TV↗
+        - generic [ref=e175]: IDLE
+        - generic [ref=e176]: Outside session — skipped
+      - link "SMCI TV↗ IDLE Outside session — skipped" [ref=e177] [cursor=pointer]:
+        - /url: /analyze?ticker=SMCI
+        - generic [ref=e178]:
+          - generic [ref=e179]: SMCI
+          - generic [ref=e180]: TV↗
+        - generic [ref=e181]: IDLE
+        - generic [ref=e182]: Outside session — skipped
+      - link "SOFI TV↗ IDLE Outside session — skipped" [ref=e183] [cursor=pointer]:
+        - /url: /analyze?ticker=SOFI
+        - generic [ref=e184]:
+          - generic [ref=e185]: SOFI
+          - generic [ref=e186]: TV↗
+        - generic [ref=e187]: IDLE
+        - generic [ref=e188]: Outside session — skipped
+      - link "SPY TV↗ IDLE Outside session — skipped" [ref=e189] [cursor=pointer]:
+        - /url: /analyze?ticker=SPY
+        - generic [ref=e190]:
+          - generic [ref=e191]: SPY
+          - generic [ref=e192]: TV↗
+        - generic [ref=e193]: IDLE
+        - generic [ref=e194]: Outside session — skipped
+      - link "TSLA TV↗ IDLE Outside session — skipped" [ref=e195] [cursor=pointer]:
+        - /url: /analyze?ticker=TSLA
+        - generic [ref=e196]:
+          - generic [ref=e197]: TSLA
+          - generic [ref=e198]: TV↗
+        - generic [ref=e199]: IDLE
+        - generic [ref=e200]: Outside session — skipped
+    - generic [ref=e201]:
+      - text: ACTIVE SETUPS
+      - generic [ref=e202]: "0"
+    - generic [ref=e204]:
+      - generic [ref=e205]: 📡
+      - generic [ref=e206]: No setups yet — waiting for Sweep → Displacement → FVG → Retest
+  - generic [ref=e207]:
+    - text: ⚡ ADAPTIVE SUPPRESSOR
+    - generic [ref=e209]: consecutive-loss memory per ticker · auto-reduces confidence after losing streaks
+  - generic [ref=e210]:
+    - generic [ref=e212]: Loading streak data…
+    - generic [ref=e213]:
+      - textbox "TICKER" [ref=e214]
+      - button "✓ WIN" [ref=e215] [cursor=pointer]
+      - button "✗ LOSS" [ref=e216] [cursor=pointer]
+  - heading "Strategy Performance" [level=3] [ref=e218]: Strategy Performance
+  - generic [ref=e219]:
+    - generic [ref=e220]:
+      - heading "🏦 Alpaca Open Positions" [level=3] [ref=e221]
+      - button "⚠️ Close All Stocks" [ref=e222] [cursor=pointer]
+      - button "🔄 Refresh" [ref=e223] [cursor=pointer]
+    - generic [ref=e225]: Loading positions…
+  - generic [ref=e226]: "Last refresh: 2:54:15 AM — auto-refresh every 8s"

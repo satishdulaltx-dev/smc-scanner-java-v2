@@ -1,0 +1,478 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e5]:
+      - heading "SD SCANNER — BACKTEST" [level=1] [ref=e6]
+      - paragraph [ref=e7]: SMC strategy historical performance
+    - generic [ref=e8]:
+      - link "← Dashboard" [ref=e9] [cursor=pointer]:
+        - /url: /
+      - link "🧪 Research" [ref=e10] [cursor=pointer]:
+        - /url: /research
+      - link "⚡ Adaptive" [ref=e11] [cursor=pointer]:
+        - /url: /#adaptive-panel
+      - link "📊 EOD Report" [ref=e12] [cursor=pointer]:
+        - /url: /eod
+      - link "📋 Live Trades" [ref=e13] [cursor=pointer]:
+        - /url: /trades
+  - generic [ref=e14]:
+    - generic [ref=e15]:
+      - generic [ref=e16]: Mode
+      - combobox [ref=e17]:
+        - option "Single Ticker" [selected]
+        - option "All Watchlist"
+    - generic [ref=e18]:
+      - generic [ref=e19]: Ticker
+      - combobox [ref=e20]:
+        - option "AAPL"
+        - option "AMD"
+        - option "AMZN"
+        - option "BA"
+        - option "BABA"
+        - option "COIN"
+        - option "CRWD"
+        - option "DDOG"
+        - option "DIS"
+        - option "GLD" [selected]
+        - option "GOOGL"
+        - option "GS"
+        - option "HOOD"
+        - option "JPM"
+        - option "MARA"
+        - option "META"
+        - option "MSFT"
+        - option "NFLX"
+        - option "NIO"
+        - option "NVDA"
+        - option "PLTR"
+        - option "PYPL"
+        - option "QQQ"
+        - option "ROKU"
+        - option "SHOP"
+        - option "SNAP"
+        - option "SOFI"
+        - option "SPY"
+        - option "SQ"
+        - option "TSLA"
+        - option "UBER"
+        - option "V"
+        - option "X:SOLUSD"
+        - option "X:XRPUSD"
+    - generic [ref=e21]:
+      - generic [ref=e22]: Mode
+      - combobox [ref=e23]:
+        - option "All (scalp + intraday + swing)" [selected]
+        - option "Scalp (dynamic hold)"
+        - option "Intraday (4h max hold)"
+        - option "Swing (multi-day)"
+        - option "Options (4h + P&L focus)"
+    - generic [ref=e24]:
+      - generic [ref=e25]: Strategy Type
+      - combobox [ref=e26]:
+        - option "Profile default" [selected]
+        - option "Bollinger Scalp"
+        - option "SMC (sweep+FVG)"
+        - option "VWAP (1-day reversion)"
+        - option "Key Level rejection"
+        - option "ORB breakout"
+        - option "Gap Momentum / Overnight"
+        - option "Power Earnings Gap (PEG)"
+        - option "Volatility Squeeze (BB/KC)"
+        - option "3-Day VWAP reversion"
+        - option "Index Divergence (SPY lag)"
+        - option "Gamma Pin ($5 strike)"
+    - generic [ref=e27]:
+      - generic [ref=e28]: Exit Model
+      - combobox [ref=e29]:
+        - option "Hybrid Trail After 1.5R ✓" [selected]
+        - option "Live Parity Trail"
+        - option "Classic TP / SL"
+    - generic [ref=e30]:
+      - generic [ref=e31]: Lookback
+      - combobox [ref=e32]:
+        - option "30 days"
+        - option "60 days"
+        - option "90 days" [selected]
+        - option "180 days"
+        - option "1 year"
+        - option "2 years"
+    - button "▶ Run Backtest" [ref=e33] [cursor=pointer]
+    - button "🧠 Optimize" [ref=e34] [cursor=pointer]
+  - generic [ref=e42]:
+    - generic [ref=e43]:
+      - generic [ref=e44]:
+        - generic [ref=e45]: "14"
+        - generic [ref=e46]: Total Trades
+      - generic [ref=e47]:
+        - generic [ref=e48]: 42.9%
+        - generic [ref=e49]: Win Rate
+      - generic [ref=e50]:
+        - generic [ref=e51]: "6"
+        - generic [ref=e52]: Wins
+      - generic [ref=e53]:
+        - generic [ref=e54]: "8"
+        - generic [ref=e55]: Losses
+      - generic [ref=e56]:
+        - generic [ref=e57]: +4.64%
+        - generic [ref=e58]: Expectancy / Trade
+      - generic [ref=e59]:
+        - generic [ref=e60]: +72.21%
+        - generic [ref=e61]: Avg Win
+      - generic [ref=e62]:
+        - generic [ref=e63]: "-46.13%"
+        - generic [ref=e64]: Avg Loss
+      - generic [ref=e65]:
+        - generic [ref=e66]: "9"
+        - generic [ref=e67]: Time Stops
+      - generic [ref=e68]:
+        - generic [ref=e69]: "5"
+        - generic [ref=e70]: RS/VIX Filtered
+      - generic [ref=e71]:
+        - generic [ref=e72]: "26"
+        - generic [ref=e73]: Quality Filtered
+      - generic [ref=e74]:
+        - generic [ref=e75]: 90d
+        - generic [ref=e76]: Lookback
+      - generic [ref=e77]:
+        - generic [ref=e78]: HYBRID
+        - generic [ref=e79]: Exit Model
+      - generic [ref=e81]: 📋 Options P&L (estimated · 1.1 avg contracts)
+      - generic [ref=e82]:
+        - generic [ref=e83]: +$242
+        - generic [ref=e84]: Options Total P&L
+      - generic [ref=e85]:
+        - generic [ref=e86]: +26.5%
+        - generic [ref=e87]: Options Return
+      - generic [ref=e88]:
+        - generic [ref=e89]: +$17
+        - generic [ref=e90]: Opt Expectancy/Trade
+      - generic [ref=e91]:
+        - generic [ref=e92]: +$100
+        - generic [ref=e93]: Avg Win / Contract
+      - generic [ref=e94]:
+        - generic [ref=e95]: "-$45"
+        - generic [ref=e96]: Avg Loss / Contract
+      - generic [ref=e98]: 🔬 Edge by Confidence Tier — Where does the real alpha live?
+      - generic [ref=e99]:
+        - generic [ref=e100]: ✅ 75–84 confidence
+        - generic [ref=e101]: 20%
+        - generic [ref=e102]: WR (1/5)
+        - generic [ref=e103]: "-19.46%"
+        - generic [ref=e104]: expectancy
+      - generic [ref=e105]:
+        - generic [ref=e106]: 🟡 <75 confidence
+        - generic [ref=e107]: 55.6%
+        - generic [ref=e108]: WR (5/9)
+        - generic [ref=e109]: +17.94%
+        - generic [ref=e110]: expectancy
+    - generic [ref=e111]:
+      - generic [ref=e113]: Equity Curve (cumulative P&L %)
+      - generic [ref=e117]: Win / Loss Distribution
+    - generic [ref=e120]:
+      - generic [ref=e121]:
+        - text: TRADE LOG
+        - generic [ref=e122]: "14"
+        - generic [ref=e123]: ✓ 5m bar intraday replay — same logic as live alerts · Click entry time to view 5m chart
+      - generic [ref=e124]:
+        - button "ALL (61)" [ref=e125] [cursor=pointer]
+        - button "EXECUTED (14)" [ref=e126] [cursor=pointer]
+        - button "WINS (6)" [active] [ref=e127] [cursor=pointer]
+        - button "LOSSES (8)" [ref=e128] [cursor=pointer]
+        - button "FILTERED (47)" [ref=e129] [cursor=pointer]
+      - table [ref=e130]:
+        - rowgroup [ref=e131]:
+          - row "# ENTRY TIME (ET) EXIT TIME (ET) DIR STRATEGY ENTRY STOP LOSS TAKE PROFIT OUTCOME P&L % OPT ENTRY OPT EXIT OPT P&L CONF" [ref=e132]:
+            - columnheader "#" [ref=e133]
+            - columnheader "ENTRY TIME (ET)" [ref=e134]
+            - columnheader "EXIT TIME (ET)" [ref=e135]
+            - columnheader "DIR" [ref=e136]
+            - columnheader "STRATEGY" [ref=e137]
+            - columnheader "ENTRY" [ref=e138]
+            - columnheader "STOP LOSS" [ref=e139]
+            - columnheader "TAKE PROFIT" [ref=e140]
+            - columnheader "OUTCOME" [ref=e141]
+            - columnheader "P&L %" [ref=e142]
+            - columnheader "OPT ENTRY" [ref=e143]
+            - columnheader "OPT EXIT" [ref=e144]
+            - columnheader "OPT P&L" [ref=e145]
+            - columnheader "CONF" [ref=e146]
+        - rowgroup [ref=e147]:
+          - row "📅 02/19 1 trade (1 exec, 0 filtered) 100% WR +104.10%" [ref=e1440]:
+            - cell "📅 02/19 1 trade (1 exec, 0 filtered) 100% WR +104.10%" [ref=e1441]
+          - row "1 02/19 13:30 ET 02/19 15:55 ET ▲ LONG DAYvwap $457.83 $452.36 $471.07 TIMEOUT +104.10% $0.54 $1.10 +$56 81/100" [ref=e1442]:
+            - cell "1" [ref=e1443]
+            - cell "02/19 13:30 ET" [ref=e1444]:
+              - link "02/19 13:30 ET" [ref=e1445] [cursor=pointer]:
+                - /url: "#"
+            - cell "02/19 15:55 ET" [ref=e1446]
+            - cell "▲ LONG" [ref=e1447]
+            - cell "DAYvwap" [ref=e1448]:
+              - generic [ref=e1449]: DAYvwap
+            - cell "$457.83" [ref=e1450]
+            - cell "$452.36" [ref=e1451]
+            - cell "$471.07" [ref=e1452]
+            - cell "TIMEOUT" [ref=e1453]
+            - cell "+104.10%" [ref=e1454]
+            - cell "$0.54" [ref=e1455]
+            - cell "$1.10" [ref=e1456]
+            - cell "+$56" [ref=e1457]
+            - cell "81/100" [ref=e1458]
+          - row "📅 03/02 1 trade (1 exec, 0 filtered) 100% WR +170.30%" [ref=e1459]:
+            - cell "📅 03/02 1 trade (1 exec, 0 filtered) 100% WR +170.30%" [ref=e1460]
+          - row "2 03/02 11:05 ET 03/02 15:05 ET ▲ LONG DAYvwap $486.20 $480.97 $495.94 TIMEOUT +170.30% $1.04 $2.81 +$177 70/100-5⚡" [ref=e1461]:
+            - cell "2" [ref=e1462]
+            - cell "03/02 11:05 ET" [ref=e1463]:
+              - link "03/02 11:05 ET" [ref=e1464] [cursor=pointer]:
+                - /url: "#"
+            - cell "03/02 15:05 ET" [ref=e1465]
+            - cell "▲ LONG" [ref=e1466]
+            - cell "DAYvwap" [ref=e1467]:
+              - generic [ref=e1468]: DAYvwap
+            - cell "$486.20" [ref=e1469]
+            - cell "$480.97" [ref=e1470]
+            - cell "$495.94" [ref=e1471]
+            - cell "TIMEOUT" [ref=e1472]
+            - cell "+170.30%" [ref=e1473]
+            - cell "$1.04" [ref=e1474]
+            - cell "$2.81" [ref=e1475]
+            - cell "+$177" [ref=e1476]
+            - cell "70/100-5⚡" [ref=e1477]
+          - row "3 03/11 13:40 ET 03/11 15:55 ET ▲ LONG DAYvwap $474.56 $469.74 $478.90 TIMEOUT +101.90% $0.56 $1.13 +$57 72/100+3📊-10⚡" [ref=e1478]:
+            - cell "3" [ref=e1479]
+            - cell "03/11 13:40 ET" [ref=e1480]:
+              - link "03/11 13:40 ET" [ref=e1481] [cursor=pointer]:
+                - /url: "#"
+            - cell "03/11 15:55 ET" [ref=e1482]
+            - cell "▲ LONG" [ref=e1483]
+            - cell "DAYvwap" [ref=e1484]:
+              - generic [ref=e1485]: DAYvwap
+            - cell "$474.56" [ref=e1486]
+            - cell "$469.74" [ref=e1487]
+            - cell "$478.90" [ref=e1488]
+            - cell "TIMEOUT" [ref=e1489]
+            - cell "+101.90%" [ref=e1490]
+            - cell "$0.56" [ref=e1491]
+            - cell "$1.13" [ref=e1492]
+            - cell "+$57" [ref=e1493]
+            - cell "72/100+3📊-10⚡" [ref=e1494]
+          - row "4 03/16 11:30 ET 03/16 15:30 ET ▲ LONG DAYvwap $459.07 $454.60 $469.75 TIMEOUT +55.20% $0.54 $0.84 +$30 70/100-13⚡" [ref=e1495]:
+            - cell "4" [ref=e1496]
+            - cell "03/16 11:30 ET" [ref=e1497]:
+              - link "03/16 11:30 ET" [ref=e1498] [cursor=pointer]:
+                - /url: "#"
+            - cell "03/16 15:30 ET" [ref=e1499]
+            - cell "▲ LONG" [ref=e1500]
+            - cell "DAYvwap" [ref=e1501]:
+              - generic [ref=e1502]: DAYvwap
+            - cell "$459.07" [ref=e1503]
+            - cell "$454.60" [ref=e1504]
+            - cell "$469.75" [ref=e1505]
+            - cell "TIMEOUT" [ref=e1506]
+            - cell "+55.20%" [ref=e1507]
+            - cell "$0.54" [ref=e1508]
+            - cell "$0.84" [ref=e1509]
+            - cell "+$30" [ref=e1510]
+            - cell "70/100-13⚡" [ref=e1511]
+          - row "📅 03/27 1 trade (1 exec, 0 filtered) 100% WR +1.47%" [ref=e1512]:
+            - cell "📅 03/27 1 trade (1 exec, 0 filtered) 100% WR +1.47%" [ref=e1513]
+          - row "5 03/27 10:00 ET 03/27 11:10 ET ▲ LONG DAYkeylevel $409.68 $403.54 $415.42 WIN +1.47% $0.63 $3.13 +$250 70/100+3📊-18⚡" [ref=e1514]:
+            - cell "5" [ref=e1515]
+            - cell "03/27 10:00 ET" [ref=e1516]:
+              - link "03/27 10:00 ET" [ref=e1517] [cursor=pointer]:
+                - /url: "#"
+            - cell "03/27 11:10 ET" [ref=e1518]
+            - cell "▲ LONG" [ref=e1519]
+            - cell "DAYkeylevel" [ref=e1520]:
+              - generic [ref=e1521]: DAYkeylevel
+            - cell "$409.68" [ref=e1522]
+            - cell "$403.54" [ref=e1523]
+            - cell "$415.42" [ref=e1524]
+            - cell "WIN" [ref=e1525]
+            - cell "+1.47%" [ref=e1526]
+            - cell "$0.63" [ref=e1527]
+            - cell "$3.13" [ref=e1528]
+            - cell "+$250" [ref=e1529]
+            - cell "70/100+3📊-18⚡" [ref=e1530]
+          - row "📅 04/08 1 trade (1 exec, 0 filtered) 100% WR +0.26%" [ref=e1531]:
+            - cell "📅 04/08 1 trade (1 exec, 0 filtered) 100% WR +0.26%" [ref=e1532]
+          - row "6 04/08 13:35 ET 04/08 14:22 ET ▼ SHORT SCALPscalp $434.91 $435.93 $433.92 WIN +0.26% $0.41 $0.73 +$32 72/100+3📊-10⚡" [ref=e1533]:
+            - cell "6" [ref=e1534]
+            - cell "04/08 13:35 ET" [ref=e1535]:
+              - link "04/08 13:35 ET" [ref=e1536] [cursor=pointer]:
+                - /url: "#"
+            - cell "04/08 14:22 ET" [ref=e1537]
+            - cell "▼ SHORT" [ref=e1538]
+            - cell "SCALPscalp" [ref=e1539]:
+              - generic [ref=e1540]: SCALPscalp
+            - cell "$434.91" [ref=e1541]
+            - cell "$435.93" [ref=e1542]
+            - cell "$433.92" [ref=e1543]
+            - cell "WIN" [ref=e1544]
+            - cell "+0.26%" [ref=e1545]
+            - cell "$0.41" [ref=e1546]
+            - cell "$0.73" [ref=e1547]
+            - cell "+$32" [ref=e1548]
+            - cell "72/100+3📊-10⚡" [ref=e1549]
+    - generic [ref=e1270]:
+      - generic [ref=e1271]:
+        - generic [ref=e1272]: Loss Pattern Analysis — 8 losing trades
+        - generic [ref=e1273]:
+          - generic [ref=e1274]:
+            - text: "Long:"
+            - strong [ref=e1275]: 50% loss rate
+            - text: (avg -36.85%)
+          - generic [ref=e1276]:
+            - text: "Short:"
+            - strong [ref=e1277]: 75% loss rate
+            - text: (avg -61.59%)
+      - generic [ref=e1278]:
+        - generic [ref=e1279]:
+          - generic [ref=e1280]:
+            - generic [ref=e1281]: Loss by Hour
+            - generic [ref=e1282]:
+              - generic [ref=e1285]: 9am
+              - generic [ref=e1286]:
+                - generic [ref=e1287]: "2"
+                - generic [ref=e1289]: 10am
+                - generic [ref=e1290]: 67%L
+              - generic [ref=e1291]:
+                - generic [ref=e1292]: "2"
+                - generic [ref=e1294]: 11am
+                - generic [ref=e1295]: 50%L
+              - generic [ref=e1298]: 12pm
+              - generic [ref=e1299]:
+                - generic [ref=e1301]: 1pm
+                - generic [ref=e1302]: 0%L
+              - generic [ref=e1303]:
+                - generic [ref=e1304]: "4"
+                - generic [ref=e1306]: 2pm
+                - generic [ref=e1307]: 100%L
+              - generic [ref=e1310]: 3pm
+          - generic [ref=e1311]:
+            - generic [ref=e1312]: Loss by Day of Week
+            - generic [ref=e1313]:
+              - generic [ref=e1314]:
+                - generic [ref=e1315]: Mon
+                - generic [ref=e1316]: "0"
+                - generic [ref=e1317]: 0%L
+              - generic [ref=e1318]:
+                - generic [ref=e1319]: Tue
+                - generic [ref=e1320]: "4"
+                - generic [ref=e1321]: 100%L
+              - generic [ref=e1322]:
+                - generic [ref=e1323]: Wed
+                - generic [ref=e1324]: "0"
+                - generic [ref=e1325]: 0%L
+              - generic [ref=e1326]:
+                - generic [ref=e1327]: Thu
+                - generic [ref=e1328]: "2"
+                - generic [ref=e1329]: 67%L
+              - generic [ref=e1330]:
+                - generic [ref=e1331]: Fri
+                - generic [ref=e1332]: "2"
+                - generic [ref=e1333]: 67%L
+          - generic [ref=e1334]:
+            - generic [ref=e1335]: Exit Types
+            - generic [ref=e1336]:
+              - generic [ref=e1337]: "TIMEOUT: 5"
+              - generic [ref=e1338]: "LOSS: 3"
+        - generic [ref=e1340]:
+          - generic [ref=e1341]: Loss by Strategy
+          - generic [ref=e1342]:
+            - generic [ref=e1343]:
+              - generic [ref=e1345]: DAYvwap
+              - generic [ref=e1346]:
+                - text: 4L / 4W
+                - strong [ref=e1347]: 50% loss rate
+              - generic [ref=e1348]: "-67.60% avg loss"
+            - generic [ref=e1349]:
+              - generic [ref=e1351]: DAYkeylevel
+              - generic [ref=e1352]:
+                - text: 3L / 1W
+                - strong [ref=e1353]: 75% loss rate
+              - generic [ref=e1354]: "-29.81% avg loss"
+            - generic [ref=e1355]:
+              - generic [ref=e1357]: SCALPscalp
+              - generic [ref=e1358]:
+                - text: 1L / 1W
+                - strong [ref=e1359]: 50% loss rate
+              - generic [ref=e1360]: "-9.20% avg loss"
+      - generic [ref=e1361]:
+        - generic [ref=e1362]: ⚠ SHORT trades lose 75% of the time — consider raising short minConf
+        - generic [ref=e1363]: ⚠ 2pm accounts for 50% of all losses — dead zone filter may help
+        - generic [ref=e1364]: ⚠ Tue has the most losses (4) — consider skipping or reducing size on Tue
+      - generic [ref=e1365]:
+        - generic [ref=e1366]: Worst 10 Trades
+        - generic [ref=e1367]:
+          - generic [ref=e1368]:
+            - generic [ref=e1369]: "#1"
+            - generic [ref=e1370]: 03/12 14:00 ET
+            - generic [ref=e1371]: ▲ LONG
+            - generic [ref=e1373]: DAYvwap
+            - generic [ref=e1374]: "-98.20%"
+            - generic [ref=e1375]: conf:78
+            - link "view chart" [ref=e1376] [cursor=pointer]:
+              - /url: "#"
+          - generic [ref=e1377]:
+            - generic [ref=e1378]: "#2"
+            - generic [ref=e1379]: 04/07 14:45 ET
+            - generic [ref=e1380]: ▼ SHORT
+            - generic [ref=e1382]: DAYvwap
+            - generic [ref=e1383]: "-98.00%"
+            - generic [ref=e1384]: conf:73
+            - link "view chart" [ref=e1385] [cursor=pointer]:
+              - /url: "#"
+          - generic [ref=e1386]:
+            - generic [ref=e1387]: "#3"
+            - generic [ref=e1388]: 04/16 10:40 ET
+            - generic [ref=e1389]: ▼ SHORT
+            - generic [ref=e1391]: DAYkeylevel
+            - generic [ref=e1392]: "-86.40%"
+            - generic [ref=e1393]: conf:76
+            - link "view chart" [ref=e1394] [cursor=pointer]:
+              - /url: "#"
+          - generic [ref=e1395]:
+            - generic [ref=e1396]: "#4"
+            - generic [ref=e1397]: 03/13 11:00 ET
+            - generic [ref=e1398]: ▲ LONG
+            - generic [ref=e1400]: DAYvwap
+            - generic [ref=e1401]: "-66.60%"
+            - generic [ref=e1402]: conf:70
+            - link "view chart" [ref=e1403] [cursor=pointer]:
+              - /url: "#"
+          - generic [ref=e1404]:
+            - generic [ref=e1405]: "#5"
+            - generic [ref=e1406]: 01/27 14:40 ET
+            - generic [ref=e1407]: ▲ LONG
+            - generic [ref=e1409]: SCALPscalp
+            - generic [ref=e1410]: "-9.20%"
+            - generic [ref=e1411]: conf:81
+            - link "view chart" [ref=e1412] [cursor=pointer]:
+              - /url: "#"
+          - generic [ref=e1413]:
+            - generic [ref=e1414]: "#6"
+            - generic [ref=e1415]: 03/10 14:20 ET
+            - generic [ref=e1416]: ▲ LONG
+            - generic [ref=e1418]: DAYvwap
+            - generic [ref=e1419]: "-7.60%"
+            - generic [ref=e1420]: conf:84
+            - link "view chart" [ref=e1421] [cursor=pointer]:
+              - /url: "#"
+          - generic [ref=e1422]:
+            - generic [ref=e1423]: "#7"
+            - generic [ref=e1424]: 02/13 11:25 ET
+            - generic [ref=e1425]: ▲ LONG
+            - generic [ref=e1427]: DAYkeylevel
+            - generic [ref=e1428]: "-2.66%"
+            - generic [ref=e1429]: conf:69
+            - link "view chart" [ref=e1430] [cursor=pointer]:
+              - /url: "#"
+          - generic [ref=e1431]:
+            - generic [ref=e1432]: "#8"
+            - generic [ref=e1433]: 03/24 10:10 ET
+            - generic [ref=e1434]: ▼ SHORT
+            - generic [ref=e1436]: DAYkeylevel
+            - generic [ref=e1437]: "-0.37%"
+            - generic [ref=e1438]: conf:69
+            - link "view chart" [ref=e1439] [cursor=pointer]:
+              - /url: "#"
+  - generic [ref=e39]: SD Scanner — Backtest Engine · Intraday 5m replay · Same logic as live alerts · Real-time Polygon data

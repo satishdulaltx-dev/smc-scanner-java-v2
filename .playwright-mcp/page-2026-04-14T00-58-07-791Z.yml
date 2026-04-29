@@ -1,0 +1,62 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e5]:
+      - heading "SD SCANNER — LIVE TRADES" [level=1] [ref=e6]
+      - paragraph [ref=e7]: Recorded live alerts & cumulative performance
+    - generic [ref=e8]:
+      - link "← Dashboard" [ref=e9] [cursor=pointer]:
+        - /url: /
+      - link "📊 Backtest" [ref=e10] [cursor=pointer]:
+        - /url: /backtest
+      - link "📈 EOD Report" [ref=e11] [cursor=pointer]:
+        - /url: /eod
+      - button "🔄 Refresh" [ref=e12] [cursor=pointer]
+  - generic [ref=e13]:
+    - generic [ref=e14]: 📊 Cumulative Performance (All Time)
+    - generic [ref=e16]: Loading...
+    - generic [ref=e17]: ✏️ Resolve Open Trade
+    - generic [ref=e18]:
+      - generic [ref=e19]:
+        - text: Ticker
+        - textbox "AAPL" [ref=e20]
+      - generic [ref=e21]:
+        - text: Outcome
+        - combobox [ref=e22]:
+          - option "WIN" [selected]
+          - option "LOSS"
+          - option "BE_STOP"
+          - option "TIMEOUT"
+      - generic [ref=e23]:
+        - text: P&L $ (e.g. 56.00 or -24.00)
+        - spinbutton [ref=e24]
+      - button "✅ Submit" [ref=e25] [cursor=pointer]
+    - generic [ref=e26]: 📅 Today's Closed Broker Trades
+    - generic [ref=e27]:
+      - button "ALL" [ref=e28] [cursor=pointer]: ALL
+      - button "SCALP" [ref=e29] [cursor=pointer]: SCALP
+      - button "DAY TRADE" [ref=e30] [cursor=pointer]: DAY TRADE
+      - button "SWING" [ref=e31] [cursor=pointer]: SWING
+    - generic [ref=e33]: Loading...
+    - generic [ref=e34]: 📡 Today's Scanner Alerts
+    - generic [ref=e35]:
+      - button "ALL" [ref=e36] [cursor=pointer]: ALL
+      - button "SCALP" [ref=e37] [cursor=pointer]: SCALP
+      - button "DAY TRADE" [ref=e38] [cursor=pointer]: DAY TRADE
+      - button "SWING" [ref=e39] [cursor=pointer]: SWING
+      - button "NOT FILLED" [ref=e40] [cursor=pointer]: NOT FILLED
+    - generic [ref=e42]: Loading...
+    - generic [ref=e43]: 🗂️ Recent Trade History
+    - generic [ref=e44]:
+      - button "ALL" [ref=e45] [cursor=pointer]: ALL
+      - button "SCALP" [ref=e46] [cursor=pointer]: SCALP
+      - button "DAY TRADE" [ref=e47] [cursor=pointer]: DAY TRADE
+      - button "SWING" [ref=e48] [cursor=pointer]: SWING
+    - generic [ref=e50]: Loading...
+    - generic [ref=e51]: 🧭 Recent Scanner Alert History
+    - generic [ref=e52]:
+      - button "ALL" [ref=e53] [cursor=pointer]: ALL
+      - button "SCALP" [ref=e54] [cursor=pointer]: SCALP
+      - button "DAY TRADE" [ref=e55] [cursor=pointer]: DAY TRADE
+      - button "SWING" [ref=e56] [cursor=pointer]: SWING
+      - button "NOT FILLED" [ref=e57] [cursor=pointer]: NOT FILLED
+    - generic [ref=e59]: Loading...

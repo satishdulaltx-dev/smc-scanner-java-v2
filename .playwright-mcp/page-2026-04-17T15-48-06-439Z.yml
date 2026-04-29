@@ -1,0 +1,666 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e5]:
+      - heading "SD SCANNER — BACKTEST" [level=1] [ref=e6]
+      - paragraph [ref=e7]: SMC strategy historical performance
+    - generic [ref=e8]:
+      - link "← Dashboard" [ref=e9] [cursor=pointer]:
+        - /url: /
+      - link "🧪 Research" [ref=e10] [cursor=pointer]:
+        - /url: /research
+      - link "⚡ Adaptive" [ref=e11] [cursor=pointer]:
+        - /url: /#adaptive-panel
+      - link "📊 EOD Report" [ref=e12] [cursor=pointer]:
+        - /url: /eod
+      - link "📋 Live Trades" [ref=e13] [cursor=pointer]:
+        - /url: /trades
+  - generic [ref=e14]:
+    - generic [ref=e15]:
+      - generic [ref=e16]: Mode
+      - combobox [ref=e17]:
+        - option "Single Ticker" [selected]
+        - option "All Watchlist"
+    - generic [ref=e18]:
+      - generic [ref=e19]: Ticker
+      - combobox [ref=e20]:
+        - option "AAPL"
+        - option "AMD"
+        - option "AMZN"
+        - option "BA"
+        - option "BABA"
+        - option "COIN"
+        - option "CRWD"
+        - option "DDOG"
+        - option "DIS"
+        - option "GLD" [selected]
+        - option "GOOGL"
+        - option "GS"
+        - option "HOOD"
+        - option "JPM"
+        - option "MARA"
+        - option "META"
+        - option "MSFT"
+        - option "NFLX"
+        - option "NIO"
+        - option "NVDA"
+        - option "PLTR"
+        - option "PYPL"
+        - option "QQQ"
+        - option "ROKU"
+        - option "SHOP"
+        - option "SNAP"
+        - option "SOFI"
+        - option "SPY"
+        - option "SQ"
+        - option "TSLA"
+        - option "UBER"
+        - option "V"
+        - option "X:SOLUSD"
+        - option "X:XRPUSD"
+    - generic [ref=e21]:
+      - generic [ref=e22]: Mode
+      - combobox [ref=e23]:
+        - option "All (scalp + intraday + swing)" [selected]
+        - option "Scalp (dynamic hold)"
+        - option "Intraday (4h max hold)"
+        - option "Swing (multi-day)"
+        - option "Options (4h + P&L focus)"
+    - generic [ref=e24]:
+      - generic [ref=e25]: Strategy Type
+      - combobox [ref=e26]:
+        - option "Profile default"
+        - option "Bollinger Scalp"
+        - option "SMC (sweep+FVG)"
+        - option "VWAP (1-day reversion)"
+        - option "Key Level rejection" [selected]
+        - option "ORB breakout"
+        - option "Gap Momentum / Overnight"
+        - option "Power Earnings Gap (PEG)"
+        - option "Volatility Squeeze (BB/KC)"
+        - option "3-Day VWAP reversion"
+        - option "Index Divergence (SPY lag)"
+        - option "Gamma Pin ($5 strike)"
+    - generic [ref=e27]:
+      - generic [ref=e28]: Exit Model
+      - combobox [ref=e29]:
+        - option "Hybrid Trail After 1.5R ✓" [selected]
+        - option "Live Parity Trail"
+        - option "Classic TP / SL"
+    - generic [ref=e30]:
+      - generic [ref=e31]: Lookback
+      - combobox [ref=e32]:
+        - option "30 days"
+        - option "60 days"
+        - option "90 days" [selected]
+        - option "180 days"
+        - option "1 year"
+        - option "2 years"
+    - button "▶ Run Backtest" [ref=e33] [cursor=pointer]
+    - button "🧠 Optimize" [ref=e34] [cursor=pointer]
+  - generic [ref=e42]:
+    - generic [ref=e43]:
+      - generic [ref=e44]:
+        - generic [ref=e45]: "1"
+        - generic [ref=e46]: Total Trades
+      - generic [ref=e47]:
+        - generic [ref=e48]: 0%
+        - generic [ref=e49]: Win Rate
+      - generic [ref=e50]:
+        - generic [ref=e51]: "0"
+        - generic [ref=e52]: Wins
+      - generic [ref=e53]:
+        - generic [ref=e54]: "1"
+        - generic [ref=e55]: Losses
+      - generic [ref=e56]:
+        - generic [ref=e57]: "-86.4%"
+        - generic [ref=e58]: Expectancy / Trade
+      - generic [ref=e59]:
+        - generic [ref=e60]: +0.00%
+        - generic [ref=e61]: Avg Win
+      - generic [ref=e62]:
+        - generic [ref=e63]: "-86.40%"
+        - generic [ref=e64]: Avg Loss
+      - generic [ref=e65]:
+        - generic [ref=e66]: "1"
+        - generic [ref=e67]: Time Stops
+      - generic [ref=e68]:
+        - generic [ref=e69]: "7"
+        - generic [ref=e70]: Quality Filtered
+      - generic [ref=e71]:
+        - generic [ref=e72]: 90d
+        - generic [ref=e73]: Lookback
+      - generic [ref=e74]:
+        - generic [ref=e75]: HYBRID
+        - generic [ref=e76]: Exit Model
+      - generic [ref=e78]: 📋 Options P&L (estimated · 1.0 avg contracts)
+      - generic [ref=e79]:
+        - generic [ref=e80]: $-51
+        - generic [ref=e81]: Options Total P&L
+      - generic [ref=e82]:
+        - generic [ref=e83]: "-86%"
+        - generic [ref=e84]: Options Return
+      - generic [ref=e85]:
+        - generic [ref=e86]: $-51
+        - generic [ref=e87]: Opt Expectancy/Trade
+      - generic [ref=e88]:
+        - generic [ref=e89]: +$0
+        - generic [ref=e90]: Avg Win / Contract
+      - generic [ref=e91]:
+        - generic [ref=e92]: "-$51"
+        - generic [ref=e93]: Avg Loss / Contract
+      - generic [ref=e95]: 🔬 Edge by Confidence Tier — Where does the real alpha live?
+      - generic [ref=e96]:
+        - generic [ref=e97]: ✅ 75–84 confidence
+        - generic [ref=e98]: 0%
+        - generic [ref=e99]: WR (0/1)
+        - generic [ref=e100]: "-86.4%"
+        - generic [ref=e101]: expectancy
+    - generic [ref=e102]:
+      - generic [ref=e104]: Equity Curve (cumulative P&L %)
+      - generic [ref=e108]: Win / Loss Distribution
+    - generic [ref=e111]:
+      - generic [ref=e112]:
+        - text: TRADE LOG
+        - generic [ref=e113]: "1"
+        - generic [ref=e114]: ✓ 5m bar intraday replay — same logic as live alerts · Click entry time to view 5m chart
+      - generic [ref=e115]:
+        - button "ALL (20)" [ref=e116] [cursor=pointer]
+        - button "EXECUTED (1)" [ref=e117] [cursor=pointer]
+        - button "WINS" [ref=e118] [cursor=pointer]: WINS
+        - button "LOSSES (1)" [ref=e119] [cursor=pointer]
+        - button "FILTERED (19)" [ref=e120] [cursor=pointer]
+      - table [ref=e121]:
+        - rowgroup [ref=e122]:
+          - row "# ENTRY TIME (ET) EXIT TIME (ET) DIR STRATEGY ENTRY STOP LOSS TAKE PROFIT OUTCOME P&L % OPT ENTRY OPT EXIT OPT P&L CONF" [ref=e123]:
+            - columnheader "#" [ref=e124]
+            - columnheader "ENTRY TIME (ET)" [ref=e125]
+            - columnheader "EXIT TIME (ET)" [ref=e126]
+            - columnheader "DIR" [ref=e127]
+            - columnheader "STRATEGY" [ref=e128]
+            - columnheader "ENTRY" [ref=e129]
+            - columnheader "STOP LOSS" [ref=e130]
+            - columnheader "TAKE PROFIT" [ref=e131]
+            - columnheader "OUTCOME" [ref=e132]
+            - columnheader "P&L %" [ref=e133]
+            - columnheader "OPT ENTRY" [ref=e134]
+            - columnheader "OPT EXIT" [ref=e135]
+            - columnheader "OPT P&L" [ref=e136]
+            - columnheader "CONF" [ref=e137]
+        - rowgroup [ref=e138]:
+          - row "📅 02/11 1 trade (0 exec, 1 filtered)" [ref=e139]:
+            - cell "📅 02/11 1 trade (0 exec, 1 filtered)" [ref=e140]
+          - 'row "1 02/11 13:00 ET — ▼ SHORT DAYkeylevel $467.84 $470.23 $465.45 CONFLUENCE_FILTERED ↗️ +RS: +2.2% vs SPY | ↗️ +RS: +2.2% vs SPY | R:R 1.0 (-20) | time-of-day (lunch) (-5) — — — 46/100-6📊-25⚡" [ref=e141]':
+            - cell "1" [ref=e142]
+            - cell "02/11 13:00 ET" [ref=e143]:
+              - link "02/11 13:00 ET" [ref=e144] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e145]
+            - cell "▼ SHORT" [ref=e146]
+            - cell "DAYkeylevel" [ref=e147]:
+              - generic [ref=e148]: DAYkeylevel
+            - cell "$467.84" [ref=e149]
+            - cell "$470.23" [ref=e150]
+            - cell "$465.45" [ref=e151]
+            - cell "CONFLUENCE_FILTERED" [ref=e152]
+            - 'cell "↗️ +RS: +2.2% vs SPY | ↗️ +RS: +2.2% vs SPY | R:R 1.0 (-20) | time-of-day (lunch) (-5)" [ref=e153]'
+            - cell "—" [ref=e154]
+            - cell "—" [ref=e155]
+            - cell "—" [ref=e156]
+            - cell "46/100-6📊-25⚡" [ref=e157]
+          - row "📅 02/20 1 trade (0 exec, 1 filtered)" [ref=e158]:
+            - cell "📅 02/20 1 trade (0 exec, 1 filtered)" [ref=e159]
+          - 'row "2 02/20 10:00 ET — ▼ SHORT DAYkeylevel $462.00 $470.05 $449.92 CONFLUENCE_FILTERED ↗️ +RS: +2.6% vs SPY | ↗️ +RS: +2.6% vs SPY | R:R 1.5 (-10) — — — 52/100-6📊-10⚡" [ref=e160]':
+            - cell "2" [ref=e161]
+            - cell "02/20 10:00 ET" [ref=e162]:
+              - link "02/20 10:00 ET" [ref=e163] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e164]
+            - cell "▼ SHORT" [ref=e165]
+            - cell "DAYkeylevel" [ref=e166]:
+              - generic [ref=e167]: DAYkeylevel
+            - cell "$462.00" [ref=e168]
+            - cell "$470.05" [ref=e169]
+            - cell "$449.92" [ref=e170]
+            - cell "CONFLUENCE_FILTERED" [ref=e171]
+            - 'cell "↗️ +RS: +2.6% vs SPY | ↗️ +RS: +2.6% vs SPY | R:R 1.5 (-10)" [ref=e172]'
+            - cell "—" [ref=e173]
+            - cell "—" [ref=e174]
+            - cell "—" [ref=e175]
+            - cell "52/100-6📊-10⚡" [ref=e176]
+          - row "📅 03/03 1 trade (0 exec, 1 filtered)" [ref=e177]:
+            - cell "📅 03/03 1 trade (0 exec, 1 filtered)" [ref=e178]
+          - row "3 03/03 10:00 ET — ▼ SHORT DAYkeylevel $462.45 $468.64 $456.26 CONFLUENCE_FILTERED R:R 1.0 (-10) — — — 52/100-10⚡" [ref=e179]:
+            - cell "3" [ref=e180]
+            - cell "03/03 10:00 ET" [ref=e181]:
+              - link "03/03 10:00 ET" [ref=e182] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e183]
+            - cell "▼ SHORT" [ref=e184]
+            - cell "DAYkeylevel" [ref=e185]:
+              - generic [ref=e186]: DAYkeylevel
+            - cell "$462.45" [ref=e187]
+            - cell "$468.64" [ref=e188]
+            - cell "$456.26" [ref=e189]
+            - cell "CONFLUENCE_FILTERED" [ref=e190]
+            - cell "R:R 1.0 (-10)" [ref=e191]
+            - cell "—" [ref=e192]
+            - cell "—" [ref=e193]
+            - cell "—" [ref=e194]
+            - cell "52/100-10⚡" [ref=e195]
+          - row "📅 03/05 1 trade (0 exec, 1 filtered)" [ref=e196]:
+            - cell "📅 03/05 1 trade (0 exec, 1 filtered)" [ref=e197]
+          - row "4 03/05 10:00 ET — ▼ SHORT DAYkeylevel $468.11 $470.84 $464.02 CONFLUENCE_FILTERED R:R 1.5 (-10) — — — 56/100-10⚡" [ref=e198]:
+            - cell "4" [ref=e199]
+            - cell "03/05 10:00 ET" [ref=e200]:
+              - link "03/05 10:00 ET" [ref=e201] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e202]
+            - cell "▼ SHORT" [ref=e203]
+            - cell "DAYkeylevel" [ref=e204]:
+              - generic [ref=e205]: DAYkeylevel
+            - cell "$468.11" [ref=e206]
+            - cell "$470.84" [ref=e207]
+            - cell "$464.02" [ref=e208]
+            - cell "CONFLUENCE_FILTERED" [ref=e209]
+            - cell "R:R 1.5 (-10)" [ref=e210]
+            - cell "—" [ref=e211]
+            - cell "—" [ref=e212]
+            - cell "—" [ref=e213]
+            - cell "56/100-10⚡" [ref=e214]
+          - row "📅 03/09 1 trade (0 exec, 1 filtered)" [ref=e215]:
+            - cell "📅 03/09 1 trade (0 exec, 1 filtered)" [ref=e216]
+          - 'row "5 03/09 10:05 ET — ▼ SHORT DAYkeylevel $466.20 $468.17 $463.25 CONFLUENCE_FILTERED ↘️ −RS: -2.4% vs SPY | ↘️ −RS: -2.4% vs SPY | R:R 1.5 (-10) — — — 52/100+3📊-10⚡" [ref=e217]':
+            - cell "5" [ref=e218]
+            - cell "03/09 10:05 ET" [ref=e219]:
+              - link "03/09 10:05 ET" [ref=e220] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e221]
+            - cell "▼ SHORT" [ref=e222]
+            - cell "DAYkeylevel" [ref=e223]:
+              - generic [ref=e224]: DAYkeylevel
+            - cell "$466.20" [ref=e225]
+            - cell "$468.17" [ref=e226]
+            - cell "$463.25" [ref=e227]
+            - cell "CONFLUENCE_FILTERED" [ref=e228]
+            - 'cell "↘️ −RS: -2.4% vs SPY | ↘️ −RS: -2.4% vs SPY | R:R 1.5 (-10)" [ref=e229]'
+            - cell "—" [ref=e230]
+            - cell "—" [ref=e231]
+            - cell "—" [ref=e232]
+            - cell "52/100+3📊-10⚡" [ref=e233]
+          - row "📅 03/11 1 trade (0 exec, 1 filtered)" [ref=e234]:
+            - cell "📅 03/11 1 trade (0 exec, 1 filtered)" [ref=e235]
+          - 'row "6 03/11 13:35 ET — ▼ SHORT DAYkeylevel $474.01 $477.53 $470.49 QUALITY_FILTERED ↗️ +RS: +2.2% vs SPY | ↗️ +RS: +2.2% vs SPY | R:R 1.0 (-10) — — — 50/100-6📊-10⚡" [ref=e236]':
+            - cell "6" [ref=e237]
+            - cell "03/11 13:35 ET" [ref=e238]:
+              - link "03/11 13:35 ET" [ref=e239] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e240]
+            - cell "▼ SHORT" [ref=e241]
+            - cell "DAYkeylevel" [ref=e242]:
+              - generic [ref=e243]: DAYkeylevel
+            - cell "$474.01" [ref=e244]
+            - cell "$477.53" [ref=e245]
+            - cell "$470.49" [ref=e246]
+            - cell "QUALITY_FILTERED" [ref=e247]
+            - 'cell "↗️ +RS: +2.2% vs SPY | ↗️ +RS: +2.2% vs SPY | R:R 1.0 (-10)" [ref=e248]'
+            - cell "—" [ref=e249]
+            - cell "—" [ref=e250]
+            - cell "—" [ref=e251]
+            - cell "50/100-6📊-10⚡" [ref=e252]
+          - row "📅 03/12 1 trade (0 exec, 1 filtered)" [ref=e253]:
+            - cell "📅 03/12 1 trade (0 exec, 1 filtered)" [ref=e254]
+          - 'row "7 03/12 13:50 ET — ▼ SHORT DAYkeylevel $469.09 $470.46 $467.03 QUALITY_FILTERED ↗️ +RS: +2.4% vs SPY | ↗️ +RS: +2.4% vs SPY | R:R 1.5 (-10) — — — 63/100-6📊-10⚡" [ref=e255]':
+            - cell "7" [ref=e256]
+            - cell "03/12 13:50 ET" [ref=e257]:
+              - link "03/12 13:50 ET" [ref=e258] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e259]
+            - cell "▼ SHORT" [ref=e260]
+            - cell "DAYkeylevel" [ref=e261]:
+              - generic [ref=e262]: DAYkeylevel
+            - cell "$469.09" [ref=e263]
+            - cell "$470.46" [ref=e264]
+            - cell "$467.03" [ref=e265]
+            - cell "QUALITY_FILTERED" [ref=e266]
+            - 'cell "↗️ +RS: +2.4% vs SPY | ↗️ +RS: +2.4% vs SPY | R:R 1.5 (-10)" [ref=e267]'
+            - cell "—" [ref=e268]
+            - cell "—" [ref=e269]
+            - cell "—" [ref=e270]
+            - cell "63/100-6📊-10⚡" [ref=e271]
+          - row "📅 03/13 1 trade (0 exec, 1 filtered)" [ref=e272]:
+            - cell "📅 03/13 1 trade (0 exec, 1 filtered)" [ref=e273]
+          - row "8 03/13 10:00 ET — ▲ LONG DAYkeylevel $469.08 $468.63 $469.76 CONF_CAP_FILTERED CONF_CAP — — — 88/100-5⚡" [ref=e274]:
+            - cell "8" [ref=e275]
+            - cell "03/13 10:00 ET" [ref=e276]:
+              - link "03/13 10:00 ET" [ref=e277] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e278]
+            - cell "▲ LONG" [ref=e279]
+            - cell "DAYkeylevel" [ref=e280]:
+              - generic [ref=e281]: DAYkeylevel
+            - cell "$469.08" [ref=e282]
+            - cell "$468.63" [ref=e283]
+            - cell "$469.76" [ref=e284]
+            - cell "CONF_CAP_FILTERED" [ref=e285]
+            - cell "CONF_CAP" [ref=e286]
+            - cell "—" [ref=e287]
+            - cell "—" [ref=e288]
+            - cell "—" [ref=e289]
+            - cell "88/100-5⚡" [ref=e290]
+          - row "📅 03/16 1 trade (0 exec, 1 filtered)" [ref=e291]:
+            - cell "📅 03/16 1 trade (0 exec, 1 filtered)" [ref=e292]
+          - row "9 03/16 10:35 ET — ▼ SHORT DAYkeylevel $459.89 $461.62 $457.29 QUALITY_FILTERED R:R 1.5 (-5) — — — 52/100-5⚡" [ref=e293]:
+            - cell "9" [ref=e294]
+            - cell "03/16 10:35 ET" [ref=e295]:
+              - link "03/16 10:35 ET" [ref=e296] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e297]
+            - cell "▼ SHORT" [ref=e298]
+            - cell "DAYkeylevel" [ref=e299]:
+              - generic [ref=e300]: DAYkeylevel
+            - cell "$459.89" [ref=e301]
+            - cell "$461.62" [ref=e302]
+            - cell "$457.29" [ref=e303]
+            - cell "QUALITY_FILTERED" [ref=e304]
+            - cell "R:R 1.5 (-5)" [ref=e305]
+            - cell "—" [ref=e306]
+            - cell "—" [ref=e307]
+            - cell "—" [ref=e308]
+            - cell "52/100-5⚡" [ref=e309]
+          - row "📅 03/17 1 trade (0 exec, 1 filtered)" [ref=e310]:
+            - cell "📅 03/17 1 trade (0 exec, 1 filtered)" [ref=e311]
+          - 'row "10 03/17 10:00 ET — ▼ SHORT DAYkeylevel $460.26 $461.55 $458.97 CONFLUENCE_FILTERED ↘️ −RS: -2.9% vs SPY | ↘️ −RS: -2.9% vs SPY | R:R 1.0 (-20) — — — 52/100+3📊-20⚡" [ref=e312]':
+            - cell "10" [ref=e313]
+            - cell "03/17 10:00 ET" [ref=e314]:
+              - link "03/17 10:00 ET" [ref=e315] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e316]
+            - cell "▼ SHORT" [ref=e317]
+            - cell "DAYkeylevel" [ref=e318]:
+              - generic [ref=e319]: DAYkeylevel
+            - cell "$460.26" [ref=e320]
+            - cell "$461.55" [ref=e321]
+            - cell "$458.97" [ref=e322]
+            - cell "CONFLUENCE_FILTERED" [ref=e323]
+            - 'cell "↘️ −RS: -2.9% vs SPY | ↘️ −RS: -2.9% vs SPY | R:R 1.0 (-20)" [ref=e324]'
+            - cell "—" [ref=e325]
+            - cell "—" [ref=e326]
+            - cell "—" [ref=e327]
+            - cell "52/100+3📊-20⚡" [ref=e328]
+          - row "📅 03/20 1 trade (0 exec, 1 filtered)" [ref=e329]:
+            - cell "📅 03/20 1 trade (0 exec, 1 filtered)" [ref=e330]
+          - 'row "11 03/20 10:00 ET — ▼ SHORT DAYkeylevel $424.02 $426.50 $421.53 CONFLUENCE_FILTERED 📉 Weak RS: -8.2% vs SPY | 📉 Weak RS: -8.2% vs SPY | R:R 1.0 (-10) — — — 63/100+6📊-10⚡" [ref=e331]':
+            - cell "11" [ref=e332]
+            - cell "03/20 10:00 ET" [ref=e333]:
+              - link "03/20 10:00 ET" [ref=e334] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e335]
+            - cell "▼ SHORT" [ref=e336]
+            - cell "DAYkeylevel" [ref=e337]:
+              - generic [ref=e338]: DAYkeylevel
+            - cell "$424.02" [ref=e339]
+            - cell "$426.50" [ref=e340]
+            - cell "$421.53" [ref=e341]
+            - cell "CONFLUENCE_FILTERED" [ref=e342]
+            - 'cell "📉 Weak RS: -8.2% vs SPY | 📉 Weak RS: -8.2% vs SPY | R:R 1.0 (-10)" [ref=e343]'
+            - cell "—" [ref=e344]
+            - cell "—" [ref=e345]
+            - cell "—" [ref=e346]
+            - cell "63/100+6📊-10⚡" [ref=e347]
+          - row "📅 03/24 1 trade (0 exec, 1 filtered)" [ref=e348]:
+            - cell "📅 03/24 1 trade (0 exec, 1 filtered)" [ref=e349]
+          - 'row "12 03/24 10:10 ET — ▼ SHORT DAYkeylevel $403.74 $405.00 $401.85 QUALITY_FILTERED 📉 Weak RS: -9.4% vs SPY | 📉 Weak RS: -9.4% vs SPY | R:R 1.5 (-5) — — — 69/100+6📊-5⚡" [ref=e350]':
+            - cell "12" [ref=e351]
+            - cell "03/24 10:10 ET" [ref=e352]:
+              - link "03/24 10:10 ET" [ref=e353] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e354]
+            - cell "▼ SHORT" [ref=e355]
+            - cell "DAYkeylevel" [ref=e356]:
+              - generic [ref=e357]: DAYkeylevel
+            - cell "$403.74" [ref=e358]
+            - cell "$405.00" [ref=e359]
+            - cell "$401.85" [ref=e360]
+            - cell "QUALITY_FILTERED" [ref=e361]
+            - 'cell "📉 Weak RS: -9.4% vs SPY | 📉 Weak RS: -9.4% vs SPY | R:R 1.5 (-5)" [ref=e362]'
+            - cell "—" [ref=e363]
+            - cell "—" [ref=e364]
+            - cell "—" [ref=e365]
+            - cell "69/100+6📊-5⚡" [ref=e366]
+          - row "📅 03/25 1 trade (0 exec, 1 filtered)" [ref=e367]:
+            - cell "📅 03/25 1 trade (0 exec, 1 filtered)" [ref=e368]
+          - 'row "13 03/25 11:20 ET — ▲ LONG DAYkeylevel $418.54 $416.09 $420.99 QUALITY_FILTERED ↘️ −RS: -5.7% vs SPY | ↘️ −RS: -5.7% vs SPY | R:R 1.0 (-20) — — — 46/100-6📊-20⚡" [ref=e369]':
+            - cell "13" [ref=e370]
+            - cell "03/25 11:20 ET" [ref=e371]:
+              - link "03/25 11:20 ET" [ref=e372] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e373]
+            - cell "▲ LONG" [ref=e374]
+            - cell "DAYkeylevel" [ref=e375]:
+              - generic [ref=e376]: DAYkeylevel
+            - cell "$418.54" [ref=e377]
+            - cell "$416.09" [ref=e378]
+            - cell "$420.99" [ref=e379]
+            - cell "QUALITY_FILTERED" [ref=e380]
+            - 'cell "↘️ −RS: -5.7% vs SPY | ↘️ −RS: -5.7% vs SPY | R:R 1.0 (-20)" [ref=e381]'
+            - cell "—" [ref=e382]
+            - cell "—" [ref=e383]
+            - cell "—" [ref=e384]
+            - cell "46/100-6📊-20⚡" [ref=e385]
+          - row "📅 03/26 1 trade (0 exec, 1 filtered)" [ref=e386]:
+            - cell "📅 03/26 1 trade (0 exec, 1 filtered)" [ref=e387]
+          - 'row "14 03/26 12:40 ET — ▼ SHORT DAYkeylevel $402.34 $404.84 $399.84 CONFLUENCE_FILTERED ↘️ −RS: -3.8% vs SPY | ↘️ −RS: -3.8% vs SPY | R:R 1.0 (-10) | time-of-day (lunch) (-5) — — — 52/100+3📊-15⚡" [ref=e388]':
+            - cell "14" [ref=e389]
+            - cell "03/26 12:40 ET" [ref=e390]:
+              - link "03/26 12:40 ET" [ref=e391] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e392]
+            - cell "▼ SHORT" [ref=e393]
+            - cell "DAYkeylevel" [ref=e394]:
+              - generic [ref=e395]: DAYkeylevel
+            - cell "$402.34" [ref=e396]
+            - cell "$404.84" [ref=e397]
+            - cell "$399.84" [ref=e398]
+            - cell "CONFLUENCE_FILTERED" [ref=e399]
+            - 'cell "↘️ −RS: -3.8% vs SPY | ↘️ −RS: -3.8% vs SPY | R:R 1.0 (-10) | time-of-day (lunch) (-5)" [ref=e400]'
+            - cell "—" [ref=e401]
+            - cell "—" [ref=e402]
+            - cell "—" [ref=e403]
+            - cell "52/100+3📊-15⚡" [ref=e404]
+          - row "📅 03/27 1 trade (0 exec, 1 filtered)" [ref=e405]:
+            - cell "📅 03/27 1 trade (0 exec, 1 filtered)" [ref=e406]
+          - 'row "15 03/27 10:05 ET — ▲ LONG DAYkeylevel $408.74 $405.46 $412.02 TRAP_FILTERED ↗️ +RS: +2.6% vs SPY | ↗️ +RS: +2.6% vs SPY | R:R 1.0 (-20) — — — 54/100+3📊-20⚡" [ref=e407]':
+            - cell "15" [ref=e408]
+            - cell "03/27 10:05 ET" [ref=e409]:
+              - link "03/27 10:05 ET" [ref=e410] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e411]
+            - cell "▲ LONG" [ref=e412]
+            - cell "DAYkeylevel" [ref=e413]:
+              - generic [ref=e414]: DAYkeylevel
+            - cell "$408.74" [ref=e415]
+            - cell "$405.46" [ref=e416]
+            - cell "$412.02" [ref=e417]
+            - cell "TRAP_FILTERED" [ref=e418]
+            - 'cell "↗️ +RS: +2.6% vs SPY | ↗️ +RS: +2.6% vs SPY | R:R 1.0 (-20)" [ref=e419]'
+            - cell "—" [ref=e420]
+            - cell "—" [ref=e421]
+            - cell "—" [ref=e422]
+            - cell "54/100+3📊-20⚡" [ref=e423]
+          - row "📅 03/31 1 trade (0 exec, 1 filtered)" [ref=e424]:
+            - cell "📅 03/31 1 trade (0 exec, 1 filtered)" [ref=e425]
+          - 'row "16 03/31 10:05 ET — ▲ LONG DAYkeylevel $423.04 $421.86 $424.81 TRAP_FILTERED 📈 Strong RS: +6.9% vs SPY | 📈 Strong RS: +6.9% vs SPY | R:R 1.5 (-10) — — — 46/100+6📊-10⚡" [ref=e426]':
+            - cell "16" [ref=e427]
+            - cell "03/31 10:05 ET" [ref=e428]:
+              - link "03/31 10:05 ET" [ref=e429] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e430]
+            - cell "▲ LONG" [ref=e431]
+            - cell "DAYkeylevel" [ref=e432]:
+              - generic [ref=e433]: DAYkeylevel
+            - cell "$423.04" [ref=e434]
+            - cell "$421.86" [ref=e435]
+            - cell "$424.81" [ref=e436]
+            - cell "TRAP_FILTERED" [ref=e437]
+            - 'cell "📈 Strong RS: +6.9% vs SPY | 📈 Strong RS: +6.9% vs SPY | R:R 1.5 (-10)" [ref=e438]'
+            - cell "—" [ref=e439]
+            - cell "—" [ref=e440]
+            - cell "—" [ref=e441]
+            - cell "46/100+6📊-10⚡" [ref=e442]
+          - row "📅 04/06 1 trade (0 exec, 1 filtered)" [ref=e443]:
+            - cell "📅 04/06 1 trade (0 exec, 1 filtered)" [ref=e444]
+          - row "17 04/06 13:10 ET — ▼ SHORT DAYkeylevel $427.58 $429.48 $425.68 QUALITY_FILTERED R:R 1.0 (-20) | time-of-day (lunch) (-5) — — — 52/100-25⚡" [ref=e445]:
+            - cell "17" [ref=e446]
+            - cell "04/06 13:10 ET" [ref=e447]:
+              - link "04/06 13:10 ET" [ref=e448] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e449]
+            - cell "▼ SHORT" [ref=e450]
+            - cell "DAYkeylevel" [ref=e451]:
+              - generic [ref=e452]: DAYkeylevel
+            - cell "$427.58" [ref=e453]
+            - cell "$429.48" [ref=e454]
+            - cell "$425.68" [ref=e455]
+            - cell "QUALITY_FILTERED" [ref=e456]
+            - cell "R:R 1.0 (-20) | time-of-day (lunch) (-5)" [ref=e457]
+            - cell "—" [ref=e458]
+            - cell "—" [ref=e459]
+            - cell "—" [ref=e460]
+            - cell "52/100-25⚡" [ref=e461]
+          - row "📅 04/07 1 trade (0 exec, 1 filtered)" [ref=e462]:
+            - cell "📅 04/07 1 trade (0 exec, 1 filtered)" [ref=e463]
+          - row "18 04/07 10:10 ET — ▲ LONG DAYkeylevel $424.53 $421.88 $428.51 MULTI_FILTERED R:R 1.5 (-5) — — — 55/100-5⚡" [ref=e464]:
+            - cell "18" [ref=e465]
+            - cell "04/07 10:10 ET" [ref=e466]:
+              - link "04/07 10:10 ET" [ref=e467] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e468]
+            - cell "▲ LONG" [ref=e469]
+            - cell "DAYkeylevel" [ref=e470]:
+              - generic [ref=e471]: DAYkeylevel
+            - cell "$424.53" [ref=e472]
+            - cell "$421.88" [ref=e473]
+            - cell "$428.51" [ref=e474]
+            - cell "MULTI_FILTERED" [ref=e475]
+            - cell "R:R 1.5 (-5)" [ref=e476]
+            - cell "—" [ref=e477]
+            - cell "—" [ref=e478]
+            - cell "—" [ref=e479]
+            - cell "55/100-5⚡" [ref=e480]
+          - row "📅 04/09 1 trade (0 exec, 1 filtered)" [ref=e481]:
+            - cell "📅 04/09 1 trade (0 exec, 1 filtered)" [ref=e482]
+          - 'row "19 04/09 12:35 ET — ▼ SHORT DAYkeylevel $440.04 $441.06 $438.52 CONFLUENCE_FILTERED ↘️ −RS: -3.7% vs SPY | ↘️ −RS: -3.7% vs SPY | R:R 1.5 (-5) | time-of-day (lunch) (-5) — — — 46/100+3📊-10⚡" [ref=e483]':
+            - cell "19" [ref=e484]
+            - cell "04/09 12:35 ET" [ref=e485]:
+              - link "04/09 12:35 ET" [ref=e486] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e487]
+            - cell "▼ SHORT" [ref=e488]
+            - cell "DAYkeylevel" [ref=e489]:
+              - generic [ref=e490]: DAYkeylevel
+            - cell "$440.04" [ref=e491]
+            - cell "$441.06" [ref=e492]
+            - cell "$438.52" [ref=e493]
+            - cell "CONFLUENCE_FILTERED" [ref=e494]
+            - 'cell "↘️ −RS: -3.7% vs SPY | ↘️ −RS: -3.7% vs SPY | R:R 1.5 (-5) | time-of-day (lunch) (-5)" [ref=e495]'
+            - cell "—" [ref=e496]
+            - cell "—" [ref=e497]
+            - cell "—" [ref=e498]
+            - cell "46/100+3📊-10⚡" [ref=e499]
+          - row "📅 04/16 1 trade (1 exec, 0 filtered) 0% WR -86.40%" [ref=e500]:
+            - cell "📅 04/16 1 trade (1 exec, 0 filtered) 0% WR -86.40%" [ref=e501]
+          - row "20 04/16 10:40 ET 04/16 15:55 ET ▼ SHORT DAYkeylevel $439.41 $442.19 $435.79 TIMEOUT -86.40% $0.59 $0.08 $-51 76/100+3📊-10⚡" [ref=e502]:
+            - cell "20" [ref=e503]
+            - cell "04/16 10:40 ET" [ref=e504]:
+              - link "04/16 10:40 ET" [ref=e505] [cursor=pointer]:
+                - /url: "#"
+            - cell "04/16 15:55 ET" [ref=e506]
+            - cell "▼ SHORT" [ref=e507]
+            - cell "DAYkeylevel" [ref=e508]:
+              - generic [ref=e509]: DAYkeylevel
+            - cell "$439.41" [ref=e510]
+            - cell "$442.19" [ref=e511]
+            - cell "$435.79" [ref=e512]
+            - cell "TIMEOUT" [ref=e513]
+            - cell "-86.40%" [ref=e514]
+            - cell "$0.59" [ref=e515]
+            - cell "$0.08" [ref=e516]
+            - cell "$-51" [ref=e517]
+            - cell "76/100+3📊-10⚡" [ref=e518]
+    - generic [ref=e520]:
+      - generic [ref=e521]:
+        - generic [ref=e522]: Loss Pattern Analysis — 1 losing trades
+        - generic [ref=e523]:
+          - generic [ref=e524]:
+            - text: "Long:"
+            - strong [ref=e525]: 0% loss rate
+            - text: (avg 0.00%)
+          - generic [ref=e526]:
+            - text: "Short:"
+            - strong [ref=e527]: 100% loss rate
+            - text: (avg -86.40%)
+      - generic [ref=e528]:
+        - generic [ref=e529]:
+          - generic [ref=e530]:
+            - generic [ref=e531]: Loss by Hour
+            - generic [ref=e532]:
+              - generic [ref=e535]: 9am
+              - generic [ref=e536]:
+                - generic [ref=e537]: "1"
+                - generic [ref=e539]: 10am
+                - generic [ref=e540]: 100%L
+              - generic [ref=e543]: 11am
+              - generic [ref=e546]: 12pm
+              - generic [ref=e549]: 1pm
+              - generic [ref=e552]: 2pm
+              - generic [ref=e555]: 3pm
+          - generic [ref=e556]:
+            - generic [ref=e557]: Loss by Day of Week
+            - generic [ref=e558]:
+              - generic [ref=e559]:
+                - generic [ref=e560]: Mon
+                - generic [ref=e561]: "0"
+                - generic [ref=e562]: "-"
+              - generic [ref=e563]:
+                - generic [ref=e564]: Tue
+                - generic [ref=e565]: "0"
+                - generic [ref=e566]: "-"
+              - generic [ref=e567]:
+                - generic [ref=e568]: Wed
+                - generic [ref=e569]: "0"
+                - generic [ref=e570]: "-"
+              - generic [ref=e571]:
+                - generic [ref=e572]: Thu
+                - generic [ref=e573]: "1"
+                - generic [ref=e574]: 100%L
+              - generic [ref=e575]:
+                - generic [ref=e576]: Fri
+                - generic [ref=e577]: "0"
+                - generic [ref=e578]: "-"
+          - generic [ref=e579]:
+            - generic [ref=e580]: Exit Types
+            - generic [ref=e582]: "TIMEOUT: 1"
+        - generic [ref=e584]:
+          - generic [ref=e585]: Loss by Strategy
+          - generic [ref=e587]:
+            - generic [ref=e589]: DAYkeylevel
+            - generic [ref=e590]:
+              - text: 1L / 0W
+              - strong [ref=e591]: 100% loss rate
+            - generic [ref=e592]: "-86.40% avg loss"
+      - generic [ref=e593]:
+        - generic [ref=e594]: ⚠ SHORT trades lose 100% of the time — consider raising short minConf
+        - generic [ref=e595]: ⚠ 10am accounts for 100% of all losses — dead zone filter may help
+        - generic [ref=e596]: ⚠ Thu has the most losses (1) — consider skipping or reducing size on Thu
+      - generic [ref=e597]:
+        - generic [ref=e598]: Worst 10 Trades
+        - generic [ref=e600]:
+          - generic [ref=e601]: "#1"
+          - generic [ref=e602]: 04/16 10:40 ET
+          - generic [ref=e603]: ▼ SHORT
+          - generic [ref=e605]: DAYkeylevel
+          - generic [ref=e606]: "-86.40%"
+          - generic [ref=e607]: conf:76
+          - link "view chart" [ref=e608] [cursor=pointer]:
+            - /url: "#"
+  - generic [ref=e39]: SD Scanner — Backtest Engine · Intraday 5m replay · Same logic as live alerts · Real-time Polygon data

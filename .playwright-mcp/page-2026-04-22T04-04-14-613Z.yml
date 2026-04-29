@@ -1,0 +1,420 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e5]:
+      - heading "SD SCANNER — BACKTEST" [level=1] [ref=e6]
+      - paragraph [ref=e7]: SMC strategy historical performance
+    - generic [ref=e8]:
+      - link "← Dashboard" [ref=e9] [cursor=pointer]:
+        - /url: /
+      - link "🧪 Research" [ref=e10] [cursor=pointer]:
+        - /url: /research
+      - link "⚡ Adaptive" [ref=e11] [cursor=pointer]:
+        - /url: /#adaptive-panel
+      - link "📊 EOD Report" [ref=e12] [cursor=pointer]:
+        - /url: /eod
+      - link "📋 Live Trades" [ref=e13] [cursor=pointer]:
+        - /url: /trades
+  - generic [ref=e14]:
+    - generic [ref=e15]:
+      - generic [ref=e16]: Mode
+      - combobox [ref=e17]:
+        - option "Single Ticker"
+        - option "All Watchlist" [selected]
+    - generic [ref=e21]:
+      - generic [ref=e22]: Mode
+      - combobox [ref=e23]:
+        - option "All (scalp + intraday + swing)" [selected]
+        - option "Scalp (dynamic hold)"
+        - option "Intraday (4h max hold)"
+        - option "Swing (multi-day)"
+        - option "Options (4h + P&L focus)"
+    - generic [ref=e24]:
+      - generic [ref=e25]: Strategy Type
+      - combobox [ref=e26]:
+        - option "Profile default" [selected]
+        - option "Bollinger Scalp"
+        - option "SMC (sweep+FVG)"
+        - option "VWAP (1-day reversion)"
+        - option "Key Level rejection"
+        - option "ORB breakout"
+        - option "Gap Momentum / Overnight"
+        - option "Power Earnings Gap (PEG)"
+        - option "Volatility Squeeze (BB/KC)"
+        - option "3-Day VWAP reversion"
+        - option "Index Divergence (SPY lag)"
+        - option "Gamma Pin ($5 strike)"
+    - generic [ref=e27]:
+      - generic [ref=e28]: Exit Model
+      - combobox [ref=e29]:
+        - option "Hybrid Trail After 1.5R ✓" [selected]
+        - option "Live Parity Trail"
+        - option "Classic TP / SL"
+    - generic [ref=e30]:
+      - generic [ref=e31]: Lookback
+      - combobox [ref=e32]:
+        - option "30 days"
+        - option "60 days"
+        - option "90 days"
+        - option "180 days" [selected]
+        - option "1 year"
+        - option "2 years"
+    - button "▶ Run Backtest" [ref=e43] [cursor=pointer]
+    - button "🧠 Optimize" [ref=e34] [cursor=pointer]
+  - generic [ref=e44]:
+    - generic [ref=e45]:
+      - generic [ref=e46]: WATCHLIST BACKTEST RESULTS CLICK A CARD TO DRILL IN
+      - generic [ref=e47]:
+        - button "Loss Breakdown" [ref=e48] [cursor=pointer]
+        - button "Show Filtered Trades" [ref=e49] [cursor=pointer]
+        - button "$ Capital Sim" [ref=e50] [cursor=pointer]
+        - button "By Day" [ref=e51] [cursor=pointer]
+    - generic [ref=e52]:
+      - generic [ref=e53]:
+        - generic [ref=e54]: 61%
+        - generic [ref=e55]: Overall Win Rate
+      - generic [ref=e57]:
+        - generic [ref=e58]: "223"
+        - generic [ref=e59]: Total Trades
+      - generic [ref=e60]:
+        - generic [ref=e61]: "137"
+        - generic [ref=e62]: Wins
+      - generic [ref=e63]:
+        - generic [ref=e64]: "80"
+        - generic [ref=e65]: Losses
+      - generic [ref=e67]:
+        - generic [ref=e68]: +0.30%
+        - generic [ref=e69]: Avg Expectancy
+      - generic [ref=e70]:
+        - generic [ref=e71]: +0.99%
+        - generic [ref=e72]: Avg Win
+      - generic [ref=e73]:
+        - generic [ref=e74]: "-0.88%"
+        - generic [ref=e75]: Avg Loss
+      - generic [ref=e78]:
+        - generic [ref=e79]: +$14688
+        - generic [ref=e80]: Options P&L (1.3 avg contracts)
+      - generic [ref=e81]:
+        - generic [ref=e82]: "306"
+        - generic [ref=e83]: Filtered
+      - generic [ref=e84]:
+        - generic [ref=e85]: COIN
+        - generic [ref=e86]: Best (+0.69%)
+      - generic [ref=e87]:
+        - generic [ref=e88]: NVDA
+        - generic [ref=e89]: Worst (-0.38%)
+      - generic [ref=e90]:
+        - generic [ref=e91]: 180d
+        - generic [ref=e92]: Lookback
+    - generic [ref=e93]:
+      - generic [ref=e94] [cursor=pointer]:
+        - generic [ref=e95]: COIN 📈
+        - generic [ref=e96]:
+          - generic [ref=e97]: Win Rate
+          - generic [ref=e98]: 66.7%
+        - generic [ref=e99]:
+          - generic [ref=e100]: Trades
+          - generic [ref=e101]: 16 10W / 5L
+        - generic [ref=e102]:
+          - generic [ref=e103]: Expectancy
+          - generic [ref=e104]: +0.69%
+        - generic [ref=e105]:
+          - generic [ref=e106]: Avg Win
+          - generic [ref=e107]: +1.56%
+        - generic [ref=e108]:
+          - generic [ref=e109]: Opt P&L
+          - generic [ref=e110]: +$1433
+      - generic [ref=e111] [cursor=pointer]:
+        - generic [ref=e112]: CRWD 📈
+        - generic [ref=e113]:
+          - generic [ref=e114]: Win Rate
+          - generic [ref=e115]: 68.4%
+        - generic [ref=e116]:
+          - generic [ref=e117]: Trades
+          - generic [ref=e118]: 19 13W / 6L
+        - generic [ref=e119]:
+          - generic [ref=e120]: Expectancy
+          - generic [ref=e121]: +0.65%
+        - generic [ref=e122]:
+          - generic [ref=e123]: Avg Win
+          - generic [ref=e124]: +1.41%
+        - generic [ref=e125]:
+          - generic [ref=e126]: Opt P&L
+          - generic [ref=e127]: +$2974
+      - generic [ref=e128] [cursor=pointer]:
+        - generic [ref=e129]: GS 📈
+        - generic [ref=e130]:
+          - generic [ref=e131]: Win Rate
+          - generic [ref=e132]: 66.7%
+        - generic [ref=e133]:
+          - generic [ref=e134]: Trades
+          - generic [ref=e135]: 9 6W / 3L
+        - generic [ref=e136]:
+          - generic [ref=e137]: Expectancy
+          - generic [ref=e138]: +0.6%
+        - generic [ref=e139]:
+          - generic [ref=e140]: Avg Win
+          - generic [ref=e141]: +1.38%
+        - generic [ref=e142]:
+          - generic [ref=e143]: Opt P&L
+          - generic [ref=e144]: +$2729
+      - generic [ref=e145] [cursor=pointer]:
+        - generic [ref=e146]: META 📈
+        - generic [ref=e147]:
+          - generic [ref=e148]: Win Rate
+          - generic [ref=e149]: 66.7%
+        - generic [ref=e150]:
+          - generic [ref=e151]: Trades
+          - generic [ref=e152]: 10 6W / 3L
+        - generic [ref=e153]:
+          - generic [ref=e154]: Expectancy
+          - generic [ref=e155]: +0.56%
+        - generic [ref=e156]:
+          - generic [ref=e157]: Avg Win
+          - generic [ref=e158]: +1.29%
+        - generic [ref=e159]:
+          - generic [ref=e160]: Opt P&L
+          - generic [ref=e161]: +$3522
+      - generic [ref=e162] [cursor=pointer]:
+        - generic [ref=e163]: PLTR 📈
+        - generic [ref=e164]:
+          - generic [ref=e165]: Win Rate
+          - generic [ref=e166]: 73.1%
+        - generic [ref=e167]:
+          - generic [ref=e168]: Trades
+          - generic [ref=e169]: 29 19W / 7L
+        - generic [ref=e170]:
+          - generic [ref=e171]: Expectancy
+          - generic [ref=e172]: +0.56%
+        - generic [ref=e173]:
+          - generic [ref=e174]: Avg Win
+          - generic [ref=e175]: +1.16%
+        - generic [ref=e176]:
+          - generic [ref=e177]: Opt P&L
+          - generic [ref=e178]: +$944
+      - generic [ref=e179] [cursor=pointer]:
+        - generic [ref=e180]: SHOP 📈
+        - generic [ref=e181]:
+          - generic [ref=e182]: Win Rate
+          - generic [ref=e183]: 56.3%
+        - generic [ref=e184]:
+          - generic [ref=e185]: Trades
+          - generic [ref=e186]: 16 9W / 7L
+        - generic [ref=e187]:
+          - generic [ref=e188]: Expectancy
+          - generic [ref=e189]: +0.51%
+        - generic [ref=e190]:
+          - generic [ref=e191]: Avg Win
+          - generic [ref=e192]: +1.60%
+        - generic [ref=e193]:
+          - generic [ref=e194]: Opt P&L
+          - generic [ref=e195]: +$649
+      - generic [ref=e196] [cursor=pointer]:
+        - generic [ref=e197]: BA 📈
+        - generic [ref=e198]:
+          - generic [ref=e199]: Win Rate
+          - generic [ref=e200]: 70%
+        - generic [ref=e201]:
+          - generic [ref=e202]: Trades
+          - generic [ref=e203]: 20 14W / 6L
+        - generic [ref=e204]:
+          - generic [ref=e205]: Expectancy
+          - generic [ref=e206]: +0.37%
+        - generic [ref=e207]:
+          - generic [ref=e208]: Avg Win
+          - generic [ref=e209]: +0.85%
+        - generic [ref=e210]:
+          - generic [ref=e211]: Opt P&L
+          - generic [ref=e212]: +$887
+      - generic [ref=e213] [cursor=pointer]:
+        - generic [ref=e214]: NFLX 📈
+        - generic [ref=e215]:
+          - generic [ref=e216]: Win Rate
+          - generic [ref=e217]: 63.6%
+        - generic [ref=e218]:
+          - generic [ref=e219]: Trades
+          - generic [ref=e220]: 11 7W / 4L
+        - generic [ref=e221]:
+          - generic [ref=e222]: Expectancy
+          - generic [ref=e223]: +0.37%
+        - generic [ref=e224]:
+          - generic [ref=e225]: Avg Win
+          - generic [ref=e226]: +1.00%
+        - generic [ref=e227]:
+          - generic [ref=e228]: Opt P&L
+          - generic [ref=e229]: +$4
+      - generic [ref=e230] [cursor=pointer]:
+        - generic [ref=e231]: TSLA 📈
+        - generic [ref=e232]:
+          - generic [ref=e233]: Win Rate
+          - generic [ref=e234]: 33.3%
+        - generic [ref=e235]:
+          - generic [ref=e236]: Trades
+          - generic [ref=e237]: 3 1W / 2L
+        - generic [ref=e238]:
+          - generic [ref=e239]: Expectancy
+          - generic [ref=e240]: +0.13%
+        - generic [ref=e241]:
+          - generic [ref=e242]: Avg Win
+          - generic [ref=e243]: +1.15%
+        - generic [ref=e244]:
+          - generic [ref=e245]: Opt P&L
+          - generic [ref=e246]: +$37
+      - generic [ref=e247] [cursor=pointer]:
+        - generic [ref=e248]: QQQ 📈
+        - generic [ref=e249]:
+          - generic [ref=e250]: Win Rate
+          - generic [ref=e251]: 66.7%
+        - generic [ref=e252]:
+          - generic [ref=e253]: Trades
+          - generic [ref=e254]: 21 14W / 7L
+        - generic [ref=e255]:
+          - generic [ref=e256]: Expectancy
+          - generic [ref=e257]: +0.08%
+        - generic [ref=e258]:
+          - generic [ref=e259]: Avg Win
+          - generic [ref=e260]: +0.47%
+        - generic [ref=e261]:
+          - generic [ref=e262]: Opt P&L
+          - generic [ref=e263]: +$1160
+      - generic [ref=e264] [cursor=pointer]:
+        - generic [ref=e265]: SPY 📈
+        - generic [ref=e266]:
+          - generic [ref=e267]: Win Rate
+          - generic [ref=e268]: 64.7%
+        - generic [ref=e269]:
+          - generic [ref=e270]: Trades
+          - generic [ref=e271]: 17 11W / 6L
+        - generic [ref=e272]:
+          - generic [ref=e273]: Expectancy
+          - generic [ref=e274]: +0.06%
+        - generic [ref=e275]:
+          - generic [ref=e276]: Avg Win
+          - generic [ref=e277]: +0.27%
+        - generic [ref=e278]:
+          - generic [ref=e279]: Opt P&L
+          - generic [ref=e280]: +$321
+      - generic [ref=e281] [cursor=pointer]:
+        - generic [ref=e282]: UBER 📈
+        - generic [ref=e283]:
+          - generic [ref=e284]: Win Rate
+          - generic [ref=e285]: 56.5%
+        - generic [ref=e286]:
+          - generic [ref=e287]: Trades
+          - generic [ref=e288]: 23 13W / 10L
+        - generic [ref=e289]:
+          - generic [ref=e290]: Expectancy
+          - generic [ref=e291]: +0.05%
+        - generic [ref=e292]:
+          - generic [ref=e293]: Avg Win
+          - generic [ref=e294]: +0.87%
+        - generic [ref=e295]:
+          - generic [ref=e296]: Opt P&L
+          - generic [ref=e297]: $-20
+      - generic [ref=e298] [cursor=pointer]:
+        - generic [ref=e299]: AMD 📈
+        - generic [ref=e300]:
+          - generic [ref=e301]: Win Rate
+          - generic [ref=e302]: 0%
+        - generic [ref=e303]:
+          - generic [ref=e304]: Trades
+          - generic [ref=e305]: 0 0W / 0L
+        - generic [ref=e306]:
+          - generic [ref=e307]: Expectancy
+          - generic [ref=e308]: +0%
+        - generic [ref=e309]:
+          - generic [ref=e310]: Avg Win
+          - generic [ref=e311]: +0.00%
+      - generic [ref=e312] [cursor=pointer]:
+        - generic [ref=e313]: GLD 📈
+        - generic [ref=e314]:
+          - generic [ref=e315]: Win Rate
+          - generic [ref=e316]: 0%
+        - generic [ref=e317]:
+          - generic [ref=e318]: Trades
+          - generic [ref=e319]: 0 0W / 0L
+        - generic [ref=e320]:
+          - generic [ref=e321]: Expectancy
+          - generic [ref=e322]: +0%
+        - generic [ref=e323]:
+          - generic [ref=e324]: Avg Win
+          - generic [ref=e325]: +0.00%
+      - generic [ref=e326] [cursor=pointer]:
+        - generic [ref=e327]: GOOGL 📈
+        - generic [ref=e328]:
+          - generic [ref=e329]: Win Rate
+          - generic [ref=e330]: 0%
+        - generic [ref=e331]:
+          - generic [ref=e332]: Trades
+          - generic [ref=e333]: 0 0W / 0L
+        - generic [ref=e334]:
+          - generic [ref=e335]: Expectancy
+          - generic [ref=e336]: +0%
+        - generic [ref=e337]:
+          - generic [ref=e338]: Avg Win
+          - generic [ref=e339]: +0.00%
+      - generic [ref=e340] [cursor=pointer]:
+        - generic [ref=e341]: SOFI 📈
+        - generic [ref=e342]:
+          - generic [ref=e343]: Win Rate
+          - generic [ref=e344]: 0%
+        - generic [ref=e345]:
+          - generic [ref=e346]: Trades
+          - generic [ref=e347]: 0 0W / 0L
+        - generic [ref=e348]:
+          - generic [ref=e349]: Expectancy
+          - generic [ref=e350]: +0%
+        - generic [ref=e351]:
+          - generic [ref=e352]: Avg Win
+          - generic [ref=e353]: +0.00%
+      - generic [ref=e354] [cursor=pointer]:
+        - generic [ref=e355]: BABA 📉
+        - generic [ref=e356]:
+          - generic [ref=e357]: Win Rate
+          - generic [ref=e358]: 53.8%
+        - generic [ref=e359]:
+          - generic [ref=e360]: Trades
+          - generic [ref=e361]: 13 7W / 6L
+        - generic [ref=e362]:
+          - generic [ref=e363]: Expectancy
+          - generic [ref=e364]: "-0.08%"
+        - generic [ref=e365]:
+          - generic [ref=e366]: Avg Win
+          - generic [ref=e367]: +0.62%
+        - generic [ref=e368]:
+          - generic [ref=e369]: Opt P&L
+          - generic [ref=e370]: +$12
+      - generic [ref=e371] [cursor=pointer]:
+        - generic [ref=e372]: MSFT 📉
+        - generic [ref=e373]:
+          - generic [ref=e374]: Win Rate
+          - generic [ref=e375]: 25%
+        - generic [ref=e376]:
+          - generic [ref=e377]: Trades
+          - generic [ref=e378]: 5 1W / 3L
+        - generic [ref=e379]:
+          - generic [ref=e380]: Expectancy
+          - generic [ref=e381]: "-0.35%"
+        - generic [ref=e382]:
+          - generic [ref=e383]: Avg Win
+          - generic [ref=e384]: +0.40%
+        - generic [ref=e385]:
+          - generic [ref=e386]: Opt P&L
+          - generic [ref=e387]: $-270
+      - generic [ref=e388] [cursor=pointer]:
+        - generic [ref=e389]: NVDA 📉
+        - generic [ref=e390]:
+          - generic [ref=e391]: Win Rate
+          - generic [ref=e392]: 54.5%
+        - generic [ref=e393]:
+          - generic [ref=e394]: Trades
+          - generic [ref=e395]: 11 6W / 5L
+        - generic [ref=e396]:
+          - generic [ref=e397]: Expectancy
+          - generic [ref=e398]: "-0.38%"
+        - generic [ref=e399]:
+          - generic [ref=e400]: Avg Win
+          - generic [ref=e401]: +0.54%
+        - generic [ref=e402]:
+          - generic [ref=e403]: Opt P&L
+          - generic [ref=e404]: +$306
+  - generic [ref=e39]: SD Scanner — Backtest Engine · Intraday 5m replay · Same logic as live alerts · Real-time Polygon data

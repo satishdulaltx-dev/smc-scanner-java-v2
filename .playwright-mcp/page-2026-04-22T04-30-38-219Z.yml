@@ -1,0 +1,151 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e5]:
+      - heading "SD SCANNER — BACKTEST" [level=1] [ref=e6]
+      - paragraph [ref=e7]: SMC strategy historical performance
+    - generic [ref=e8]:
+      - link "← Dashboard" [ref=e9] [cursor=pointer]:
+        - /url: /
+      - link "🧪 Research" [ref=e10] [cursor=pointer]:
+        - /url: /research
+      - link "⚡ Adaptive" [ref=e11] [cursor=pointer]:
+        - /url: /#adaptive-panel
+      - link "📊 EOD Report" [ref=e12] [cursor=pointer]:
+        - /url: /eod
+      - link "📋 Live Trades" [ref=e13] [cursor=pointer]:
+        - /url: /trades
+  - generic [ref=e14]:
+    - generic [ref=e15]:
+      - generic [ref=e16]: Mode
+      - combobox [ref=e17]:
+        - option "Single Ticker" [selected]
+        - option "All Watchlist"
+    - generic [ref=e18]:
+      - generic [ref=e19]: Ticker
+      - combobox [ref=e20]:
+        - option "AAPL"
+        - option "AMD"
+        - option "AMZN"
+        - option "BA"
+        - option "BABA"
+        - option "COIN" [selected]
+        - option "CRWD"
+        - option "DDOG"
+        - option "DIS"
+        - option "GLD"
+        - option "GOOGL"
+        - option "GS"
+        - option "HOOD"
+        - option "JPM"
+        - option "MARA"
+        - option "META"
+        - option "MSFT"
+        - option "NFLX"
+        - option "NIO"
+        - option "NVDA"
+        - option "PLTR"
+        - option "PYPL"
+        - option "QQQ"
+        - option "ROKU"
+        - option "SHOP"
+        - option "SNAP"
+        - option "SOFI"
+        - option "SPY"
+        - option "SQ"
+        - option "TSLA"
+        - option "UBER"
+        - option "V"
+        - option "X:SOLUSD"
+        - option "X:XRPUSD"
+    - generic [ref=e21]:
+      - generic [ref=e22]: Mode
+      - combobox [ref=e23]:
+        - option "All (scalp + intraday + swing)" [selected]
+        - option "Scalp (dynamic hold)"
+        - option "Intraday (4h max hold)"
+        - option "Swing (multi-day)"
+        - option "Options (4h + P&L focus)"
+    - generic [ref=e24]:
+      - generic [ref=e25]: Strategy Type
+      - combobox [ref=e26]:
+        - option "Profile default" [selected]
+        - option "Bollinger Scalp"
+        - option "SMC (sweep+FVG)"
+        - option "VWAP (1-day reversion)"
+        - option "Key Level rejection"
+        - option "ORB breakout"
+        - option "Gap Momentum / Overnight"
+        - option "Power Earnings Gap (PEG)"
+        - option "Volatility Squeeze (BB/KC)"
+        - option "3-Day VWAP reversion"
+        - option "Index Divergence (SPY lag)"
+        - option "Gamma Pin ($5 strike)"
+    - generic [ref=e27]:
+      - generic [ref=e28]: Exit Model
+      - combobox [ref=e29]:
+        - option "Hybrid Trail After 1.5R ✓" [selected]
+        - option "Live Parity Trail"
+        - option "Classic TP / SL"
+    - generic [ref=e30]:
+      - generic [ref=e31]: Lookback
+      - combobox [ref=e32]:
+        - option "30 days"
+        - option "60 days"
+        - option "90 days"
+        - option "180 days" [selected]
+        - option "1 year"
+        - option "2 years"
+    - button "▶ Run Backtest" [ref=e43] [cursor=pointer]
+    - button "🧠 Optimize" [ref=e34] [cursor=pointer]
+  - generic [ref=e500]:
+    - heading "🧠 Profile Optimizer Results" [level=3] [ref=e501]
+    - paragraph [ref=e502]: "COIN · 180d lookback · Current strategy: SMC · 2 viable combos found (min 3 trades)"
+    - table [ref=e504]:
+      - rowgroup [ref=e505]:
+        - row "Rank Strategy MinConf SL (ATR×) TP (R:R) Trades W L BE WR% Avg Win% Avg Loss% Expectancy Opt P&L" [ref=e506]:
+          - columnheader "Rank" [ref=e507]
+          - columnheader "Strategy" [ref=e508]
+          - columnheader "MinConf" [ref=e509]
+          - columnheader "SL (ATR×)" [ref=e510]
+          - columnheader "TP (R:R)" [ref=e511]
+          - columnheader "Trades" [ref=e512]
+          - columnheader "W" [ref=e513]
+          - columnheader "L" [ref=e514]
+          - columnheader "BE" [ref=e515]
+          - columnheader "WR%" [ref=e516]
+          - columnheader "Avg Win%" [ref=e517]
+          - columnheader "Avg Loss%" [ref=e518]
+          - columnheader "Expectancy" [ref=e519]
+          - columnheader "Opt P&L" [ref=e520]
+      - rowgroup [ref=e521]:
+        - row "🏆 VWAP 74 0.4 1:1 1 1 0 0 100% +1.40% -0.00% +1.40% $119" [ref=e822]:
+          - cell "🏆" [ref=e823]
+          - cell "VWAP" [ref=e824]
+          - cell "74" [ref=e825]
+          - cell "0.4" [ref=e826]
+          - cell "1:1" [ref=e827]
+          - cell "1" [ref=e828]
+          - cell "1" [ref=e829]
+          - cell "0" [ref=e830]
+          - cell "0" [ref=e831]
+          - cell "100%" [ref=e832]
+          - cell "+1.40%" [ref=e833]
+          - cell "-0.00%" [ref=e834]
+          - cell "+1.40%" [ref=e835]
+          - cell "$119" [ref=e836]
+        - row "2 IDIV 74 0.4 1:1 1 1 0 0 100% +0.64% -0.00% +0.64% $45" [ref=e837]:
+          - cell "2" [ref=e838]
+          - cell "IDIV" [ref=e839]
+          - cell "74" [ref=e840]
+          - cell "0.4" [ref=e841]
+          - cell "1:1" [ref=e842]
+          - cell "1" [ref=e843]
+          - cell "1" [ref=e844]
+          - cell "0" [ref=e845]
+          - cell "0" [ref=e846]
+          - cell "100%" [ref=e847]
+          - cell "+0.64%" [ref=e848]
+          - cell "-0.00%" [ref=e849]
+          - cell "+0.64%" [ref=e850]
+          - cell "$45" [ref=e851]
+  - generic [ref=e39]: SD Scanner — Backtest Engine · Intraday 5m replay · Same logic as live alerts · Real-time Polygon data

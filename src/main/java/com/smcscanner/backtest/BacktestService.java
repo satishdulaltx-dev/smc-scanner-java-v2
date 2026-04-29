@@ -416,7 +416,10 @@ public class BacktestService {
                             .collect(Collectors.toList());
                     bSetups = scalpDetector.detect(window, spySlice, ticker, dailyAtr, true);
                 } else if ("vwap".equals(effectiveStrat)) {
-                    bSetups = vwapDetector.detect(window, ticker, dailyAtr, true, bp.isVwapLongOnly());
+                    // MOMENTUM tickers trend through VWAP deviations — shorts structurally lose.
+                    // STABLE_LARGE_CAP and others mean-revert cleanly; both directions allowed.
+                    boolean vwapLongOnly = bp.isVwapLongOnly() || "MOMENTUM".equals(bp.getCharacter());
+                    bSetups = vwapDetector.detect(window, ticker, dailyAtr, true, vwapLongOnly);
                 } else if ("breakout".equals(effectiveStrat)) {
                     bSetups = breakoutDetector.detect(window, ticker, dailyAtr, true);
                 } else if ("gap".equals(effectiveStrat)) {

@@ -1,0 +1,1517 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e5]:
+      - heading "SD SCANNER — BACKTEST" [level=1] [ref=e6]
+      - paragraph [ref=e7]: SMC strategy historical performance
+    - generic [ref=e8]:
+      - link "← Dashboard" [ref=e9] [cursor=pointer]:
+        - /url: /
+      - link "🧪 Research" [ref=e10] [cursor=pointer]:
+        - /url: /research
+      - link "⚡ Adaptive" [ref=e11] [cursor=pointer]:
+        - /url: /#adaptive-panel
+      - link "📊 EOD Report" [ref=e12] [cursor=pointer]:
+        - /url: /eod
+      - link "📋 Live Trades" [ref=e13] [cursor=pointer]:
+        - /url: /trades
+  - generic [ref=e14]:
+    - generic [ref=e15]:
+      - generic [ref=e16]: Mode
+      - combobox [ref=e17]:
+        - option "Single Ticker" [selected]
+        - option "All Watchlist"
+    - generic [ref=e18]:
+      - generic [ref=e19]: Ticker
+      - combobox [ref=e20]:
+        - option "AAPL"
+        - option "AMD"
+        - option "AMZN"
+        - option "BA"
+        - option "BABA"
+        - option "COIN"
+        - option "CRWD"
+        - option "DDOG"
+        - option "DIS"
+        - option "GLD" [selected]
+        - option "GOOGL"
+        - option "GS"
+        - option "HOOD"
+        - option "JPM"
+        - option "MARA"
+        - option "META"
+        - option "MSFT"
+        - option "NFLX"
+        - option "NIO"
+        - option "NVDA"
+        - option "PLTR"
+        - option "PYPL"
+        - option "QQQ"
+        - option "ROKU"
+        - option "SHOP"
+        - option "SNAP"
+        - option "SOFI"
+        - option "SPY"
+        - option "SQ"
+        - option "TSLA"
+        - option "UBER"
+        - option "V"
+        - option "X:SOLUSD"
+        - option "X:XRPUSD"
+    - generic [ref=e21]:
+      - generic [ref=e22]: Mode
+      - combobox [ref=e23]:
+        - option "All (scalp + intraday + swing)" [selected]
+        - option "Scalp (dynamic hold)"
+        - option "Intraday (4h max hold)"
+        - option "Swing (multi-day)"
+        - option "Options (4h + P&L focus)"
+    - generic [ref=e24]:
+      - generic [ref=e25]: Strategy Type
+      - combobox [ref=e26]:
+        - option "Profile default" [selected]
+        - option "Bollinger Scalp"
+        - option "SMC (sweep+FVG)"
+        - option "VWAP (1-day reversion)"
+        - option "Key Level rejection"
+        - option "ORB breakout"
+        - option "Gap Momentum / Overnight"
+        - option "Power Earnings Gap (PEG)"
+        - option "Volatility Squeeze (BB/KC)"
+        - option "3-Day VWAP reversion"
+        - option "Index Divergence (SPY lag)"
+        - option "Gamma Pin ($5 strike)"
+    - generic [ref=e27]:
+      - generic [ref=e28]: Exit Model
+      - combobox [ref=e29]:
+        - option "Hybrid Trail After 1.5R ✓" [selected]
+        - option "Live Parity Trail"
+        - option "Classic TP / SL"
+    - generic [ref=e30]:
+      - generic [ref=e31]: Lookback
+      - combobox [ref=e32]:
+        - option "30 days"
+        - option "60 days"
+        - option "90 days" [selected]
+        - option "180 days"
+        - option "1 year"
+        - option "2 years"
+    - button "▶ Run Backtest" [ref=e33] [cursor=pointer]
+    - button "🧠 Optimize" [ref=e34] [cursor=pointer]
+  - generic [ref=e42]:
+    - generic [ref=e43]:
+      - generic [ref=e2191]:
+        - generic [ref=e2192]: "14"
+        - generic [ref=e2193]: Total Trades
+      - generic [ref=e2194]:
+        - generic [ref=e2195]: 50%
+        - generic [ref=e2196]: Win Rate
+      - generic [ref=e2197]:
+        - generic [ref=e2198]: "7"
+        - generic [ref=e2199]: Wins
+      - generic [ref=e2200]:
+        - generic [ref=e2201]: "7"
+        - generic [ref=e2202]: Losses
+      - generic [ref=e2203]:
+        - generic [ref=e2204]: +4.79%
+        - generic [ref=e2205]: Expectancy / Trade
+      - generic [ref=e2206]:
+        - generic [ref=e2207]: +61.92%
+        - generic [ref=e2208]: Avg Win
+      - generic [ref=e2209]:
+        - generic [ref=e2210]: "-52.34%"
+        - generic [ref=e2211]: Avg Loss
+      - generic [ref=e2212]:
+        - generic [ref=e2213]: "9"
+        - generic [ref=e2214]: Time Stops
+      - generic [ref=e2215]:
+        - generic [ref=e2216]: "5"
+        - generic [ref=e2217]: RS/VIX Filtered
+      - generic [ref=e2218]:
+        - generic [ref=e2219]: "26"
+        - generic [ref=e2220]: Quality Filtered
+      - generic [ref=e2221]:
+        - generic [ref=e2222]: 90d
+        - generic [ref=e2223]: Lookback
+      - generic [ref=e2224]:
+        - generic [ref=e2225]: HYBRID
+        - generic [ref=e2226]: Exit Model
+      - generic [ref=e2228]: 📋 Options P&L (estimated · 1.1 avg contracts)
+      - generic [ref=e2229]:
+        - generic [ref=e2230]: +$361
+        - generic [ref=e2231]: Options Total P&L
+      - generic [ref=e2232]:
+        - generic [ref=e2233]: +39.4%
+        - generic [ref=e2234]: Options Return
+      - generic [ref=e2235]:
+        - generic [ref=e2236]: +$26
+        - generic [ref=e2237]: Opt Expectancy/Trade
+      - generic [ref=e2238]:
+        - generic [ref=e2239]: +$93
+        - generic [ref=e2240]: Avg Win / Contract
+      - generic [ref=e2241]:
+        - generic [ref=e2242]: "-$42"
+        - generic [ref=e2243]: Avg Loss / Contract
+      - generic [ref=e2245]: 🔬 Edge by Confidence Tier — Where does the real alpha live?
+      - generic [ref=e2246]:
+        - generic [ref=e2247]: ✅ 75–84 confidence
+        - generic [ref=e2248]: 57.1%
+        - generic [ref=e2249]: WR (4/7)
+        - generic [ref=e2250]: "-12.31%"
+        - generic [ref=e2251]: expectancy
+      - generic [ref=e2252]:
+        - generic [ref=e2253]: 🟡 <75 confidence
+        - generic [ref=e2254]: 42.9%
+        - generic [ref=e2255]: WR (3/7)
+        - generic [ref=e2256]: +21.89%
+        - generic [ref=e2257]: expectancy
+    - generic [ref=e114]:
+      - generic [ref=e116]: Equity Curve (cumulative P&L %)
+      - generic [ref=e120]: Win / Loss Distribution
+    - generic [ref=e123]:
+      - generic [ref=e124]:
+        - text: TRADE LOG
+        - generic [ref=e125]: "14"
+        - generic [ref=e126]: ✓ 5m bar intraday replay — same logic as live alerts · Click entry time to view 5m chart
+      - generic [ref=e127]:
+        - button "ALL (60)" [ref=e2258] [cursor=pointer]
+        - button "EXECUTED (14)" [ref=e2259] [cursor=pointer]
+        - button "WINS (7)" [ref=e2260] [cursor=pointer]
+        - button "LOSSES (7)" [ref=e2261] [cursor=pointer]
+        - button "FILTERED (46)" [ref=e2262] [cursor=pointer]
+      - table [ref=e133]:
+        - rowgroup [ref=e134]:
+          - row "# ENTRY TIME (ET) EXIT TIME (ET) DIR STRATEGY ENTRY STOP LOSS TAKE PROFIT OUTCOME P&L % OPT ENTRY OPT EXIT OPT P&L CONF" [ref=e135]:
+            - columnheader "#" [ref=e136]
+            - columnheader "ENTRY TIME (ET)" [ref=e137]
+            - columnheader "EXIT TIME (ET)" [ref=e138]
+            - columnheader "DIR" [ref=e139]
+            - columnheader "STRATEGY" [ref=e140]
+            - columnheader "ENTRY" [ref=e141]
+            - columnheader "STOP LOSS" [ref=e142]
+            - columnheader "TAKE PROFIT" [ref=e143]
+            - columnheader "OUTCOME" [ref=e144]
+            - columnheader "P&L %" [ref=e145]
+            - columnheader "OPT ENTRY" [ref=e146]
+            - columnheader "OPT EXIT" [ref=e147]
+            - columnheader "OPT P&L" [ref=e148]
+            - columnheader "CONF" [ref=e149]
+        - rowgroup [ref=e150]:
+          - row "📅 01/20 1 trade (0 exec, 1 filtered)" [ref=e2263]:
+            - cell "📅 01/20 1 trade (0 exec, 1 filtered)" [ref=e2264]
+          - 'row "1 01/20 13:40 ET — ▼ SHORT DAYvwap $437.37 $439.61 $431.60 CTX_FILTERED 📈 Strong RS: +6.1% vs SPY | 📈 Strong RS: +6.1% vs SPY — — — 52/100-999📊" [ref=e2265]':
+            - cell "1" [ref=e2266]
+            - cell "01/20 13:40 ET" [ref=e2267]:
+              - link "01/20 13:40 ET" [ref=e2268] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e2269]
+            - cell "▼ SHORT" [ref=e2270]
+            - cell "DAYvwap" [ref=e2271]:
+              - generic [ref=e2272]: DAYvwap
+            - cell "$437.37" [ref=e2273]
+            - cell "$439.61" [ref=e2274]
+            - cell "$431.60" [ref=e2275]
+            - cell "CTX_FILTERED" [ref=e2276]
+            - 'cell "📈 Strong RS: +6.1% vs SPY | 📈 Strong RS: +6.1% vs SPY" [ref=e2277]'
+            - cell "—" [ref=e2278]
+            - cell "—" [ref=e2279]
+            - cell "—" [ref=e2280]
+            - cell "52/100-999📊" [ref=e2281]
+          - row "📅 01/23 2 trades (0 exec, 2 filtered)" [ref=e2282]:
+            - cell "📅 01/23 2 trades (0 exec, 2 filtered)" [ref=e2283]
+          - 'row "2 01/23 11:10 ET — ▼ SHORT DAYvwap $457.02 $459.67 $450.21 CTX_FILTERED 📈 Strong RS: +8.6% vs SPY | 📈 Strong RS: +8.6% vs SPY — — — 56/100-999📊" [ref=e2284]':
+            - cell "2" [ref=e2285]
+            - cell "01/23 11:10 ET" [ref=e2286]:
+              - link "01/23 11:10 ET" [ref=e2287] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e2288]
+            - cell "▼ SHORT" [ref=e2289]
+            - cell "DAYvwap" [ref=e2290]:
+              - generic [ref=e2291]: DAYvwap
+            - cell "$457.02" [ref=e2292]
+            - cell "$459.67" [ref=e2293]
+            - cell "$450.21" [ref=e2294]
+            - cell "CTX_FILTERED" [ref=e2295]
+            - 'cell "📈 Strong RS: +8.6% vs SPY | 📈 Strong RS: +8.6% vs SPY" [ref=e2296]'
+            - cell "—" [ref=e2297]
+            - cell "—" [ref=e2298]
+            - cell "—" [ref=e2299]
+            - cell "56/100-999📊" [ref=e2300]
+          - 'row "3 01/23 14:45 ET — ▲ LONG SCALPscalp $458.11 $457.59 $458.63 CONF_CAP_FILTERED 📈 Strong RS: +8.6% vs SPY | CONF_CAP — — — 85/100+6📊-20⚡" [ref=e2301]':
+            - cell "3" [ref=e2302]
+            - cell "01/23 14:45 ET" [ref=e2303]:
+              - link "01/23 14:45 ET" [ref=e2304] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e2305]
+            - cell "▲ LONG" [ref=e2306]
+            - cell "SCALPscalp" [ref=e2307]:
+              - generic [ref=e2308]: SCALPscalp
+            - cell "$458.11" [ref=e2309]
+            - cell "$457.59" [ref=e2310]
+            - cell "$458.63" [ref=e2311]
+            - cell "CONF_CAP_FILTERED" [ref=e2312]
+            - 'cell "📈 Strong RS: +8.6% vs SPY | CONF_CAP" [ref=e2313]'
+            - cell "—" [ref=e2314]
+            - cell "—" [ref=e2315]
+            - cell "—" [ref=e2316]
+            - cell "85/100+6📊-20⚡" [ref=e2317]
+          - row "📅 01/26 1 trade (0 exec, 1 filtered)" [ref=e2318]:
+            - cell "📅 01/26 1 trade (0 exec, 1 filtered)" [ref=e2319]
+          - 'row "4 01/26 14:05 ET — ▲ LONG DAYvwap $464.86 $462.23 $467.49 QUALITY_FILTERED 📈 Strong RS: +10.1% vs SPY | 📈 Strong RS: +10.1% vs SPY | R:R 1.0 (-20) — — — 56/100+6📊-20⚡" [ref=e2320]':
+            - cell "4" [ref=e2321]
+            - cell "01/26 14:05 ET" [ref=e2322]:
+              - link "01/26 14:05 ET" [ref=e2323] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e2324]
+            - cell "▲ LONG" [ref=e2325]
+            - cell "DAYvwap" [ref=e2326]:
+              - generic [ref=e2327]: DAYvwap
+            - cell "$464.86" [ref=e2328]
+            - cell "$462.23" [ref=e2329]
+            - cell "$467.49" [ref=e2330]
+            - cell "QUALITY_FILTERED" [ref=e2331]
+            - 'cell "📈 Strong RS: +10.1% vs SPY | 📈 Strong RS: +10.1% vs SPY | R:R 1.0 (-20)" [ref=e2332]'
+            - cell "—" [ref=e2333]
+            - cell "—" [ref=e2334]
+            - cell "—" [ref=e2335]
+            - cell "56/100+6📊-20⚡" [ref=e2336]
+          - row "📅 01/27 2 trades (1 exec, 1 filtered) 0% WR -9.20%" [ref=e2337]:
+            - cell "📅 01/27 2 trades (1 exec, 1 filtered) 0% WR -9.20%" [ref=e2338]
+          - 'row "5 01/27 11:35 ET — ▼ SHORT DAYvwap $468.06 $470.79 $465.34 QUALITY_FILTERED 📈 Strong RS: +6.2% vs SPY | 📈 Strong RS: +6.2% vs SPY | R:R 1.0 (-10) | time-of-day (lunch) (-5) — — — 52/100-999📊-15⚡" [ref=e2339]':
+            - cell "5" [ref=e2340]
+            - cell "01/27 11:35 ET" [ref=e2341]:
+              - link "01/27 11:35 ET" [ref=e2342] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e2343]
+            - cell "▼ SHORT" [ref=e2344]
+            - cell "DAYvwap" [ref=e2345]:
+              - generic [ref=e2346]: DAYvwap
+            - cell "$468.06" [ref=e2347]
+            - cell "$470.79" [ref=e2348]
+            - cell "$465.34" [ref=e2349]
+            - cell "QUALITY_FILTERED" [ref=e2350]
+            - 'cell "📈 Strong RS: +6.2% vs SPY | 📈 Strong RS: +6.2% vs SPY | R:R 1.0 (-10) | time-of-day (lunch) (-5)" [ref=e2351]'
+            - cell "—" [ref=e2352]
+            - cell "—" [ref=e2353]
+            - cell "—" [ref=e2354]
+            - cell "52/100-999📊-15⚡" [ref=e2355]
+          - row "6 01/27 14:40 ET 01/27 14:55 ET ▲ LONG SCALPscalp $468.37 $467.77 $468.51 LOSS -9.20% $0.36 $0.33 $-3 73/100+6📊-10⚡" [ref=e2356]:
+            - cell "6" [ref=e2357]
+            - cell "01/27 14:40 ET" [ref=e2358]:
+              - link "01/27 14:40 ET" [ref=e2359] [cursor=pointer]:
+                - /url: "#"
+            - cell "01/27 14:55 ET" [ref=e2360]
+            - cell "▲ LONG" [ref=e2361]
+            - cell "SCALPscalp" [ref=e2362]:
+              - generic [ref=e2363]: SCALPscalp
+            - cell "$468.37" [ref=e2364]
+            - cell "$467.77" [ref=e2365]
+            - cell "$468.51" [ref=e2366]
+            - cell "LOSS" [ref=e2367]
+            - cell "-9.20%" [ref=e2368]
+            - cell "$0.36" [ref=e2369]
+            - cell "$0.33" [ref=e2370]
+            - cell "$-3" [ref=e2371]
+            - cell "73/100+6📊-10⚡" [ref=e2372]
+          - row "📅 01/28 1 trade (0 exec, 1 filtered)" [ref=e2373]:
+            - cell "📅 01/28 1 trade (0 exec, 1 filtered)" [ref=e2374]
+          - 'row "7 01/28 12:55 ET — ▼ SHORT DAYvwap $486.94 $489.79 $484.10 QUALITY_FILTERED 📈 Strong RS: +10.0% vs SPY | 📈 Strong RS: +10.0% vs SPY | R:R 1.0 (-10) | time-of-day (lunch) (-5) — — — 52/100-999📊-15⚡" [ref=e2375]':
+            - cell "7" [ref=e2376]
+            - cell "01/28 12:55 ET" [ref=e2377]:
+              - link "01/28 12:55 ET" [ref=e2378] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e2379]
+            - cell "▼ SHORT" [ref=e2380]
+            - cell "DAYvwap" [ref=e2381]:
+              - generic [ref=e2382]: DAYvwap
+            - cell "$486.94" [ref=e2383]
+            - cell "$489.79" [ref=e2384]
+            - cell "$484.10" [ref=e2385]
+            - cell "QUALITY_FILTERED" [ref=e2386]
+            - 'cell "📈 Strong RS: +10.0% vs SPY | 📈 Strong RS: +10.0% vs SPY | R:R 1.0 (-10) | time-of-day (lunch) (-5)" [ref=e2387]'
+            - cell "—" [ref=e2388]
+            - cell "—" [ref=e2389]
+            - cell "—" [ref=e2390]
+            - cell "52/100-999📊-15⚡" [ref=e2391]
+          - row "📅 01/29 1 trade (0 exec, 1 filtered)" [ref=e2392]:
+            - cell "📅 01/29 1 trade (0 exec, 1 filtered)" [ref=e2393]
+          - 'row "8 01/29 14:10 ET — ▼ SHORT SCALPscalp $487.64 $490.64 $484.64 QUALITY_FILTERED 📈 Strong RS: +9.0% vs SPY | 📈 Strong RS: +9.0% vs SPY | R:R 1.0 (-10) — — — 59/100-12📊-10⚡" [ref=e2394]':
+            - cell "8" [ref=e2395]
+            - cell "01/29 14:10 ET" [ref=e2396]:
+              - link "01/29 14:10 ET" [ref=e2397] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e2398]
+            - cell "▼ SHORT" [ref=e2399]
+            - cell "SCALPscalp" [ref=e2400]:
+              - generic [ref=e2401]: SCALPscalp
+            - cell "$487.64" [ref=e2402]
+            - cell "$490.64" [ref=e2403]
+            - cell "$484.64" [ref=e2404]
+            - cell "QUALITY_FILTERED" [ref=e2405]
+            - 'cell "📈 Strong RS: +9.0% vs SPY | 📈 Strong RS: +9.0% vs SPY | R:R 1.0 (-10)" [ref=e2406]'
+            - cell "—" [ref=e2407]
+            - cell "—" [ref=e2408]
+            - cell "—" [ref=e2409]
+            - cell "59/100-12📊-10⚡" [ref=e2410]
+          - row "📅 01/30 1 trade (0 exec, 1 filtered)" [ref=e2411]:
+            - cell "📅 01/30 1 trade (0 exec, 1 filtered)" [ref=e2412]
+          - 'row "9 01/30 11:15 ET — ▼ SHORT SCALPscalp $460.60 $463.05 $458.15 QUALITY_FILTERED ↘️ −RS: -3.2% vs SPY | ↘️ −RS: -3.2% vs SPY | R:R 1.0 (-10) — — — 64/100+3📊-10⚡" [ref=e2413]':
+            - cell "9" [ref=e2414]
+            - cell "01/30 11:15 ET" [ref=e2415]:
+              - link "01/30 11:15 ET" [ref=e2416] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e2417]
+            - cell "▼ SHORT" [ref=e2418]
+            - cell "SCALPscalp" [ref=e2419]:
+              - generic [ref=e2420]: SCALPscalp
+            - cell "$460.60" [ref=e2421]
+            - cell "$463.05" [ref=e2422]
+            - cell "$458.15" [ref=e2423]
+            - cell "QUALITY_FILTERED" [ref=e2424]
+            - 'cell "↘️ −RS: -3.2% vs SPY | ↘️ −RS: -3.2% vs SPY | R:R 1.0 (-10)" [ref=e2425]'
+            - cell "—" [ref=e2426]
+            - cell "—" [ref=e2427]
+            - cell "—" [ref=e2428]
+            - cell "64/100+3📊-10⚡" [ref=e2429]
+          - row "📅 02/09 2 trades (0 exec, 2 filtered)" [ref=e2430]:
+            - cell "📅 02/09 2 trades (0 exec, 2 filtered)" [ref=e2431]
+          - 'row "10 02/09 14:05 ET — ▲ LONG SCALPscalp $465.80 $465.40 $467.17 CONF_CAP_FILTERED 📈 Strong RS: +9.6% vs SPY | CONF_CAP — — — 100/100+6📊+5⚡" [ref=e2432]':
+            - cell "10" [ref=e2433]
+            - cell "02/09 14:05 ET" [ref=e2434]:
+              - link "02/09 14:05 ET" [ref=e2435] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e2436]
+            - cell "▲ LONG" [ref=e2437]
+            - cell "SCALPscalp" [ref=e2438]:
+              - generic [ref=e2439]: SCALPscalp
+            - cell "$465.80" [ref=e2440]
+            - cell "$465.40" [ref=e2441]
+            - cell "$467.17" [ref=e2442]
+            - cell "CONF_CAP_FILTERED" [ref=e2443]
+            - 'cell "📈 Strong RS: +9.6% vs SPY | CONF_CAP" [ref=e2444]'
+            - cell "—" [ref=e2445]
+            - cell "—" [ref=e2446]
+            - cell "—" [ref=e2447]
+            - cell "100/100+6📊+5⚡" [ref=e2448]
+          - 'row "11 02/09 14:45 ET — ▼ SHORT DAYvwap $466.45 $472.22 $451.61 CTX_FILTERED 📈 Strong RS: +9.6% vs SPY | 📈 Strong RS: +9.6% vs SPY — — — 52/100-999📊" [ref=e2449]':
+            - cell "11" [ref=e2450]
+            - cell "02/09 14:45 ET" [ref=e2451]:
+              - link "02/09 14:45 ET" [ref=e2452] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e2453]
+            - cell "▼ SHORT" [ref=e2454]
+            - cell "DAYvwap" [ref=e2455]:
+              - generic [ref=e2456]: DAYvwap
+            - cell "$466.45" [ref=e2457]
+            - cell "$472.22" [ref=e2458]
+            - cell "$451.61" [ref=e2459]
+            - cell "CTX_FILTERED" [ref=e2460]
+            - 'cell "📈 Strong RS: +9.6% vs SPY | 📈 Strong RS: +9.6% vs SPY" [ref=e2461]'
+            - cell "—" [ref=e2462]
+            - cell "—" [ref=e2463]
+            - cell "—" [ref=e2464]
+            - cell "52/100-999📊" [ref=e2465]
+          - row "📅 02/11 2 trades (0 exec, 2 filtered)" [ref=e2466]:
+            - cell "📅 02/11 2 trades (0 exec, 2 filtered)" [ref=e2467]
+          - 'row "12 02/11 13:00 ET — ▼ SHORT DAYkeylevel $467.84 $470.23 $465.45 CONFLUENCE_FILTERED ↗️ +RS: +2.2% vs SPY | ↗️ +RS: +2.2% vs SPY | R:R 1.0 (-20) | time-of-day (lunch) (-5) — — — 46/100-6📊-25⚡" [ref=e2468]':
+            - cell "12" [ref=e2469]
+            - cell "02/11 13:00 ET" [ref=e2470]:
+              - link "02/11 13:00 ET" [ref=e2471] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e2472]
+            - cell "▼ SHORT" [ref=e2473]
+            - cell "DAYkeylevel" [ref=e2474]:
+              - generic [ref=e2475]: DAYkeylevel
+            - cell "$467.84" [ref=e2476]
+            - cell "$470.23" [ref=e2477]
+            - cell "$465.45" [ref=e2478]
+            - cell "CONFLUENCE_FILTERED" [ref=e2479]
+            - 'cell "↗️ +RS: +2.2% vs SPY | ↗️ +RS: +2.2% vs SPY | R:R 1.0 (-20) | time-of-day (lunch) (-5)" [ref=e2480]'
+            - cell "—" [ref=e2481]
+            - cell "—" [ref=e2482]
+            - cell "—" [ref=e2483]
+            - cell "46/100-6📊-25⚡" [ref=e2484]
+          - 'row "13 02/11 13:00 ET — ▼ SHORT DAYvwap $467.84 $473.29 $462.39 QUALITY_FILTERED ↗️ +RS: +2.2% vs SPY | ↗️ +RS: +2.2% vs SPY | R:R 1.0 (-20) | time-of-day (lunch) (-5) — — — 52/100-999📊-25⚡" [ref=e2485]':
+            - cell "13" [ref=e2486]
+            - cell "02/11 13:00 ET" [ref=e2487]:
+              - link "02/11 13:00 ET" [ref=e2488] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e2489]
+            - cell "▼ SHORT" [ref=e2490]
+            - cell "DAYvwap" [ref=e2491]:
+              - generic [ref=e2492]: DAYvwap
+            - cell "$467.84" [ref=e2493]
+            - cell "$473.29" [ref=e2494]
+            - cell "$462.39" [ref=e2495]
+            - cell "QUALITY_FILTERED" [ref=e2496]
+            - 'cell "↗️ +RS: +2.2% vs SPY | ↗️ +RS: +2.2% vs SPY | R:R 1.0 (-20) | time-of-day (lunch) (-5)" [ref=e2497]'
+            - cell "—" [ref=e2498]
+            - cell "—" [ref=e2499]
+            - cell "—" [ref=e2500]
+            - cell "52/100-999📊-25⚡" [ref=e2501]
+          - row "📅 02/13 1 trade (0 exec, 1 filtered)" [ref=e2502]:
+            - cell "📅 02/13 1 trade (0 exec, 1 filtered)" [ref=e2503]
+          - 'row "14 02/13 11:20 ET — ▲ LONG SCALPscalp $460.53 $459.77 $461.67 CONF_CAP_FILTERED ↗️ +RS: +2.9% vs SPY | CONF_CAP — — — 93/100+3📊-5⚡" [ref=e2504]':
+            - cell "14" [ref=e2505]
+            - cell "02/13 11:20 ET" [ref=e2506]:
+              - link "02/13 11:20 ET" [ref=e2507] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e2508]
+            - cell "▲ LONG" [ref=e2509]
+            - cell "SCALPscalp" [ref=e2510]:
+              - generic [ref=e2511]: SCALPscalp
+            - cell "$460.53" [ref=e2512]
+            - cell "$459.77" [ref=e2513]
+            - cell "$461.67" [ref=e2514]
+            - cell "CONF_CAP_FILTERED" [ref=e2515]
+            - 'cell "↗️ +RS: +2.9% vs SPY | CONF_CAP" [ref=e2516]'
+            - cell "—" [ref=e2517]
+            - cell "—" [ref=e2518]
+            - cell "—" [ref=e2519]
+            - cell "93/100+3📊-5⚡" [ref=e2520]
+          - row "📅 02/17 1 trade (0 exec, 1 filtered)" [ref=e2521]:
+            - cell "📅 02/17 1 trade (0 exec, 1 filtered)" [ref=e2522]
+          - 'row "15 02/17 13:55 ET — ▲ LONG DAYkeylevel $450.24 $446.12 $454.36 QUALITY_FILTERED ↘️ −RS: -2.4% vs SPY | ↘️ −RS: -2.4% vs SPY | R:R 1.0 (-20) — — — 46/100-6📊-20⚡" [ref=e2523]':
+            - cell "15" [ref=e2524]
+            - cell "02/17 13:55 ET" [ref=e2525]:
+              - link "02/17 13:55 ET" [ref=e2526] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e2527]
+            - cell "▲ LONG" [ref=e2528]
+            - cell "DAYkeylevel" [ref=e2529]:
+              - generic [ref=e2530]: DAYkeylevel
+            - cell "$450.24" [ref=e2531]
+            - cell "$446.12" [ref=e2532]
+            - cell "$454.36" [ref=e2533]
+            - cell "QUALITY_FILTERED" [ref=e2534]
+            - 'cell "↘️ −RS: -2.4% vs SPY | ↘️ −RS: -2.4% vs SPY | R:R 1.0 (-20)" [ref=e2535]'
+            - cell "—" [ref=e2536]
+            - cell "—" [ref=e2537]
+            - cell "—" [ref=e2538]
+            - cell "46/100-6📊-20⚡" [ref=e2539]
+          - row "📅 02/19 1 trade (1 exec, 0 filtered) 100% WR +104.10%" [ref=e2540]:
+            - cell "📅 02/19 1 trade (1 exec, 0 filtered) 100% WR +104.10%" [ref=e2541]
+          - row "16 02/19 13:30 ET 02/19 15:55 ET ▲ LONG DAYvwap $457.83 $452.36 $471.07 TIMEOUT +104.10% $0.54 $1.10 +$56 81/100" [ref=e2542]:
+            - cell "16" [ref=e2543]
+            - cell "02/19 13:30 ET" [ref=e2544]:
+              - link "02/19 13:30 ET" [ref=e2545] [cursor=pointer]:
+                - /url: "#"
+            - cell "02/19 15:55 ET" [ref=e2546]
+            - cell "▲ LONG" [ref=e2547]
+            - cell "DAYvwap" [ref=e2548]:
+              - generic [ref=e2549]: DAYvwap
+            - cell "$457.83" [ref=e2550]
+            - cell "$452.36" [ref=e2551]
+            - cell "$471.07" [ref=e2552]
+            - cell "TIMEOUT" [ref=e2553]
+            - cell "+104.10%" [ref=e2554]
+            - cell "$0.54" [ref=e2555]
+            - cell "$1.10" [ref=e2556]
+            - cell "+$56" [ref=e2557]
+            - cell "81/100" [ref=e2558]
+          - row "📅 02/20 2 trades (1 exec, 1 filtered) 100% WR +0.22%" [ref=e2559]:
+            - cell "📅 02/20 2 trades (1 exec, 1 filtered) 100% WR +0.22%" [ref=e2560]
+          - 'row "17 02/20 10:00 ET — ▼ SHORT DAYkeylevel $462.00 $470.05 $449.92 CONFLUENCE_FILTERED ↗️ +RS: +2.6% vs SPY | ↗️ +RS: +2.6% vs SPY | R:R 1.5 (-10) — — — 52/100-6📊-10⚡" [ref=e2561]':
+            - cell "17" [ref=e2562]
+            - cell "02/20 10:00 ET" [ref=e2563]:
+              - link "02/20 10:00 ET" [ref=e2564] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e2565]
+            - cell "▼ SHORT" [ref=e2566]
+            - cell "DAYkeylevel" [ref=e2567]:
+              - generic [ref=e2568]: DAYkeylevel
+            - cell "$462.00" [ref=e2569]
+            - cell "$470.05" [ref=e2570]
+            - cell "$449.92" [ref=e2571]
+            - cell "CONFLUENCE_FILTERED" [ref=e2572]
+            - 'cell "↗️ +RS: +2.6% vs SPY | ↗️ +RS: +2.6% vs SPY | R:R 1.5 (-10)" [ref=e2573]'
+            - cell "—" [ref=e2574]
+            - cell "—" [ref=e2575]
+            - cell "—" [ref=e2576]
+            - cell "52/100-6📊-10⚡" [ref=e2577]
+          - row "18 02/20 14:50 ET 02/20 15:55 ET ▲ LONG SCALPscalp $466.74 $466.08 $467.66 WIN +0.22% $0.37 $0.63 +$51 82/100+3📊" [ref=e2578]:
+            - cell "18" [ref=e2579]
+            - cell "02/20 14:50 ET" [ref=e2580]:
+              - link "02/20 14:50 ET" [ref=e2581] [cursor=pointer]:
+                - /url: "#"
+            - cell "02/20 15:55 ET" [ref=e2582]
+            - cell "▲ LONG" [ref=e2583]
+            - cell "SCALPscalp" [ref=e2584]:
+              - generic [ref=e2585]: SCALPscalp
+            - cell "$466.74" [ref=e2586]
+            - cell "$466.08" [ref=e2587]
+            - cell "$467.66" [ref=e2588]
+            - cell "WIN" [ref=e2589]
+            - cell "+0.22%" [ref=e2590]
+            - cell "$0.37" [ref=e2591]
+            - cell "$0.63" [ref=e2592]
+            - cell "+$51" [ref=e2593]
+            - cell "82/100+3📊" [ref=e2594]
+          - row "📅 02/24 1 trade (0 exec, 1 filtered)" [ref=e2595]:
+            - cell "📅 02/24 1 trade (0 exec, 1 filtered)" [ref=e2596]
+          - 'row "19 02/24 12:50 ET — ▼ SHORT DAYvwap $474.11 $478.98 $461.58 QUALITY_FILTERED ↗️ +RS: +5.2% vs SPY | ↗️ +RS: +5.2% vs SPY | time-of-day (lunch) (-5) — — — 41/100-999📊-5⚡" [ref=e2597]':
+            - cell "19" [ref=e2598]
+            - cell "02/24 12:50 ET" [ref=e2599]:
+              - link "02/24 12:50 ET" [ref=e2600] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e2601]
+            - cell "▼ SHORT" [ref=e2602]
+            - cell "DAYvwap" [ref=e2603]:
+              - generic [ref=e2604]: DAYvwap
+            - cell "$474.11" [ref=e2605]
+            - cell "$478.98" [ref=e2606]
+            - cell "$461.58" [ref=e2607]
+            - cell "QUALITY_FILTERED" [ref=e2608]
+            - 'cell "↗️ +RS: +5.2% vs SPY | ↗️ +RS: +5.2% vs SPY | time-of-day (lunch) (-5)" [ref=e2609]'
+            - cell "—" [ref=e2610]
+            - cell "—" [ref=e2611]
+            - cell "—" [ref=e2612]
+            - cell "41/100-999📊-5⚡" [ref=e2613]
+          - row "📅 02/26 1 trade (0 exec, 1 filtered)" [ref=e2614]:
+            - cell "📅 02/26 1 trade (0 exec, 1 filtered)" [ref=e2615]
+          - 'row "20 02/26 14:55 ET — ▼ SHORT DAYvwap $476.52 $481.16 $464.59 CTX_FILTERED ↗️ +RS: +3.2% vs SPY | ↗️ +RS: +3.2% vs SPY — — — 60/100-999📊" [ref=e2616]':
+            - cell "20" [ref=e2617]
+            - cell "02/26 14:55 ET" [ref=e2618]:
+              - link "02/26 14:55 ET" [ref=e2619] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e2620]
+            - cell "▼ SHORT" [ref=e2621]
+            - cell "DAYvwap" [ref=e2622]:
+              - generic [ref=e2623]: DAYvwap
+            - cell "$476.52" [ref=e2624]
+            - cell "$481.16" [ref=e2625]
+            - cell "$464.59" [ref=e2626]
+            - cell "CTX_FILTERED" [ref=e2627]
+            - 'cell "↗️ +RS: +3.2% vs SPY | ↗️ +RS: +3.2% vs SPY" [ref=e2628]'
+            - cell "—" [ref=e2629]
+            - cell "—" [ref=e2630]
+            - cell "—" [ref=e2631]
+            - cell "60/100-999📊" [ref=e2632]
+          - row "📅 03/02 1 trade (1 exec, 0 filtered) 100% WR +170.30%" [ref=e2633]:
+            - cell "📅 03/02 1 trade (1 exec, 0 filtered) 100% WR +170.30%" [ref=e2634]
+          - row "21 03/02 11:05 ET 03/02 15:05 ET ▲ LONG DAYvwap $486.20 $480.97 $495.94 TIMEOUT +170.30% $1.04 $2.81 +$177 70/100-5⚡" [ref=e2635]:
+            - cell "21" [ref=e2636]
+            - cell "03/02 11:05 ET" [ref=e2637]:
+              - link "03/02 11:05 ET" [ref=e2638] [cursor=pointer]:
+                - /url: "#"
+            - cell "03/02 15:05 ET" [ref=e2639]
+            - cell "▲ LONG" [ref=e2640]
+            - cell "DAYvwap" [ref=e2641]:
+              - generic [ref=e2642]: DAYvwap
+            - cell "$486.20" [ref=e2643]
+            - cell "$480.97" [ref=e2644]
+            - cell "$495.94" [ref=e2645]
+            - cell "TIMEOUT" [ref=e2646]
+            - cell "+170.30%" [ref=e2647]
+            - cell "$1.04" [ref=e2648]
+            - cell "$2.81" [ref=e2649]
+            - cell "+$177" [ref=e2650]
+            - cell "70/100-5⚡" [ref=e2651]
+          - row "📅 03/03 1 trade (0 exec, 1 filtered)" [ref=e2652]:
+            - cell "📅 03/03 1 trade (0 exec, 1 filtered)" [ref=e2653]
+          - row "22 03/03 10:00 ET — ▼ SHORT DAYkeylevel $462.45 $468.64 $456.26 CONFLUENCE_FILTERED R:R 1.0 (-10) — — — 52/100-10⚡" [ref=e2654]:
+            - cell "22" [ref=e2655]
+            - cell "03/03 10:00 ET" [ref=e2656]:
+              - link "03/03 10:00 ET" [ref=e2657] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e2658]
+            - cell "▼ SHORT" [ref=e2659]
+            - cell "DAYkeylevel" [ref=e2660]:
+              - generic [ref=e2661]: DAYkeylevel
+            - cell "$462.45" [ref=e2662]
+            - cell "$468.64" [ref=e2663]
+            - cell "$456.26" [ref=e2664]
+            - cell "CONFLUENCE_FILTERED" [ref=e2665]
+            - cell "R:R 1.0 (-10)" [ref=e2666]
+            - cell "—" [ref=e2667]
+            - cell "—" [ref=e2668]
+            - cell "—" [ref=e2669]
+            - cell "52/100-10⚡" [ref=e2670]
+          - row "📅 03/05 2 trades (0 exec, 2 filtered)" [ref=e2671]:
+            - cell "📅 03/05 2 trades (0 exec, 2 filtered)" [ref=e2672]
+          - row "23 03/05 10:00 ET — ▼ SHORT DAYkeylevel $468.11 $470.84 $464.02 CONFLUENCE_FILTERED R:R 1.5 (-10) — — — 56/100-10⚡" [ref=e2673]:
+            - cell "23" [ref=e2674]
+            - cell "03/05 10:00 ET" [ref=e2675]:
+              - link "03/05 10:00 ET" [ref=e2676] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e2677]
+            - cell "▼ SHORT" [ref=e2678]
+            - cell "DAYkeylevel" [ref=e2679]:
+              - generic [ref=e2680]: DAYkeylevel
+            - cell "$468.11" [ref=e2681]
+            - cell "$470.84" [ref=e2682]
+            - cell "$464.02" [ref=e2683]
+            - cell "CONFLUENCE_FILTERED" [ref=e2684]
+            - cell "R:R 1.5 (-10)" [ref=e2685]
+            - cell "—" [ref=e2686]
+            - cell "—" [ref=e2687]
+            - cell "—" [ref=e2688]
+            - cell "56/100-10⚡" [ref=e2689]
+          - row "24 03/05 11:35 ET — ▲ LONG DAYvwap $465.39 $460.27 $475.62 QUALITY_FILTERED time-of-day (lunch) (-5) — — — 45/100-5⚡" [ref=e2690]:
+            - cell "24" [ref=e2691]
+            - cell "03/05 11:35 ET" [ref=e2692]:
+              - link "03/05 11:35 ET" [ref=e2693] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e2694]
+            - cell "▲ LONG" [ref=e2695]
+            - cell "DAYvwap" [ref=e2696]:
+              - generic [ref=e2697]: DAYvwap
+            - cell "$465.39" [ref=e2698]
+            - cell "$460.27" [ref=e2699]
+            - cell "$475.62" [ref=e2700]
+            - cell "QUALITY_FILTERED" [ref=e2701]
+            - cell "time-of-day (lunch) (-5)" [ref=e2702]
+            - cell "—" [ref=e2703]
+            - cell "—" [ref=e2704]
+            - cell "—" [ref=e2705]
+            - cell "45/100-5⚡" [ref=e2706]
+          - row "📅 03/06 1 trade (0 exec, 1 filtered)" [ref=e2707]:
+            - cell "📅 03/06 1 trade (0 exec, 1 filtered)" [ref=e2708]
+          - row "25 03/06 13:45 ET — ▼ SHORT DAYvwap $474.23 $479.18 $464.33 CTX_FILTERED filtered — — — 56/100" [ref=e2709]:
+            - cell "25" [ref=e2710]
+            - cell "03/06 13:45 ET" [ref=e2711]:
+              - link "03/06 13:45 ET" [ref=e2712] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e2713]
+            - cell "▼ SHORT" [ref=e2714]
+            - cell "DAYvwap" [ref=e2715]:
+              - generic [ref=e2716]: DAYvwap
+            - cell "$474.23" [ref=e2717]
+            - cell "$479.18" [ref=e2718]
+            - cell "$464.33" [ref=e2719]
+            - cell "CTX_FILTERED" [ref=e2720]
+            - cell "filtered" [ref=e2721]
+            - cell "—" [ref=e2722]
+            - cell "—" [ref=e2723]
+            - cell "—" [ref=e2724]
+            - cell "56/100" [ref=e2725]
+          - row "📅 03/09 1 trade (0 exec, 1 filtered)" [ref=e2726]:
+            - cell "📅 03/09 1 trade (0 exec, 1 filtered)" [ref=e2727]
+          - 'row "26 03/09 10:05 ET — ▼ SHORT DAYkeylevel $466.20 $468.17 $463.25 CONFLUENCE_FILTERED ↘️ −RS: -2.4% vs SPY | ↘️ −RS: -2.4% vs SPY | R:R 1.5 (-10) — — — 52/100+3📊-10⚡" [ref=e2728]':
+            - cell "26" [ref=e2729]
+            - cell "03/09 10:05 ET" [ref=e2730]:
+              - link "03/09 10:05 ET" [ref=e2731] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e2732]
+            - cell "▼ SHORT" [ref=e2733]
+            - cell "DAYkeylevel" [ref=e2734]:
+              - generic [ref=e2735]: DAYkeylevel
+            - cell "$466.20" [ref=e2736]
+            - cell "$468.17" [ref=e2737]
+            - cell "$463.25" [ref=e2738]
+            - cell "CONFLUENCE_FILTERED" [ref=e2739]
+            - 'cell "↘️ −RS: -2.4% vs SPY | ↘️ −RS: -2.4% vs SPY | R:R 1.5 (-10)" [ref=e2740]'
+            - cell "—" [ref=e2741]
+            - cell "—" [ref=e2742]
+            - cell "—" [ref=e2743]
+            - cell "52/100+3📊-10⚡" [ref=e2744]
+          - row "📅 03/10 1 trade (1 exec, 0 filtered) 0% WR -7.60%" [ref=e2745]:
+            - cell "📅 03/10 1 trade (1 exec, 0 filtered) 0% WR -7.60%" [ref=e2746]
+          - row "27 03/10 14:20 ET 03/10 15:55 ET ▲ LONG DAYvwap $477.38 $470.09 $495.27 TIMEOUT -7.60% $0.63 $0.58 $-10 84/100+3📊" [ref=e2747]:
+            - cell "27" [ref=e2748]
+            - cell "03/10 14:20 ET" [ref=e2749]:
+              - link "03/10 14:20 ET" [ref=e2750] [cursor=pointer]:
+                - /url: "#"
+            - cell "03/10 15:55 ET" [ref=e2751]
+            - cell "▲ LONG" [ref=e2752]
+            - cell "DAYvwap" [ref=e2753]:
+              - generic [ref=e2754]: DAYvwap
+            - cell "$477.38" [ref=e2755]
+            - cell "$470.09" [ref=e2756]
+            - cell "$495.27" [ref=e2757]
+            - cell "TIMEOUT" [ref=e2758]
+            - cell "-7.60%" [ref=e2759]
+            - cell "$0.63" [ref=e2760]
+            - cell "$0.58" [ref=e2761]
+            - cell "$-10" [ref=e2762]
+            - cell "84/100+3📊" [ref=e2763]
+          - row "📅 03/11 2 trades (1 exec, 1 filtered) 100% WR +101.90%" [ref=e2764]:
+            - cell "📅 03/11 2 trades (1 exec, 1 filtered) 100% WR +101.90%" [ref=e2765]
+          - 'row "28 03/11 13:35 ET — ▼ SHORT DAYkeylevel $474.01 $477.53 $470.49 QUALITY_FILTERED ↗️ +RS: +2.2% vs SPY | ↗️ +RS: +2.2% vs SPY | R:R 1.0 (-10) — — — 50/100-6📊-10⚡" [ref=e2766]':
+            - cell "28" [ref=e2767]
+            - cell "03/11 13:35 ET" [ref=e2768]:
+              - link "03/11 13:35 ET" [ref=e2769] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e2770]
+            - cell "▼ SHORT" [ref=e2771]
+            - cell "DAYkeylevel" [ref=e2772]:
+              - generic [ref=e2773]: DAYkeylevel
+            - cell "$474.01" [ref=e2774]
+            - cell "$477.53" [ref=e2775]
+            - cell "$470.49" [ref=e2776]
+            - cell "QUALITY_FILTERED" [ref=e2777]
+            - 'cell "↗️ +RS: +2.2% vs SPY | ↗️ +RS: +2.2% vs SPY | R:R 1.0 (-10)" [ref=e2778]'
+            - cell "—" [ref=e2779]
+            - cell "—" [ref=e2780]
+            - cell "—" [ref=e2781]
+            - cell "50/100-6📊-10⚡" [ref=e2782]
+          - row "29 03/11 13:40 ET 03/11 15:55 ET ▲ LONG DAYvwap $474.56 $469.74 $478.90 TIMEOUT +101.90% $0.56 $1.13 +$57 72/100+3📊-10⚡" [ref=e2783]:
+            - cell "29" [ref=e2784]
+            - cell "03/11 13:40 ET" [ref=e2785]:
+              - link "03/11 13:40 ET" [ref=e2786] [cursor=pointer]:
+                - /url: "#"
+            - cell "03/11 15:55 ET" [ref=e2787]
+            - cell "▲ LONG" [ref=e2788]
+            - cell "DAYvwap" [ref=e2789]:
+              - generic [ref=e2790]: DAYvwap
+            - cell "$474.56" [ref=e2791]
+            - cell "$469.74" [ref=e2792]
+            - cell "$478.90" [ref=e2793]
+            - cell "TIMEOUT" [ref=e2794]
+            - cell "+101.90%" [ref=e2795]
+            - cell "$0.56" [ref=e2796]
+            - cell "$1.13" [ref=e2797]
+            - cell "+$57" [ref=e2798]
+            - cell "72/100+3📊-10⚡" [ref=e2799]
+          - row "📅 03/12 2 trades (1 exec, 1 filtered) 0% WR -98.20%" [ref=e2800]:
+            - cell "📅 03/12 2 trades (1 exec, 1 filtered) 0% WR -98.20%" [ref=e2801]
+          - 'row "30 03/12 13:50 ET — ▼ SHORT DAYkeylevel $469.09 $470.46 $467.03 QUALITY_FILTERED ↗️ +RS: +2.4% vs SPY | ↗️ +RS: +2.4% vs SPY | R:R 1.5 (-10) — — — 63/100-6📊-10⚡" [ref=e2802]':
+            - cell "30" [ref=e2803]
+            - cell "03/12 13:50 ET" [ref=e2804]:
+              - link "03/12 13:50 ET" [ref=e2805] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e2806]
+            - cell "▼ SHORT" [ref=e2807]
+            - cell "DAYkeylevel" [ref=e2808]:
+              - generic [ref=e2809]: DAYkeylevel
+            - cell "$469.09" [ref=e2810]
+            - cell "$470.46" [ref=e2811]
+            - cell "$467.03" [ref=e2812]
+            - cell "QUALITY_FILTERED" [ref=e2813]
+            - 'cell "↗️ +RS: +2.4% vs SPY | ↗️ +RS: +2.4% vs SPY | R:R 1.5 (-10)" [ref=e2814]'
+            - cell "—" [ref=e2815]
+            - cell "—" [ref=e2816]
+            - cell "—" [ref=e2817]
+            - cell "63/100-6📊-10⚡" [ref=e2818]
+          - row "31 03/12 14:00 ET 03/12 15:55 ET ▲ LONG DAYvwap $469.43 $464.82 $477.95 TIMEOUT -98.20% $0.55 $0.01 $-54 78/100+3📊" [ref=e2819]:
+            - cell "31" [ref=e2820]
+            - cell "03/12 14:00 ET" [ref=e2821]:
+              - link "03/12 14:00 ET" [ref=e2822] [cursor=pointer]:
+                - /url: "#"
+            - cell "03/12 15:55 ET" [ref=e2823]
+            - cell "▲ LONG" [ref=e2824]
+            - cell "DAYvwap" [ref=e2825]:
+              - generic [ref=e2826]: DAYvwap
+            - cell "$469.43" [ref=e2827]
+            - cell "$464.82" [ref=e2828]
+            - cell "$477.95" [ref=e2829]
+            - cell "TIMEOUT" [ref=e2830]
+            - cell "-98.20%" [ref=e2831]
+            - cell "$0.55" [ref=e2832]
+            - cell "$0.01" [ref=e2833]
+            - cell "$-54" [ref=e2834]
+            - cell "78/100+3📊" [ref=e2835]
+          - row "📅 03/13 2 trades (1 exec, 1 filtered) 0% WR -66.60%" [ref=e2836]:
+            - cell "📅 03/13 2 trades (1 exec, 1 filtered) 0% WR -66.60%" [ref=e2837]
+          - row "32 03/13 10:00 ET — ▲ LONG DAYkeylevel $469.08 $468.63 $469.76 CONF_CAP_FILTERED CONF_CAP — — — 88/100-5⚡" [ref=e2838]:
+            - cell "32" [ref=e2839]
+            - cell "03/13 10:00 ET" [ref=e2840]:
+              - link "03/13 10:00 ET" [ref=e2841] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e2842]
+            - cell "▲ LONG" [ref=e2843]
+            - cell "DAYkeylevel" [ref=e2844]:
+              - generic [ref=e2845]: DAYkeylevel
+            - cell "$469.08" [ref=e2846]
+            - cell "$468.63" [ref=e2847]
+            - cell "$469.76" [ref=e2848]
+            - cell "CONF_CAP_FILTERED" [ref=e2849]
+            - cell "CONF_CAP" [ref=e2850]
+            - cell "—" [ref=e2851]
+            - cell "—" [ref=e2852]
+            - cell "—" [ref=e2853]
+            - cell "88/100-5⚡" [ref=e2854]
+          - row "33 03/13 11:00 ET 03/13 15:00 ET ▲ LONG DAYvwap $464.16 $459.63 $472.54 TIMEOUT -66.60% $0.60 $0.20 $-40 70/100" [ref=e2855]:
+            - cell "33" [ref=e2856]
+            - cell "03/13 11:00 ET" [ref=e2857]:
+              - link "03/13 11:00 ET" [ref=e2858] [cursor=pointer]:
+                - /url: "#"
+            - cell "03/13 15:00 ET" [ref=e2859]
+            - cell "▲ LONG" [ref=e2860]
+            - cell "DAYvwap" [ref=e2861]:
+              - generic [ref=e2862]: DAYvwap
+            - cell "$464.16" [ref=e2863]
+            - cell "$459.63" [ref=e2864]
+            - cell "$472.54" [ref=e2865]
+            - cell "TIMEOUT" [ref=e2866]
+            - cell "-66.60%" [ref=e2867]
+            - cell "$0.60" [ref=e2868]
+            - cell "$0.20" [ref=e2869]
+            - cell "$-40" [ref=e2870]
+            - cell "70/100" [ref=e2871]
+          - row "📅 03/16 2 trades (1 exec, 1 filtered) 100% WR +55.20%" [ref=e2872]:
+            - cell "📅 03/16 2 trades (1 exec, 1 filtered) 100% WR +55.20%" [ref=e2873]
+          - row "34 03/16 10:35 ET — ▼ SHORT DAYkeylevel $459.89 $461.62 $457.29 QUALITY_FILTERED R:R 1.5 (-5) — — — 52/100-5⚡" [ref=e2874]:
+            - cell "34" [ref=e2875]
+            - cell "03/16 10:35 ET" [ref=e2876]:
+              - link "03/16 10:35 ET" [ref=e2877] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e2878]
+            - cell "▼ SHORT" [ref=e2879]
+            - cell "DAYkeylevel" [ref=e2880]:
+              - generic [ref=e2881]: DAYkeylevel
+            - cell "$459.89" [ref=e2882]
+            - cell "$461.62" [ref=e2883]
+            - cell "$457.29" [ref=e2884]
+            - cell "QUALITY_FILTERED" [ref=e2885]
+            - cell "R:R 1.5 (-5)" [ref=e2886]
+            - cell "—" [ref=e2887]
+            - cell "—" [ref=e2888]
+            - cell "—" [ref=e2889]
+            - cell "52/100-5⚡" [ref=e2890]
+          - row "35 03/16 11:30 ET 03/16 15:30 ET ▲ LONG DAYvwap $459.07 $454.60 $469.75 TIMEOUT +55.20% $0.54 $0.84 +$30 70/100-13⚡" [ref=e2891]:
+            - cell "35" [ref=e2892]
+            - cell "03/16 11:30 ET" [ref=e2893]:
+              - link "03/16 11:30 ET" [ref=e2894] [cursor=pointer]:
+                - /url: "#"
+            - cell "03/16 15:30 ET" [ref=e2895]
+            - cell "▲ LONG" [ref=e2896]
+            - cell "DAYvwap" [ref=e2897]:
+              - generic [ref=e2898]: DAYvwap
+            - cell "$459.07" [ref=e2899]
+            - cell "$454.60" [ref=e2900]
+            - cell "$469.75" [ref=e2901]
+            - cell "TIMEOUT" [ref=e2902]
+            - cell "+55.20%" [ref=e2903]
+            - cell "$0.54" [ref=e2904]
+            - cell "$0.84" [ref=e2905]
+            - cell "+$30" [ref=e2906]
+            - cell "70/100-13⚡" [ref=e2907]
+          - row "📅 03/17 2 trades (0 exec, 2 filtered)" [ref=e2908]:
+            - cell "📅 03/17 2 trades (0 exec, 2 filtered)" [ref=e2909]
+          - 'row "36 03/17 10:00 ET — ▼ SHORT DAYkeylevel $460.26 $461.55 $458.97 CONFLUENCE_FILTERED ↘️ −RS: -2.9% vs SPY | ↘️ −RS: -2.9% vs SPY | R:R 1.0 (-20) — — — 52/100+3📊-20⚡" [ref=e2910]':
+            - cell "36" [ref=e2911]
+            - cell "03/17 10:00 ET" [ref=e2912]:
+              - link "03/17 10:00 ET" [ref=e2913] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e2914]
+            - cell "▼ SHORT" [ref=e2915]
+            - cell "DAYkeylevel" [ref=e2916]:
+              - generic [ref=e2917]: DAYkeylevel
+            - cell "$460.26" [ref=e2918]
+            - cell "$461.55" [ref=e2919]
+            - cell "$458.97" [ref=e2920]
+            - cell "CONFLUENCE_FILTERED" [ref=e2921]
+            - 'cell "↘️ −RS: -2.9% vs SPY | ↘️ −RS: -2.9% vs SPY | R:R 1.0 (-20)" [ref=e2922]'
+            - cell "—" [ref=e2923]
+            - cell "—" [ref=e2924]
+            - cell "—" [ref=e2925]
+            - cell "52/100+3📊-20⚡" [ref=e2926]
+          - 'row "37 03/17 11:40 ET — ▲ LONG DAYvwap $457.91 $453.82 $462.00 QUALITY_FILTERED ↘️ −RS: -2.9% vs SPY | ↘️ −RS: -2.9% vs SPY | R:R 1.0 (-20) | time-of-day (lunch) (-5) — — — 56/100-999📊-25⚡" [ref=e2927]':
+            - cell "37" [ref=e2928]
+            - cell "03/17 11:40 ET" [ref=e2929]:
+              - link "03/17 11:40 ET" [ref=e2930] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e2931]
+            - cell "▲ LONG" [ref=e2932]
+            - cell "DAYvwap" [ref=e2933]:
+              - generic [ref=e2934]: DAYvwap
+            - cell "$457.91" [ref=e2935]
+            - cell "$453.82" [ref=e2936]
+            - cell "$462.00" [ref=e2937]
+            - cell "QUALITY_FILTERED" [ref=e2938]
+            - 'cell "↘️ −RS: -2.9% vs SPY | ↘️ −RS: -2.9% vs SPY | R:R 1.0 (-20) | time-of-day (lunch) (-5)" [ref=e2939]'
+            - cell "—" [ref=e2940]
+            - cell "—" [ref=e2941]
+            - cell "—" [ref=e2942]
+            - cell "56/100-999📊-25⚡" [ref=e2943]
+          - row "📅 03/20 2 trades (0 exec, 2 filtered)" [ref=e2944]:
+            - cell "📅 03/20 2 trades (0 exec, 2 filtered)" [ref=e2945]
+          - 'row "38 03/20 10:00 ET — ▼ SHORT DAYkeylevel $424.02 $426.50 $421.53 CONFLUENCE_FILTERED 📉 Weak RS: -8.2% vs SPY | 📉 Weak RS: -8.2% vs SPY | R:R 1.0 (-10) — — — 63/100+6📊-10⚡" [ref=e2946]':
+            - cell "38" [ref=e2947]
+            - cell "03/20 10:00 ET" [ref=e2948]:
+              - link "03/20 10:00 ET" [ref=e2949] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e2950]
+            - cell "▼ SHORT" [ref=e2951]
+            - cell "DAYkeylevel" [ref=e2952]:
+              - generic [ref=e2953]: DAYkeylevel
+            - cell "$424.02" [ref=e2954]
+            - cell "$426.50" [ref=e2955]
+            - cell "$421.53" [ref=e2956]
+            - cell "CONFLUENCE_FILTERED" [ref=e2957]
+            - 'cell "📉 Weak RS: -8.2% vs SPY | 📉 Weak RS: -8.2% vs SPY | R:R 1.0 (-10)" [ref=e2958]'
+            - cell "—" [ref=e2959]
+            - cell "—" [ref=e2960]
+            - cell "—" [ref=e2961]
+            - cell "63/100+6📊-10⚡" [ref=e2962]
+          - 'row "39 03/20 14:45 ET — ▼ SHORT SCALPscalp $414.35 $416.30 $412.40 QUALITY_FILTERED 📉 Weak RS: -8.2% vs SPY | 📉 Weak RS: -8.2% vs SPY | R:R 1.0 (-10) — — — 61/100+6📊-10⚡" [ref=e2963]':
+            - cell "39" [ref=e2964]
+            - cell "03/20 14:45 ET" [ref=e2965]:
+              - link "03/20 14:45 ET" [ref=e2966] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e2967]
+            - cell "▼ SHORT" [ref=e2968]
+            - cell "SCALPscalp" [ref=e2969]:
+              - generic [ref=e2970]: SCALPscalp
+            - cell "$414.35" [ref=e2971]
+            - cell "$416.30" [ref=e2972]
+            - cell "$412.40" [ref=e2973]
+            - cell "QUALITY_FILTERED" [ref=e2974]
+            - 'cell "📉 Weak RS: -8.2% vs SPY | 📉 Weak RS: -8.2% vs SPY | R:R 1.0 (-10)" [ref=e2975]'
+            - cell "—" [ref=e2976]
+            - cell "—" [ref=e2977]
+            - cell "—" [ref=e2978]
+            - cell "61/100+6📊-10⚡" [ref=e2979]
+          - row "📅 03/23 1 trade (0 exec, 1 filtered)" [ref=e2980]:
+            - cell "📅 03/23 1 trade (0 exec, 1 filtered)" [ref=e2981]
+          - 'row "40 03/23 14:30 ET — ▲ LONG SCALPscalp $408.16 $406.33 $409.99 QUALITY_FILTERED 📉 Weak RS: -10.2% vs SPY | 📉 Weak RS: -10.2% vs SPY | R:R 1.0 (-20) — — — 58/100-12📊-20⚡" [ref=e2982]':
+            - cell "40" [ref=e2983]
+            - cell "03/23 14:30 ET" [ref=e2984]:
+              - link "03/23 14:30 ET" [ref=e2985] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e2986]
+            - cell "▲ LONG" [ref=e2987]
+            - cell "SCALPscalp" [ref=e2988]:
+              - generic [ref=e2989]: SCALPscalp
+            - cell "$408.16" [ref=e2990]
+            - cell "$406.33" [ref=e2991]
+            - cell "$409.99" [ref=e2992]
+            - cell "QUALITY_FILTERED" [ref=e2993]
+            - 'cell "📉 Weak RS: -10.2% vs SPY | 📉 Weak RS: -10.2% vs SPY | R:R 1.0 (-20)" [ref=e2994]'
+            - cell "—" [ref=e2995]
+            - cell "—" [ref=e2996]
+            - cell "—" [ref=e2997]
+            - cell "58/100-12📊-20⚡" [ref=e2998]
+          - row "📅 03/24 1 trade (1 exec, 0 filtered) 0% WR -0.37%" [ref=e2999]:
+            - cell "📅 03/24 1 trade (1 exec, 0 filtered) 0% WR -0.37%" [ref=e3000]
+          - row "41 03/24 10:10 ET 03/24 10:25 ET ▼ SHORT DAYkeylevel $403.54 $405.00 $401.85 LOSS -0.37% $0.85 $0.01 $-84 69/100+6📊-5⚡" [ref=e3001]:
+            - cell "41" [ref=e3002]
+            - cell "03/24 10:10 ET" [ref=e3003]:
+              - link "03/24 10:10 ET" [ref=e3004] [cursor=pointer]:
+                - /url: "#"
+            - cell "03/24 10:25 ET" [ref=e3005]
+            - cell "▼ SHORT" [ref=e3006]
+            - cell "DAYkeylevel" [ref=e3007]:
+              - generic [ref=e3008]: DAYkeylevel
+            - cell "$403.54" [ref=e3009]
+            - cell "$405.00" [ref=e3010]
+            - cell "$401.85" [ref=e3011]
+            - cell "LOSS" [ref=e3012]
+            - cell "-0.37%" [ref=e3013]
+            - cell "$0.85" [ref=e3014]
+            - cell "$0.01" [ref=e3015]
+            - cell "$-84" [ref=e3016]
+            - cell "69/100+6📊-5⚡" [ref=e3017]
+          - row "📅 03/25 1 trade (0 exec, 1 filtered)" [ref=e3018]:
+            - cell "📅 03/25 1 trade (0 exec, 1 filtered)" [ref=e3019]
+          - 'row "42 03/25 10:15 ET — ▲ LONG DAYkeylevel $418.61 $416.08 $421.14 QUALITY_FILTERED ↘️ −RS: -5.7% vs SPY | ↘️ −RS: -5.7% vs SPY | R:R 1.0 (-20) — — — 46/100-6📊-20⚡" [ref=e3020]':
+            - cell "42" [ref=e3021]
+            - cell "03/25 10:15 ET" [ref=e3022]:
+              - link "03/25 10:15 ET" [ref=e3023] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e3024]
+            - cell "▲ LONG" [ref=e3025]
+            - cell "DAYkeylevel" [ref=e3026]:
+              - generic [ref=e3027]: DAYkeylevel
+            - cell "$418.61" [ref=e3028]
+            - cell "$416.08" [ref=e3029]
+            - cell "$421.14" [ref=e3030]
+            - cell "QUALITY_FILTERED" [ref=e3031]
+            - 'cell "↘️ −RS: -5.7% vs SPY | ↘️ −RS: -5.7% vs SPY | R:R 1.0 (-20)" [ref=e3032]'
+            - cell "—" [ref=e3033]
+            - cell "—" [ref=e3034]
+            - cell "—" [ref=e3035]
+            - cell "46/100-6📊-20⚡" [ref=e3036]
+          - row "📅 03/26 1 trade (0 exec, 1 filtered)" [ref=e3037]:
+            - cell "📅 03/26 1 trade (0 exec, 1 filtered)" [ref=e3038]
+          - 'row "43 03/26 12:40 ET — ▼ SHORT DAYkeylevel $402.34 $404.84 $399.84 CONFLUENCE_FILTERED ↘️ −RS: -3.8% vs SPY | ↘️ −RS: -3.8% vs SPY | R:R 1.0 (-10) | time-of-day (lunch) (-5) — — — 52/100+3📊-15⚡" [ref=e3039]':
+            - cell "43" [ref=e3040]
+            - cell "03/26 12:40 ET" [ref=e3041]:
+              - link "03/26 12:40 ET" [ref=e3042] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e3043]
+            - cell "▼ SHORT" [ref=e3044]
+            - cell "DAYkeylevel" [ref=e3045]:
+              - generic [ref=e3046]: DAYkeylevel
+            - cell "$402.34" [ref=e3047]
+            - cell "$404.84" [ref=e3048]
+            - cell "$399.84" [ref=e3049]
+            - cell "CONFLUENCE_FILTERED" [ref=e3050]
+            - 'cell "↘️ −RS: -3.8% vs SPY | ↘️ −RS: -3.8% vs SPY | R:R 1.0 (-10) | time-of-day (lunch) (-5)" [ref=e3051]'
+            - cell "—" [ref=e3052]
+            - cell "—" [ref=e3053]
+            - cell "—" [ref=e3054]
+            - cell "52/100+3📊-15⚡" [ref=e3055]
+          - row "📅 03/27 1 trade (1 exec, 0 filtered) 100% WR +1.47%" [ref=e3056]:
+            - cell "📅 03/27 1 trade (1 exec, 0 filtered) 100% WR +1.47%" [ref=e3057]
+          - row "44 03/27 10:00 ET 03/27 11:10 ET ▲ LONG DAYkeylevel $409.68 $403.54 $415.42 WIN +1.47% $0.63 $3.13 +$250 78/100+3📊-10⚡" [ref=e3058]:
+            - cell "44" [ref=e3059]
+            - cell "03/27 10:00 ET" [ref=e3060]:
+              - link "03/27 10:00 ET" [ref=e3061] [cursor=pointer]:
+                - /url: "#"
+            - cell "03/27 11:10 ET" [ref=e3062]
+            - cell "▲ LONG" [ref=e3063]
+            - cell "DAYkeylevel" [ref=e3064]:
+              - generic [ref=e3065]: DAYkeylevel
+            - cell "$409.68" [ref=e3066]
+            - cell "$403.54" [ref=e3067]
+            - cell "$415.42" [ref=e3068]
+            - cell "WIN" [ref=e3069]
+            - cell "+1.47%" [ref=e3070]
+            - cell "$0.63" [ref=e3071]
+            - cell "$3.13" [ref=e3072]
+            - cell "+$250" [ref=e3073]
+            - cell "78/100+3📊-10⚡" [ref=e3074]
+          - row "📅 03/31 2 trades (0 exec, 2 filtered)" [ref=e3075]:
+            - cell "📅 03/31 2 trades (0 exec, 2 filtered)" [ref=e3076]
+          - 'row "45 03/31 10:05 ET — ▲ LONG DAYkeylevel $423.04 $421.86 $424.81 TRAP_FILTERED 📈 Strong RS: +6.9% vs SPY | 📈 Strong RS: +6.9% vs SPY | R:R 1.5 (-10) — — — 46/100+6📊-10⚡" [ref=e3077]':
+            - cell "45" [ref=e3078]
+            - cell "03/31 10:05 ET" [ref=e3079]:
+              - link "03/31 10:05 ET" [ref=e3080] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e3081]
+            - cell "▲ LONG" [ref=e3082]
+            - cell "DAYkeylevel" [ref=e3083]:
+              - generic [ref=e3084]: DAYkeylevel
+            - cell "$423.04" [ref=e3085]
+            - cell "$421.86" [ref=e3086]
+            - cell "$424.81" [ref=e3087]
+            - cell "TRAP_FILTERED" [ref=e3088]
+            - 'cell "📈 Strong RS: +6.9% vs SPY | 📈 Strong RS: +6.9% vs SPY | R:R 1.5 (-10)" [ref=e3089]'
+            - cell "—" [ref=e3090]
+            - cell "—" [ref=e3091]
+            - cell "—" [ref=e3092]
+            - cell "46/100+6📊-10⚡" [ref=e3093]
+          - 'row "46 03/31 12:50 ET — ▼ SHORT DAYvwap $425.98 $430.58 $416.78 QUALITY_FILTERED 📈 Strong RS: +6.9% vs SPY | 📈 Strong RS: +6.9% vs SPY | time-of-day (lunch) (-5) — — — 41/100-999📊-5⚡" [ref=e3094]':
+            - cell "46" [ref=e3095]
+            - cell "03/31 12:50 ET" [ref=e3096]:
+              - link "03/31 12:50 ET" [ref=e3097] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e3098]
+            - cell "▼ SHORT" [ref=e3099]
+            - cell "DAYvwap" [ref=e3100]:
+              - generic [ref=e3101]: DAYvwap
+            - cell "$425.98" [ref=e3102]
+            - cell "$430.58" [ref=e3103]
+            - cell "$416.78" [ref=e3104]
+            - cell "QUALITY_FILTERED" [ref=e3105]
+            - 'cell "📈 Strong RS: +6.9% vs SPY | 📈 Strong RS: +6.9% vs SPY | time-of-day (lunch) (-5)" [ref=e3106]'
+            - cell "—" [ref=e3107]
+            - cell "—" [ref=e3108]
+            - cell "—" [ref=e3109]
+            - cell "41/100-999📊-5⚡" [ref=e3110]
+          - row "📅 04/02 1 trade (0 exec, 1 filtered)" [ref=e3111]:
+            - cell "📅 04/02 1 trade (0 exec, 1 filtered)" [ref=e3112]
+          - 'row "47 04/02 14:45 ET — ▲ LONG SCALPscalp $428.90 $428.18 $429.62 QUALITY_FILTERED ↗️ +RS: +5.5% vs SPY | ↗️ +RS: +5.5% vs SPY | R:R 1.0 (-10) — — — 65/100+6📊-10⚡" [ref=e3113]':
+            - cell "47" [ref=e3114]
+            - cell "04/02 14:45 ET" [ref=e3115]:
+              - link "04/02 14:45 ET" [ref=e3116] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e3117]
+            - cell "▲ LONG" [ref=e3118]
+            - cell "SCALPscalp" [ref=e3119]:
+              - generic [ref=e3120]: SCALPscalp
+            - cell "$428.90" [ref=e3121]
+            - cell "$428.18" [ref=e3122]
+            - cell "$429.62" [ref=e3123]
+            - cell "QUALITY_FILTERED" [ref=e3124]
+            - 'cell "↗️ +RS: +5.5% vs SPY | ↗️ +RS: +5.5% vs SPY | R:R 1.0 (-10)" [ref=e3125]'
+            - cell "—" [ref=e3126]
+            - cell "—" [ref=e3127]
+            - cell "—" [ref=e3128]
+            - cell "65/100+6📊-10⚡" [ref=e3129]
+          - row "📅 04/06 2 trades (0 exec, 2 filtered)" [ref=e3130]:
+            - cell "📅 04/06 2 trades (0 exec, 2 filtered)" [ref=e3131]
+          - row "48 04/06 13:10 ET — ▼ SHORT DAYkeylevel $427.58 $429.48 $425.68 QUALITY_FILTERED R:R 1.0 (-20) | time-of-day (lunch) (-5) — — — 52/100-25⚡" [ref=e3132]:
+            - cell "48" [ref=e3133]
+            - cell "04/06 13:10 ET" [ref=e3134]:
+              - link "04/06 13:10 ET" [ref=e3135] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e3136]
+            - cell "▼ SHORT" [ref=e3137]
+            - cell "DAYkeylevel" [ref=e3138]:
+              - generic [ref=e3139]: DAYkeylevel
+            - cell "$427.58" [ref=e3140]
+            - cell "$429.48" [ref=e3141]
+            - cell "$425.68" [ref=e3142]
+            - cell "QUALITY_FILTERED" [ref=e3143]
+            - cell "R:R 1.0 (-20) | time-of-day (lunch) (-5)" [ref=e3144]
+            - cell "—" [ref=e3145]
+            - cell "—" [ref=e3146]
+            - cell "—" [ref=e3147]
+            - cell "52/100-25⚡" [ref=e3148]
+          - row "49 04/06 13:30 ET — ▲ LONG DAYvwap $428.01 $423.34 $432.68 QUALITY_FILTERED R:R 1.0 (-10) — — — 52/100-10⚡" [ref=e3149]:
+            - cell "49" [ref=e3150]
+            - cell "04/06 13:30 ET" [ref=e3151]:
+              - link "04/06 13:30 ET" [ref=e3152] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e3153]
+            - cell "▲ LONG" [ref=e3154]
+            - cell "DAYvwap" [ref=e3155]:
+              - generic [ref=e3156]: DAYvwap
+            - cell "$428.01" [ref=e3157]
+            - cell "$423.34" [ref=e3158]
+            - cell "$432.68" [ref=e3159]
+            - cell "QUALITY_FILTERED" [ref=e3160]
+            - cell "R:R 1.0 (-10)" [ref=e3161]
+            - cell "—" [ref=e3162]
+            - cell "—" [ref=e3163]
+            - cell "—" [ref=e3164]
+            - cell "52/100-10⚡" [ref=e3165]
+          - row "📅 04/07 2 trades (1 exec, 1 filtered) 0% WR -98.00%" [ref=e3166]:
+            - cell "📅 04/07 2 trades (1 exec, 1 filtered) 0% WR -98.00%" [ref=e3167]
+          - row "50 04/07 10:10 ET — ▲ LONG DAYkeylevel $424.53 $421.88 $428.51 MULTI_FILTERED R:R 1.5 (-5) — — — 55/100-5⚡" [ref=e3168]:
+            - cell "50" [ref=e3169]
+            - cell "04/07 10:10 ET" [ref=e3170]:
+              - link "04/07 10:10 ET" [ref=e3171] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e3172]
+            - cell "▲ LONG" [ref=e3173]
+            - cell "DAYkeylevel" [ref=e3174]:
+              - generic [ref=e3175]: DAYkeylevel
+            - cell "$424.53" [ref=e3176]
+            - cell "$421.88" [ref=e3177]
+            - cell "$428.51" [ref=e3178]
+            - cell "MULTI_FILTERED" [ref=e3179]
+            - cell "R:R 1.5 (-5)" [ref=e3180]
+            - cell "—" [ref=e3181]
+            - cell "—" [ref=e3182]
+            - cell "—" [ref=e3183]
+            - cell "55/100-5⚡" [ref=e3184]
+          - row "51 04/07 14:45 ET 04/07 15:55 ET ▼ SHORT DAYvwap $429.09 $433.76 $420.39 TIMEOUT -98.00% $0.51 $0.01 $-50 73/100" [ref=e3185]:
+            - cell "51" [ref=e3186]
+            - cell "04/07 14:45 ET" [ref=e3187]:
+              - link "04/07 14:45 ET" [ref=e3188] [cursor=pointer]:
+                - /url: "#"
+            - cell "04/07 15:55 ET" [ref=e3189]
+            - cell "▼ SHORT" [ref=e3190]
+            - cell "DAYvwap" [ref=e3191]:
+              - generic [ref=e3192]: DAYvwap
+            - cell "$429.09" [ref=e3193]
+            - cell "$433.76" [ref=e3194]
+            - cell "$420.39" [ref=e3195]
+            - cell "TIMEOUT" [ref=e3196]
+            - cell "-98.00%" [ref=e3197]
+            - cell "$0.51" [ref=e3198]
+            - cell "$0.01" [ref=e3199]
+            - cell "$-50" [ref=e3200]
+            - cell "73/100" [ref=e3201]
+          - row "📅 04/08 1 trade (1 exec, 0 filtered) 100% WR +0.26%" [ref=e3202]:
+            - cell "📅 04/08 1 trade (1 exec, 0 filtered) 100% WR +0.26%" [ref=e3203]
+          - row "52 04/08 13:35 ET 04/08 14:22 ET ▼ SHORT SCALPscalp $434.91 $435.93 $433.92 WIN +0.26% $0.41 $0.73 +$32 78/100+3📊-10⚡" [ref=e3204]:
+            - cell "52" [ref=e3205]
+            - cell "04/08 13:35 ET" [ref=e3206]:
+              - link "04/08 13:35 ET" [ref=e3207] [cursor=pointer]:
+                - /url: "#"
+            - cell "04/08 14:22 ET" [ref=e3208]
+            - cell "▼ SHORT" [ref=e3209]
+            - cell "SCALPscalp" [ref=e3210]:
+              - generic [ref=e3211]: SCALPscalp
+            - cell "$434.91" [ref=e3212]
+            - cell "$435.93" [ref=e3213]
+            - cell "$433.92" [ref=e3214]
+            - cell "WIN" [ref=e3215]
+            - cell "+0.26%" [ref=e3216]
+            - cell "$0.41" [ref=e3217]
+            - cell "$0.73" [ref=e3218]
+            - cell "+$32" [ref=e3219]
+            - cell "78/100+3📊-10⚡" [ref=e3220]
+          - row "📅 04/09 3 trades (0 exec, 3 filtered)" [ref=e3221]:
+            - cell "📅 04/09 3 trades (0 exec, 3 filtered)" [ref=e3222]
+          - 'row "53 04/09 12:35 ET — ▼ SHORT DAYkeylevel $440.04 $441.06 $438.52 CONFLUENCE_FILTERED ↘️ −RS: -3.7% vs SPY | ↘️ −RS: -3.7% vs SPY | R:R 1.5 (-5) | time-of-day (lunch) (-5) — — — 46/100+3📊-10⚡" [ref=e3223]':
+            - cell "53" [ref=e3224]
+            - cell "04/09 12:35 ET" [ref=e3225]:
+              - link "04/09 12:35 ET" [ref=e3226] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e3227]
+            - cell "▼ SHORT" [ref=e3228]
+            - cell "DAYkeylevel" [ref=e3229]:
+              - generic [ref=e3230]: DAYkeylevel
+            - cell "$440.04" [ref=e3231]
+            - cell "$441.06" [ref=e3232]
+            - cell "$438.52" [ref=e3233]
+            - cell "CONFLUENCE_FILTERED" [ref=e3234]
+            - 'cell "↘️ −RS: -3.7% vs SPY | ↘️ −RS: -3.7% vs SPY | R:R 1.5 (-5) | time-of-day (lunch) (-5)" [ref=e3235]'
+            - cell "—" [ref=e3236]
+            - cell "—" [ref=e3237]
+            - cell "—" [ref=e3238]
+            - cell "46/100+3📊-10⚡" [ref=e3239]
+          - 'row "54 04/09 12:35 ET — ▼ SHORT DAYvwap $440.04 $444.35 $428.95 QUALITY_FILTERED ↘️ −RS: -3.7% vs SPY | ↘️ −RS: -3.7% vs SPY | time-of-day (lunch) (-5) — — — 58/100+3📊-5⚡" [ref=e3240]':
+            - cell "54" [ref=e3241]
+            - cell "04/09 12:35 ET" [ref=e3242]:
+              - link "04/09 12:35 ET" [ref=e3243] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e3244]
+            - cell "▼ SHORT" [ref=e3245]
+            - cell "DAYvwap" [ref=e3246]:
+              - generic [ref=e3247]: DAYvwap
+            - cell "$440.04" [ref=e3248]
+            - cell "$444.35" [ref=e3249]
+            - cell "$428.95" [ref=e3250]
+            - cell "QUALITY_FILTERED" [ref=e3251]
+            - 'cell "↘️ −RS: -3.7% vs SPY | ↘️ −RS: -3.7% vs SPY | time-of-day (lunch) (-5)" [ref=e3252]'
+            - cell "—" [ref=e3253]
+            - cell "—" [ref=e3254]
+            - cell "—" [ref=e3255]
+            - cell "58/100+3📊-5⚡" [ref=e3256]
+          - 'row "55 04/09 13:35 ET — ▲ LONG SCALPscalp $440.70 $439.97 $441.80 QUALITY_FILTERED ↘️ −RS: -3.7% vs SPY | ↘️ −RS: -3.7% vs SPY | R:R 1.5 (-10) — — — 66/100-6📊-10⚡" [ref=e3257]':
+            - cell "55" [ref=e3258]
+            - cell "04/09 13:35 ET" [ref=e3259]:
+              - link "04/09 13:35 ET" [ref=e3260] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e3261]
+            - cell "▲ LONG" [ref=e3262]
+            - cell "SCALPscalp" [ref=e3263]:
+              - generic [ref=e3264]: SCALPscalp
+            - cell "$440.70" [ref=e3265]
+            - cell "$439.97" [ref=e3266]
+            - cell "$441.80" [ref=e3267]
+            - cell "QUALITY_FILTERED" [ref=e3268]
+            - 'cell "↘️ −RS: -3.7% vs SPY | ↘️ −RS: -3.7% vs SPY | R:R 1.5 (-10)" [ref=e3269]'
+            - cell "—" [ref=e3270]
+            - cell "—" [ref=e3271]
+            - cell "—" [ref=e3272]
+            - cell "66/100-6📊-10⚡" [ref=e3273]
+          - row "📅 04/10 1 trade (0 exec, 1 filtered)" [ref=e3274]:
+            - cell "📅 04/10 1 trade (0 exec, 1 filtered)" [ref=e3275]
+          - row "56 04/10 13:50 ET — ▼ SHORT SCALPscalp $437.26 $437.69 $436.84 QUALITY_FILTERED R:R 1.0 (-10) — — — 60/100-10⚡" [ref=e3276]:
+            - cell "56" [ref=e3277]
+            - cell "04/10 13:50 ET" [ref=e3278]:
+              - link "04/10 13:50 ET" [ref=e3279] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e3280]
+            - cell "▼ SHORT" [ref=e3281]
+            - cell "SCALPscalp" [ref=e3282]:
+              - generic [ref=e3283]: SCALPscalp
+            - cell "$437.26" [ref=e3284]
+            - cell "$437.69" [ref=e3285]
+            - cell "$436.84" [ref=e3286]
+            - cell "QUALITY_FILTERED" [ref=e3287]
+            - cell "R:R 1.0 (-10)" [ref=e3288]
+            - cell "—" [ref=e3289]
+            - cell "—" [ref=e3290]
+            - cell "—" [ref=e3291]
+            - cell "60/100-10⚡" [ref=e3292]
+          - row "📅 04/13 2 trades (0 exec, 2 filtered)" [ref=e3293]:
+            - cell "📅 04/13 2 trades (0 exec, 2 filtered)" [ref=e3294]
+          - 'row "57 04/13 12:05 ET — ▲ LONG DAYkeylevel $433.16 $430.58 $435.74 QUALITY_FILTERED ↘️ −RS: -2.3% vs SPY | ↘️ −RS: -2.3% vs SPY | R:R 1.0 (-20) | time-of-day (lunch) (-5) — — — 52/100-6📊-25⚡" [ref=e3295]':
+            - cell "57" [ref=e3296]
+            - cell "04/13 12:05 ET" [ref=e3297]:
+              - link "04/13 12:05 ET" [ref=e3298] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e3299]
+            - cell "▲ LONG" [ref=e3300]
+            - cell "DAYkeylevel" [ref=e3301]:
+              - generic [ref=e3302]: DAYkeylevel
+            - cell "$433.16" [ref=e3303]
+            - cell "$430.58" [ref=e3304]
+            - cell "$435.74" [ref=e3305]
+            - cell "QUALITY_FILTERED" [ref=e3306]
+            - 'cell "↘️ −RS: -2.3% vs SPY | ↘️ −RS: -2.3% vs SPY | R:R 1.0 (-20) | time-of-day (lunch) (-5)" [ref=e3307]'
+            - cell "—" [ref=e3308]
+            - cell "—" [ref=e3309]
+            - cell "—" [ref=e3310]
+            - cell "52/100-6📊-25⚡" [ref=e3311]
+          - 'row "58 04/13 12:45 ET — ▼ SHORT DAYvwap $435.10 $439.07 $424.88 CONF_CAP_FILTERED ↘️ −RS: -2.3% vs SPY | CONF_CAP — — — 89/100+3📊-5⚡" [ref=e3312]':
+            - cell "58" [ref=e3313]
+            - cell "04/13 12:45 ET" [ref=e3314]:
+              - link "04/13 12:45 ET" [ref=e3315] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e3316]
+            - cell "▼ SHORT" [ref=e3317]
+            - cell "DAYvwap" [ref=e3318]:
+              - generic [ref=e3319]: DAYvwap
+            - cell "$435.10" [ref=e3320]
+            - cell "$439.07" [ref=e3321]
+            - cell "$424.88" [ref=e3322]
+            - cell "CONF_CAP_FILTERED" [ref=e3323]
+            - 'cell "↘️ −RS: -2.3% vs SPY | CONF_CAP" [ref=e3324]'
+            - cell "—" [ref=e3325]
+            - cell "—" [ref=e3326]
+            - cell "—" [ref=e3327]
+            - cell "89/100+3📊-5⚡" [ref=e3328]
+          - row "📅 04/14 1 trade (0 exec, 1 filtered)" [ref=e3329]:
+            - cell "📅 04/14 1 trade (0 exec, 1 filtered)" [ref=e3330]
+          - 'row "59 04/14 12:05 ET — ▼ SHORT DAYvwap $441.90 $445.73 $432.06 QUALITY_FILTERED ↘️ −RS: -2.3% vs SPY | ↘️ −RS: -2.3% vs SPY | time-of-day (lunch) (-5) — — — 68/100+3📊-5⚡" [ref=e3331]':
+            - cell "59" [ref=e3332]
+            - cell "04/14 12:05 ET" [ref=e3333]:
+              - link "04/14 12:05 ET" [ref=e3334] [cursor=pointer]:
+                - /url: "#"
+            - cell "—" [ref=e3335]
+            - cell "▼ SHORT" [ref=e3336]
+            - cell "DAYvwap" [ref=e3337]:
+              - generic [ref=e3338]: DAYvwap
+            - cell "$441.90" [ref=e3339]
+            - cell "$445.73" [ref=e3340]
+            - cell "$432.06" [ref=e3341]
+            - cell "QUALITY_FILTERED" [ref=e3342]
+            - 'cell "↘️ −RS: -2.3% vs SPY | ↘️ −RS: -2.3% vs SPY | time-of-day (lunch) (-5)" [ref=e3343]'
+            - cell "—" [ref=e3344]
+            - cell "—" [ref=e3345]
+            - cell "—" [ref=e3346]
+            - cell "68/100+3📊-5⚡" [ref=e3347]
+          - row "📅 04/16 1 trade (1 exec, 0 filtered) 0% WR -86.40%" [ref=e3348]:
+            - cell "📅 04/16 1 trade (1 exec, 0 filtered) 0% WR -86.40%" [ref=e3349]
+          - row "60 04/16 10:40 ET 04/16 15:55 ET ▼ SHORT DAYkeylevel $439.41 $442.19 $435.79 TIMEOUT -86.40% $0.59 $0.08 $-51 76/100+3📊-10⚡" [ref=e3350]:
+            - cell "60" [ref=e3351]
+            - cell "04/16 10:40 ET" [ref=e3352]:
+              - link "04/16 10:40 ET" [ref=e3353] [cursor=pointer]:
+                - /url: "#"
+            - cell "04/16 15:55 ET" [ref=e3354]
+            - cell "▼ SHORT" [ref=e3355]
+            - cell "DAYkeylevel" [ref=e3356]:
+              - generic [ref=e3357]: DAYkeylevel
+            - cell "$439.41" [ref=e3358]
+            - cell "$442.19" [ref=e3359]
+            - cell "$435.79" [ref=e3360]
+            - cell "TIMEOUT" [ref=e3361]
+            - cell "-86.40%" [ref=e3362]
+            - cell "$0.59" [ref=e3363]
+            - cell "$0.08" [ref=e3364]
+            - cell "$-51" [ref=e3365]
+            - cell "76/100+3📊-10⚡" [ref=e3366]
+    - generic [ref=e3367]:
+      - generic [ref=e3368]:
+        - generic [ref=e3369]: Loss Pattern Analysis — 7 losing trades
+        - generic [ref=e3370]:
+          - generic [ref=e3371]:
+            - text: "Long:"
+            - strong [ref=e3372]: 40% loss rate
+            - text: (avg -45.40%)
+          - generic [ref=e3373]:
+            - text: "Short:"
+            - strong [ref=e3374]: 75% loss rate
+            - text: (avg -61.59%)
+      - generic [ref=e3375]:
+        - generic [ref=e3376]:
+          - generic [ref=e3377]:
+            - generic [ref=e3378]: Loss by Hour
+            - generic [ref=e3379]:
+              - generic [ref=e3382]: 9am
+              - generic [ref=e3383]:
+                - generic [ref=e3384]: "2"
+                - generic [ref=e3386]: 10am
+                - generic [ref=e3387]: 67%L
+              - generic [ref=e3388]:
+                - generic [ref=e3389]: "1"
+                - generic [ref=e3391]: 11am
+                - generic [ref=e3392]: 33%L
+              - generic [ref=e3395]: 12pm
+              - generic [ref=e3396]:
+                - generic [ref=e3398]: 1pm
+                - generic [ref=e3399]: 0%L
+              - generic [ref=e3400]:
+                - generic [ref=e3401]: "4"
+                - generic [ref=e3403]: 2pm
+                - generic [ref=e3404]: 80%L
+              - generic [ref=e3407]: 3pm
+          - generic [ref=e3408]:
+            - generic [ref=e3409]: Loss by Day of Week
+            - generic [ref=e3410]:
+              - generic [ref=e3411]:
+                - generic [ref=e3412]: Mon
+                - generic [ref=e3413]: "0"
+                - generic [ref=e3414]: 0%L
+              - generic [ref=e3415]:
+                - generic [ref=e3416]: Tue
+                - generic [ref=e3417]: "4"
+                - generic [ref=e3418]: 100%L
+              - generic [ref=e3419]:
+                - generic [ref=e3420]: Wed
+                - generic [ref=e3421]: "0"
+                - generic [ref=e3422]: 0%L
+              - generic [ref=e3423]:
+                - generic [ref=e3424]: Thu
+                - generic [ref=e3425]: "2"
+                - generic [ref=e3426]: 67%L
+              - generic [ref=e3427]:
+                - generic [ref=e3428]: Fri
+                - generic [ref=e3429]: "1"
+                - generic [ref=e3430]: 33%L
+          - generic [ref=e3431]:
+            - generic [ref=e3432]: Exit Types
+            - generic [ref=e3433]:
+              - generic [ref=e3434]: "TIMEOUT: 5"
+              - generic [ref=e3435]: "LOSS: 2"
+        - generic [ref=e3437]:
+          - generic [ref=e3438]: Loss by Strategy
+          - generic [ref=e3439]:
+            - generic [ref=e3440]:
+              - generic [ref=e3442]: DAYvwap
+              - generic [ref=e3443]:
+                - text: 4L / 4W
+                - strong [ref=e3444]: 50% loss rate
+              - generic [ref=e3445]: "-67.60% avg loss"
+            - generic [ref=e3446]:
+              - generic [ref=e3448]: DAYkeylevel
+              - generic [ref=e3449]:
+                - text: 2L / 1W
+                - strong [ref=e3450]: 67% loss rate
+              - generic [ref=e3451]: "-43.39% avg loss"
+            - generic [ref=e3452]:
+              - generic [ref=e3454]: SCALPscalp
+              - generic [ref=e3455]:
+                - text: 1L / 2W
+                - strong [ref=e3456]: 33% loss rate
+              - generic [ref=e3457]: "-9.20% avg loss"
+      - generic [ref=e3458]:
+        - generic [ref=e3459]: ⚠ SHORT trades lose 75% of the time — consider raising short minConf
+        - generic [ref=e3460]: ⚠ 2pm accounts for 57% of all losses — dead zone filter may help
+        - generic [ref=e3461]: ⚠ Tue has the most losses (4) — consider skipping or reducing size on Tue
+      - generic [ref=e3462]:
+        - generic [ref=e3463]: Worst 10 Trades
+        - generic [ref=e3464]:
+          - generic [ref=e3465]:
+            - generic [ref=e3466]: "#1"
+            - generic [ref=e3467]: 03/12 14:00 ET
+            - generic [ref=e3468]: ▲ LONG
+            - generic [ref=e3470]: DAYvwap
+            - generic [ref=e3471]: "-98.20%"
+            - generic [ref=e3472]: conf:78
+            - link "view chart" [ref=e3473] [cursor=pointer]:
+              - /url: "#"
+          - generic [ref=e3474]:
+            - generic [ref=e3475]: "#2"
+            - generic [ref=e3476]: 04/07 14:45 ET
+            - generic [ref=e3477]: ▼ SHORT
+            - generic [ref=e3479]: DAYvwap
+            - generic [ref=e3480]: "-98.00%"
+            - generic [ref=e3481]: conf:73
+            - link "view chart" [ref=e3482] [cursor=pointer]:
+              - /url: "#"
+          - generic [ref=e3483]:
+            - generic [ref=e3484]: "#3"
+            - generic [ref=e3485]: 04/16 10:40 ET
+            - generic [ref=e3486]: ▼ SHORT
+            - generic [ref=e3488]: DAYkeylevel
+            - generic [ref=e3489]: "-86.40%"
+            - generic [ref=e3490]: conf:76
+            - link "view chart" [ref=e3491] [cursor=pointer]:
+              - /url: "#"
+          - generic [ref=e3492]:
+            - generic [ref=e3493]: "#4"
+            - generic [ref=e3494]: 03/13 11:00 ET
+            - generic [ref=e3495]: ▲ LONG
+            - generic [ref=e3497]: DAYvwap
+            - generic [ref=e3498]: "-66.60%"
+            - generic [ref=e3499]: conf:70
+            - link "view chart" [ref=e3500] [cursor=pointer]:
+              - /url: "#"
+          - generic [ref=e3501]:
+            - generic [ref=e3502]: "#5"
+            - generic [ref=e3503]: 01/27 14:40 ET
+            - generic [ref=e3504]: ▲ LONG
+            - generic [ref=e3506]: SCALPscalp
+            - generic [ref=e3507]: "-9.20%"
+            - generic [ref=e3508]: conf:73
+            - link "view chart" [ref=e3509] [cursor=pointer]:
+              - /url: "#"
+          - generic [ref=e3510]:
+            - generic [ref=e3511]: "#6"
+            - generic [ref=e3512]: 03/10 14:20 ET
+            - generic [ref=e3513]: ▲ LONG
+            - generic [ref=e3515]: DAYvwap
+            - generic [ref=e3516]: "-7.60%"
+            - generic [ref=e3517]: conf:84
+            - link "view chart" [ref=e3518] [cursor=pointer]:
+              - /url: "#"
+          - generic [ref=e3519]:
+            - generic [ref=e3520]: "#7"
+            - generic [ref=e3521]: 03/24 10:10 ET
+            - generic [ref=e3522]: ▼ SHORT
+            - generic [ref=e3524]: DAYkeylevel
+            - generic [ref=e3525]: "-0.37%"
+            - generic [ref=e3526]: conf:69
+            - link "view chart" [ref=e3527] [cursor=pointer]:
+              - /url: "#"
+  - generic [ref=e39]: SD Scanner — Backtest Engine · Intraday 5m replay · Same logic as live alerts · Real-time Polygon data

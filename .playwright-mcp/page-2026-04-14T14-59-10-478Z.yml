@@ -1,0 +1,266 @@
+- generic [ref=e1]:
+  - generic [ref=e2]:
+    - generic [ref=e5]:
+      - heading "SD SCANNER" [level=1] [ref=e6]
+      - paragraph [ref=e7]: Smart Money Concepts — Real-time Intraday Scanner
+    - generic [ref=e8]:
+      - link "📈 Backtest" [active] [ref=e9] [cursor=pointer]:
+        - /url: /backtest
+      - link "🧪 Research" [ref=e10] [cursor=pointer]:
+        - /url: /research
+      - link "🔍 Analyze" [ref=e11] [cursor=pointer]:
+        - /url: /analyze
+      - link "⚡ Adaptive" [ref=e12] [cursor=pointer]:
+        - /url: "#adaptive-panel"
+      - link "📋 Live Trades" [ref=e13] [cursor=pointer]:
+        - /url: /trades
+      - link "📊 EOD Report" [ref=e14] [cursor=pointer]:
+        - /url: /eod
+      - button "Send EOD" [ref=e15] [cursor=pointer]:
+        - img [ref=e16]
+        - text: Send EOD
+      - generic [ref=e18]: RUNNING
+  - generic [ref=e19]:
+    - generic [ref=e20]:
+      - paragraph [ref=e21]: WATCHLIST
+      - heading "24" [level=2] [ref=e22]
+    - generic [ref=e23]:
+      - paragraph [ref=e24]: ACTIVE SETUPS
+      - heading "1" [level=2] [ref=e25]
+    - generic [ref=e26]:
+      - paragraph [ref=e27]: SESSION
+      - heading "London" [level=2] [ref=e28]
+    - generic [ref=e29]:
+      - paragraph [ref=e30]: LAST SCAN
+      - heading "10:58:45 AM" [level=2] [ref=e31]
+  - generic [ref=e32]:
+    - generic [ref=e33]:
+      - text: WATCHLIST
+      - generic [ref=e34]: 24 tickers
+    - generic [ref=e35]:
+      - link "AMD TV↗ IDLE ⊘ Low liquidity — RVOL < 0.8" [ref=e36] [cursor=pointer]:
+        - /url: /analyze?ticker=AMD
+        - generic [ref=e37]:
+          - generic [ref=e38]: AMD
+          - generic [ref=e39]: TV↗
+        - generic [ref=e40]: IDLE
+        - generic [ref=e41]: ⊘ Low liquidity — RVOL < 0.8
+      - link "BA TV↗ IDLE ⊘ Low liquidity — RVOL < 0.8" [ref=e42] [cursor=pointer]:
+        - /url: /analyze?ticker=BA
+        - generic [ref=e43]:
+          - generic [ref=e44]: BA
+          - generic [ref=e45]: TV↗
+        - generic [ref=e46]: IDLE
+        - generic [ref=e47]: ⊘ Low liquidity — RVOL < 0.8
+      - link "BABA TV↗ IDLE Waiting for breakout + sweep..." [ref=e48] [cursor=pointer]:
+        - /url: /analyze?ticker=BABA
+        - generic [ref=e49]:
+          - generic [ref=e50]: BABA
+          - generic [ref=e51]: TV↗
+        - generic [ref=e52]: IDLE
+        - generic [ref=e53]: Waiting for breakout + sweep...
+      - link "COIN TV↗ IDLE ⊘ Low liquidity — RVOL < 0.8" [ref=e54] [cursor=pointer]:
+        - /url: /analyze?ticker=COIN
+        - generic [ref=e55]:
+          - generic [ref=e56]: COIN
+          - generic [ref=e57]: TV↗
+        - generic [ref=e58]: IDLE
+        - generic [ref=e59]: ⊘ Low liquidity — RVOL < 0.8
+      - link "CRWD TV↗ IDLE ⊘ Low liquidity — RVOL < 0.8" [ref=e60] [cursor=pointer]:
+        - /url: /analyze?ticker=CRWD
+        - generic [ref=e61]:
+          - generic [ref=e62]: CRWD
+          - generic [ref=e63]: TV↗
+        - generic [ref=e64]: IDLE
+        - generic [ref=e65]: ⊘ Low liquidity — RVOL < 0.8
+      - link "GS TV↗ IDLE Waiting for key level rejection..." [ref=e66] [cursor=pointer]:
+        - /url: /analyze?ticker=GS
+        - generic [ref=e67]:
+          - generic [ref=e68]: GS
+          - generic [ref=e69]: TV↗
+        - generic [ref=e70]: IDLE
+        - generic [ref=e71]: Waiting for key level rejection...
+      - link "GOOGL TV↗ IDLE ⊘ Low liquidity — RVOL < 0.8" [ref=e72] [cursor=pointer]:
+        - /url: /analyze?ticker=GOOGL
+        - generic [ref=e73]:
+          - generic [ref=e74]: GOOGL
+          - generic [ref=e75]: TV↗
+        - generic [ref=e76]: IDLE
+        - generic [ref=e77]: ⊘ Low liquidity — RVOL < 0.8
+      - link "META TV↗ IDLE ⊘ Low liquidity — RVOL < 0.8" [ref=e78] [cursor=pointer]:
+        - /url: /analyze?ticker=META
+        - generic [ref=e79]:
+          - generic [ref=e80]: META
+          - generic [ref=e81]: TV↗
+        - generic [ref=e82]: IDLE
+        - generic [ref=e83]: ⊘ Low liquidity — RVOL < 0.8
+      - link "MSFT TV↗ IDLE ⊘ Low liquidity — RVOL < 0.8" [ref=e84] [cursor=pointer]:
+        - /url: /analyze?ticker=MSFT
+        - generic [ref=e85]:
+          - generic [ref=e86]: MSFT
+          - generic [ref=e87]: TV↗
+        - generic [ref=e88]: IDLE
+        - generic [ref=e89]: ⊘ Low liquidity — RVOL < 0.8
+      - link "NFLX TV↗ IDLE Waiting for VWAP reversion..." [ref=e90] [cursor=pointer]:
+        - /url: /analyze?ticker=NFLX
+        - generic [ref=e91]:
+          - generic [ref=e92]: NFLX
+          - generic [ref=e93]: TV↗
+        - generic [ref=e94]: IDLE
+        - generic [ref=e95]: Waiting for VWAP reversion...
+      - link "NVDA TV↗ IDLE ⊘ Low liquidity — RVOL < 0.8" [ref=e96] [cursor=pointer]:
+        - /url: /analyze?ticker=NVDA
+        - generic [ref=e97]:
+          - generic [ref=e98]: NVDA
+          - generic [ref=e99]: TV↗
+        - generic [ref=e100]: IDLE
+        - generic [ref=e101]: ⊘ Low liquidity — RVOL < 0.8
+      - link "PLTR TV↗ SCANNING Fetching data..." [ref=e102] [cursor=pointer]:
+        - /url: /analyze?ticker=PLTR
+        - generic [ref=e103]:
+          - generic [ref=e104]: PLTR
+          - generic [ref=e105]: TV↗
+        - generic [ref=e106]: SCANNING
+        - generic [ref=e107]: Fetching data...
+      - link "QQQ TV↗ IDLE ⊘ Low liquidity — RVOL < 0.8" [ref=e108] [cursor=pointer]:
+        - /url: /analyze?ticker=QQQ
+        - generic [ref=e109]:
+          - generic [ref=e110]: QQQ
+          - generic [ref=e111]: TV↗
+        - generic [ref=e112]: IDLE
+        - generic [ref=e113]: ⊘ Low liquidity — RVOL < 0.8
+      - link "SHOP TV↗ IDLE ⊘ Low liquidity — RVOL < 0.8" [ref=e114] [cursor=pointer]:
+        - /url: /analyze?ticker=SHOP
+        - generic [ref=e115]:
+          - generic [ref=e116]: SHOP
+          - generic [ref=e117]: TV↗
+        - generic [ref=e118]: IDLE
+        - generic [ref=e119]: ⊘ Low liquidity — RVOL < 0.8
+      - link "SPY TV↗ IDLE Waiting for breakout + sweep..." [ref=e120] [cursor=pointer]:
+        - /url: /analyze?ticker=SPY
+        - generic [ref=e121]:
+          - generic [ref=e122]: SPY
+          - generic [ref=e123]: TV↗
+        - generic [ref=e124]: IDLE
+        - generic [ref=e125]: Waiting for breakout + sweep...
+      - link "TSLA TV↗ IDLE ⊘ Low liquidity — RVOL < 0.8" [ref=e126] [cursor=pointer]:
+        - /url: /analyze?ticker=TSLA
+        - generic [ref=e127]:
+          - generic [ref=e128]: TSLA
+          - generic [ref=e129]: TV↗
+        - generic [ref=e130]: IDLE
+        - generic [ref=e131]: ⊘ Low liquidity — RVOL < 0.8
+      - link "UBER TV↗ IDLE ⊘ Low liquidity — RVOL < 0.8" [ref=e132] [cursor=pointer]:
+        - /url: /analyze?ticker=UBER
+        - generic [ref=e133]:
+          - generic [ref=e134]: UBER
+          - generic [ref=e135]: TV↗
+        - generic [ref=e136]: IDLE
+        - generic [ref=e137]: ⊘ Low liquidity — RVOL < 0.8
+      - link "AAPL TV↗ IDLE ⊘ Swing-only ticker — no intraday alert" [ref=e138] [cursor=pointer]:
+        - /url: /analyze?ticker=AAPL
+        - generic [ref=e139]:
+          - generic [ref=e140]: AAPL
+          - generic [ref=e141]: TV↗
+        - generic [ref=e142]: IDLE
+        - generic [ref=e143]: ⊘ Swing-only ticker — no intraday alert
+      - link "AMZN TV↗ IDLE ⊘ Swing-only ticker — no intraday alert" [ref=e144] [cursor=pointer]:
+        - /url: /analyze?ticker=AMZN
+        - generic [ref=e145]:
+          - generic [ref=e146]: AMZN
+          - generic [ref=e147]: TV↗
+        - generic [ref=e148]: IDLE
+        - generic [ref=e149]: ⊘ Swing-only ticker — no intraday alert
+      - link "DDOG TV↗ IDLE ⊘ Swing-only ticker — no intraday alert" [ref=e150] [cursor=pointer]:
+        - /url: /analyze?ticker=DDOG
+        - generic [ref=e151]:
+          - generic [ref=e152]: DDOG
+          - generic [ref=e153]: TV↗
+        - generic [ref=e154]: IDLE
+        - generic [ref=e155]: ⊘ Swing-only ticker — no intraday alert
+      - link "JPM TV↗ IDLE ⊘ Swing-only ticker — no intraday alert" [ref=e156] [cursor=pointer]:
+        - /url: /analyze?ticker=JPM
+        - generic [ref=e157]:
+          - generic [ref=e158]: JPM
+          - generic [ref=e159]: TV↗
+        - generic [ref=e160]: IDLE
+        - generic [ref=e161]: ⊘ Swing-only ticker — no intraday alert
+      - link "MARA TV↗ IDLE ⊘ Swing-only ticker — no intraday alert" [ref=e162] [cursor=pointer]:
+        - /url: /analyze?ticker=MARA
+        - generic [ref=e163]:
+          - generic [ref=e164]: MARA
+          - generic [ref=e165]: TV↗
+        - generic [ref=e166]: IDLE
+        - generic [ref=e167]: ⊘ Swing-only ticker — no intraday alert
+      - link "SOFI TV↗ IDLE ⊘ Low liquidity — RVOL < 0.8" [ref=e168] [cursor=pointer]:
+        - /url: /analyze?ticker=SOFI
+        - generic [ref=e169]:
+          - generic [ref=e170]: SOFI
+          - generic [ref=e171]: TV↗
+        - generic [ref=e172]: IDLE
+        - generic [ref=e173]: ⊘ Low liquidity — RVOL < 0.8
+      - link "V TV↗ SETUP-SHORT ENTRY SHORT | Score 68 | $310.95" [ref=e174] [cursor=pointer]:
+        - /url: /analyze?ticker=V
+        - generic [ref=e175]:
+          - generic [ref=e176]: V
+          - generic [ref=e177]: TV↗
+        - generic [ref=e178]: SETUP-SHORT
+        - generic [ref=e179]: ENTRY SHORT | Score 68 | $310.95
+    - generic [ref=e180]:
+      - text: ACTIVE SETUPS
+      - generic [ref=e181]: "1"
+    - table [ref=e183]:
+      - rowgroup [ref=e184]:
+        - row "TICKER DIR TF CONF ENTRY STOP LOSS TAKE PROFIT R:R CONDITIONS FVG ZONE SESSION VOLATILITY TIME" [ref=e185]:
+          - columnheader "TICKER" [ref=e186]
+          - columnheader "DIR" [ref=e187]
+          - columnheader "TF" [ref=e188]
+          - columnheader "CONF" [ref=e189]
+          - columnheader "ENTRY" [ref=e190]
+          - columnheader "STOP LOSS" [ref=e191]
+          - columnheader "TAKE PROFIT" [ref=e192]
+          - columnheader "R:R" [ref=e193]
+          - columnheader "CONDITIONS" [ref=e194]
+          - columnheader "FVG ZONE" [ref=e195]
+          - columnheader "SESSION" [ref=e196]
+          - columnheader "VOLATILITY" [ref=e197]
+          - columnheader "TIME" [ref=e198]
+      - rowgroup [ref=e199]:
+        - row "V ▼ SHORT NYSE 68% $310.95 $311.1674 $310.6239 1.5:1 Key Level Rejection $310.2978 – $310.8775 NYSE keylevel 2026-04-14T14:58:36.022915599" [ref=e200]:
+          - cell "V" [ref=e201]:
+            - link "V" [ref=e202] [cursor=pointer]:
+              - /url: /analyze?ticker=V
+          - cell "▼ SHORT" [ref=e203]
+          - cell "NYSE" [ref=e204]
+          - cell "68%" [ref=e205]
+          - cell "$310.95" [ref=e206]
+          - cell "$311.1674" [ref=e207]
+          - cell "$310.6239" [ref=e208]
+          - cell "1.5:1" [ref=e209]
+          - cell "Key Level Rejection" [ref=e210]
+          - cell "$310.2978 – $310.8775" [ref=e211]
+          - cell "NYSE" [ref=e212]
+          - cell "keylevel" [ref=e213]
+          - cell "2026-04-14T14:58:36.022915599" [ref=e214]
+  - generic [ref=e215]:
+    - text: ⚡ ADAPTIVE SUPPRESSOR
+    - generic [ref=e216]: no active streaks
+    - generic [ref=e217]: consecutive-loss memory per ticker · auto-reduces confidence after losing streaks
+  - generic [ref=e218]:
+    - generic [ref=e235]: No outcomes recorded yet — record your first WIN or LOSS below.
+    - generic [ref=e221]:
+      - textbox "TICKER" [ref=e222]
+      - button "✓ WIN" [ref=e223] [cursor=pointer]
+      - button "✗ LOSS" [ref=e224] [cursor=pointer]
+  - generic [ref=e225]:
+    - heading "Strategy Performance (0 setups | avg conf 0)" [level=3] [ref=e236]:
+      - text: Strategy Performance
+      - generic [ref=e237]: (0 setups | avg conf 0)
+    - paragraph [ref=e239]: No strategy signals yet this session.
+  - generic [ref=e227]:
+    - generic [ref=e228]:
+      - heading "🏦 Alpaca Open Positions" [level=3] [ref=e229]
+      - button "⚠️ Close All Stocks" [ref=e230] [cursor=pointer]
+      - button "🔄 Refresh" [ref=e231] [cursor=pointer]
+    - generic [ref=e240]: No open positions.
+  - generic [ref=e234]: Live panels update in place — no full-page auto-refresh
