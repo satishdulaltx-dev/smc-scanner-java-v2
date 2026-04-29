@@ -405,6 +405,10 @@ public class BacktestService {
                 String effectiveStrat = (strategyOverride == null || strategyOverride.isBlank()) && bp.hasTimeRouting()
                         ? bp.resolveStrategyForTime(barEpochMs)
                         : stratType;
+                // MOMENTUM tickers must not take short signals at all — VWAP shorts and
+                // sweep-flip/PDH/PDL overlays both blocked. Computed here so overlay block
+                // can filter after primary detection returns empty.
+                boolean vwapLongOnly = bp.isVwapLongOnly() || "MOMENTUM".equals(bp.getCharacter());
                 // Regime computed before strategy detection so gap strategy can use it
                 MarketRegimeDetector.Regime btRegime = ticker.startsWith("X:") ? MarketRegimeDetector.Regime.RANGING
                         : regimeDetector.detectForBacktest(window);
@@ -416,10 +420,6 @@ public class BacktestService {
                             .collect(Collectors.toList());
                     bSetups = scalpDetector.detect(window, spySlice, ticker, dailyAtr, true);
                 } else if ("vwap".equals(effectiveStrat)) {
-                    // MOMENTUM tickers trend through VWAP deviations — shorts structurally lose.
-                    // STABLE_LARGE_CAP and others mean-revert cleanly; both directions allowed.
-                    boolean vwapLongOnly = bp.isVwapLongOnly() || "MOMENTUM".equals(bp.getCharacter());
-                    log.info("VWAP_LONGONLY_CHECK {} char={} longOnly={}", ticker, bp.getCharacter(), vwapLongOnly);
                     bSetups = vwapDetector.detect(window, ticker, dailyAtr, true, vwapLongOnly);
                 } else if ("breakout".equals(effectiveStrat)) {
                     bSetups = breakoutDetector.detect(window, ticker, dailyAtr, true);
@@ -554,6 +554,7 @@ public class BacktestService {
                     ov.addAll(sweepFlipDetector.detect(window, ticker, dailyAtr, true));
                     ov.addAll(pdhPdlDetector.detect(window, ticker, dailyAtr, true));
                     ov.addAll(setupDetector.detectChochPrimary(window, ticker, dailyAtr, true));
+                    if (vwapLongOnly) ov.removeIf(s -> "short".equals(s.getDirection()));
                     if (!ov.isEmpty()) {
                         ov.sort(java.util.Comparator.comparingInt(TradeSetup::getConfidence).reversed());
                         bSetups = java.util.List.of(ov.get(0));
