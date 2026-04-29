@@ -29,7 +29,7 @@ build/
 *.jpg
 
 # Local runtime data — live trade state, never commit
-data/
+/data/
 trades_today.txt
 trades_history.txt
 
