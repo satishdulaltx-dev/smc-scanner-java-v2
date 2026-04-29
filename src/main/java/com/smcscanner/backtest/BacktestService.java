@@ -408,7 +408,7 @@ public class BacktestService {
                 // MOMENTUM tickers must not take short signals at all — VWAP shorts and
                 // sweep-flip/PDH/PDL overlays both blocked. Computed here so overlay block
                 // can filter after primary detection returns empty.
-                boolean vwapLongOnly = bp.isVwapLongOnly() || "MOMENTUM".equals(bp.getCharacter());
+                boolean vwapLongOnly = bp.isVwapLongOnly() || "MOMENTUM".equals(bp.getExplicitCharacter());
                 // Regime computed before strategy detection so gap strategy can use it
                 MarketRegimeDetector.Regime btRegime = ticker.startsWith("X:") ? MarketRegimeDetector.Regime.RANGING
                         : regimeDetector.detectForBacktest(window);

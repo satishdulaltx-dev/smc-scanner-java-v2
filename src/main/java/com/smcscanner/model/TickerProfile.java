@@ -245,6 +245,8 @@ public class TickerProfile {
     public void setPrimeStrategy(String v)   { this.primeStrategy = v; }
     public void setLunchStrategy(String v)   { this.lunchStrategy = v; }
     public String  getCharacter()            { return character != null ? character : "MOMENTUM"; }
+    /** Returns the raw character field — null when not explicitly set in the profile. */
+    public String  getExplicitCharacter()    { return character; }
     public void    setCharacter(String v)    { this.character = v; }
     public boolean isRequireCatalyst()       { return requireCatalyst; }
     public void    setRequireCatalyst(boolean v) { this.requireCatalyst = v; }
