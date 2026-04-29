@@ -1010,12 +1010,12 @@ function renderSingle(d) {
         document.getElementById('stats-grid').innerHTML += `
             <div style="grid-column:1/-1;height:1px;background:var(--border);margin:4px 0"></div>
             <div style="grid-column:1/-1;font-size:10px;color:#58d68d;text-transform:uppercase;letter-spacing:.8px;font-weight:600">📈 Gap Prediction Scorecard</div>
-            <div class="stat-card"><div class="val" style="color:var(--blue)">${d.trades.length}</div><div class="lbl">Gap Setups Found</div></div>
-            <div class="stat-card"><div class="val" style="color:${hitColor}">${hitRate}%</div><div class="lbl">Prediction Hit Rate</div></div>
-            <div class="stat-card"><div class="val" style="color:var(--green)">${correct}</div><div class="lbl">Predicted Correct</div></div>
-            <div class="stat-card"><div class="val" style="color:var(--red)">${incorrect}</div><div class="lbl">Predicted Incorrect</div></div>
-            <div class="stat-card"><div class="val" style="color:var(--yellow)">${neutral}</div><div class="lbl">Neutral / Timeout</div></div>
-            <div class="stat-card"><div class="val" style="color:var(--muted)">${filtered}</div><div class="lbl">Filtered / Skipped</div></div>
+            <div class="stat-card"><div class="val" style="color:var(--blue)">${d.trades.length}</div><div class="lbl">Gap Setups Reviewed</div></div>
+            <div class="stat-card"><div class="val" style="color:${hitColor}">${hitRate}%</div><div class="lbl">Gap Prediction Accuracy</div></div>
+            <div class="stat-card"><div class="val" style="color:var(--green)">${correct}</div><div class="lbl">Predicted Right</div></div>
+            <div class="stat-card"><div class="val" style="color:var(--red)">${incorrect}</div><div class="lbl">Predicted Wrong</div></div>
+            <div class="stat-card"><div class="val" style="color:var(--yellow)">${neutral}</div><div class="lbl">Predicted But No Follow-Through</div></div>
+            <div class="stat-card"><div class="val" style="color:var(--muted)">${filtered}</div><div class="lbl">No Prediction / Skipped</div></div>
         `;
     }
 
