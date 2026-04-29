@@ -419,7 +419,7 @@ public class BacktestService {
                     // MOMENTUM tickers trend through VWAP deviations — shorts structurally lose.
                     // STABLE_LARGE_CAP and others mean-revert cleanly; both directions allowed.
                     boolean vwapLongOnly = bp.isVwapLongOnly() || "MOMENTUM".equals(bp.getCharacter());
-                    log.debug("VWAP_LONGONLY_DEBUG {} char={} vwapLongOnly={}", ticker, bp.getCharacter(), vwapLongOnly);
+                    log.info("VWAP_LONGONLY_CHECK {} char={} longOnly={}", ticker, bp.getCharacter(), vwapLongOnly);
                     bSetups = vwapDetector.detect(window, ticker, dailyAtr, true, vwapLongOnly);
                 } else if ("breakout".equals(effectiveStrat)) {
                     bSetups = breakoutDetector.detect(window, ticker, dailyAtr, true);
