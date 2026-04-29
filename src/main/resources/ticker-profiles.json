@@ -106,14 +106,15 @@
         11
       ],
       "skip": false,
-      "note": "Apr 2026 full sweep: smc 5/5 timeframes intraday (87T 61%WR $1760 at 365d), swing 3/3 ($1630), scalp 4/5. Was wrongly skipped on 3 bad trades in one 90d window. Aerospace moves DO follow SMC patterns \u2014 the original test was too small a sample.",
+      "note": "Apr 2026 full sweep: smc 5/5 timeframes intraday (87T 61%WR $1760 at 365d), swing 3/3 ($1630), scalp 4/5. Was wrongly skipped on 3 bad trades in one 90d window. Aerospace moves DO follow SMC patterns \u2014 the original test was too small a sample. | 2026-04-29 LIVE_PARITY retest: intraday SMC no longer viable for options (90d -$108, 180d -$379); all tested alternatives also negative. Intraday disabled, swing/scalp left active.",
       "scalp": {
         "skip": false,
         "strategyType": "scalp",
         "minConfidence": 70
       },
       "intraday": {
-        "skip": false,
+        "skip": true,
+        "skipReason": "2026-04-29 LIVE_PARITY: intraday SMC/options negative; no tested replacement strategy positive.",
         "strategyType": "smc",
         "minConfidence": 70,
         "maxConfidence": 84
@@ -397,14 +398,14 @@
       "intradayRsGate": true,
       "skip": false,
       "skipReason": null,
-      "note": "Apr 2026: tightened mc 70\u219278, dispAtrMult=1.5, tpRrRatio=2.0. Mega-cap \u2014 only A+ displacement setups. mc=70 generated mediocre FVG retests on a slow tape. intradayRsGate=true kept to require RS vs SPY.",
+      "note": "Apr 2026: tightened mc 70\u219278, dispAtrMult=1.5, tpRrRatio=2.0. Mega-cap \u2014 only A+ displacement setups. mc=70 generated mediocre FVG retests on a slow tape. intradayRsGate=true kept to require RS vs SPY. | 2026-04-29 LIVE_PARITY retest: SMC failed badly (90d -$137, 180d -$487). vsqueeze was the only positive intraday replacement in 180d (+$611 on 4 trades), so intraday routed away from SMC with small-sample caution.",
       "scalp": {
         "skip": true,
         "skipReason": "Apr 2026 VWAP scalp validation: 36.8% WR -0.12% exp \u2014 negative edge"
       },
       "intraday": {
         "skip": false,
-        "strategyType": "smc",
+        "strategyType": "vsqueeze",
         "minConfidence": 78,
         "maxConfidence": 90,
         "dispAtrMult": 1.5,
@@ -485,7 +486,7 @@
       "maxConfidence": 100,
       "slAtrMult": 1.0,
       "tpRrRatio": 2.5,
-      "note": "Apr 2026 30d optimizer: smc minC=78 SL=1.0 TP=2.0 \u2192 6T 83.3%WR $797. Prior vwap generated 1T -$16 in 30d. 180d vwap was near-zero but 30d smc dominates.",
+      "note": "Apr 2026 30d optimizer: smc minC=78 SL=1.0 TP=2.0 \u2192 6T 83.3%WR $797. Prior vwap generated 1T -$16 in 30d. 180d vwap was near-zero but 30d smc dominates. | 2026-04-29 LIVE_PARITY retest: SMC still has strong underlying WR but options PnL negative (90d -$97, 180d -$101). keylevel was the only positive tested intraday replacement at 180d (+$46), so intraday routed to keylevel.",
       "scalp": {
         "skip": false,
         "strategyType": "scalp",
@@ -493,7 +494,7 @@
       },
       "intraday": {
         "skip": false,
-        "strategyType": "smc",
+        "strategyType": "keylevel",
         "minConfidence": 78
       },
       "swing": {
@@ -518,13 +519,14 @@
       "slAtrMult": 0.4,
       "tpRrRatio": 1.5,
       "intradayRsGate": false,
-      "note": "Apr 2026 180d optimizer: 1 viable combo \u2014 maxConf=84 + mc=78 window too narrow for new quality scoring system. Lowered mc 78\u219270, widened maxConf 84\u219292, raised TP 1.0\u21921.5:1. Apr 2026 HYBRID backtest: 3T 66.7%WR +$81 (previously). Removed intradayRsGate (was 0 scalp trades).",
+      "note": "Apr 2026 180d optimizer: 1 viable combo \u2014 maxConf=84 + mc=78 window too narrow for new quality scoring system. Lowered mc 78\u219270, widened maxConf 84\u219292, raised TP 1.0\u21921.5:1. Apr 2026 HYBRID backtest: 3T 66.7%WR +$81 (previously). Removed intradayRsGate (was 0 scalp trades). | 2026-04-29 LIVE_PARITY retest: intraday SMC/options negative (90d -$491, 180d -$846); vwap/keylevel/breakout/vsqueeze also negative. Intraday disabled until regime improves.",
       "scalp": {
         "skip": true,
         "skipReason": "0 scalp trades \u2014 RS gate blocks all entries in current AI-cycle slowdown"
       },
       "intraday": {
-        "skip": false,
+        "skip": true,
+        "skipReason": "2026-04-29 LIVE_PARITY: SMC and tested intraday replacements negative for options.",
         "strategyType": "smc",
         "minConfidence": 78
       },
@@ -552,14 +554,15 @@
       "minConfidence": 62,
       "minFvgPct": 0.0006,
       "maxConfidence": 92,
-      "note": "Apr 2026 180d optimizer: 0 viable combos \u2014 dispAtrMult=1.3 was pre-filtering displacement before quality scoring, leaving no chains. Removed dispAtrMult override (let default apply). Widened maxConf 84\u219292 to allow quality scores from new scoring system. Apr 2026 SMC confirmed best: SCALP mode $908 > Bollinger Scalp $591.",
+      "note": "Apr 2026 180d optimizer: 0 viable combos \u2014 dispAtrMult=1.3 was pre-filtering displacement before quality scoring, leaving no chains. Removed dispAtrMult override (let default apply). Widened maxConf 84\u219292 to allow quality scores from new scoring system. Apr 2026 SMC confirmed best: SCALP mode $908 > Bollinger Scalp $591. | 2026-04-29 LIVE_PARITY retest: intraday SMC roughly breakeven but still negative for options (90d -$134, 180d -$57); all tested alternatives worse. Intraday disabled, scalp/swing left active.",
       "scalp": {
         "skip": false,
         "strategyType": "scalp",
         "minConfidence": 65
       },
       "intraday": {
-        "skip": false,
+        "skip": true,
+        "skipReason": "2026-04-29 LIVE_PARITY: intraday options edge not positive; alternatives worse.",
         "strategyType": "smc",
         "minConfidence": 62
       },
@@ -782,13 +785,14 @@
       "slAtrMult": 1.0,
       "tpRrRatio": 1.5,
       "skip": false,
-      "note": "Apr 2026 full sweep: intraday smc 4/5 timeframes (fails 30d only), swing 3/3. Scalp only 2/5 (90d and 180d). Was killed by 0%WR in one 30d bad window \u2014 regime artifact, not structural failure.",
+      "note": "Apr 2026 full sweep: intraday smc 4/5 timeframes (fails 30d only), swing 3/3. Scalp only 2/5 (90d and 180d). Was killed by 0%WR in one 30d bad window \u2014 regime artifact, not structural failure. | 2026-04-29 LIVE_PARITY retest: SMC underlying stats remain decent but options PnL is flat/negative (90d -$0, 180d -$231); all tested alternatives negative. Intraday disabled, swing left active.",
       "scalp": {
         "skip": true,
         "skipReason": "Only 2/5 timeframes pass scalp \u2014 not consistent"
       },
       "intraday": {
-        "skip": false,
+        "skip": true,
+        "skipReason": "2026-04-29 LIVE_PARITY: intraday options PnL negative across SMC and tested replacements.",
         "strategyType": "smc",
         "minConfidence": 70,
         "maxConfidence": 84

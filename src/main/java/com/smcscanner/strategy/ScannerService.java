@@ -119,8 +119,9 @@ public class ScannerService {
             com.smcscanner.model.TickerProfile.ModeProfile intradayMode = profile.resolveMode("intraday");
             com.smcscanner.model.TickerProfile.ModeProfile swingMode    = profile.resolveMode("swing");
             boolean rootSkip    = profile.isSkip();
+            boolean intradayActive = !intradayMode.isEffectiveSkip(rootSkip);
             boolean anyActive   = !scalpMode.isEffectiveSkip(rootSkip)
-                               || !intradayMode.isEffectiveSkip(rootSkip)
+                               || intradayActive
                                || !swingMode.isEffectiveSkip(rootSkip);
             if (!anyActive) {
                 setTs(ticker,"idle",null,0,"⊘ "+profile.getSkipReason());
@@ -265,6 +266,12 @@ public class ScannerService {
             // ── Intraday alert (5m bars → original Discord channel) ─────────
             long lastBarTs = bars.isEmpty() ? System.currentTimeMillis()
                     : bars.get(bars.size() - 1).getTimestamp();
+            String rootStratType = profile.hasTimeRouting()
+                    ? profile.resolveStrategyForTime(lastBarTs)
+                    : profile.getStrategyType();
+            String intradayStratType = intradayMode.getStrategyType() != null
+                    ? intradayMode.getStrategyType()
+                    : rootStratType;
 
             // ── Universal intraday time gate ──────────────────────────────────
             // Pre-compute so capReversal/fallback overlays share the same gate.
@@ -306,15 +313,9 @@ public class ScannerService {
                     if (st != null) stratTypes.add(st);
                 }
                 // Add intraday sub-profile strategy if that mode is active
-                if (!intradayMode.isEffectiveSkip(rootSkip)) {
-                    String st = intradayMode.getStrategyType();
-                    if (st != null) stratTypes.add(st);
+                if (intradayActive) {
+                    stratTypes.add(intradayStratType);
                 }
-                // Always include root/time-routed strategy as fallback
-                String rootStratType = profile.hasTimeRouting()
-                        ? profile.resolveStrategyForTime(lastBarTs)
-                        : profile.getStrategyType();
-                stratTypes.add(rootStratType);
 
                 if (stratTypes.size() > 1) {
                     log.debug("{} MULTI_STRAT: running {} strategies: {}", ticker, stratTypes.size(), stratTypes);
@@ -426,11 +427,11 @@ public class ScannerService {
             // in recent bars, check for a capitulation reversal bounce.
             // This catches the COIN/SOFI waterfall pattern regardless of configured strategy.
             // Blocked in VOLATILE regime only (too much false-positive noise).
-            if (setups.isEmpty() && !isC && !intradayTooEarly && !intradayTooLate && regime != MarketRegimeDetector.Regime.VOLATILE) {
+            if (intradayActive && setups.isEmpty() && !isC && !intradayTooEarly && !intradayTooLate && regime != MarketRegimeDetector.Regime.VOLATILE) {
                 List<TradeSetup> capSetups = capReversal.detect(bars, ticker, dailyAtr);
                 if (!capSetups.isEmpty()) {
                     log.info("{} CAP_REVERSAL_OVERLAY: waterfall + reversal detected — primary strategy={}", ticker,
-                            profile.hasTimeRouting() ? profile.resolveStrategyForTime(lastBarTs) : profile.getStrategyType());
+                            intradayStratType);
                     setups = capSetups;
                     phaseMsg = "";
                 }
@@ -439,7 +440,7 @@ public class ScannerService {
             // ── Pattern overlays: sweep-flip, PDH/PDL, CHOCH primary ──────────
             // Run for all non-crypto NYSE tickers after primary strategy + cap overlay.
             // These detect setups that don't require a full SMC chain.
-            if (setups.isEmpty() && !isC && !intradayTooEarly && !intradayTooLate) {
+            if (intradayActive && setups.isEmpty() && !isC && !intradayTooEarly && !intradayTooLate) {
                 List<TradeSetup> overlaySetups = new java.util.ArrayList<>();
                 overlaySetups.addAll(sweepFlip.detect(bars, ticker, dailyAtr));
                 overlaySetups.addAll(pdhPdl.detect(bars, ticker, dailyAtr));
@@ -457,10 +458,8 @@ public class ScannerService {
             // e.g. SMC ticker in a RANGING day → try keylevel instead.
             // Only the 3 generic regimes have clear fallbacks; VOLATILE/LOW_LIQUIDITY
             // don't (LOW_LIQUIDITY is already gated above, VOLATILE trusts the profile).
-            if (setups.isEmpty() && !isC && !intradayTooEarly && !intradayTooLate) {
-                String strategyType = profile.hasTimeRouting()
-                        ? profile.resolveStrategyForTime(lastBarTs)
-                        : profile.getStrategyType();
+            if (intradayActive && setups.isEmpty() && !isC && !intradayTooEarly && !intradayTooLate) {
+                String strategyType = intradayStratType;
                 String fallbackStrat = regimeDetector.suggestStrategy(regime, strategyType);
                 if (fallbackStrat != null && !fallbackStrat.equals(strategyType)) {
                     List<TradeSetup> fb = switch (fallbackStrat) {
@@ -600,8 +599,7 @@ public class ScannerService {
                 // ── Volume pressure trap detection ────────────────────────────
                 // BOS with declining bar pressure = institutional trap. Bypassed
                 // for VWAP (mean-reversion) and SQUEEZE regime (volume naturally low).
-                String activeStrat = profile.hasTimeRouting()
-                        ? profile.resolveStrategyForTime(lastBarTs) : profile.getStrategyType();
+                String activeStrat = intradayStratType;
                 int trapAdj = !isC ? pressureService.computeTrapAdj(
                         bars, s.getDirection(), activeStrat, regime) : 0;
                 if (trapAdj != 0) {
@@ -703,9 +701,7 @@ public class ScannerService {
                 // Hard block was wiping valid counter-trend entries that had strong
                 // conviction from other signals (volume, key level, etc).
                 // BYPASS for VWAP: mean-reversion trades intentionally fight the trend.
-                String stratTypeForFilter = profile.hasTimeRouting()
-                        ? profile.resolveStrategyForTime(lastBarTs)
-                        : profile.getStrategyType();
+                String stratTypeForFilter = intradayStratType;
                 boolean is15mApplicable = !"vwap".equals(stratTypeForFilter) && !"vwap3d".equals(stratTypeForFilter);
                 int bias15mAdj = 0;
                 boolean is15mConflict = !isC && is15mApplicable && (
@@ -718,8 +714,7 @@ public class ScannerService {
 
                 // ── News sentiment check ──────────────────────────────────────
                 NewsSentiment sentiment = isC ? NewsSentiment.NONE : news.getSentiment(ticker);
-                String stratType = profile.hasTimeRouting()
-                        ? profile.resolveStrategyForTime(lastBarTs) : profile.getStrategyType();
+                String stratType = intradayStratType;
                 int newsAdj = sentiment.confidenceDelta(s.getDirection(), stratType);
                 if (newsAdj != 0) {
                     log.info("{} news adj={} score={} dir={}", ticker, newsAdj, sentiment.netScore(), s.getDirection());
