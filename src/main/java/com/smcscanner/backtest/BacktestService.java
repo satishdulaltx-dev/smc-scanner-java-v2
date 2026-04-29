@@ -867,6 +867,26 @@ public class BacktestService {
                         : marketCtxService.getContextAt(ticker, dailyBars, spyBars, vixBars, entryEpochMs);
                 int ctxAdj = context.confidenceDelta(setup.getDirection(), effectiveStrat);
 
+                // Hard gate: choch-primary SHORT against bullish news OR positive RS = structural counter-momentum.
+                // Visual review (04/08+04/16 META) confirmed 100% loss rate on these setups —
+                // alignment bonus (+10) was overriding the news/RS penalties, so hard gate is required.
+                boolean isChochPrimaryShort = "short".equals(setup.getDirection())
+                        && setup.getFactorBreakdown() != null
+                        && setup.getFactorBreakdown().startsWith("choch-primary-short");
+                if (isChochPrimaryShort && (sentiment.isBullish() || context.isRsConflicting(setup.getDirection()))) {
+                    log.debug("{} CHOCH_SHORT_BLOCKED: {} — bullishNews={} rsConflict={}",
+                            ticker, date, sentiment.isBullish(), context.isRsConflicting(setup.getDirection()));
+                    trades.add(new TradeResult(ticker, setup.getDirection(), effectiveStrat,
+                            setup.getEntry(), setup.getStopLoss(), setup.getTakeProfit(),
+                            "QUALITY_FILTERED", 0.0,
+                            toDateTime(dayBars.get(end - 1).getTimestamp()), toDateTime(dayBars.get(end - 1).getTimestamp()),
+                            dayBars.get(end - 1).getTimestamp(), dayBars.get(end - 1).getTimestamp(),
+                            setup.getFactorBreakdown(),
+                            setup.getConfidence(), setup.getAtr(), newsAdj, sentiment.label(), ctxAdj, context.rsLabel(),
+                            0, "CHOCH_SHORT_BLOCKED", 0, 0, 0, 0, 0));
+                    continue;
+                }
+
                 // Signal quality: R:R + time-of-day + consecutive loss streak
                 // Streak = consecutive losses at the tail of the last-6-outcomes window
                 java.util.ArrayDeque<Boolean> hist = btOutcomes.getOrDefault(ticker, new java.util.ArrayDeque<>());

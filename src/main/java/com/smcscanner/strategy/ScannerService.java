@@ -769,6 +769,20 @@ public class ScannerService {
                             String.format("%.2f%%", context.rsScore()*100), context.vixLevel(), context.vixRegime());
                 }
 
+                // Hard gate: choch-primary SHORT against bullish news OR positive RS.
+                // Both conditions were present in every META CHOCH short loss (04/08, 04/16).
+                // Alignment bonus was overriding news/RS penalties; hard gate is required.
+                if (!isC && "short".equals(s.getDirection())
+                        && s.getFactorBreakdown() != null
+                        && s.getFactorBreakdown().startsWith("choch-primary-short")
+                        && (sentiment.isBullish() || context.isRsConflicting(s.getDirection()))) {
+                    log.info("{} CHOCH_SHORT_BLOCKED: bullishNews={} rsConflict={} — suppressed",
+                            ticker, sentiment.isBullish(), context.isRsConflicting(s.getDirection()));
+                    setTs(ticker, "idle", null, 0, "⊘ Short CHOCH blocked — bullish news or positive RS");
+                    removeSetup(ticker);
+                    return;
+                }
+
                 // ── Signal quality (R:R + time-of-day + loss streak) ─────────
                 // The entry bar's timestamp drives both R:R and time-of-day checks.
                 // Streak comes from the live adaptive suppressor's file-backed state.
