@@ -20,3 +20,21 @@
 # Build folders
 target/
 build/
+
+# Playwright MCP artifacts
+.playwright-mcp/
+
+# Screenshots and local analysis images
+*.png
+*.jpg
+
+# Local runtime data — live trade state, never commit
+data/
+trades_today.txt
+trades_history.txt
+
+# Local YAML snapshots
+*.yml
+
+# Ad-hoc scripts
+scripts/
