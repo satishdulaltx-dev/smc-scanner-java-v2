@@ -771,7 +771,8 @@
       "swing": {
         "skip": false
       },
-      "intradayRsGate": true
+      "intradayRsGate": true,
+      "vwapLongOnly": true
     },
     {
       "ticker": "UBER",

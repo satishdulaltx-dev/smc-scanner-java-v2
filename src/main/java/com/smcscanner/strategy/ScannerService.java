@@ -368,7 +368,7 @@ public class ScannerService {
                             stratSetups = List.of();
                             if (phaseMsg.isEmpty()) phaseMsg = "⊘ VWAP trade already placed today";
                         } else {
-                            stratSetups = vwap.detect(bars, ticker, dailyAtr);
+                            stratSetups = vwap.detect(bars, ticker, dailyAtr, false, profile.isVwapLongOnly());
                             if (stratSetups.isEmpty() && phaseMsg.isEmpty()) phaseMsg = "Waiting for VWAP reversion...";
                         }
                     } else if ("breakout".equals(strat)) {

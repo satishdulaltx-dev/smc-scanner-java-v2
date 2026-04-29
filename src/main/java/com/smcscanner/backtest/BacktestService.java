@@ -416,7 +416,7 @@ public class BacktestService {
                             .collect(Collectors.toList());
                     bSetups = scalpDetector.detect(window, spySlice, ticker, dailyAtr, true);
                 } else if ("vwap".equals(effectiveStrat)) {
-                    bSetups = vwapDetector.detect(window, ticker, dailyAtr, true);
+                    bSetups = vwapDetector.detect(window, ticker, dailyAtr, true, bp.isVwapLongOnly());
                 } else if ("breakout".equals(effectiveStrat)) {
                     bSetups = breakoutDetector.detect(window, ticker, dailyAtr, true);
                 } else if ("gap".equals(effectiveStrat)) {

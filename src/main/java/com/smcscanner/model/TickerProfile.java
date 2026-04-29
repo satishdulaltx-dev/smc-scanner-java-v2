@@ -114,6 +114,10 @@ public class TickerProfile {
     // This filters out noise trades in HFT-dominated stocks — the edge is in divergence from SPY.
     private Boolean intradayRsGate = null; // default false
 
+    // When true: VWAP strategy only fires LONG setups for this ticker.
+    // Use for momentum stocks (TSLA) where VWAP shorts have a 100% backtest loss rate.
+    private Boolean vwapLongOnly = null;
+
     // Per-ticker dead zone hard blocks — hours (ET, 0-23) where this ticker historically loses.
     // Data-driven: set only after reviewing loss-by-hour from backtest loss analysis.
     // Does NOT affect any other ticker. Empty = no hour blocked (default).
@@ -191,6 +195,7 @@ public class TickerProfile {
     public double resolveTpRrRatio()  { return tpRrRatio != null ? tpRrRatio : 1.5; }
     /** Whether this ticker requires intraday RS vs SPY divergence to fire signals. */
     public boolean isIntradayRsGate() { return intradayRsGate != null && intradayRsGate; }
+    public boolean isVwapLongOnly()   { return vwapLongOnly   != null && vwapLongOnly;   }
 
     /**
      * Resolve which strategy to run based on the bar's epoch-ms timestamp.
@@ -229,6 +234,7 @@ public class TickerProfile {
     public void setSlAtrMult(Double v)       { this.slAtrMult = v; }
     public void setTpRrRatio(Double v)       { this.tpRrRatio = v; }
     public void setIntradayRsGate(Boolean v) { this.intradayRsGate = v; }
+    public void setVwapLongOnly(Boolean v)   { this.vwapLongOnly   = v; }
     public java.util.List<Integer> getSkipHours() { return skipHours; }
     public void setSkipHours(java.util.List<Integer> v) { this.skipHours = v; }
     /** Returns true if entries at this ET hour should be hard-blocked for this ticker. */

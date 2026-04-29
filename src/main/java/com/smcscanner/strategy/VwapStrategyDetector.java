@@ -32,10 +32,14 @@ public class VwapStrategyDetector {
      * @return list of detected setups (0 or 1 element)
      */
     public List<TradeSetup> detect(List<OHLCV> bars, String ticker, double dailyAtr) {
-        return detect(bars, ticker, dailyAtr, false);
+        return detect(bars, ticker, dailyAtr, false, false);
     }
 
     public List<TradeSetup> detect(List<OHLCV> bars, String ticker, double dailyAtr, boolean backtestMode) {
+        return detect(bars, ticker, dailyAtr, backtestMode, false);
+    }
+
+    public List<TradeSetup> detect(List<OHLCV> bars, String ticker, double dailyAtr, boolean backtestMode, boolean longOnly) {
         List<TradeSetup> result = new ArrayList<>();
         if (bars == null || bars.isEmpty()) return result;
 
@@ -276,6 +280,8 @@ public class VwapStrategyDetector {
         //
         // Hard block: trendStronglyBullish OR steep bullish slope only blocks SHORT.
         // LONG evaluation above runs independently.
+        // vwapLongOnly: momentum tickers (TSLA) where backtest shows 100% short loss rate.
+        if (longOnly) return result;
         if (!trendStronglyBullish && !steepBullishSlope && highestClose > vwap + 0.5 * curAtr && zScore > 1.2) {
             // ── 2-bar confirmation window (SHORT side) ───────────────────────
             OHLCV confirmBarShort = last;
