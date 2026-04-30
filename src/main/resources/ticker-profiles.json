@@ -106,17 +106,16 @@
         11
       ],
       "skip": false,
-      "note": "Apr 2026 full sweep: smc 5/5 timeframes intraday (87T 61%WR $1760 at 365d), swing 3/3 ($1630), scalp 4/5. Was wrongly skipped on 3 bad trades in one 90d window. Aerospace moves DO follow SMC patterns \u2014 the original test was too small a sample. | 2026-04-29 LIVE_PARITY retest: intraday SMC no longer viable for options (90d -$108, 180d -$379); all tested alternatives also negative. Intraday disabled, swing/scalp left active.",
+      "note": "2026-04-30 HYBRID backtest: intraday SMC RE-ENABLED. +$336 (30d/15T/50%WR) and +$349 (60d/26T/52%WR) options P&L \u2014 regime shifted positive. Apr 2026 LIVE_PARITY showed 90d -$108 but current 30-60d window is positive. minConf raised 70\u219275 for quality gate.",
       "scalp": {
         "skip": false,
         "strategyType": "scalp",
         "minConfidence": 70
       },
       "intraday": {
-        "skip": true,
-        "skipReason": "2026-04-29 LIVE_PARITY: intraday SMC/options negative; no tested replacement strategy positive.",
+        "skip": false,
         "strategyType": "smc",
-        "minConfidence": 70,
+        "minConfidence": 75,
         "maxConfidence": 84
       },
       "swing": {
@@ -167,7 +166,8 @@
         "minConfidence": 72
       },
       "intraday": {
-        "skip": false,
+        "skip": true,
+        "skipReason": "2026-04-30 backtest: breakout 0%WR 30d -0.47exp, 33%WR 60d -0.40exp. ORB breakout strategy not finding edge — too many false breakouts on choppy open. Scalp mode left active.",
         "strategyType": "breakout",
         "minConfidence": 70,
         "maxConfidence": 84,
@@ -404,7 +404,8 @@
         "skipReason": "Apr 2026 VWAP scalp validation: 36.8% WR -0.12% exp \u2014 negative edge"
       },
       "intraday": {
-        "skip": false,
+        "skip": true,
+        "skipReason": "2026-04-30 HYBRID backtest: vsqueeze -$389 (30d), -$104 (60d), -$62 (90d). Consistently negative options P&L across all windows. Small vsqueeze sample (+$611 at 180d 4 trades) was noise.",
         "strategyType": "vsqueeze",
         "minConfidence": 78,
         "maxConfidence": 90,
@@ -493,7 +494,8 @@
         "minConfidence": 68
       },
       "intraday": {
-        "skip": false,
+        "skip": true,
+        "skipReason": "2026-04-30 HYBRID backtest: keylevel -$50 (30d), -$242 (60d). Negative options P&L despite 64.3% CLASSIC WR at 90d — wins too slow/small to recover options premium.",
         "strategyType": "keylevel",
         "minConfidence": 78
       },
@@ -696,11 +698,11 @@
       "skipReason": "Apr 2026: skipped after full strategy sweep. All 6 strategies negative on LIVE_PARITY 180d \u2014 best was vwap -$303 at 80% WR. Root cause: SOFI ~$13 stock, avg win move 0.85% = ~$0.11/share. Options premium (~$10-15) cannot be overcome by such small moves regardless of WR. Not viable for options trading until price >$20.",
       "note": "Apr 2026 90d: skipHours=[11,12] added \u2014 loss analysis showed 11am=100% loss rate (3/3), 12pm=75% loss rate (12/16). Other hours unaffected.",
       "scalp": {
-        "skip": false,
+        "skip": true,
+        "skipReason": "2026-04-30 HYBRID backtest: avg options win $1.23 vs avg loss $10.51 \u2014 stock too cheap (~$15) for options premium recovery regardless of 65% WR. -$865 options P&L over 90d. Structurally broken.",
         "strategyType": "scalp",
         "minConfidence": 62,
-        "tpRrRatio": 1.5,
-        "note": "Apr 2026 VWAP scalp validation: 56.7% WR +0.36% exp on 31 trades \u2014 stock now $15-17, edge confirmed. minConf lowered 72\u219262 to offset SPECULATIVE_LOW_PRICE -10 penalty (raw 72 was too restrictive)"
+        "tpRrRatio": 1.5
       },
       "intraday": {
         "skip": true,
