@@ -151,26 +151,21 @@ public class KeyLevelStrategyDetector {
                 }
                 if (!approachingFromBelow) continue; // price arrived from wrong side — skip
 
-                boolean touched      = curHigh >= levelPrice * (1 - TOUCH_TOLERANCE);
-                boolean rejectedDown = curClose <= levelPrice * (1 + TOUCH_TOLERANCE * 0.3);
-                // ── 2-bar confirmation: if previous bar was the rejection candle, use it ──
-                OHLCV shortConfirm = last;
-                if (sessionBars.size() >= 2) {
-                    OHLCV prev = sessionBars.get(sessionBars.size() - 2);
-                    if (prev.getClose() < prev.getOpen() && prev.getVolume() > avgVol * 1.2
-                            && prev.getHigh() >= levelPrice * (1 - TOUCH_TOLERANCE)
-                            && last.getClose() <= prev.getClose() * 1.002) {
-                        shortConfirm = prev;
-                        touched = true; // prev bar touched the level
-                    }
-                }
-                boolean bearishBar   = shortConfirm.getClose() < shortConfirm.getOpen();
-                boolean upperWick    = (shortConfirm.getHigh() - shortConfirm.getClose()) > atr * 0.15;
-                boolean volConfirmed = shortConfirm.getVolume() > avgVol * 1.2;
+                if (sessionBars.size() < 2) continue;
+                OHLCV rejectBar = sessionBars.get(sessionBars.size() - 2);
+                OHLCV confirmBar = last;
+
+                boolean touched      = rejectBar.getHigh() >= levelPrice * (1 - TOUCH_TOLERANCE);
+                boolean rejectedDown = rejectBar.getClose() <= levelPrice * (1 + TOUCH_TOLERANCE * 0.3);
+                boolean bearishBar   = rejectBar.getClose() < rejectBar.getOpen();
+                boolean upperWick    = (rejectBar.getHigh() - rejectBar.getClose()) > atr * 0.15;
+                boolean volConfirmed = rejectBar.getVolume() > avgVol * 1.2;
+                boolean followThrough = confirmBar.getClose() <= rejectBar.getClose()
+                        && confirmBar.getLow() <= rejectBar.getLow();
                 // Counter-trend flag: shorting into an uptrend reduces conviction
                 boolean counterTrend = "up".equals(htfTrend);
 
-                if (touched && rejectedDown && bearishBar && volConfirmed) {
+                if (touched && rejectedDown && bearishBar && volConfirmed && followThrough) {
                     double entry = r4(curClose);
                     double sl    = r4(levelPrice + atr * slMult);
                     // Safety guard: sl must be above entry for a short
@@ -188,10 +183,10 @@ public class KeyLevelStrategyDetector {
                             if (touches >= 3)                         confidence += 10;
                             if (touches >= 4)                         confidence += 5;
                             if (upperWick)                            confidence += 5;
-                            if (last.getVolume() > avgVol * 2.0)     confidence += 5;
+                            if (rejectBar.getVolume() > avgVol * 2.0) confidence += 5;
                             if (counterTrend)                         confidence -= 8;
 
-                            double volRatio = avgVol > 0 ? last.getVolume() / avgVol : 1.0;
+                            double volRatio = avgVol > 0 ? rejectBar.getVolume() / avgVol : 1.0;
                             String factors = String.format(
                                     "keylevel-short | level=$%.2f | touches=%d | type=RESISTANCE" +
                                     " | wick=%s | vol=%.1f×avg | trend=%s | R:R=%.1f",
@@ -244,26 +239,21 @@ public class KeyLevelStrategyDetector {
                 }
                 if (!approachingFromAbove) continue; // price arrived from wrong side — skip
 
-                boolean touched      = curLow <= levelPrice * (1 + TOUCH_TOLERANCE);
-                boolean bouncedUp    = curClose >= levelPrice * (1 - TOUCH_TOLERANCE * 0.3);
-                // ── 2-bar confirmation: if previous bar was the bounce candle, use it ──
-                OHLCV longConfirm = last;
-                if (sessionBars.size() >= 2) {
-                    OHLCV prev = sessionBars.get(sessionBars.size() - 2);
-                    if (prev.getClose() > prev.getOpen() && prev.getVolume() > avgVol * 1.2
-                            && prev.getLow() <= levelPrice * (1 + TOUCH_TOLERANCE)
-                            && last.getClose() >= prev.getClose() * 0.998) {
-                        longConfirm = prev;
-                        touched = true; // prev bar touched the level
-                    }
-                }
-                boolean bullishBar   = longConfirm.getClose() > longConfirm.getOpen();
-                boolean lowerWick    = (longConfirm.getClose() - longConfirm.getLow()) > atr * 0.15;
-                boolean volConfirmed = longConfirm.getVolume() > avgVol * 1.2;
+                if (sessionBars.size() < 2) continue;
+                OHLCV rejectBar = sessionBars.get(sessionBars.size() - 2);
+                OHLCV confirmBar = last;
+
+                boolean touched      = rejectBar.getLow() <= levelPrice * (1 + TOUCH_TOLERANCE);
+                boolean bouncedUp    = rejectBar.getClose() >= levelPrice * (1 - TOUCH_TOLERANCE * 0.3);
+                boolean bullishBar   = rejectBar.getClose() > rejectBar.getOpen();
+                boolean lowerWick    = (rejectBar.getClose() - rejectBar.getLow()) > atr * 0.15;
+                boolean volConfirmed = rejectBar.getVolume() > avgVol * 1.2;
+                boolean followThrough = confirmBar.getClose() >= rejectBar.getClose()
+                        && confirmBar.getHigh() >= rejectBar.getHigh();
                 // Counter-trend flag: buying into a downtrend reduces conviction
                 boolean counterTrend = "down".equals(htfTrend);
 
-                if (touched && bouncedUp && bullishBar && volConfirmed) {
+                if (touched && bouncedUp && bullishBar && volConfirmed && followThrough) {
                     double entry = r4(curClose);
                     double sl    = r4(levelPrice - atr * slMult);
                     // Safety guard: sl must be below entry for a long
@@ -281,10 +271,10 @@ public class KeyLevelStrategyDetector {
                             if (touches >= 3)                         confidence += 10;
                             if (touches >= 4)                         confidence += 5;
                             if (lowerWick)                            confidence += 5;
-                            if (last.getVolume() > avgVol * 2.0)     confidence += 5;
+                            if (rejectBar.getVolume() > avgVol * 2.0) confidence += 5;
                             if (counterTrend)                         confidence -= 8;
 
-                            double volRatio = avgVol > 0 ? last.getVolume() / avgVol : 1.0;
+                            double volRatio = avgVol > 0 ? rejectBar.getVolume() / avgVol : 1.0;
                             String factors = String.format(
                                     "keylevel-long | level=$%.2f | touches=%d | type=SUPPORT" +
                                     " | wick=%s | vol=%.1f×avg | trend=%s | R:R=%.1f",
