@@ -1111,10 +1111,44 @@ public class ScannerService {
                 double maxIntradayEntryDrift = s.getAtr() > 0 ? s.getAtr() * 1.5 : dailyAtr * 0.5;
                 boolean intradayEntryReachable = intradayCurrentPrice > 0
                         && Math.abs(intradayCurrentPrice - s.getEntry()) <= maxIntradayEntryDrift;
+                boolean scalpOptionSetup = "scalp".equals(s.getVolatility());
+                double setupRisk = Math.abs(s.getStopLoss() - s.getEntry());
+                boolean strongFlowConflict = flow.hasData() && flow.isConflicting(s.getDirection())
+                        && (("short".equals(s.getDirection()) && flow.pcRatioVol() >= 3.0)
+                         || ("long".equals(s.getDirection()) && flow.pcRatioVol() <= 0.33));
+                double maxPain = s.getOptionsMaxPain();
+                boolean adverseMaxPainMagnet = maxPain > 0 && setupRisk > 0
+                        && (("short".equals(s.getDirection())
+                                && maxPain >= s.getEntry()
+                                && maxPain <= s.getStopLoss())
+                         || ("long".equals(s.getDirection())
+                                && maxPain <= s.getEntry()
+                                && maxPain >= s.getStopLoss()));
 
                 if (s.getConfidence() > effectiveMaxConf) {
                     log.debug("{} OVEREXTENDED conf={} maxConf={} — skipping over-extended signal",
                             ticker, s.getConfidence(), effectiveMaxConf);
+                } else if (s.hasOptionsData() && s.getOptionsRR() > 0 && s.getOptionsRR() < 0.8) {
+                    log.info("{} OPTIONS_RR_BLOCK: optionsRR={} too weak for directional buy; stockRR={} entry={} tp={} sl={}",
+                            ticker, String.format("%.2f", s.getOptionsRR()),
+                            String.format("%.2f", s.rrRatio()), s.getEntry(), s.getTakeProfit(), s.getStopLoss());
+                    removeSetup(ticker);
+                    setTs(ticker, "idle", null, 0, "⊘ Options R:R too weak");
+                    return;
+                } else if (scalpOptionSetup && strongFlowConflict) {
+                    log.info("{} FLOW_CONFLICT_BLOCK: {} flow ratio={} conflicts with {} scalp",
+                            ticker, flow.flowDirection(), String.format("%.2f", flow.pcRatioVol()),
+                            s.getDirection().toUpperCase());
+                    removeSetup(ticker);
+                    setTs(ticker, "idle", null, 0, "⊘ Options flow conflicts");
+                    return;
+                } else if (scalpOptionSetup && adverseMaxPainMagnet) {
+                    log.info("{} MAX_PAIN_BLOCK: maxPain={} sits between entry={} and stop={} for {} scalp",
+                            ticker, String.format("%.2f", maxPain), s.getEntry(), s.getStopLoss(),
+                            s.getDirection().toUpperCase());
+                    removeSetup(ticker);
+                    setTs(ticker, "idle", null, 0, "⊘ Max pain magnet against setup");
+                    return;
                 } else if (!intradayEntryReachable) {
                     log.info("INTRADAY STALE {} {} entry={} currentPrice={} drift={} > 1.5×ATR({}), skipping",
                             ticker, s.getDirection(), s.getEntry(), intradayCurrentPrice,
