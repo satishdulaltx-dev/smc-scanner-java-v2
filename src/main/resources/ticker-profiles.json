@@ -105,21 +105,25 @@
       "skipHours": [
         11
       ],
-      "skip": false,
-      "note": "2026-04-30 HYBRID backtest: intraday SMC RE-ENABLED. +$336 (30d/15T/50%WR) and +$349 (60d/26T/52%WR) options P&L \u2014 regime shifted positive. Apr 2026 LIVE_PARITY showed 90d -$108 but current 30-60d window is positive. minConf raised 70\u219275 for quality gate.",
+      "skip": true,
+      "skipReason": "2026-04-30 30/60/90/180 HYBRID sweep: long-horizon decay confirmed. BA fell to -$227 at 180d; short-term 30-60d strength was not stable enough for annual target profile.",
+      "note": "2026-04-30 HYBRID backtest: intraday SMC RE-ENABLED. +$336 (30d/15T/50%WR) and +$349 (60d/26T/52%WR) options P&L \u2014 regime shifted positive. Apr 2026 LIVE_PARITY showed 90d -$108 but current 30-60d window is positive. minConf raised 70\u219275 for quality gate. | 2026-04-30 long-horizon retest: disabled again for default profile because 180d options P&L remained negative.",
       "scalp": {
-        "skip": false,
+        "skip": true,
+        "skipReason": "Long-horizon profile: BA scalp contributed to 180d decay.",
         "strategyType": "scalp",
         "minConfidence": 70
       },
       "intraday": {
-        "skip": false,
+        "skip": true,
+        "skipReason": "Long-horizon profile: 180d options P&L negative despite recent 30-60d strength.",
         "strategyType": "smc",
         "minConfidence": 75,
         "maxConfidence": 84
       },
       "swing": {
-        "skip": false
+        "skip": true,
+        "skipReason": "Long-horizon profile: disable until 180d options P&L turns positive."
       }
     },
     {
@@ -141,7 +145,8 @@
         "skipReason": "Chinese ADR \u2014 institutional flow not SMC-readable"
       },
       "swing": {
-        "skip": false
+        "skip": true,
+        "skipReason": "2026-04-30 180d HYBRID: BABA swing/SMC options P&L negative; ADR flow not reliable enough for annual target profile."
       },
       "skipReason": "Chinese ADR \u2014 thin US session flow, unreliable SMC setups."
     },
@@ -174,7 +179,8 @@
         "tpRrRatio": 2.5
       },
       "swing": {
-        "skip": false
+        "skip": true,
+        "skipReason": "2026-04-30 180d HYBRID: breakout/swing leg negative. Keep COIN scalp only; block ORB/swing false-breakout exposure."
       }
     },
     {
@@ -222,7 +228,8 @@
         "skipReason": "All strategies negative on LIVE_PARITY 180d"
       },
       "swing": {
-        "skip": false,
+        "skip": true,
+        "skipReason": "2026-04-30 30/60/90/180 HYBRID sweep: DDOG swing/VWAP only added a tiny +$38 over 180d with low sample; not enough edge for annual target profile.",
         "strategyType": "vwap",
         "minConfidence": 70
       }
@@ -254,9 +261,9 @@
         "skipReason": "GLD too slow for scalp options edge after spread/slippage."
       },
       "intraday": {
-        "skip": false,
+        "skip": true,
         "strategyType": "vwap",
-        "skipReason": "Selective VWAP-reversion only. Not SMC.",
+        "skipReason": "2026-04-30 30/60/90/180 HYBRID sweep: GLD VWAP stayed negative; macro ETF options decay overwhelms small reversion moves.",
         "minConfidence": 80,
         "maxConfidence": 92,
         "slAtrMult": 0.9,
@@ -286,21 +293,25 @@
       "maxConfidence": 84,
       "slAtrMult": 1.0,
       "tpRrRatio": 1.5,
-      "skip": false,
-      "note": "Apr 2026 full sweep: passes ALL 8 strategies \u00d7 ALL 5 timeframes. Best intraday: vwap 90d 82.4%WR $1470, vsqueeze 90d 84.6%WR $1363. Was wrongly skipped \u2014 SMC 5m was weak but VWAP is dominant (mega-cap VWAP-magnet). Scalp 83.3%WR 30d. Swing 76.5%WR 90d.",
+      "skip": true,
+      "skipReason": "2026-04-30 30/60/90/180 HYBRID sweep: GOOGL decayed from +$1083 at 30d to -$1077 at 180d. VWAP/scalp setups are recent-regime only, not annual-target stable.",
+      "note": "Apr 2026 full sweep: passes ALL 8 strategies \u00d7 ALL 5 timeframes. Best intraday: vwap 90d 82.4%WR $1470, vsqueeze 90d 84.6%WR $1363. Was wrongly skipped \u2014 SMC 5m was weak but VWAP is dominant (mega-cap VWAP-magnet). Scalp 83.3%WR 30d. Swing 76.5%WR 90d. | 2026-04-30 long-horizon retest: disabled for default profile because 180d options P&L turned materially negative.",
       "scalp": {
-        "skip": false,
+        "skip": true,
+        "skipReason": "Long-horizon profile: GOOGL scalp was negative at 180d.",
         "strategyType": "scalp",
         "minConfidence": 70
       },
       "intraday": {
-        "skip": false,
+        "skip": true,
+        "skipReason": "Long-horizon profile: GOOGL VWAP was the largest 180d strategy drag.",
         "strategyType": "vwap",
         "minConfidence": 70,
         "maxConfidence": 84
       },
       "swing": {
-        "skip": false
+        "skip": true,
+        "skipReason": "Long-horizon profile: inherited VWAP/swing exposure not stable over 180d."
       }
     },
     {
@@ -382,7 +393,8 @@
         "skipReason": "Options P&L negative on HYBRID exits (small $15 stock)"
       },
       "swing": {
-        "skip": false,
+        "skip": true,
+        "skipReason": "2026-04-30 HYBRID backtest: cheap stock (~$15) swing options P&L -$172/30d despite 70% WR. BTC-erratic moves too unpredictable for multi-day option holds.",
         "strategyType": "smc",
         "minConfidence": 70
       }
@@ -413,7 +425,8 @@
         "tpRrRatio": 2.0
       },
       "swing": {
-        "skip": false
+        "skip": true,
+        "skipReason": "2026-04-30 180d HYBRID: META swing/SMC produced 0 wins and negative options P&L."
       },
       "dispAtrMult": 1.5
     },
@@ -489,7 +502,8 @@
       "tpRrRatio": 2.5,
       "note": "Apr 2026 30d optimizer: smc minC=78 SL=1.0 TP=2.0 \u2192 6T 83.3%WR $797. Prior vwap generated 1T -$16 in 30d. 180d vwap was near-zero but 30d smc dominates. | 2026-04-29 LIVE_PARITY retest: SMC still has strong underlying WR but options PnL negative (90d -$97, 180d -$101). keylevel was the only positive tested intraday replacement at 180d (+$46), so intraday routed to keylevel.",
       "scalp": {
-        "skip": false,
+        "skip": true,
+        "skipReason": "2026-04-30 180d HYBRID: NFLX scalp options P&L negative despite decent WR; premium decay too high.",
         "strategyType": "scalp",
         "minConfidence": 68
       },
@@ -500,7 +514,8 @@
         "minConfidence": 78
       },
       "swing": {
-        "skip": false,
+        "skip": true,
+        "skipReason": "2026-04-30 180d HYBRID: NFLX SMC/swing options P&L negative; wins too small/slow for bought options.",
         "strategyType": "smc"
       }
     },
@@ -533,7 +548,8 @@
         "minConfidence": 78
       },
       "swing": {
-        "skip": false
+        "skip": true,
+        "skipReason": "2026-04-30 180d HYBRID: NVDA SMC/swing was the worst ticker-strategy drag (-$860). Disable until regime improves."
       }
     },
     {
@@ -558,7 +574,8 @@
       "maxConfidence": 92,
       "note": "Apr 2026 180d optimizer: 0 viable combos \u2014 dispAtrMult=1.3 was pre-filtering displacement before quality scoring, leaving no chains. Removed dispAtrMult override (let default apply). Widened maxConf 84\u219292 to allow quality scores from new scoring system. Apr 2026 SMC confirmed best: SCALP mode $908 > Bollinger Scalp $591. | 2026-04-29 LIVE_PARITY retest: intraday SMC roughly breakeven but still negative for options (90d -$134, 180d -$57); all tested alternatives worse. Intraday disabled, scalp/swing left active.",
       "scalp": {
-        "skip": false,
+        "skip": true,
+        "skipReason": "2026-04-30 180d HYBRID: PLTR scalp negative; recent windows not stable enough for annual target profile.",
         "strategyType": "scalp",
         "minConfidence": 65
       },
@@ -569,7 +586,8 @@
         "minConfidence": 62
       },
       "swing": {
-        "skip": false
+        "skip": true,
+        "skipReason": "2026-04-30 180d HYBRID: PLTR SMC/swing negative; disable duplicate SMC exposure."
       }
     },
     {
@@ -589,10 +607,12 @@
       "skipHours": [
         15
       ],
-      "skip": false,
+      "skip": true,
+      "skipReason": "2026-04-30 180d HYBRID: QQQ default profile negative (-$700). Index ETF setups are too regime-sensitive for annual target default.",
       "note": "Apr 2026 full sweep: smc intraday 365d 62.3%WR $2638. Scalp exceptionally strong \u2014 73.5%WR 365d, 100%WR 30d. Was wrongly skipped on VWAP only \u2014 SMC is the right strategy for QQQ. 60d/90d windows thin (regime-sensitive), reliable at 30d and 180d+. | Apr 2026 SMC disabled: Index ETF \u2014 same as SPY. 30d: 14.3% WR -$195, 180d: 33.3% WR -$482. Zero edge on SMC.",
       "scalp": {
-        "skip": false,
+        "skip": true,
+        "skipReason": "Long-horizon profile: QQQ scalp was negative at 180d.",
         "strategyType": "scalp",
         "minConfidence": 75
       },
@@ -601,9 +621,9 @@
         "skipReason": "Index ETF \u2014 no SMC edge"
       },
       "swing": {
-        "skip": false
-      },
-      "skipReason": "Index ETF \u2014 no SMC edge across any mode. 30d: 14.3% WR -$195."
+        "skip": true,
+        "skipReason": "Long-horizon profile: QQQ swing/SMC was negative at 180d."
+      }
     },
     {
       "ticker": "RIOT",
@@ -709,7 +729,8 @@
         "skipReason": "Options P&L structurally negative \u2014 stock too cheap"
       },
       "swing": {
-        "skip": false,
+        "skip": true,
+        "skipReason": "2026-04-30 HYBRID backtest: SOFI options P&L structurally negative across longer windows; disable swing too.",
         "strategyType": "vwap",
         "minConfidence": 62
       }
@@ -726,7 +747,7 @@
         9,
         15
       ],
-      "skip": false,
+      "skip": true,
       "skipReason": "Index ETF \u2014 no SMC edge across any mode. 30d: 28.6% WR -$482.",
       "note": "Apr 2026 HYBRID backtest switch: smc $212 > breakout -$107 > keylevel -$175 > vwap -$327. SMC 78.6% WR on SPY at 180d HYBRID \u2014 FVG sweeps on index are driven by futures/macro imbalances that create clean institutional order flow. | Apr 2026 SMC disabled: Index ETF \u2014 macro-driven, SMC zones get steamrolled by broad market moves. 30d: 28.6% WR, -$482.",
       "scalp": {
@@ -738,7 +759,8 @@
         "skipReason": "Index ETF \u2014 SMC zones not structural"
       },
       "swing": {
-        "skip": false
+        "skip": true,
+        "skipReason": "2026-04-30 180d HYBRID: SPY swing/SMC remained negative; keep index ETFs out of annual target profile."
       }
     },
     {
@@ -814,7 +836,8 @@
       ],
       "note": "skip=true; V is a stable mega-cap with tiny intraday ranges. Revisit with daily-bar swing strategy.",
       "swing": {
-        "skip": false,
+        "skip": true,
+        "skipReason": "2026-04-30 180d HYBRID: V keylevel swing options P&L negative; slow financial name does not pay for options premium.",
         "strategyType": "keylevel",
         "minConfidence": 70
       }

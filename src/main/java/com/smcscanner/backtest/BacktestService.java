@@ -1863,9 +1863,10 @@ public class BacktestService {
      * Mirrors live ScannerService: scalp, intraday, and swing signals fire independently —
      * you can have both a scalp trade and an intraday trade on the same ticker in the same day.
      *
-     * Deduplication: if two tiers use the exact same strategy and fire on the same day
-     * at the same entry price, only keep the one with the widest hold window (swing > intraday > scalp).
-     * This prevents triple-counting when scalp/intraday/swing all map to "smc".
+     * Deduplication: if two tiers fire on the same 5m setup with the same direction
+     * and entry, only keep the widest hold window (swing > intraday > scalp). This
+     * prevents double exposure when two detectors label the same physical setup
+     * differently, for example "smc" and "scalp" on the same sweep/CHOCH candle.
      */
     private BacktestResult runCombinedAll(String ticker, int lookbackDays, BacktestExitStyle exitStyle) {
         TickerProfile bp = config.getTickerProfile(ticker);
@@ -1890,37 +1891,57 @@ public class BacktestService {
         // Applies to both executed AND filtered outcomes so filtered signals don't appear twice
         // when intraday and swing share the same strategy.
         Set<String> swingClaimed = new HashSet<>();
+        Set<String> setupClaimed = new HashSet<>();
         for (TradeResult t : swingResult.trades) {
             long bucket = (t.entryEpochMs() / 60000L) * 60000L; // floor to minute
             swingClaimed.add(bucket + "|" + t.strategy() + "|" + t.direction());
+            if (!isFilteredOutcome(t)) {
+                setupClaimed.add(setupExposureKey(t));
+            }
         }
 
-        // Add intraday only if a different strategy OR swing didn't already claim that slot
+        // Add intraday only if swing didn't already claim the same strategy slot or exact setup.
         Set<String> intradayClaimed = new HashSet<>(swingClaimed);
         for (TradeResult t : intradayResult.trades) {
             long bucket = (t.entryEpochMs() / 60000L) * 60000L;
             String key  = bucket + "|" + t.strategy() + "|" + t.direction();
+            String setupKey = setupExposureKey(t);
+            if (setupClaimed.contains(setupKey)) continue;
             if (intradayStrat.equals(swingStrat) && swingClaimed.contains(key)) continue;
             merged.add(t);
             intradayClaimed.add(key);
+            if (!isFilteredOutcome(t)) {
+                setupClaimed.add(setupKey);
+            }
         }
 
-        // Add scalp only if it uses a distinct strategy OR neither swing nor intraday claimed the slot
+        // Add scalp only if it uses a distinct strategy and no wider tier claimed the exact setup.
         for (TradeResult t : scalpResult.trades) {
             long bucket = (t.entryEpochMs() / 60000L) * 60000L;
             String key  = bucket + "|" + t.strategy() + "|" + t.direction();
+            String setupKey = setupExposureKey(t);
+            if (setupClaimed.contains(setupKey)) continue;
             if (scalpStrat.equals(swingStrat)    && swingClaimed.contains(key))    continue;
             if (scalpStrat.equals(intradayStrat) && intradayClaimed.contains(key)) continue;
             merged.add(t);
+            if (!isFilteredOutcome(t)) {
+                setupClaimed.add(setupKey);
+            }
         }
 
         merged.sort(Comparator.comparingLong(TradeResult::entryEpochMs));
 
-        log.info("Backtest {} ({} days, ALL combined): scalp={} intraday={} swing={} → merged={} (deduped by same-strat-same-day)",
+        log.info("Backtest {} ({} days, ALL combined): scalp={} intraday={} swing={} → merged={} (deduped by setup exposure)",
                 ticker, lookbackDays,
                 scalpResult.trades.size(), intradayResult.trades.size(),
                 swingResult.trades.size(), merged.size());
 
         return BacktestResult.of(ticker, merged, lookbackDays, BacktestMode.ALL);
+    }
+
+    private static String setupExposureKey(TradeResult t) {
+        long bucket = (t.entryEpochMs() / 60000L) * 60000L;
+        long entryCents = Math.round(t.entry() * 100.0);
+        return bucket + "|" + t.direction() + "|" + entryCents;
     }
 }
