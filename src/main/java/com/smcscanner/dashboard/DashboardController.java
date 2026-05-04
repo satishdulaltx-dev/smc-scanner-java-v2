@@ -156,6 +156,12 @@ public class DashboardController {
         try { return Double.parseDouble(v.toString()); } catch (Exception e) { return 0.0; }
     }
 
+    private static long toLong(Object v) {
+        if (v == null) return 0L;
+        if (v instanceof Number n) return n.longValue();
+        try { return Long.parseLong(v.toString()); } catch (Exception e) { return 0L; }
+    }
+
     @GetMapping("/")
     public String dashboard(Model model) {
         List<String> tickers = config.loadWatchlist();
@@ -955,17 +961,35 @@ public class DashboardController {
             String underlying = underlyingFromOcc(symbol);
             Map<String, Object> openTrade = liveLog.findOpenTradeForPosition(symbol, underlying);
             if (openTrade != null) {
+                double entry = toDouble(openTrade.get("entry"));
+                double sl    = toDouble(openTrade.get("stopLoss"));
+                double tp    = toDouble(openTrade.get("takeProfit"));
+                String dir   = String.valueOf(openTrade.getOrDefault("direction", inferDirectionFromOcc(symbol)));
+                long entryTs = toLong(openTrade.get("timestamp"));
+
+                boolean recovered = alpaca.recoverTrackedPosition(symbol, underlying, dir, entry, sl, tp, entryTs);
+                if (recovered) {
+                    try {
+                        alpaca.checkTrailingStops();
+                    } catch (Exception ex) {
+                        log.warn("ALPACA_RECOVER_REFRESH {}: immediate trail check failed — {}", underlying, ex.getMessage());
+                    }
+                }
+                var actual = alpaca.getTrackedPositions().get(underlying);
+
                 pos.put("tracked", true);
                 pos.put("tracked_underlying", underlying);
-                pos.put("tracked_direction", openTrade.get("direction"));
-                pos.put("tracked_entry", openTrade.get("entry"));
-                pos.put("tracked_stop_loss", openTrade.get("stopLoss"));
-                pos.put("tracked_take_profit", openTrade.get("takeProfit"));
-                pos.put("tracked_peak_close", openTrade.get("entry"));
-                pos.put("tracked_reversal_count", 0);
-                pos.put("tracked_options_contract", openTrade.get("optionsContract"));
-                pos.put("tracked_trail_label", "Recovered from trade log");
-                pos.put("tracked_trail_method", "Recovered from live trade log (app tracker missing)");
+                pos.put("tracked_direction", actual != null ? actual.direction() : dir);
+                pos.put("tracked_entry", actual != null ? actual.entry() : entry);
+                pos.put("tracked_stop_loss", actual != null ? actual.stopLoss() : sl);
+                pos.put("tracked_take_profit", actual != null ? actual.takeProfit() : tp);
+                pos.put("tracked_peak_close", actual != null ? actual.peakClose() : entry);
+                pos.put("tracked_reversal_count", actual != null ? actual.consecutiveReversal() : 0);
+                pos.put("tracked_options_contract", actual != null ? actual.optionsContract() : openTrade.get("optionsContract"));
+                pos.put("tracked_trail_label", recovered ? "Recovered into live tracker" : "Recovered from live tracker");
+                pos.put("tracked_trail_method", recovered
+                        ? "Restored exact trade-log TP/SL, then ran immediate SL/TP check"
+                        : "Exact trade-log TP/SL is active in the live tracker");
                 continue;
             }
 
