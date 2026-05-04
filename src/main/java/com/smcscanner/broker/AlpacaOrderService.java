@@ -89,6 +89,8 @@ public class AlpacaOrderService {
     private static final double SCALP_BE_R         = 1.0;  // must match backtest scalp BE logic
     private static final double SCALP_TRAIL_R      = 2.0;  // trend continuation: scalp trail arms after 2.0R (was 0.9R)
     private static final double SCALP_TRAIL_NORMAL = 0.75; // wider scalp trail once trend is confirmed (was 0.35)
+    private static final double OPTIONS_BE_PROFIT_DOLLARS = 100.0; // protect meaningful option winners
+    private static final double OPTIONS_LOCK_PROFIT_DOLLARS = 200.0; // lock 50% of underlying target on strong winners
 
     // Config defaults (overridden by env vars)
     private static final double DEFAULT_MAX_POSITION = 500.0;   // max $ per trade
@@ -713,6 +715,35 @@ public class AlpacaOrderService {
                             newPeak, tp.consecutiveReversal(), tp.optionsContract(), tp.entryEpochMs()));
                     tp = trackedPositions.getOrDefault(symbol, tp);
                 }
+            }
+        }
+
+        // Options can be deeply green before the underlying reaches a clean 1R,
+        // because delta/IV/spread move the contract faster than the stock plan.
+        // Once the option has paid enough, stop allowing the underlying SL to
+        // remain at full initial risk.
+        if (isOptionsPosition && optionsPnlDollars >= OPTIONS_BE_PROFIT_DOLLARS) {
+            double optionProtectedStop = tp.entry();
+            if (optionsPnlDollars >= OPTIONS_LOCK_PROFIT_DOLLARS) {
+                double halfTarget = Math.abs(tp.takeProfit() - tp.entry()) * 0.50;
+                optionProtectedStop = isLong ? tp.entry() + halfTarget : tp.entry() - halfTarget;
+            }
+            boolean improvesStop = isLong
+                    ? optionProtectedStop > tp.stopLoss()
+                    : optionProtectedStop < tp.stopLoss();
+            if (improvesStop) {
+                breakEvenArmed = true;
+                log.info("TRAIL OPTIONS PROFIT LOCK {}: optPnL=${} — SL ${} → ${}",
+                        symbol,
+                        String.format("%.2f", optionsPnlDollars),
+                        String.format("%.2f", tp.stopLoss()),
+                        String.format("%.2f", optionProtectedStop));
+                putTrackedPosition(symbol, new TrackedPosition(
+                        tp.symbol(), tp.direction(), tp.entry(), optionProtectedStop,
+                        tp.takeProfit(), tp.orderId(),
+                        encodeHybridState(originalStop, hybrid.originalTakeProfit(), true, trailArmed, hybrid.brokerStopOrderId()),
+                        newPeak, tp.consecutiveReversal(), tp.optionsContract(), tp.entryEpochMs()));
+                tp = trackedPositions.getOrDefault(symbol, tp);
             }
         }
         if (!trailArmed) {
