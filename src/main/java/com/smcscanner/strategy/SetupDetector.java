@@ -87,12 +87,10 @@ public class SetupDetector {
             return new DetectResult(List.of(),state);
         }
 
-        // ── Cross-day FVG guard (Fix: blocks yesterday FVG at today's open) ──────
-        // The state machine scans 80 bars back, which spans multiple sessions.
-        // A sweep+FVG from yesterday afternoon can "retest" on today's opening bar —
-        // but yesterday's institutional zone is NOT reliable S/R at tomorrow's 9:30 open.
-        // Opening bars are in a completely different session context (gaps, overnight news,
-        // different participants). Block these cross-session FVG retests before 10:00 AM.
+        // ── Intraday freshness guard: sweep + FVG must be same session as current bar ──
+        // Fix 4: the state machine scans 80 bars back spanning multiple sessions.
+        // A sweep or FVG from a prior day is a completely different market context
+        // (overnight news, gaps, different participants). Require sweep AND FVG on today's date.
         if (!isCrypto && state.getFvgBar() >= 0 && state.getFvgBar() < bars.size()) {
             java.time.ZoneId etZone = java.time.ZoneId.of("America/New_York");
             long fvgBarTs  = bars.get(state.getFvgBar()).getTimestamp();
@@ -100,16 +98,25 @@ public class SetupDetector {
             java.time.LocalDate fvgDate  = java.time.Instant.ofEpochMilli(fvgBarTs).atZone(etZone).toLocalDate();
             java.time.LocalDate currDate = java.time.Instant.ofEpochMilli(currBarTs).atZone(etZone).toLocalDate();
             java.time.LocalTime currTime = java.time.Instant.ofEpochMilli(currBarTs).atZone(etZone).toLocalTime();
-            // Block cross-day FVGs before 10:00 — prior-session zone unreliable at open
-            if (!fvgDate.equals(currDate) && currTime.isBefore(java.time.LocalTime.of(10, 0))) {
-                log.debug("{} filtered: CROSS_DAY_FVG fvgDate={} currDate={} currTime={} — stale prior-session zone at open",
-                        ticker, fvgDate, currDate, currTime);
+            // Block ALL cross-day FVGs — prior-session imbalance is not intraday institutional urgency
+            if (!fvgDate.equals(currDate)) {
+                log.debug("{} filtered: CROSS_DAY_FVG fvgDate={} currDate={} — stale prior-session zone",
+                        ticker, fvgDate, currDate);
                 state.setPhase(SetupPhase.IDLE);
                 return new DetectResult(List.of(), state);
             }
+            // Block if sweep bar is from a prior session
+            if (state.getSweepBar() >= 0 && state.getSweepBar() < bars.size()) {
+                java.time.LocalDate sweepDate = java.time.Instant.ofEpochMilli(
+                        bars.get(state.getSweepBar()).getTimestamp()).atZone(etZone).toLocalDate();
+                if (!sweepDate.equals(currDate)) {
+                    log.debug("{} filtered: CROSS_DAY_SWEEP sweepDate={} currDate={} — prior-session stop run",
+                            ticker, sweepDate, currDate);
+                    state.setPhase(SetupPhase.IDLE);
+                    return new DetectResult(List.of(), state);
+                }
+            }
             // Block ALL SMC entries in the first 15 min — opening bars are directionally unreliable
-            // (gap fills, stop hunts, news reactions). Same-day FVG formed on the 09:30 bar itself
-            // also fails this check. User confirmed: "first 5-15 mins volatile, doesn't predict direction."
             if (currTime.isBefore(java.time.LocalTime.of(9, 45))) {
                 log.debug("{} filtered: OPEN_VOLATILITY — SMC blocked before 09:45 (currTime={})", ticker, currTime);
                 state.setPhase(SetupPhase.IDLE);
@@ -149,9 +156,13 @@ public class SetupDetector {
             return new DetectResult(List.of(),state);
         }
 
-        // FVG age: no hard cutoff — ScoringService penalizes freshness via fvgAgeBars.
-        // A morning FVG retested in the afternoon is 24+ bars old but still valid S/R.
+        // Fix 2: FVG freshness gate — institutional urgency dissipates after ~8 bars
         int fvgAgeBars = (bars.size() - 1) - state.getFvgBar();
+        if (fvgAgeBars > 8) {
+            log.debug("{} filtered: FVG_TOO_OLD fvgAgeBars={} — imbalance no longer dominant", ticker, fvgAgeBars);
+            state.setPhase(SetupPhase.IDLE);
+            return new DetectResult(List.of(), state);
+        }
 
         boolean[] str=detectStructure(bars);
         boolean hasStructure=str[0]||str[1];
@@ -200,6 +211,16 @@ public class SetupDetector {
             double pos = (rb2.getClose() - rb2.getLow()) / rng;
             retestWickQuality = "long".equals(state.getDirection()) ? pos : (1.0 - pos);
         }
+        if (retestWickQuality < 0.50) {
+            log.debug("{} filtered: WEAK_DIRECTIONAL_RETEST retestQuality={} dir={}",
+                    ticker, String.format("%.2f", retestWickQuality), state.getDirection());
+            return new DetectResult(List.of(), state);
+        }
+        if (!str[0] && dispAtrRatio < 1.8) {
+            log.debug("{} filtered: WEAK_CHOCH_ONLY no BOS and dispAtrRatio={}",
+                    ticker, String.format("%.2f", dispAtrRatio));
+            return new DetectResult(List.of(), state);
+        }
 
         int conf=scoring.scoreSetup(isEqualSweep, dispAtrRatio, fvgAgeBars, retestWickQuality,
                                     hasStructure, peakVol > avgVol * MIN_VOL_MULT);
@@ -228,6 +249,8 @@ public class SetupDetector {
         double tpRatio = profile.resolveTpRrRatio();
         if ("long".equals(state.getDirection()))  { sl=r4(entry-targetAtr*slMult); tp=r4(entry+targetAtr*slMult*tpRatio); }
         else                                       { sl=r4(entry+targetAtr*slMult); tp=r4(entry-targetAtr*slMult*tpRatio); }
+        // Minimum SL floor: risk < 0.35% of entry means options spread eats the entire move
+        if (Math.abs(entry - sl) < entry * 0.0035) return new DetectResult(List.of(), state);
 
         // ── SMC signal breakdown (shown in "WHY THIS TRADE?" panel) ────────────
         // Format: "smc-{dir} | sweep=BEAR(N bars back) | disp=2.4×ATR | FVG=[top/bot] | retest=X% | BOS=✓/✗ CHOCH=✓/✗ | vol=X×avg"
@@ -273,10 +296,15 @@ public class SetupDetector {
                 OHLCV bar = bars.get(i);
                 boolean bull = bar.getLow() < swLow  && bar.getClose() > swLow;
                 boolean bear = bar.getHigh() > swHigh && bar.getClose() < swHigh;
+                // Fix 1: sweep depth ≥ 0.3% — filters bid-ask noise, requires genuine stop-run
+                if (bull && (swLow - bar.getLow()) / swLow < 0.003) bull = false;
+                if (bear && (bar.getHigh() - swHigh) / swHigh < 0.003) bear = false;
                 if (!bull && !bear && i > winEnd) {
                     OHLCV prev = bars.get(i - 1);
-                    if (prev.getLow()  < swLow  && bar.getClose() > swLow)  bull = true;
-                    if (prev.getHigh() > swHigh && bar.getClose() < swHigh) bear = true;
+                    if (prev.getLow()  < swLow  && bar.getClose() > swLow
+                            && (swLow - prev.getLow()) / swLow >= 0.003)  bull = true;
+                    if (prev.getHigh() > swHigh && bar.getClose() < swHigh
+                            && (prev.getHigh() - swHigh) / swHigh >= 0.003) bear = true;
                 }
                 if (!bull && !bear) continue;
                 String dir = bull ? "long" : "short";
@@ -345,11 +373,13 @@ public class SetupDetector {
         return null;
     }
     private int findRetestBar(List<OHLCV> bars,double top,double bot,int fvgBar,String dir,int window,int n) {
+        double mid = (top + bot) / 2.0;
         for (int i=fvgBar+1;i<Math.min(fvgBar+window,n);i++) {
             OHLCV b=bars.get(i);
             if (b.getLow()<top&&b.getHigh()>bot) {
-                if ("long".equals(dir)&&b.getClose()>=bot) return i;
-                if ("short".equals(dir)&&b.getClose()<=top) return i;
+                // Fix 3: close must pass the FVG midpoint — touch alone is a reaction, not a rejection
+                if ("long".equals(dir)  && b.getClose() >= mid) return i;
+                if ("short".equals(dir) && b.getClose() <= mid) return i;
             }
         }
         return -1;
@@ -458,11 +488,29 @@ public class SetupDetector {
             }
 
             double risk = "long".equals(dir) ? entry - sl : sl - entry;
-            if (risk <= 0 || risk > curAtr * 3.0) return List.of();
+            // Minimum SL floor: risk < 0.35% of entry means options spread eats the entire move
+            if (risk <= 0 || risk > curAtr * 3.0 || risk < entry * 0.0035) return List.of();
 
             double tp = "long".equals(dir) ? r4(entry + risk * 2.0) : r4(entry - risk * 2.0);
             double avgVol = bars.stream().skip(Math.max(0, n - 30))
                                .mapToDouble(OHLCV::getVolume).average().orElse(1);
+
+            // Wick quality gate: CHOCH bar must show conviction via rejection wick ≥ 1.5× body OR volume > 1.5× avg
+            double chochBody = Math.abs(chochBar.getClose() - chochBar.getOpen());
+            double rejectionWick = "long".equals(dir)
+                    ? (Math.min(chochBar.getOpen(), chochBar.getClose()) - chochBar.getLow())
+                    : (chochBar.getHigh() - Math.max(chochBar.getOpen(), chochBar.getClose()));
+            boolean wickOk = chochBody > 0 && rejectionWick >= chochBody * 1.5;
+            boolean volOk  = chochBar.getVolume() > avgVol * 1.5;
+            if (!wickOk && !volOk) {
+                log.debug("{} filtered: CHOCH_WEAK_WICK dir={} body={} rejWick={} vol={}×avg",
+                        ticker, dir,
+                        String.format("%.4f", chochBody),
+                        String.format("%.4f", Math.max(0, rejectionWick)),
+                        String.format("%.2f", chochBar.getVolume() / Math.max(avgVol, 1)));
+                return List.of();
+            }
+
             int conf = 70;
             if (chochBar.getVolume() > avgVol * 1.5) conf += 6;
             if (chochBar.getVolume() > avgVol * 2.5) conf += 4;

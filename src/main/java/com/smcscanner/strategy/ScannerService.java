@@ -70,6 +70,7 @@ public class ScannerService {
     private final LiquiditySweepFlipDetector      sweepFlip;
     private final PdhPdlDetector                  pdhPdl;
     private final OpeningRangeVwapDetector        orVwap;
+    private final LiquidityMapService             liquidityMap;
 
     public ScannerService(ScannerConfig config, PolygonClient client, SetupDetector setupDetector,
                           CryptoStrategyService crypto, MultiTimeframeAnalyzer mtf,
@@ -92,7 +93,8 @@ public class ScannerService {
                           CapitulationReversalDetector capReversal,
                           LiquiditySweepFlipDetector sweepFlip,
                           PdhPdlDetector pdhPdl,
-                          OpeningRangeVwapDetector orVwap) {
+                          OpeningRangeVwapDetector orVwap,
+                          LiquidityMapService liquidityMap) {
         this.config=config; this.client=client; this.setupDetector=setupDetector; this.crypto=crypto;
         this.mtf=mtf; this.discord=discord; this.dedup=dedup; this.tracker=tracker; this.liveLog=liveLog; this.state=state;
         this.atrCalc=atrCalc; this.vwap=vwap; this.breakout=breakout; this.scalpMomentum=scalpMomentum; this.keyLevel=keyLevel;
@@ -104,6 +106,7 @@ public class ScannerService {
         this.pressureService=pressureService; this.overnightService=overnightService;
         this.pegDetector=pegDetector; this.capReversal=capReversal;
         this.sweepFlip=sweepFlip; this.pdhPdl=pdhPdl; this.orVwap=orVwap;
+        this.liquidityMap=liquidityMap;
     }
 
     public boolean isCrypto(String t) { return t.startsWith("X:"); }
@@ -116,8 +119,9 @@ public class ScannerService {
             com.smcscanner.model.TickerProfile.ModeProfile intradayMode = profile.resolveMode("intraday");
             com.smcscanner.model.TickerProfile.ModeProfile swingMode    = profile.resolveMode("swing");
             boolean rootSkip    = profile.isSkip();
+            boolean intradayActive = !intradayMode.isEffectiveSkip(rootSkip);
             boolean anyActive   = !scalpMode.isEffectiveSkip(rootSkip)
-                               || !intradayMode.isEffectiveSkip(rootSkip)
+                               || intradayActive
                                || !swingMode.isEffectiveSkip(rootSkip);
             if (!anyActive) {
                 setTs(ticker,"idle",null,0,"⊘ "+profile.getSkipReason());
@@ -262,6 +266,12 @@ public class ScannerService {
             // ── Intraday alert (5m bars → original Discord channel) ─────────
             long lastBarTs = bars.isEmpty() ? System.currentTimeMillis()
                     : bars.get(bars.size() - 1).getTimestamp();
+            String rootStratType = profile.hasTimeRouting()
+                    ? profile.resolveStrategyForTime(lastBarTs)
+                    : profile.getStrategyType();
+            String intradayStratType = intradayMode.getStrategyType() != null
+                    ? intradayMode.getStrategyType()
+                    : rootStratType;
 
             // ── Universal intraday time gate ──────────────────────────────────
             // Pre-compute so capReversal/fallback overlays share the same gate.
@@ -303,15 +313,9 @@ public class ScannerService {
                     if (st != null) stratTypes.add(st);
                 }
                 // Add intraday sub-profile strategy if that mode is active
-                if (!intradayMode.isEffectiveSkip(rootSkip)) {
-                    String st = intradayMode.getStrategyType();
-                    if (st != null) stratTypes.add(st);
+                if (intradayActive) {
+                    stratTypes.add(intradayStratType);
                 }
-                // Always include root/time-routed strategy as fallback
-                String rootStratType = profile.hasTimeRouting()
-                        ? profile.resolveStrategyForTime(lastBarTs)
-                        : profile.getStrategyType();
-                stratTypes.add(rootStratType);
 
                 if (stratTypes.size() > 1) {
                     log.debug("{} MULTI_STRAT: running {} strategies: {}", ticker, stratTypes.size(), stratTypes);
@@ -358,8 +362,17 @@ public class ScannerService {
                         stratSetups = scalpMomentum.detect(bars, spyBars5m, ticker, dailyAtr);
                         if (stratSetups.isEmpty() && phaseMsg.isEmpty()) phaseMsg = "Waiting for Bollinger reclaim or squeeze break...";
                     } else if ("vwap".equals(strat)) {
-                        stratSetups = vwap.detect(bars, ticker, dailyAtr);
-                        if (stratSetups.isEmpty() && phaseMsg.isEmpty()) phaseMsg = "Waiting for VWAP reversion...";
+                        // 1-per-day cap: once a VWAP trade fires on this ticker today, skip all
+                        // subsequent VWAP scans for the rest of the session (prevents "death by
+                        // a thousand cuts" where TSLA fires 3× on the same choppy day).
+                        if (liveLog.hasStrategyFiredToday(ticker, "vwap")) {
+                            stratSetups = List.of();
+                            if (phaseMsg.isEmpty()) phaseMsg = "⊘ VWAP trade already placed today";
+                        } else {
+                            boolean vwapLongOnly = profile.isVwapLongOnly() || "MOMENTUM".equals(profile.getExplicitCharacter());
+                            stratSetups = vwap.detect(bars, ticker, dailyAtr, false, vwapLongOnly);
+                            if (stratSetups.isEmpty() && phaseMsg.isEmpty()) phaseMsg = "Waiting for VWAP reversion...";
+                        }
                     } else if ("breakout".equals(strat)) {
                         stratSetups = breakout.detect(bars, ticker, dailyAtr);
                         if (stratSetups.isEmpty() && phaseMsg.isEmpty()) phaseMsg = "Waiting for ORB breakout...";
@@ -414,11 +427,11 @@ public class ScannerService {
             // in recent bars, check for a capitulation reversal bounce.
             // This catches the COIN/SOFI waterfall pattern regardless of configured strategy.
             // Blocked in VOLATILE regime only (too much false-positive noise).
-            if (setups.isEmpty() && !isC && !intradayTooEarly && !intradayTooLate && regime != MarketRegimeDetector.Regime.VOLATILE) {
+            if (intradayActive && setups.isEmpty() && !isC && !intradayTooEarly && !intradayTooLate && regime != MarketRegimeDetector.Regime.VOLATILE) {
                 List<TradeSetup> capSetups = capReversal.detect(bars, ticker, dailyAtr);
                 if (!capSetups.isEmpty()) {
                     log.info("{} CAP_REVERSAL_OVERLAY: waterfall + reversal detected — primary strategy={}", ticker,
-                            profile.hasTimeRouting() ? profile.resolveStrategyForTime(lastBarTs) : profile.getStrategyType());
+                            intradayStratType);
                     setups = capSetups;
                     phaseMsg = "";
                 }
@@ -427,7 +440,7 @@ public class ScannerService {
             // ── Pattern overlays: sweep-flip, PDH/PDL, CHOCH primary ──────────
             // Run for all non-crypto NYSE tickers after primary strategy + cap overlay.
             // These detect setups that don't require a full SMC chain.
-            if (setups.isEmpty() && !isC && !intradayTooEarly && !intradayTooLate) {
+            if (intradayActive && setups.isEmpty() && !isC && !intradayTooEarly && !intradayTooLate) {
                 List<TradeSetup> overlaySetups = new java.util.ArrayList<>();
                 overlaySetups.addAll(sweepFlip.detect(bars, ticker, dailyAtr));
                 overlaySetups.addAll(pdhPdl.detect(bars, ticker, dailyAtr));
@@ -445,10 +458,8 @@ public class ScannerService {
             // e.g. SMC ticker in a RANGING day → try keylevel instead.
             // Only the 3 generic regimes have clear fallbacks; VOLATILE/LOW_LIQUIDITY
             // don't (LOW_LIQUIDITY is already gated above, VOLATILE trusts the profile).
-            if (setups.isEmpty() && !isC && !intradayTooEarly && !intradayTooLate) {
-                String strategyType = profile.hasTimeRouting()
-                        ? profile.resolveStrategyForTime(lastBarTs)
-                        : profile.getStrategyType();
+            if (intradayActive && setups.isEmpty() && !isC && !intradayTooEarly && !intradayTooLate) {
+                String strategyType = intradayStratType;
                 String fallbackStrat = regimeDetector.suggestStrategy(regime, strategyType);
                 if (fallbackStrat != null && !fallbackStrat.equals(strategyType)) {
                     List<TradeSetup> fb = switch (fallbackStrat) {
@@ -588,8 +599,7 @@ public class ScannerService {
                 // ── Volume pressure trap detection ────────────────────────────
                 // BOS with declining bar pressure = institutional trap. Bypassed
                 // for VWAP (mean-reversion) and SQUEEZE regime (volume naturally low).
-                String activeStrat = profile.hasTimeRouting()
-                        ? profile.resolveStrategyForTime(lastBarTs) : profile.getStrategyType();
+                String activeStrat = intradayStratType;
                 int trapAdj = !isC ? pressureService.computeTrapAdj(
                         bars, s.getDirection(), activeStrat, regime) : 0;
                 if (trapAdj != 0) {
@@ -691,9 +701,7 @@ public class ScannerService {
                 // Hard block was wiping valid counter-trend entries that had strong
                 // conviction from other signals (volume, key level, etc).
                 // BYPASS for VWAP: mean-reversion trades intentionally fight the trend.
-                String stratTypeForFilter = profile.hasTimeRouting()
-                        ? profile.resolveStrategyForTime(lastBarTs)
-                        : profile.getStrategyType();
+                String stratTypeForFilter = intradayStratType;
                 boolean is15mApplicable = !"vwap".equals(stratTypeForFilter) && !"vwap3d".equals(stratTypeForFilter);
                 int bias15mAdj = 0;
                 boolean is15mConflict = !isC && is15mApplicable && (
@@ -706,8 +714,7 @@ public class ScannerService {
 
                 // ── News sentiment check ──────────────────────────────────────
                 NewsSentiment sentiment = isC ? NewsSentiment.NONE : news.getSentiment(ticker);
-                String stratType = profile.hasTimeRouting()
-                        ? profile.resolveStrategyForTime(lastBarTs) : profile.getStrategyType();
+                String stratType = intradayStratType;
                 int newsAdj = sentiment.confidenceDelta(s.getDirection(), stratType);
                 if (newsAdj != 0) {
                     log.info("{} news adj={} score={} dir={}", ticker, newsAdj, sentiment.netScore(), s.getDirection());
@@ -764,6 +771,20 @@ public class ScannerService {
                 if (ctxAdj != 0) {
                     log.info("{} market ctx adj={} rs={} vix={} regime={}", ticker, ctxAdj,
                             String.format("%.2f%%", context.rsScore()*100), context.vixLevel(), context.vixRegime());
+                }
+
+                // Hard gate: choch-primary SHORT against bullish news OR positive RS.
+                // Both conditions were present in every META CHOCH short loss (04/08, 04/16).
+                // Alignment bonus was overriding news/RS penalties; hard gate is required.
+                if (!isC && "short".equals(s.getDirection())
+                        && s.getFactorBreakdown() != null
+                        && s.getFactorBreakdown().startsWith("choch-primary-short")
+                        && (sentiment.isBullish() || context.isRsConflicting(s.getDirection()))) {
+                    log.info("{} CHOCH_SHORT_BLOCKED: bullishNews={} rsConflict={} — suppressed",
+                            ticker, sentiment.isBullish(), context.isRsConflicting(s.getDirection()));
+                    setTs(ticker, "idle", null, 0, "⊘ Short CHOCH blocked — bullish news or positive RS");
+                    removeSetup(ticker);
+                    return;
                 }
 
                 // ── Signal quality (R:R + time-of-day + loss streak) ─────────
@@ -1090,10 +1111,44 @@ public class ScannerService {
                 double maxIntradayEntryDrift = s.getAtr() > 0 ? s.getAtr() * 1.5 : dailyAtr * 0.5;
                 boolean intradayEntryReachable = intradayCurrentPrice > 0
                         && Math.abs(intradayCurrentPrice - s.getEntry()) <= maxIntradayEntryDrift;
+                boolean scalpOptionSetup = "scalp".equals(s.getVolatility());
+                double setupRisk = Math.abs(s.getStopLoss() - s.getEntry());
+                boolean strongFlowConflict = flow.hasData() && flow.isConflicting(s.getDirection())
+                        && (("short".equals(s.getDirection()) && flow.pcRatioVol() >= 3.0)
+                         || ("long".equals(s.getDirection()) && flow.pcRatioVol() <= 0.33));
+                double maxPain = s.getOptionsMaxPain();
+                boolean adverseMaxPainMagnet = maxPain > 0 && setupRisk > 0
+                        && (("short".equals(s.getDirection())
+                                && maxPain >= s.getEntry()
+                                && maxPain <= s.getStopLoss())
+                         || ("long".equals(s.getDirection())
+                                && maxPain <= s.getEntry()
+                                && maxPain >= s.getStopLoss()));
 
                 if (s.getConfidence() > effectiveMaxConf) {
                     log.debug("{} OVEREXTENDED conf={} maxConf={} — skipping over-extended signal",
                             ticker, s.getConfidence(), effectiveMaxConf);
+                } else if (s.hasOptionsData() && s.getOptionsRR() > 0 && s.getOptionsRR() < 0.8) {
+                    log.info("{} OPTIONS_RR_BLOCK: optionsRR={} too weak for directional buy; stockRR={} entry={} tp={} sl={}",
+                            ticker, String.format("%.2f", s.getOptionsRR()),
+                            String.format("%.2f", s.rrRatio()), s.getEntry(), s.getTakeProfit(), s.getStopLoss());
+                    removeSetup(ticker);
+                    setTs(ticker, "idle", null, 0, "⊘ Options R:R too weak");
+                    return;
+                } else if (scalpOptionSetup && strongFlowConflict) {
+                    log.info("{} FLOW_CONFLICT_BLOCK: {} flow ratio={} conflicts with {} scalp",
+                            ticker, flow.flowDirection(), String.format("%.2f", flow.pcRatioVol()),
+                            s.getDirection().toUpperCase());
+                    removeSetup(ticker);
+                    setTs(ticker, "idle", null, 0, "⊘ Options flow conflicts");
+                    return;
+                } else if (scalpOptionSetup && adverseMaxPainMagnet) {
+                    log.info("{} MAX_PAIN_BLOCK: maxPain={} sits between entry={} and stop={} for {} scalp",
+                            ticker, String.format("%.2f", maxPain), s.getEntry(), s.getStopLoss(),
+                            s.getDirection().toUpperCase());
+                    removeSetup(ticker);
+                    setTs(ticker, "idle", null, 0, "⊘ Max pain magnet against setup");
+                    return;
                 } else if (!intradayEntryReachable) {
                     log.info("INTRADAY STALE {} {} entry={} currentPrice={} drift={} > 1.5×ATR({}), skipping",
                             ticker, s.getDirection(), s.getEntry(), intradayCurrentPrice,
@@ -1243,6 +1298,14 @@ public class ScannerService {
                                             log.info("ALPACA SKIPPED {} {} conf={} < dynamicMinConf={} — alert only",
                                                     ticker, s.getDirection().toUpperCase(),
                                                     liveConf, dynamicMinConf);
+                                        } else if (!ticker.startsWith("X:") && !liquidityMap.isNearLevel(ticker, s.getEntry(), dailyAtr)) {
+                                            log.info("ALPACA SKIPPED {} {} entry={} — not near a liquidity level (location gate)",
+                                                    ticker, s.getDirection().toUpperCase(),
+                                                    String.format("%.2f", s.getEntry()));
+                                        } else if (!ticker.startsWith("X:") && !liquidityMap.isLevelFresh(ticker, s.getEntry(), dailyAtr)) {
+                                            log.info("ALPACA SKIPPED {} {} entry={} — level already tested 2× this session (third-push filter)",
+                                                    ticker, s.getDirection().toUpperCase(),
+                                                    String.format("%.2f", s.getEntry()));
                                         } else {
                                             String orderId = alpaca.placeOrder(s);
                                             if (orderId != null) {

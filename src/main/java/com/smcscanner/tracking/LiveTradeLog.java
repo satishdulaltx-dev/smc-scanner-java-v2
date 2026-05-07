@@ -168,6 +168,18 @@ public class LiveTradeLog {
                         && String.valueOf(t.get("strategy")).startsWith("gap_overnight"));
     }
 
+    /**
+     * Returns true if any trade with a strategy name starting with {@code strategyPrefix}
+     * was already recorded today for the given ticker (open OR resolved).
+     * Used to enforce a 1-trade-per-day cap per strategy type.
+     */
+    public boolean hasStrategyFiredToday(String ticker, String strategyPrefix) {
+        String today = ZonedDateTime.now(ET).format(DATE_FMT);
+        return getTradesForDate(today).stream()
+                .anyMatch(t -> ticker.equals(t.get("ticker"))
+                        && String.valueOf(t.get("strategy")).startsWith(strategyPrefix));
+    }
+
     /** Get all trades for a specific date (yyyy-MM-dd). */
     public List<Map<String, Object>> getTradesForDate(String date) {
         ensureTradeHistoryAvailable();

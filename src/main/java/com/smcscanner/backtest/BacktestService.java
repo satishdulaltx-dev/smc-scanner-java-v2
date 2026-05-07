@@ -175,7 +175,7 @@ public class BacktestService {
                 modeKey = switch (strategyOverride.toLowerCase()) {
                     case "scalp"                                     -> "scalp";
                     case "smc","vwap","keylevel","breakout","gap",
-                         "peg","vsqueeze","vwap3d","idiv","gammapin" -> "intraday";
+                         "peg","vsqueeze","vwap3d","idiv","gammapin","choch-primary" -> "intraday";
                     default                                          -> null;
                 };
             } else {
@@ -350,7 +350,8 @@ public class BacktestService {
                                   || "vsqueeze".equals(stratType)
                                   || "vwap3d".equals(stratType)
                                   || "idiv".equals(stratType)
-                                  || "gammapin".equals(stratType);
+                                  || "gammapin".equals(stratType)
+                                  || "or-vwap".equals(stratType);
             // Minimum bars before we start checking each strategy
             int minBars = "breakout".equals(stratType)  ? 8
                         : "scalp".equals(stratType)     ? 22
@@ -362,6 +363,7 @@ public class BacktestService {
                         : "vwap3d".equals(stratType)    ? 20
                         : "idiv".equals(stratType)      ? 12
                         : "gammapin".equals(stratType)  ? 15
+                        : "or-vwap".equals(stratType)   ? 2   // Mode A fires from 2nd RTH bar (9:35)
                         : 20; // smc
             // Build previous 2 days' bars for 3-day VWAP strategy (computed once per day)
             final List<OHLCV> prevDaysBars;
@@ -403,6 +405,10 @@ public class BacktestService {
                 String effectiveStrat = (strategyOverride == null || strategyOverride.isBlank()) && bp.hasTimeRouting()
                         ? bp.resolveStrategyForTime(barEpochMs)
                         : stratType;
+                // MOMENTUM tickers must not take short signals at all — VWAP shorts and
+                // sweep-flip/PDH/PDL overlays both blocked. Computed here so overlay block
+                // can filter after primary detection returns empty.
+                boolean vwapLongOnly = bp.isVwapLongOnly() || "MOMENTUM".equals(bp.getExplicitCharacter());
                 // Regime computed before strategy detection so gap strategy can use it
                 MarketRegimeDetector.Regime btRegime = ticker.startsWith("X:") ? MarketRegimeDetector.Regime.RANGING
                         : regimeDetector.detectForBacktest(window);
@@ -414,7 +420,7 @@ public class BacktestService {
                             .collect(Collectors.toList());
                     bSetups = scalpDetector.detect(window, spySlice, ticker, dailyAtr, true);
                 } else if ("vwap".equals(effectiveStrat)) {
-                    bSetups = vwapDetector.detect(window, ticker, dailyAtr, true);
+                    bSetups = vwapDetector.detect(window, ticker, dailyAtr, true, vwapLongOnly);
                 } else if ("breakout".equals(effectiveStrat)) {
                     bSetups = breakoutDetector.detect(window, ticker, dailyAtr, true);
                 } else if ("gap".equals(effectiveStrat)) {
@@ -525,6 +531,8 @@ public class BacktestService {
                     bSetups = capReversalDetector.detect(window, ticker, dailyAtr);
                 } else if ("or-vwap".equals(effectiveStrat)) {
                     bSetups = orVwapDetector.detect(window, ticker, dailyAtr, true);
+                } else if ("choch-primary".equals(effectiveStrat)) {
+                    bSetups = setupDetector.detectChochPrimary(window, ticker, dailyAtr, true);
                 } else {
                     SetupDetector.DetectResult dr = setupDetector.detectSetups(
                             window, htfBias, ticker, false, dailyAtr, true); // backtestMode=true, real dailyAtr for TP/SL
@@ -532,18 +540,21 @@ public class BacktestService {
                 }
 
                 // ── Capitulation reversal overlay — mirrors live ScannerService ──
-                if (bSetups.isEmpty() && !ticker.startsWith("X:")
+                // Skip for or-vwap: overlays would fill in wrong-direction trades labeled as or-vwap
+                if (bSetups.isEmpty() && !ticker.startsWith("X:") && !"or-vwap".equals(effectiveStrat)
                         && btRegime != MarketRegimeDetector.Regime.VOLATILE) {
                     bSetups = capReversalDetector.detect(window, ticker, dailyAtr);
                 }
 
                 // ── Pattern overlays: sweep-flip, PDH/PDL, CHOCH primary ────────
                 // Mirrors live ScannerService overlay block — fires for all non-crypto tickers.
-                if (bSetups.isEmpty() && !ticker.startsWith("X:")) {
+                if (bSetups.isEmpty() && !ticker.startsWith("X:") && !"or-vwap".equals(effectiveStrat)
+                        && !"choch-primary".equals(effectiveStrat)) {
                     java.util.List<TradeSetup> ov = new java.util.ArrayList<>();
                     ov.addAll(sweepFlipDetector.detect(window, ticker, dailyAtr, true));
                     ov.addAll(pdhPdlDetector.detect(window, ticker, dailyAtr, true));
                     ov.addAll(setupDetector.detectChochPrimary(window, ticker, dailyAtr, true));
+                    if (vwapLongOnly) ov.removeIf(s -> "short".equals(s.getDirection()));
                     if (!ov.isEmpty()) {
                         ov.sort(java.util.Comparator.comparingInt(TradeSetup::getConfidence).reversed());
                         bSetups = java.util.List.of(ov.get(0));
@@ -588,6 +599,25 @@ public class BacktestService {
 
                 TradeSetup setup = bSetups.get(0);
 
+                // or-bounce setups (Mode B) are unreliable in crash conditions: VWAP loses
+                // gravity when the stock has declined sharply over multiple days. The VWAP
+                // regime detector can't catch this since it only sees same-day bars.
+                // Instead, use the 5-day daily return: if > 7% decline in 5 sessions,
+                // skip or-bounce (crash mode — bounces are dead cats, shorts are overextended).
+                if ("or-vwap".equals(effectiveStrat)
+                        && setup.getFactorBreakdown() != null
+                        && setup.getFactorBreakdown().contains("or-bounce")
+                        && htfSlice.size() >= 6) {
+                    OHLCV htfLast = htfSlice.get(htfSlice.size() - 1);
+                    OHLCV htfPast = htfSlice.get(htfSlice.size() - 6);
+                    double fiveDayReturn = (htfLast.getClose() - htfPast.getClose()) / htfPast.getClose();
+                    if (fiveDayReturn < -0.07) {
+                        log.debug("{} OR_BOUNCE_CRASH_SKIP {}: 5d return={:.1f}%% — crash regime, skipping Mode B",
+                                ticker, date, fiveDayReturn * 100);
+                        continue;
+                    }
+                }
+
                 // ── VOLATILE regime SL widening — mirrors live ScannerService ─
                 // Root cause of 66% sub-1:1 R:R: SL was widened by slFactor but TP
                 // was left unchanged, converting 1.5:1 trades to <1:1 in volatile
@@ -609,6 +639,7 @@ public class BacktestService {
                             .confidence(setup.getConfidence()).session(setup.getSession()).volatility(setup.getVolatility())
                             .atr(setup.getAtr()).hasBos(setup.isHasBos()).hasChoch(setup.isHasChoch())
                             .fvgTop(setup.getFvgTop()).fvgBottom(setup.getFvgBottom()).timestamp(setup.getTimestamp())
+                            .factorBreakdown(setup.getFactorBreakdown())
                             .build();
                 }
 
@@ -841,6 +872,26 @@ public class BacktestService {
                         : marketCtxService.getContextAt(ticker, dailyBars, spyBars, vixBars, entryEpochMs);
                 int ctxAdj = context.confidenceDelta(setup.getDirection(), effectiveStrat);
 
+                // Hard gate: choch-primary SHORT against bullish news OR positive RS = structural counter-momentum.
+                // Visual review (04/08+04/16 META) confirmed 100% loss rate on these setups —
+                // alignment bonus (+10) was overriding the news/RS penalties, so hard gate is required.
+                boolean isChochPrimaryShort = "short".equals(setup.getDirection())
+                        && setup.getFactorBreakdown() != null
+                        && setup.getFactorBreakdown().startsWith("choch-primary-short");
+                if (isChochPrimaryShort && (sentiment.isBullish() || context.isRsConflicting(setup.getDirection()))) {
+                    log.debug("{} CHOCH_SHORT_BLOCKED: {} — bullishNews={} rsConflict={}",
+                            ticker, date, sentiment.isBullish(), context.isRsConflicting(setup.getDirection()));
+                    trades.add(new TradeResult(ticker, setup.getDirection(), effectiveStrat,
+                            setup.getEntry(), setup.getStopLoss(), setup.getTakeProfit(),
+                            "QUALITY_FILTERED", 0.0,
+                            toDateTime(dayBars.get(end - 1).getTimestamp()), toDateTime(dayBars.get(end - 1).getTimestamp()),
+                            dayBars.get(end - 1).getTimestamp(), dayBars.get(end - 1).getTimestamp(),
+                            setup.getFactorBreakdown(),
+                            setup.getConfidence(), setup.getAtr(), newsAdj, sentiment.label(), ctxAdj, context.rsLabel(),
+                            0, "CHOCH_SHORT_BLOCKED", 0, 0, 0, 0, 0));
+                    continue;
+                }
+
                 // Signal quality: R:R + time-of-day + consecutive loss streak
                 // Streak = consecutive losses at the tail of the last-6-outcomes window
                 java.util.ArrayDeque<Boolean> hist = btOutcomes.getOrDefault(ticker, new java.util.ArrayDeque<>());
@@ -990,7 +1041,10 @@ public class BacktestService {
                 // Skip trade if combined filters knocked confidence below threshold.
                 // Gap strategy: score is already gated by OvernightMomentumService.shouldHold()
                 // which enforces its own 55/45 threshold — skip the intraday conf gate.
-                if (adjConf < dynamicMinConf && !"gap".equals(effectiveStrat) && !"peg".equals(effectiveStrat)) {
+                // or-vwap bypasses the low-conf gate ONLY when market context is positive (ctxAdj > 0).
+                // Negative or neutral ctx (crash regime, misaligned RS) means we still apply the conf gate.
+                boolean orVwapConfBypass = "or-vwap".equals(effectiveStrat) && ctxAdj > 0;
+                if (adjConf < dynamicMinConf && !"gap".equals(effectiveStrat) && !"peg".equals(effectiveStrat) && !orVwapConfBypass) {
                     log.debug("{} CONF_FILTERED: base={} news={} ctx={} qual={} iRS={} regime={} corr={} dz={} → adj={} floor={} (min={} vixBoost={})",
                             ticker, setup.getConfidence(), newsAdj, ctxAdj, qualityAdj, intradayRsAdj, regimeAdj, corrAdj, deadZoneAdj, adjConf, penaltyFloor, effectiveMinConf, vixBoost);
                     String filteredOutcome = confluenceVetoAdj < 0 ? "CONFLUENCE_FILTERED"
@@ -1019,7 +1073,7 @@ public class BacktestService {
 
                 // Over-extended gate: skip signals above per-ticker maxConfidence
                 // Reverses the reversed-confidence pattern (PLTR/SOFI/NFLX: 85+ underperforms 75-84)
-                if (adjConf > effectiveMaxConf) {
+                if (adjConf > effectiveMaxConf && !"or-vwap".equals(effectiveStrat)) {
                     trades.add(new TradeResult(ticker, setup.getDirection(), effectiveStrat,
                             setup.getEntry(), setup.getStopLoss(), setup.getTakeProfit(),
                             "CONF_CAP_FILTERED", 0.0,
@@ -1809,9 +1863,10 @@ public class BacktestService {
      * Mirrors live ScannerService: scalp, intraday, and swing signals fire independently —
      * you can have both a scalp trade and an intraday trade on the same ticker in the same day.
      *
-     * Deduplication: if two tiers use the exact same strategy and fire on the same day
-     * at the same entry price, only keep the one with the widest hold window (swing > intraday > scalp).
-     * This prevents triple-counting when scalp/intraday/swing all map to "smc".
+     * Deduplication: if two tiers fire on the same 5m setup with the same direction
+     * and entry, only keep the widest hold window (swing > intraday > scalp). This
+     * prevents double exposure when two detectors label the same physical setup
+     * differently, for example "smc" and "scalp" on the same sweep/CHOCH candle.
      */
     private BacktestResult runCombinedAll(String ticker, int lookbackDays, BacktestExitStyle exitStyle) {
         TickerProfile bp = config.getTickerProfile(ticker);
@@ -1836,37 +1891,57 @@ public class BacktestService {
         // Applies to both executed AND filtered outcomes so filtered signals don't appear twice
         // when intraday and swing share the same strategy.
         Set<String> swingClaimed = new HashSet<>();
+        Set<String> setupClaimed = new HashSet<>();
         for (TradeResult t : swingResult.trades) {
             long bucket = (t.entryEpochMs() / 60000L) * 60000L; // floor to minute
             swingClaimed.add(bucket + "|" + t.strategy() + "|" + t.direction());
+            if (!isFilteredOutcome(t)) {
+                setupClaimed.add(setupExposureKey(t));
+            }
         }
 
-        // Add intraday only if a different strategy OR swing didn't already claim that slot
+        // Add intraday only if swing didn't already claim the same strategy slot or exact setup.
         Set<String> intradayClaimed = new HashSet<>(swingClaimed);
         for (TradeResult t : intradayResult.trades) {
             long bucket = (t.entryEpochMs() / 60000L) * 60000L;
             String key  = bucket + "|" + t.strategy() + "|" + t.direction();
+            String setupKey = setupExposureKey(t);
+            if (setupClaimed.contains(setupKey)) continue;
             if (intradayStrat.equals(swingStrat) && swingClaimed.contains(key)) continue;
             merged.add(t);
             intradayClaimed.add(key);
+            if (!isFilteredOutcome(t)) {
+                setupClaimed.add(setupKey);
+            }
         }
 
-        // Add scalp only if it uses a distinct strategy OR neither swing nor intraday claimed the slot
+        // Add scalp only if it uses a distinct strategy and no wider tier claimed the exact setup.
         for (TradeResult t : scalpResult.trades) {
             long bucket = (t.entryEpochMs() / 60000L) * 60000L;
             String key  = bucket + "|" + t.strategy() + "|" + t.direction();
+            String setupKey = setupExposureKey(t);
+            if (setupClaimed.contains(setupKey)) continue;
             if (scalpStrat.equals(swingStrat)    && swingClaimed.contains(key))    continue;
             if (scalpStrat.equals(intradayStrat) && intradayClaimed.contains(key)) continue;
             merged.add(t);
+            if (!isFilteredOutcome(t)) {
+                setupClaimed.add(setupKey);
+            }
         }
 
         merged.sort(Comparator.comparingLong(TradeResult::entryEpochMs));
 
-        log.info("Backtest {} ({} days, ALL combined): scalp={} intraday={} swing={} → merged={} (deduped by same-strat-same-day)",
+        log.info("Backtest {} ({} days, ALL combined): scalp={} intraday={} swing={} → merged={} (deduped by setup exposure)",
                 ticker, lookbackDays,
                 scalpResult.trades.size(), intradayResult.trades.size(),
                 swingResult.trades.size(), merged.size());
 
         return BacktestResult.of(ticker, merged, lookbackDays, BacktestMode.ALL);
+    }
+
+    private static String setupExposureKey(TradeResult t) {
+        long bucket = (t.entryEpochMs() / 60000L) * 60000L;
+        long entryCents = Math.round(t.entry() * 100.0);
+        return bucket + "|" + t.direction() + "|" + entryCents;
     }
 }
