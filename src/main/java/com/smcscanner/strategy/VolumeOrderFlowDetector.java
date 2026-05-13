@@ -74,6 +74,10 @@ public class VolumeOrderFlowDetector {
                 .atZone(ET).toLocalTime();
         if (lastTime.isBefore(LocalTime.of(10, 0))) return result;
 
+        // After 14:30 ET the VPOC is well established but there is insufficient time
+        // remaining in the session to reach VP-derived targets — skip new entries.
+        if (lastTime.isAfter(LocalTime.of(14, 30))) return result;
+
         VolumeProfileDetailed vp = vpCalc.calculateDetailed(session);
         if (vp == null) return result;
 
@@ -97,14 +101,24 @@ public class VolumeOrderFlowDetector {
         double rvol   = avgVol > 0 ? last.getVolume() / avgVol : 1.0;
         double atr    = Math.max(dailyAtr, last.getClose() * 0.003);
 
+        // ── Session trend bias ─────────────────────────────────────────────────
+        // deltaRatio = cumulative delta / total session volume.
+        // Range: −1 (100% selling) to +1 (100% buying).
+        // A strongly positive session means institutions are buying — don't fade longs,
+        // don't take counter-trend shorts. Threshold ±0.15 (15% net imbalance).
+        double totalSessionVol = session.stream().mapToDouble(OHLCV::getVolume).sum();
+        double deltaRatio = totalSessionVol > 0 ? cumDelta[n - 1] / totalSessionVol : 0;
+        boolean sessionBullish = deltaRatio >  0.15;  // buyers in control — longs only
+        boolean sessionBearish = deltaRatio < -0.15;  // sellers in control — shorts only
+
         List<TradeSetup> candidates = new ArrayList<>();
 
         TradeSetup s;
-        if ((s = detectValueAreaReentry(session, delta, cumDelta, vp, atr, rvol, ticker)) != null) candidates.add(s);
-        if ((s = detectDeltaDivergence (session, delta, cumDelta, vp, atr,       ticker)) != null) candidates.add(s);
-        if ((s = detectVpocMagnet      (session, delta,           vp, atr, rvol, ticker)) != null) candidates.add(s);
-        if ((s = detectHvnRejection    (session, delta,           vp, atr, rvol, ticker)) != null) candidates.add(s);
-        if ((s = detectLvnBreakout     (session, delta,           vp, atr, rvol, ticker)) != null) candidates.add(s);
+        if ((s = detectValueAreaReentry(session, delta, cumDelta, vp, atr, rvol, ticker, sessionBullish, sessionBearish)) != null) candidates.add(s);
+        if ((s = detectDeltaDivergence (session, delta, cumDelta, vp, atr,       ticker, sessionBullish, sessionBearish)) != null) candidates.add(s);
+        if ((s = detectVpocMagnet      (session, delta,           vp, atr, rvol, ticker, sessionBullish, sessionBearish)) != null) candidates.add(s);
+        if ((s = detectHvnRejection    (session, delta,           vp, atr, rvol, ticker, sessionBullish, sessionBearish)) != null) candidates.add(s);
+        if ((s = detectLvnBreakout     (session, delta,           vp, atr, rvol, ticker, sessionBullish, sessionBearish)) != null) candidates.add(s);
 
         candidates.sort(Comparator.comparingInt(TradeSetup::getConfidence).reversed());
         if (!candidates.isEmpty()) {
@@ -127,7 +141,8 @@ public class VolumeOrderFlowDetector {
     //  snaps back into the value area it tends to magnetise toward VPOC.
     // ════════════════════════════════════════════════════════════════════════
     private TradeSetup detectValueAreaReentry(List<OHLCV> session, double[] delta, double[] cumDelta,
-            VolumeProfileDetailed vp, double atr, double rvol, String ticker) {
+            VolumeProfileDetailed vp, double atr, double rvol, String ticker,
+            boolean sessionBullish, boolean sessionBearish) {
         int n = session.size();
         if (n < 8) return null;
 
@@ -148,6 +163,7 @@ public class VolumeOrderFlowDetector {
 
         // ── LONG: re-entry from below VAL ─────────────────────────────────────
         if (barsBelow >= 2 && lc >= val && pc < val) {
+            if (sessionBearish) return null;  // don't fight the trend
             if (delta[n - 1] <= 0 || rvol < 0.6) return null;
 
             int conf = 64;
@@ -166,6 +182,7 @@ public class VolumeOrderFlowDetector {
 
         // ── SHORT: re-entry from above VAH ─────────────────────────────────────
         if (barsAbove >= 2 && lc <= vah && pc > vah) {
+            if (sessionBullish) return null;  // don't fight the trend
             if (delta[n - 1] >= 0 || rvol < 0.6) return null;
 
             int conf = 64;
@@ -194,7 +211,8 @@ public class VolumeOrderFlowDetector {
     //  Bearish: price at session high, bar delta negative (sellers absorbing buyers)
     // ════════════════════════════════════════════════════════════════════════
     private TradeSetup detectDeltaDivergence(List<OHLCV> session, double[] delta, double[] cumDelta,
-            VolumeProfileDetailed vp, double atr, String ticker) {
+            VolumeProfileDetailed vp, double atr, String ticker,
+            boolean sessionBullish, boolean sessionBearish) {
         int n = session.size();
         if (n < 15) return null;
 
@@ -215,7 +233,7 @@ public class VolumeOrderFlowDetector {
         avgVol /= window;
 
         // ── BULLISH divergence: session low bar had POSITIVE delta ─────────────
-        if (lowIdx >= n - 6 && lowIdx < n - 1) {
+        if (!sessionBearish && lowIdx >= n - 6 && lowIdx < n - 1) {
             double lowClose  = session.get(lowIdx).getClose();
             double lowDelta  = delta[lowIdx];
             double recovPct  = (lc - lowClose) / Math.max(lowClose, 1.0);
@@ -238,7 +256,7 @@ public class VolumeOrderFlowDetector {
         }
 
         // ── BEARISH divergence: session high bar had NEGATIVE delta ────────────
-        if (highIdx >= n - 6 && highIdx < n - 1) {
+        if (!sessionBullish && highIdx >= n - 6 && highIdx < n - 1) {
             double highClose = session.get(highIdx).getClose();
             double highDelta = delta[highIdx];
             double declinePct = (highClose - lc) / Math.max(highClose, 1.0);
@@ -270,7 +288,8 @@ public class VolumeOrderFlowDetector {
     //  when order flow agrees with the direction.
     // ════════════════════════════════════════════════════════════════════════
     private TradeSetup detectVpocMagnet(List<OHLCV> session, double[] delta,
-            VolumeProfileDetailed vp, double atr, double rvol, String ticker) {
+            VolumeProfileDetailed vp, double atr, double rvol, String ticker,
+            boolean sessionBullish, boolean sessionBearish) {
         int n = session.size();
         if (n < 12) return null;
 
@@ -289,6 +308,8 @@ public class VolumeOrderFlowDetector {
 
         // ── LONG: below VPOC, buyers pushing toward it ─────────────────────────
         if (lc < vpoc && pos >= 3) {
+            if (sessionBearish) return null;
+            if (rvol < 0.8) return null;  // require some participation on magnet entries
             if (lc <= session.get(n - 3).getClose()) return null; // must be trending up
 
             int conf = 60;
@@ -302,6 +323,8 @@ public class VolumeOrderFlowDetector {
 
         // ── SHORT: above VPOC, sellers pushing toward it ───────────────────────
         if (lc > vpoc && neg >= 3) {
+            if (sessionBullish) return null;
+            if (rvol < 0.8) return null;
             if (lc >= session.get(n - 3).getClose()) return null;
 
             int conf = 60;
@@ -323,7 +346,8 @@ public class VolumeOrderFlowDetector {
     //  with opposing delta) signals institutional absorption at the node.
     // ════════════════════════════════════════════════════════════════════════
     private TradeSetup detectHvnRejection(List<OHLCV> session, double[] delta,
-            VolumeProfileDetailed vp, double atr, double rvol, String ticker) {
+            VolumeProfileDetailed vp, double atr, double rvol, String ticker,
+            boolean sessionBullish, boolean sessionBearish) {
         int n = session.size();
         if (n < 8 || rvol < 1.2) return null;
 
@@ -337,7 +361,7 @@ public class VolumeOrderFlowDetector {
             if (Math.abs(level - lc) / Math.max(level, 1.0) > HVN_TOUCH_PCT) continue;
 
             // SHORT: bar's high reached HVN but close is below — rejection
-            if (last.getHigh() >= level * 0.999 && lc < level && ld < 0) {
+            if (!sessionBullish && last.getHigh() >= level * 0.999 && lc < level && ld < 0) {
                 int conf = 62;
                 StringBuilder f = new StringBuilder("hvn-reject-short");
                 if (rvol > 2.0)                              { conf += 5; f.append(" | big_vol_spike"); }
@@ -351,7 +375,7 @@ public class VolumeOrderFlowDetector {
             }
 
             // LONG: bar's low reached HVN but close is above — support bounce
-            if (last.getLow() <= level * 1.001 && lc > level && ld > 0) {
+            if (!sessionBearish && last.getLow() <= level * 1.001 && lc > level && ld > 0) {
                 int conf = 62;
                 StringBuilder f = new StringBuilder("hvn-reject-long");
                 if (rvol > 2.0)                              { conf += 5; f.append(" | big_vol_spike"); }
@@ -374,7 +398,8 @@ public class VolumeOrderFlowDetector {
     //  quickly to the next HVN on the other side (no resistance / support).
     // ════════════════════════════════════════════════════════════════════════
     private TradeSetup detectLvnBreakout(List<OHLCV> session, double[] delta,
-            VolumeProfileDetailed vp, double atr, double rvol, String ticker) {
+            VolumeProfileDetailed vp, double atr, double rvol, String ticker,
+            boolean sessionBullish, boolean sessionBearish) {
         int n = session.size();
         if (n < 10) return null;
 
@@ -395,8 +420,8 @@ public class VolumeOrderFlowDetector {
         if (!vp.isLvn(curBkt, LVN_THRESHOLD)) return null;
 
         boolean isLong = curBkt > prevBkt;
-        if (isLong  && ld <= 0) return null;
-        if (!isLong && ld >= 0) return null;
+        if (isLong  && (ld <= 0 || sessionBearish)) return null;
+        if (!isLong && (ld >= 0 || sessionBullish)) return null;
 
         // Find nearest HVN on the far side as TP target
         double tp;
