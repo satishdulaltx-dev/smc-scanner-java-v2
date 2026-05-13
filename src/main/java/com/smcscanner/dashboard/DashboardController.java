@@ -574,7 +574,7 @@ public class DashboardController {
         return analysisService.analyze(ticker);
     }
 
-    /** GET /api/backtest?ticker=AAPL&days=90&mode=INTRADAY&strategy=vsqueeze */
+    /** GET /api/backtest?ticker=AAPL&days=90&mode=INTRADAY&strategy=vsqueeze&force=true */
     @GetMapping("/api/backtest")
     @ResponseBody
     public ResponseEntity<Map<String,Object>> apiBacktest(
@@ -585,11 +585,12 @@ public class DashboardController {
             @org.springframework.web.bind.annotation.RequestParam(required=false)      String strategy,
             @org.springframework.web.bind.annotation.RequestParam(required=false)      Integer mc,
             @org.springframework.web.bind.annotation.RequestParam(required=false)      Double  sl,
-            @org.springframework.web.bind.annotation.RequestParam(required=false)      Double  tp) {
+            @org.springframework.web.bind.annotation.RequestParam(required=false)      Double  tp,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue="false") boolean force) {
         String sym = ticker.toUpperCase();
         // Apply inline param overrides for sweep testing (bypasses saved profile)
         com.smcscanner.model.TickerProfile savedProfile = null;
-        if (mc != null || sl != null || tp != null) {
+        if (mc != null || sl != null || tp != null || force) {
             com.smcscanner.model.TickerProfile orig = config.getTickerProfile(sym);
             com.smcscanner.model.TickerProfile override = new com.smcscanner.model.TickerProfile();
             override.setTicker(sym);
@@ -602,6 +603,28 @@ public class DashboardController {
             override.setDispAtrMult(orig.getDispAtrMult());
             override.setMinVolMult(orig.getMinVolMult());
             override.setIntradayRsGate(orig.isIntradayRsGate() ? Boolean.TRUE : null);
+            // force=true: clear all mode-level skip flags so disabled tickers can be sweep-tested
+            if (force) {
+                com.smcscanner.model.TickerProfile.ModeProfile enabledMode = new com.smcscanner.model.TickerProfile.ModeProfile();
+                enabledMode.setSkip(false);
+                com.smcscanner.model.TickerProfile.ModeProfile origIntraday = orig.getIntraday();
+                if (origIntraday != null) {
+                    enabledMode.setStrategyType(strategy != null && !strategy.isBlank() ? strategy : origIntraday.getStrategyType());
+                    enabledMode.setMinConfidence(origIntraday.getMinConfidence());
+                }
+                override.setIntraday(enabledMode);
+                com.smcscanner.model.TickerProfile.ModeProfile enabledScalp = new com.smcscanner.model.TickerProfile.ModeProfile();
+                enabledScalp.setSkip(false);
+                com.smcscanner.model.TickerProfile.ModeProfile origScalp = orig.getScalp();
+                if (origScalp != null) {
+                    enabledScalp.setStrategyType(origScalp.getStrategyType());
+                    enabledScalp.setMinConfidence(origScalp.getMinConfidence());
+                }
+                override.setScalp(enabledScalp);
+                com.smcscanner.model.TickerProfile.ModeProfile enabledSwing = new com.smcscanner.model.TickerProfile.ModeProfile();
+                enabledSwing.setSkip(false);
+                override.setSwing(enabledSwing);
+            }
             savedProfile = config.setProfileOverride(sym, override);
         }
         try {
