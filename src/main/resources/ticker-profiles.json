@@ -303,11 +303,12 @@
         "minConfidence": 70
       },
       "intraday": {
-        "skip": true,
+        "skip": false,
         "skipReason": "Long-horizon profile: GOOGL VWAP was the largest 180d strategy drag.",
-        "strategyType": "vwap",
-        "minConfidence": 70,
-        "maxConfidence": 84
+        "strategyType": "volflow",
+        "minConfidence": 68,
+        "maxConfidence": 84,
+        "note": "May 2026: volflow test — GOOGL mega-cap has VWAP-magnet behaviour; volflow VA re-entry and delta divergence may capture same edge more precisely. Root skip=true keeps this live-silent."
       },
       "swing": {
         "skip": true,
@@ -542,10 +543,11 @@
         "skipReason": "0 scalp trades \u2014 RS gate blocks all entries in current AI-cycle slowdown"
       },
       "intraday": {
-        "skip": true,
+        "skip": false,
         "skipReason": "2026-04-29 LIVE_PARITY: SMC and tested intraday replacements negative for options.",
-        "strategyType": "smc",
-        "minConfidence": 78
+        "strategyType": "volflow",
+        "minConfidence": 68,
+        "note": "May 2026: volflow test — NVDA is high-volume AI stock with strong institutional order flow footprint. Root skip=true keeps this live-silent."
       },
       "swing": {
         "skip": true,
@@ -755,8 +757,11 @@
         "skipReason": "Apr 2026 VWAP scalp validation: 33.3% WR near-zero exp \u2014 no edge"
       },
       "intraday": {
-        "skip": true,
-        "skipReason": "Index ETF \u2014 SMC zones not structural"
+        "skip": false,
+        "skipReason": "Index ETF \u2014 SMC zones not structural",
+        "strategyType": "volflow",
+        "minConfidence": 68,
+        "note": "May 2026: volflow test \u2014 SPY is the ideal VP candidate (massive institutional order flow, clean VPOC/VAH/VAL structure). Root skip=true keeps this live-silent."
       },
       "swing": {
         "skip": true,

@@ -32,6 +32,7 @@ import com.smcscanner.strategy.ScalpMomentumDetector;
 import com.smcscanner.strategy.SetupDetector;
 import com.smcscanner.strategy.ThreeDayVwapDetector;
 import com.smcscanner.strategy.VolatilitySqueezeDetector;
+import com.smcscanner.strategy.VolumeOrderFlowDetector;
 import com.smcscanner.strategy.VwapStrategyDetector;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -96,6 +97,7 @@ public class BacktestService {
     private final LiquiditySweepFlipDetector      sweepFlipDetector;
     private final PdhPdlDetector                  pdhPdlDetector;
     private final OpeningRangeVwapDetector        orVwapDetector;
+    private final VolumeOrderFlowDetector         volFlowDetector;
 
     public BacktestService(PolygonClient client, AtrCalculator atrCalc, SetupDetector setupDetector,
                            VwapStrategyDetector vwapDetector, BreakoutStrategyDetector breakoutDetector,
@@ -115,7 +117,8 @@ public class BacktestService {
                            CapitulationReversalDetector capReversalDetector,
                            LiquiditySweepFlipDetector sweepFlipDetector,
                            PdhPdlDetector pdhPdlDetector,
-                           OpeningRangeVwapDetector orVwapDetector) {
+                           OpeningRangeVwapDetector orVwapDetector,
+                           VolumeOrderFlowDetector volFlowDetector) {
         this.client = client; this.atrCalc = atrCalc; this.setupDetector = setupDetector;
         this.vwapDetector = vwapDetector; this.breakoutDetector = breakoutDetector; this.scalpDetector = scalpDetector;
         this.gapDetector = gapDetector;
@@ -130,7 +133,7 @@ public class BacktestService {
         this.pegDetector = pegDetector; this.mtf = mtf;
         this.capReversalDetector = capReversalDetector;
         this.sweepFlipDetector = sweepFlipDetector; this.pdhPdlDetector = pdhPdlDetector;
-        this.orVwapDetector = orVwapDetector;
+        this.orVwapDetector = orVwapDetector; this.volFlowDetector = volFlowDetector;
     }
 
     public BacktestResult run(String ticker, int lookbackDays) {
@@ -175,7 +178,7 @@ public class BacktestService {
                 modeKey = switch (strategyOverride.toLowerCase()) {
                     case "scalp"                                     -> "scalp";
                     case "smc","vwap","keylevel","breakout","gap",
-                         "peg","vsqueeze","vwap3d","idiv","gammapin","choch-primary" -> "intraday";
+                         "peg","vsqueeze","vwap3d","idiv","gammapin","choch-primary","volflow" -> "intraday";
                     default                                          -> null;
                 };
             } else {
@@ -351,7 +354,8 @@ public class BacktestService {
                                   || "vwap3d".equals(stratType)
                                   || "idiv".equals(stratType)
                                   || "gammapin".equals(stratType)
-                                  || "or-vwap".equals(stratType);
+                                  || "or-vwap".equals(stratType)
+                                  || "volflow".equals(stratType);
             // Minimum bars before we start checking each strategy
             int minBars = "breakout".equals(stratType)  ? 8
                         : "scalp".equals(stratType)     ? 22
@@ -364,6 +368,7 @@ public class BacktestService {
                         : "idiv".equals(stratType)      ? 12
                         : "gammapin".equals(stratType)  ? 15
                         : "or-vwap".equals(stratType)   ? 2   // Mode A fires from 2nd RTH bar (9:35)
+                        : "volflow".equals(stratType)   ? 30  // need full 150-min session for reliable VP
                         : 20; // smc
             // Build previous 2 days' bars for 3-day VWAP strategy (computed once per day)
             final List<OHLCV> prevDaysBars;
@@ -531,6 +536,8 @@ public class BacktestService {
                     bSetups = capReversalDetector.detect(window, ticker, dailyAtr);
                 } else if ("or-vwap".equals(effectiveStrat)) {
                     bSetups = orVwapDetector.detect(window, ticker, dailyAtr, true);
+                } else if ("volflow".equals(effectiveStrat)) {
+                    bSetups = volFlowDetector.detect(window, ticker, dailyAtr, true);
                 } else if ("choch-primary".equals(effectiveStrat)) {
                     bSetups = setupDetector.detectChochPrimary(window, ticker, dailyAtr, true);
                 } else {

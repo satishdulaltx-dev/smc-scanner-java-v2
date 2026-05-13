@@ -71,6 +71,7 @@ public class ScannerService {
     private final PdhPdlDetector                  pdhPdl;
     private final OpeningRangeVwapDetector        orVwap;
     private final LiquidityMapService             liquidityMap;
+    private final VolumeOrderFlowDetector         volFlow;
 
     public ScannerService(ScannerConfig config, PolygonClient client, SetupDetector setupDetector,
                           CryptoStrategyService crypto, MultiTimeframeAnalyzer mtf,
@@ -94,7 +95,8 @@ public class ScannerService {
                           LiquiditySweepFlipDetector sweepFlip,
                           PdhPdlDetector pdhPdl,
                           OpeningRangeVwapDetector orVwap,
-                          LiquidityMapService liquidityMap) {
+                          LiquidityMapService liquidityMap,
+                          VolumeOrderFlowDetector volFlow) {
         this.config=config; this.client=client; this.setupDetector=setupDetector; this.crypto=crypto;
         this.mtf=mtf; this.discord=discord; this.dedup=dedup; this.tracker=tracker; this.liveLog=liveLog; this.state=state;
         this.atrCalc=atrCalc; this.vwap=vwap; this.breakout=breakout; this.scalpMomentum=scalpMomentum; this.keyLevel=keyLevel;
@@ -106,7 +108,7 @@ public class ScannerService {
         this.pressureService=pressureService; this.overnightService=overnightService;
         this.pegDetector=pegDetector; this.capReversal=capReversal;
         this.sweepFlip=sweepFlip; this.pdhPdl=pdhPdl; this.orVwap=orVwap;
-        this.liquidityMap=liquidityMap;
+        this.liquidityMap=liquidityMap; this.volFlow=volFlow;
     }
 
     public boolean isCrypto(String t) { return t.startsWith("X:"); }
@@ -402,6 +404,9 @@ public class ScannerService {
                     } else if ("or-vwap".equals(strat)) {
                         stratSetups = orVwap.detect(bars, ticker, dailyAtr);
                         if (stratSetups.isEmpty() && phaseMsg.isEmpty()) phaseMsg = "Waiting for opening VWAP flush recovery...";
+                    } else if ("volflow".equals(strat)) {
+                        stratSetups = volFlow.detect(bars, ticker, dailyAtr);
+                        if (stratSetups.isEmpty() && phaseMsg.isEmpty()) phaseMsg = "Waiting for volume profile signal (VA re-entry / delta divergence / VPOC magnet)...";
                     } else {
                         // smc (default)
                         SetupDetector.DetectResult r = setupDetector.detectSetups(bars, htfBias, ticker, false, dailyAtr);
