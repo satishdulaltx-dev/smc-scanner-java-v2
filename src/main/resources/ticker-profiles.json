@@ -4,26 +4,21 @@
       "ticker": "AAPL",
       "character": "STABLE_LARGE_CAP",
       "requireCatalyst": true,
-      "strategyType": "vwap",
+      "strategyType": "smc",
       "minConfidence": 70,
-      "maxConfidence": 84,
       "slAtrMult": 1.0,
       "tpRrRatio": 1.5,
-      "intradayRsGate": true,
-      "skipHours": [
-        10,
-        14
-      ],
-      "skip": true,
-      "skipReason": "Apr 2026 HYBRID backtest: all 4 strategies negative (best vwap -$189, smc -$384). AAPL avg move 0.57-0.85% on $200+ stock = small dollar move vs options premium cost. Structurally not viable for intraday options in current mega-cap low-vol regime.",
-      "note": "Apr 2026 deep strategy scan: switched smc→vwap. Full 5-timeframe matrix: vwap 5/5. AAPL is VWAP-magnet mega-cap but options cost exceeds move size in current regime.",
+      "skip": false,
+      "note": "May 2026 full sweep force=true: smc wins all 4 horizons (+$403/+$378/+$443/+$32). Re-enabled.",
       "scalp": {
         "skip": true,
-        "skipReason": "Options cost > intraday move size on $200+ stock"
+        "skipReason": "May 2026 sweep: scalp negative at 60d for AAPL"
       },
       "intraday": {
-        "skip": true,
-        "skipReason": "All strategies negative on HYBRID exits"
+        "skip": false,
+        "skipReason": "All strategies negative on HYBRID exits",
+        "strategyType": "smc",
+        "minConfidence": 68
       },
       "swing": {
         "skip": true,
@@ -75,16 +70,17 @@
       "minConfidence": 70,
       "slAtrMult": 0.4,
       "tpRrRatio": 2.0,
-      "skip": true,
-      "skipReason": "Apr 2026 HYBRID backtest: all 4 strategies negative (best breakout -$56, keylevel -$58). AMZN moves are too steady/gradual for intraday options edge — no strategy generates positive P&L on HYBRID exits.",
-      "note": "Apr 2026 optimizer rank#1 (180d): KEYLEVEL mc=70 sl=0.4 tp=2:1. Skipped after HYBRID validation showed all strategies negative.",
+      "skip": false,
+      "note": "May 2026 full sweep: keylevel wins 60d+90d (+$113/+$522/+$321). Re-enabled.",
       "scalp": {
         "skip": true,
-        "skipReason": "Gradual moves, negative intraday options P&L"
+        "skipReason": "May 2026 sweep: scalp not best for AMZN"
       },
       "intraday": {
-        "skip": true,
-        "skipReason": "All strategies negative on HYBRID exits"
+        "skip": false,
+        "skipReason": "All strategies negative on HYBRID exits",
+        "strategyType": "keylevel",
+        "minConfidence": 68
       },
       "swing": {
         "skip": false,
@@ -188,10 +184,9 @@
       "character": "MOMENTUM",
       "strategyType": "smc",
       "minConfidence": 78,
-      "maxConfidence": 100,
       "slAtrMult": 0.4,
       "tpRrRatio": 2.0,
-      "note": "Apr 2026 180d optimizer: smc mc=78 SL=0.4 TP=2:1 → 14T 91.7%WR +$3996. Tightened mc 70→78, SL 1.0→0.4×ATR (tighter entry, higher quality chains). 34 viable combos — strongest SMC signal in watchlist.",
+      "note": "May 2026 full sweep: smc score=30139 (+$2562/+$2819/+$3014/+$3435, all positive). Reverted from vsqueeze.",
       "scalp": {
         "skip": false,
         "strategyType": "scalp",
@@ -199,8 +194,8 @@
       },
       "intraday": {
         "skip": false,
-        "strategyType": "vsqueeze",
-        "minConfidence": 70,
+        "strategyType": "smc",
+        "minConfidence": 68,
         "note": "May 2026 full sweep: vsqueeze wins CRWD at all 4 horizons ($2227/$2020/$1296/$3276). Switched from smc."
       },
       "swing": {
@@ -212,19 +207,19 @@
       "ticker": "DDOG",
       "strategyType": "vwap",
       "minConfidence": 70,
-      "maxConfidence": 82,
       "slAtrMult": 1.0,
       "tpRrRatio": 1.0,
-      "skip": true,
-      "skipReason": "Apr 2026: skipped after full strategy sweep. All 6 strategies negative on LIVE_PARITY 180d — best was keylevel -$196. 42% WR, avg win $24 vs avg loss $26, no edge. DDOG moves are AI-sentiment driven, not technically clean enough for intraday options.",
-      "note": "Apr 2026 outside-research retune: keep DDOG on VWAP, but tighten execution.",
+      "skip": false,
+      "note": "May 2026 full sweep: vwap wins all 4 horizons (+$435/+$188/+$799/+$779). Re-enabled.",
       "scalp": {
         "skip": true,
-        "skipReason": "No intraday edge — AI-sentiment driven"
+        "skipReason": "May 2026 sweep: scalp negative at 60d for DDOG"
       },
       "intraday": {
-        "skip": true,
-        "skipReason": "All strategies negative on LIVE_PARITY 180d"
+        "skip": false,
+        "skipReason": "All strategies negative on LIVE_PARITY 180d",
+        "strategyType": "vwap",
+        "minConfidence": 68
       },
       "swing": {
         "skip": true,
@@ -287,20 +282,22 @@
     {
       "ticker": "GOOGL",
       "character": "MOMENTUM",
-      "strategyType": "scalp",
+      "strategyType": "vsqueeze",
       "minConfidence": 68,
       "slAtrMult": 1.0,
       "tpRrRatio": 1.5,
       "skip": false,
-      "note": "May 2026 full sweep 1092 backtests: scalp wins ALL 4 horizons (+$769/+$814/+$1014/+$291). VWAP decays -$527 at 180d. Only scalp is stable long-horizon. Re-enabled.",
+      "note": "May 2026 full sweep: vsqueeze score=7584 (+$923/+$740/+$1127/+$142). Switched from scalp.",
       "scalp": {
         "skip": false,
         "strategyType": "scalp",
         "minConfidence": 68
       },
       "intraday": {
-        "skip": true,
-        "skipReason": "May 2026 sweep: vwap/smc/keylevel all decay at 180d. Scalp is the only consistently positive strategy."
+        "skip": false,
+        "skipReason": "May 2026 sweep: vwap/smc/keylevel all decay at 180d. Scalp is the only consistently positive strategy.",
+        "strategyType": "vsqueeze",
+        "minConfidence": 68
       },
       "swing": {
         "skip": true,
@@ -310,12 +307,12 @@
     {
       "ticker": "GS",
       "character": "MOMENTUM",
-      "strategyType": "scalp",
+      "strategyType": "smc",
       "minConfidence": 68,
       "slAtrMult": 1.0,
       "tpRrRatio": 1.5,
       "skip": false,
-      "note": "May 2026 full sweep 1092 backtests: scalp is the ONLY consistently positive strategy for GS ($93/$249/$418/$270 all horizons). smc bleeds at 60d (-$48). Switched intraday+scalp to scalp.",
+      "note": "May 2026 full sweep: smc score=5942 (+$1029/+$150/+$955/+$281). Switched from scalp.",
       "scalp": {
         "skip": false,
         "strategyType": "scalp",
@@ -323,7 +320,7 @@
       },
       "intraday": {
         "skip": false,
-        "strategyType": "scalp",
+        "strategyType": "smc",
         "minConfidence": 68
       },
       "swing": {
@@ -426,14 +423,19 @@
       "ticker": "NET",
       "strategyType": "smc",
       "minConfidence": 65,
-      "maxConfidence": 84,
-      "minFvgPct": 0.0006,
-      "dispAtrMult": 1.3,
       "slAtrMult": 1.0,
       "tpRrRatio": 1.25,
-      "skip": true,
-      "skipReason": "Apr 2026 research: disable. Negative expectancy across all 3 windows (90d -1.97%, 180d -0.49%, 365d -0.42%). No strategy showed eligible positive expectancy.",
-      "note": "Added Apr 2026: Cloudflare — PLTR analogy did not hold."
+      "skip": false,
+      "note": "May 2026 full sweep: smc wins all 4 horizons (+$574/+$222/+$433/+$467). Re-enabled.",
+      "intraday": {
+        "skip": false,
+        "strategyType": "smc",
+        "minConfidence": 68
+      },
+      "scalp": {
+        "skip": true,
+        "skipReason": "May 2026 sweep: scalp decays at 180d for NET"
+      }
     },
     {
       "ticker": "MSFT",
@@ -465,19 +467,19 @@
       "ticker": "MSTR",
       "strategyType": "smc",
       "minConfidence": 75,
-      "maxConfidence": 89,
       "slAtrMult": 1.0,
       "tpRrRatio": 2.0,
-      "skip": true,
-      "skipReason": "Apr 2026 full sweep: only 2/5 timeframes pass intraday — BTC-cycle dependent. Revisit when BTC enters sustained trend.",
-      "note": "Apr 2026 full sweep: intraday only 2/5 timeframes (180d and 365d). Too BTC-cycle dependent for reliable activation. Keep skipped until BTC enters sustained trend where more windows pass.",
+      "skip": false,
+      "note": "May 2026 full sweep: smc wins all 4 horizons (+$416/+$188/+$228/+$757). Re-enabled.",
       "scalp": {
         "skip": true,
-        "skipReason": "BTC gaps — too few setups"
+        "skipReason": "May 2026 sweep: scalp negative for MSTR"
       },
       "intraday": {
-        "skip": true,
-        "skipReason": "Only 2/5 timeframes pass — not consistent enough across windows"
+        "skip": false,
+        "skipReason": "Only 2/5 timeframes pass — not consistent enough across windows",
+        "strategyType": "smc",
+        "minConfidence": 68
       },
       "swing": {
         "skip": true,
@@ -547,16 +549,22 @@
     },
     {
       "ticker": "PANW",
-      "strategyType": "smc",
+      "strategyType": "scalp",
       "minConfidence": 62,
-      "maxConfidence": 84,
-      "minFvgPct": 0.0005,
-      "dispAtrMult": 1.3,
       "slAtrMult": 1.0,
       "tpRrRatio": 1.25,
-      "skip": true,
-      "skipReason": "Apr 2026: 37% WR (1yr backtest), -0.6% expectancy. CRWD analogy did not hold.",
-      "note": "Added Apr 2026: Palo Alto Networks."
+      "skip": false,
+      "note": "May 2026 full sweep: scalp wins all 4 horizons score=11633 (+$986/+$942/+$1404/+$1113, 73% WR). Re-enabled.",
+      "intraday": {
+        "skip": false,
+        "strategyType": "scalp",
+        "minConfidence": 68
+      },
+      "scalp": {
+        "skip": false,
+        "strategyType": "scalp",
+        "minConfidence": 68
+      }
     },
     {
       "ticker": "PLTR",
@@ -769,11 +777,11 @@
     {
       "ticker": "TSLA",
       "character": "MOMENTUM",
-      "strategyType": "breakout",
+      "strategyType": "smc",
       "minConfidence": 70,
       "slAtrMult": 1.0,
       "tpRrRatio": 1.5,
-      "note": "May 2026 full sweep: breakout wins ALL 4 horizons (+$384/+$502/+$695/+$1796, strongest at 180d). VWAP was good short-term but breakout is more durable. Switched from vwap.",
+      "note": "May 2026 full sweep: smc only strategy positive at 60d+90d (+$916/+$783/+$373). Breakout turns negative at 90d (-$990). Switched from breakout.",
       "scalp": {
         "skip": false,
         "strategyType": "scalp",
@@ -781,8 +789,8 @@
       },
       "intraday": {
         "skip": false,
-        "strategyType": "breakout",
-        "minConfidence": 70
+        "strategyType": "smc",
+        "minConfidence": 68
       },
       "swing": {
         "skip": false
