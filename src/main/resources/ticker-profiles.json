@@ -536,11 +536,10 @@
         "skipReason": "0 scalp trades — RS gate blocks all entries in current AI-cycle slowdown"
       },
       "intraday": {
-        "skip": false,
-        "skipReason": "2026-04-29 LIVE_PARITY: SMC and tested intraday replacements negative for options.",
+        "skip": true,
+        "skipReason": "May 2026 sweep: all strategies negative at 90d. volflow test removed.",
         "strategyType": "volflow",
-        "minConfidence": 68,
-        "note": "May 2026: volflow test — NVDA is high-volume AI stock with strong institutional order flow footprint. Root skip=true keeps this live-silent."
+        "minConfidence": 68
       },
       "swing": {
         "skip": true,
