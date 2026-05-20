@@ -2,6 +2,8 @@ package com.smcscanner.strategy;
 
 import com.smcscanner.alert.AlertDedup;
 import com.smcscanner.alert.DiscordAlertService;
+import com.smcscanner.vision.ChartVisionService;
+import com.smcscanner.vision.VisionVerdict;
 import com.smcscanner.broker.AlpacaOrderService;
 import com.smcscanner.filter.AdaptiveSuppressor;
 import com.smcscanner.filter.SignalQualityFilter;
@@ -72,6 +74,7 @@ public class ScannerService {
     private final OpeningRangeVwapDetector        orVwap;
     private final LiquidityMapService             liquidityMap;
     private final VolumeOrderFlowDetector         volFlow;
+    private final ChartVisionService              chartVision;
 
     public ScannerService(ScannerConfig config, PolygonClient client, SetupDetector setupDetector,
                           CryptoStrategyService crypto, MultiTimeframeAnalyzer mtf,
@@ -96,7 +99,8 @@ public class ScannerService {
                           PdhPdlDetector pdhPdl,
                           OpeningRangeVwapDetector orVwap,
                           LiquidityMapService liquidityMap,
-                          VolumeOrderFlowDetector volFlow) {
+                          VolumeOrderFlowDetector volFlow,
+                          ChartVisionService chartVision) {
         this.config=config; this.client=client; this.setupDetector=setupDetector; this.crypto=crypto;
         this.mtf=mtf; this.discord=discord; this.dedup=dedup; this.tracker=tracker; this.liveLog=liveLog; this.state=state;
         this.atrCalc=atrCalc; this.vwap=vwap; this.breakout=breakout; this.scalpMomentum=scalpMomentum; this.keyLevel=keyLevel;
@@ -109,6 +113,7 @@ public class ScannerService {
         this.pegDetector=pegDetector; this.capReversal=capReversal;
         this.sweepFlip=sweepFlip; this.pdhPdl=pdhPdl; this.orVwap=orVwap;
         this.liquidityMap=liquidityMap; this.volFlow=volFlow;
+        this.chartVision=chartVision;
     }
 
     public boolean isCrypto(String t) { return t.startsWith("X:"); }
@@ -1285,6 +1290,19 @@ public class ScannerService {
                                     log.info("INTRADAY ALERT {} {} conf={} entry={} adj=news{}/ctx{}/qual{}/flow{}/regime{}/corr{}/align{}/sma200{}/rsi{}/candle{}/vol{} vixBoost={} dynamicMin={}",
                                             ticker, s.getDirection().toUpperCase(), s.getConfidence(), s.getEntry(),
                                             newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj, alignmentAdj, sma200Adj, rsiAdj, candleAdj, volAdj, vixBoost, dynamicMinConf);
+                                    // ── Claude Vision gate ───────────────────────────────────────
+                                    // Render chart + ask Claude to visually verify before Discord.
+                                    // Fails open: API error or missing key never blocks an alert.
+                                    VisionVerdict vision = chartVision.analyze(bars, s);
+                                    if (!vision.approve()) {
+                                        log.info("VISION_REJECT {} {} conf={} score={} — {}",
+                                                ticker, s.getDirection().toUpperCase(), s.getConfidence(),
+                                                vision.score(), vision.reason());
+                                        setTs(ticker, "idle", null, 0, "⊘ Vision rejected: " + vision.reason());
+                                    } else {
+                                    if (!vision.failedOpen()) {
+                                        log.info("VISION_APPROVE {} score={} — {}", ticker, vision.score(), vision.reason());
+                                    }
                                     discord.sendSetupAlert(s, sentiment, context, earningsCheck);
                                     liveLog.recordTrade(s, stratType);
                                     tracker.recordStrategySignal(stratType, s.getConfidence());
@@ -1318,6 +1336,7 @@ public class ScannerService {
                                             }
                                         }
                                     }
+                                    } // end vision approve block
                                 }
                             }
                             dedup.markSent(ticker, s.getDirection(), s.getEntry());
