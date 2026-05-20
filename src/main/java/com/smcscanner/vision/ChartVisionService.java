@@ -27,7 +27,7 @@ public class ChartVisionService {
     private static final MediaType JSON = MediaType.get("application/json; charset=utf-8");
     private static final String API_URL = "https://api.anthropic.com/v1/messages";
     private static final String MODEL   = "claude-haiku-4-5-20251001";
-    private static final int MIN_SCORE_TO_APPROVE = 55; // approve if Claude gives >= 55/100
+    private static final int MIN_SCORE_TO_APPROVE = 50; // approve if Claude gives >= 50/100
     private static final long CACHE_MS = 10 * 60 * 1000L; // 10 min per ticker
 
     private final ScannerConfig config;
