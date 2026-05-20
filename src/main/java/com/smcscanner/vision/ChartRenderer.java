@@ -39,6 +39,14 @@ public class ChartRenderer {
     private ChartRenderer() {}
 
     public static byte[] render(List<OHLCV> allBars, TradeSetup signal) {
+        return renderInternal(allBars, signal, signal != null ? signal.getTicker() : "CHART");
+    }
+
+    public static byte[] renderBasic(List<OHLCV> allBars, String ticker) {
+        return renderInternal(allBars, null, ticker);
+    }
+
+    private static byte[] renderInternal(List<OHLCV> allBars, TradeSetup signal, String tickerLabel) {
         // Use last 80 bars max
         int n = Math.min(80, allBars.size());
         List<OHLCV> bars = allBars.subList(allBars.size() - n, allBars.size());
@@ -138,15 +146,16 @@ public class ChartRenderer {
         }
 
         // Title bar
-        g.setColor(TEXT_COLOR);
         g.setFont(new Font("Monospaced", Font.BOLD, 14));
-        String dir = signal != null ? signal.getDirection().toUpperCase() : "";
-        String strat = signal != null ? signal.getVolatility() : "";
-        int conf = signal != null ? signal.getConfidence() : 0;
-        Color titleColor = "long".equalsIgnoreCase(dir) ? BULL : BEAR;
-        g.setColor(titleColor);
-        String title = (signal != null ? signal.getTicker() : "CHART") + "  " + dir + "  conf=" + conf + "  " + strat.toUpperCase();
-        g.drawString(title, PAD_L + 4, 22);
+        if (signal != null) {
+            String dir   = signal.getDirection().toUpperCase();
+            Color titleColor = "long".equalsIgnoreCase(dir) ? BULL : BEAR;
+            g.setColor(titleColor);
+            g.drawString(signal.getTicker() + "  " + dir + "  conf=" + signal.getConfidence() + "  " + signal.getVolatility().toUpperCase(), PAD_L + 4, 22);
+        } else {
+            g.setColor(TEXT_COLOR);
+            g.drawString(tickerLabel + "  [VISION SCAN]", PAD_L + 4, 22);
+        }
 
         // VWAP label
         g.setColor(VWAP_COLOR);

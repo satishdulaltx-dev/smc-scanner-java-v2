@@ -233,6 +233,41 @@ public class DiscordAlertService {
         return e;
     }
 
+    public boolean sendVisionGeneratedAlert(com.smcscanner.vision.VisionSetup vs) {
+        String url = config.getDiscordWebhookUrl();
+        if (url == null || url.isBlank()) return false;
+        return postEmbeds(url, List.of(buildVisionEmbed(vs)));
+    }
+
+    private Map<String,Object> buildVisionEmbed(com.smcscanner.vision.VisionSetup vs) {
+        boolean isLong = "long".equals(vs.direction());
+        String arrow   = isLong ? "⬆️" : "⬇️";
+        String grade   = vs.score() >= 85 ? "⭐" : (vs.score() >= 75 ? "✅" : "🟡");
+        double slPct   = vs.entry() > 0 ? Math.abs(vs.entry() - vs.stopLoss())   / vs.entry() * 100 : 0;
+        double tpPct   = vs.entry() > 0 ? Math.abs(vs.takeProfit() - vs.entry()) / vs.entry() * 100 : 0;
+        String ts      = java.time.ZonedDateTime.now(java.time.ZoneOffset.UTC)
+                         .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")) + " UTC";
+
+        List<Map<String,Object>> fields = new java.util.ArrayList<>(List.of(
+            f("Direction",   arrow + " " + vs.direction().toUpperCase(), true),
+            f("Vision Score",grade + " " + vs.score() + "/100",          true),
+            f("Pattern",     vs.pattern(),                               true),
+            f("Entry",       String.format("$%.2f", vs.entry()),         true),
+            f("Stop Loss",   String.format("$%.2f (-%.2f%%)", vs.stopLoss(),  slPct), true),
+            f("Take Profit", String.format("$%.2f (+%.2f%%)", vs.takeProfit(), tpPct), true),
+            f("R:R",         String.format("%.1f:1", vs.rrRatio()),      true),
+            f("🤖 Reason",   vs.reason(),                                false)
+        ));
+
+        String devTag = config.isDev() ? "[DEV] " : "";
+        Map<String,Object> e = new HashMap<>();
+        e.put("title",  devTag + "🤖 [VISION] " + arrow + " " + vs.ticker() + " — " + vs.direction().toUpperCase());
+        e.put("color",  isLong ? 0x1ABC9C : 0x9B59B6); // teal for long, purple for short (distinct from rule-based)
+        e.put("fields", fields);
+        e.put("footer", Map.of("text", "SD Scanner · Claude Vision | " + ts));
+        return e;
+    }
+
     public boolean sendSwingAlert(TradeSetup s) {
         String url = config.getDiscordSwingWebhookUrl();
         if (url == null || url.isBlank()) { log.warn("No swing Discord webhook URL"); return false; }

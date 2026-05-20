@@ -124,6 +124,163 @@ public class ChartVisionService {
         }
     }
 
+    /**
+     * Proactive scan — Claude looks at the chart cold and decides if a setup is forming.
+     * No rule-based signal is required. Returns empty if no setup found or score < MIN_PROACTIVE_SCORE.
+     */
+    public java.util.Optional<VisionSetup> proactiveScan(List<OHLCV> bars, String ticker) {
+        if (!isEnabled()) return java.util.Optional.empty();
+
+        // Dedupe: skip if we already scanned this ticker in the last 25 min
+        Long[] ts = new Long[]{ cacheTs.getOrDefault("SCAN_" + ticker, new long[]{0})[0] };
+        if (System.currentTimeMillis() - ts[0] < 25 * 60 * 1000L) {
+            return java.util.Optional.empty();
+        }
+
+        try {
+            byte[] png = ChartRenderer.renderBasic(bars, ticker);
+            String b64 = Base64.getEncoder().encodeToString(png);
+
+            // Build context from bar data
+            OHLCV last = bars.get(bars.size() - 1);
+            double price = last.getClose();
+            double[] vwap = calcVwapFromBars(bars);
+            double vwapNow = vwap[vwap.length - 1];
+            double atr = calcAtr(bars, 14);
+
+            String prompt = buildProactivePrompt(ticker, price, vwapNow, atr);
+
+            Map<String, Object> imageContent = Map.of(
+                "type", "image",
+                "source", Map.of("type", "base64", "media_type", "image/png", "data", b64)
+            );
+            Map<String, Object> textContent = Map.of("type", "text", "text", prompt);
+
+            Map<String, Object> body = Map.of(
+                "model", MODEL,
+                "max_tokens", 400,
+                "messages", List.of(Map.of("role", "user",
+                    "content", List.of(imageContent, textContent)))
+            );
+
+            Request req = new Request.Builder()
+                .url(API_URL)
+                .post(RequestBody.create(mapper.writeValueAsString(body), JSON))
+                .addHeader("x-api-key", config.getAnthropicApiKey())
+                .addHeader("anthropic-version", "2023-06-01")
+                .addHeader("content-type", "application/json")
+                .build();
+
+            try (Response resp = http.newCall(req).execute()) {
+                if (!resp.isSuccessful()) {
+                    log.warn("VISION_SCAN_API_ERROR {} status={}", ticker, resp.code());
+                    return java.util.Optional.empty();
+                }
+                String raw = resp.body().string();
+                java.util.Optional<VisionSetup> result = parseProactiveResponse(raw, ticker, price, atr);
+                cacheTs.put("SCAN_" + ticker, new long[]{ System.currentTimeMillis() });
+                result.ifPresentOrElse(
+                    vs -> log.info("VISION_SCAN_FOUND {} dir={} entry={} score={} pattern={}", ticker, vs.direction(), vs.entry(), vs.score(), vs.pattern()),
+                    ()  -> log.debug("VISION_SCAN_NONE {} — no setup found", ticker)
+                );
+                return result;
+            }
+        } catch (Exception e) {
+            log.warn("VISION_SCAN_EXCEPTION {} — {}", ticker, e.getMessage());
+            return java.util.Optional.empty();
+        }
+    }
+
+    private String buildProactivePrompt(String ticker, double price, double vwap, double atr) {
+        return String.format(
+            "You are a professional intraday trader analyzing a 5-minute candlestick chart for %s.\n\n" +
+            "Current data:\n" +
+            "- Price: %.2f\n" +
+            "- VWAP: %.2f (%s VWAP)\n" +
+            "- ATR(14): %.2f\n\n" +
+            "Look at the chart carefully and identify if a high-probability setup is forming RIGHT NOW " +
+            "or will likely trigger in the next 1-3 bars. Consider:\n" +
+            "- Trend direction and momentum (candle structure, higher highs/lows)\n" +
+            "- Volume behavior (increasing on breakouts, declining on consolidations)\n" +
+            "- Key levels (VWAP, swing highs/lows, consolidation zones)\n" +
+            "- Chart patterns (flags, wedges, FVG retests, order block tests, breakouts)\n" +
+            "- Any divergence between price and volume\n\n" +
+            "If you see a clear setup, provide exact prices anchored to the chart.\n" +
+            "If there is no clear setup, return setup_found: false.\n\n" +
+            "Respond ONLY with valid JSON:\n" +
+            "{\"setup_found\": true/false, \"score\": 0-100, \"direction\": \"long\"/\"short\", " +
+            "\"entry\": <price>, \"stop_loss\": <price>, \"take_profit\": <price>, " +
+            "\"pattern\": \"<pattern name>\", \"reason\": \"<one sentence>\"}",
+            ticker, price, vwap, price > vwap ? "above" : "below", atr
+        );
+    }
+
+    @SuppressWarnings("unchecked")
+    private java.util.Optional<VisionSetup> parseProactiveResponse(String raw, String ticker, double currentPrice, double atr) {
+        try {
+            Map<String, Object> resp = mapper.readValue(raw, Map.class);
+            List<Map<String, Object>> content = (List<Map<String, Object>>) resp.get("content");
+            if (content == null || content.isEmpty()) return java.util.Optional.empty();
+            String text = (String) content.get(0).get("text");
+            int start = text.indexOf('{');
+            int end   = text.lastIndexOf('}') + 1;
+            if (start < 0 || end <= start) return java.util.Optional.empty();
+            Map<String, Object> r = mapper.readValue(text.substring(start, end), Map.class);
+
+            if (!Boolean.TRUE.equals(r.get("setup_found"))) return java.util.Optional.empty();
+
+            int score = r.get("score") instanceof Number ? ((Number) r.get("score")).intValue() : 0;
+            if (score < 65) return java.util.Optional.empty(); // proactive bar is higher than validator
+
+            String dir  = (String) r.getOrDefault("direction", "long");
+            double entry = toDouble(r.get("entry"),     currentPrice);
+            double sl    = toDouble(r.get("stop_loss"), currentPrice - atr);
+            double tp    = toDouble(r.get("take_profit"),currentPrice + 2 * atr);
+            String pattern = (String) r.getOrDefault("pattern", "Vision pattern");
+            String reason  = (String) r.getOrDefault("reason",  "");
+
+            // Sanity-check: SL and TP must be on correct sides of entry
+            if ("long".equals(dir)  && (sl >= entry || tp <= entry)) return java.util.Optional.empty();
+            if ("short".equals(dir) && (sl <= entry || tp >= entry)) return java.util.Optional.empty();
+
+            return java.util.Optional.of(new VisionSetup(ticker, dir, entry, sl, tp, score, pattern, reason));
+        } catch (Exception e) {
+            log.warn("VISION_SCAN_PARSE {} — {}", ticker, e.getMessage());
+            return java.util.Optional.empty();
+        }
+    }
+
+    private double toDouble(Object v, double fallback) {
+        if (v instanceof Number) return ((Number) v).doubleValue();
+        try { return Double.parseDouble(v.toString()); } catch (Exception e) { return fallback; }
+    }
+
+    private double[] calcVwapFromBars(List<OHLCV> bars) {
+        double[] vwap = new double[bars.size()];
+        double cumPV = 0, cumVol = 0;
+        for (int i = 0; i < bars.size(); i++) {
+            OHLCV b = bars.get(i);
+            double tp = (b.getHigh() + b.getLow() + b.getClose()) / 3.0;
+            cumPV  += tp * b.getVolume();
+            cumVol += b.getVolume();
+            vwap[i] = cumVol > 0 ? cumPV / cumVol : b.getClose();
+        }
+        return vwap;
+    }
+
+    private double calcAtr(List<OHLCV> bars, int period) {
+        if (bars.size() < 2) return 0;
+        double sum = 0; int count = 0;
+        for (int i = Math.max(1, bars.size() - period); i < bars.size(); i++) {
+            OHLCV cur = bars.get(i), prev = bars.get(i - 1);
+            double tr = Math.max(cur.getHigh() - cur.getLow(),
+                        Math.max(Math.abs(cur.getHigh() - prev.getClose()),
+                                 Math.abs(cur.getLow()  - prev.getClose())));
+            sum += tr; count++;
+        }
+        return count > 0 ? sum / count : 0;
+    }
+
     private String buildPrompt(TradeSetup s) {
         return String.format(
             "You are analyzing a 5-minute candlestick chart for an options trading signal.\n\n" +
