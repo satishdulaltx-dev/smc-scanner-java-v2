@@ -49,19 +49,25 @@ public class DiscordAlertService {
 
     public boolean sendSetupAlert(TradeSetup s, NewsSentiment sentiment, MarketContext context,
                                    EarningsCalendar.EarningsCheck earningsCheck) {
-        // Route to the correct channel based on strategy type
+        return sendSetupAlert(s, sentiment, context, earningsCheck, null);
+    }
+
+    public boolean sendSetupAlert(TradeSetup s, NewsSentiment sentiment, MarketContext context,
+                                   EarningsCalendar.EarningsCheck earningsCheck,
+                                   com.smcscanner.vision.VisionVerdict vision) {
         boolean isScalp = "scalp".equals(s.getVolatility());
         String url = isScalp ? config.getDiscordScalpWebhookUrl() : config.getDiscordWebhookUrl();
         if (url==null||url.isBlank()) { log.warn("No Discord webhook URL for strategy={}", s.getVolatility()); return false; }
-        return postEmbeds(url, List.of(buildEmbed(s, sentiment, context, earningsCheck)));
+        return postEmbeds(url, List.of(buildEmbed(s, sentiment, context, earningsCheck, vision)));
     }
 
     private Map<String,Object> buildEmbed(TradeSetup s) {
-        return buildEmbed(s, NewsSentiment.NONE, MarketContext.NONE, EarningsCalendar.EarningsCheck.NONE);
+        return buildEmbed(s, NewsSentiment.NONE, MarketContext.NONE, EarningsCalendar.EarningsCheck.NONE, null);
     }
 
     private Map<String,Object> buildEmbed(TradeSetup s, NewsSentiment sentiment, MarketContext context,
-                                              EarningsCalendar.EarningsCheck earningsCheck) {
+                                              EarningsCalendar.EarningsCheck earningsCheck,
+                                              com.smcscanner.vision.VisionVerdict vision) {
         boolean isLong="long".equals(s.getDirection());
         String arrow=isLong?"⬆️":"⬇️";
         String grade=s.getConfidence()>=85?"⭐":(s.getConfidence()>=75?"✅":(s.getConfidence()>=65?"🟡":"⚪"));
@@ -202,6 +208,17 @@ public class DiscordAlertService {
             fields.add(f("VIX Regime", context.vixLabel() + " ⚠️ WEAK ENV", true));
         } else if (context != null && context.vixLabel() != null && !"normal".equals(context.vixRegime())) {
             fields.add(f("VIX Regime", context.vixLabel(), true));
+        }
+
+        // ── Vision gate result ──────────────────────────────────────────────
+        if (vision != null && !vision.failedOpen()) {
+            String vLabel = vision.approve()
+                    ? "🤖 Vision (" + vision.score() + "/100) ✅"
+                    : "🤖 Vision (" + vision.score() + "/100) ⊘";
+            String vReason = vision.reason() != null
+                    ? (vision.reason().length() > 200 ? vision.reason().substring(0, 197) + "…" : vision.reason())
+                    : "—";
+            fields.add(f(vLabel, vReason, false));
         }
 
         Map<String,Object> e=new HashMap<>();

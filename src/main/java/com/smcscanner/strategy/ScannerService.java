@@ -1303,7 +1303,7 @@ public class ScannerService {
                                     if (!vision.failedOpen()) {
                                         log.info("VISION_APPROVE {} score={} — {}", ticker, vision.score(), vision.reason());
                                     }
-                                    discord.sendSetupAlert(s, sentiment, context, earningsCheck);
+                                    discord.sendSetupAlert(s, sentiment, context, earningsCheck, vision);
                                     liveLog.recordTrade(s, stratType);
                                     tracker.recordStrategySignal(stratType, s.getConfidence());
                                     // ── Auto-trade via Alpaca (if enabled) ──────────
