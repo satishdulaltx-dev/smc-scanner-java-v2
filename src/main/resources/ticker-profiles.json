@@ -755,11 +755,10 @@
         "skipReason": "Apr 2026 VWAP scalp validation: 33.3% WR near-zero exp — no edge"
       },
       "intraday": {
-        "skip": false,
-        "skipReason": "Index ETF — SMC zones not structural",
+        "skip": true,
+        "skipReason": "May 2026 sweep: all strategies negative at 90d. volflow test ended.",
         "strategyType": "volflow",
-        "minConfidence": 68,
-        "note": "May 2026: volflow test — SPY is the ideal VP candidate (massive institutional order flow, clean VPOC/VAH/VAL structure). Root skip=true keeps this live-silent."
+        "minConfidence": 68
       },
       "swing": {
         "skip": true,
