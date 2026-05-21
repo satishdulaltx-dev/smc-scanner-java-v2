@@ -194,24 +194,27 @@ public class ChartVisionService {
 
     private String buildProactivePrompt(String ticker, double price, double vwap, double atr) {
         return String.format(
-            "You are a professional intraday trader analyzing a 5-minute candlestick chart for %s.\n\n" +
-            "Current data:\n" +
-            "- Price: %.2f\n" +
-            "- VWAP: %.2f (%s VWAP)\n" +
-            "- ATR(14): %.2f\n\n" +
-            "Look at the chart carefully and identify if a high-probability setup is forming RIGHT NOW " +
-            "or will likely trigger in the next 1-3 bars. Consider:\n" +
-            "- Trend direction and momentum (candle structure, higher highs/lows)\n" +
-            "- Volume behavior (increasing on breakouts, declining on consolidations)\n" +
-            "- Key levels (VWAP, swing highs/lows, consolidation zones)\n" +
-            "- Chart patterns (flags, wedges, FVG retests, order block tests, breakouts)\n" +
-            "- Any divergence between price and volume\n\n" +
-            "If you see a clear setup, provide exact prices anchored to the chart.\n" +
-            "If there is no clear setup, return setup_found: false.\n\n" +
+            "You are a ruthlessly selective intraday trader. You only take A+ setups — the kind where " +
+            "everything lines up perfectly and you'd bet real money without hesitation.\n\n" +
+            "Chart: %s · 5-min candles · Price: %.2f · VWAP: %.2f (%s VWAP) · ATR: %.2f\n\n" +
+            "Look at the chart and ask yourself: is there a TEXTBOOK, HIGH-CONVICTION setup right now?\n\n" +
+            "A valid setup requires ALL of the following:\n" +
+            "1. Clear trend or structure break — not mid-range chop\n" +
+            "2. Price at a meaningful level (VWAP, swing high/low, consolidation edge) — not random air\n" +
+            "3. Volume confirms the move — increasing on signal bars, not drying up\n" +
+            "4. Strong candle bodies — not wicks, dojis, or indecision at the entry bar\n" +
+            "5. Momentum is aligned — multiple bars agreeing, not a single spike\n\n" +
+            "REJECT if ANY of these are true:\n" +
+            "- Price is in the middle of a range with no clear directional bias\n" +
+            "- Volume is weak, flat, or declining on the setup bar\n" +
+            "- Candles are indecisive (dojis, hammers mid-range, overlapping wicks)\n" +
+            "- The move looks overextended (too far from VWAP without pullback)\n" +
+            "- You have any doubt at all\n\n" +
+            "Default answer is NO. Only say yes if it's genuinely exceptional.\n\n" +
             "Respond ONLY with valid JSON:\n" +
             "{\"setup_found\": true/false, \"score\": 0-100, \"direction\": \"long\"/\"short\", " +
             "\"entry\": <price>, \"stop_loss\": <price>, \"take_profit\": <price>, " +
-            "\"pattern\": \"<pattern name>\", \"reason\": \"<one sentence>\"}",
+            "\"pattern\": \"<name>\", \"reason\": \"<one sentence explaining exactly what you see>\"}",
             ticker, price, vwap, price > vwap ? "above" : "below", atr
         );
     }
@@ -231,7 +234,7 @@ public class ChartVisionService {
             if (!Boolean.TRUE.equals(r.get("setup_found"))) return java.util.Optional.empty();
 
             int score = r.get("score") instanceof Number ? ((Number) r.get("score")).intValue() : 0;
-            if (score < 78) return java.util.Optional.empty(); // proactive needs high bar — no rule-based pre-filter
+            if (score < 70) return java.util.Optional.empty(); // backstop only — prompt is the real quality gate
 
             String dir  = (String) r.getOrDefault("direction", "long");
             double entry = toDouble(r.get("entry"),     currentPrice);
