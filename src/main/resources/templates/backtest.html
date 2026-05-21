@@ -217,6 +217,9 @@
                 <option value="gammapin">Gamma Pin ($5 strike)</option>
                 <option value="or-vwap">Opening Range VWAP (9:35–10:30)</option>
             </optgroup>
+            <optgroup label="── Order Flow ──">
+                <option value="volflow">Volume Profile + Order Flow</option>
+            </optgroup>
         </select>
     </div>
     <div class="ctrl-group">
@@ -456,7 +459,7 @@ const FILTERED_OUTCOMES = new Set([
 
 // ── Strategy label with model badge ──────────────────────────────────────
 const SCALP_STRATS    = new Set(['scalp']);
-const INTRADAY_STRATS = new Set(['smc','vwap','breakout','keylevel','vsqueeze','vwap3d','idiv','gammapin']);
+const INTRADAY_STRATS = new Set(['smc','vwap','breakout','keylevel','vsqueeze','vwap3d','idiv','gammapin','volflow']);
 function strategyLabel(strat) {
     if (!strat) return '<span style="color:var(--muted);font-size:11px">—</span>';
     const s = strat.toLowerCase();

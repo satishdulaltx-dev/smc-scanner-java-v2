@@ -2,6 +2,8 @@ package com.smcscanner.strategy;
 
 import com.smcscanner.alert.AlertDedup;
 import com.smcscanner.alert.DiscordAlertService;
+import com.smcscanner.vision.ChartVisionService;
+import com.smcscanner.vision.VisionVerdict;
 import com.smcscanner.broker.AlpacaOrderService;
 import com.smcscanner.filter.AdaptiveSuppressor;
 import com.smcscanner.filter.SignalQualityFilter;
@@ -71,6 +73,8 @@ public class ScannerService {
     private final PdhPdlDetector                  pdhPdl;
     private final OpeningRangeVwapDetector        orVwap;
     private final LiquidityMapService             liquidityMap;
+    private final VolumeOrderFlowDetector         volFlow;
+    private final ChartVisionService              chartVision;
 
     public ScannerService(ScannerConfig config, PolygonClient client, SetupDetector setupDetector,
                           CryptoStrategyService crypto, MultiTimeframeAnalyzer mtf,
@@ -94,7 +98,9 @@ public class ScannerService {
                           LiquiditySweepFlipDetector sweepFlip,
                           PdhPdlDetector pdhPdl,
                           OpeningRangeVwapDetector orVwap,
-                          LiquidityMapService liquidityMap) {
+                          LiquidityMapService liquidityMap,
+                          VolumeOrderFlowDetector volFlow,
+                          ChartVisionService chartVision) {
         this.config=config; this.client=client; this.setupDetector=setupDetector; this.crypto=crypto;
         this.mtf=mtf; this.discord=discord; this.dedup=dedup; this.tracker=tracker; this.liveLog=liveLog; this.state=state;
         this.atrCalc=atrCalc; this.vwap=vwap; this.breakout=breakout; this.scalpMomentum=scalpMomentum; this.keyLevel=keyLevel;
@@ -106,7 +112,8 @@ public class ScannerService {
         this.pressureService=pressureService; this.overnightService=overnightService;
         this.pegDetector=pegDetector; this.capReversal=capReversal;
         this.sweepFlip=sweepFlip; this.pdhPdl=pdhPdl; this.orVwap=orVwap;
-        this.liquidityMap=liquidityMap;
+        this.liquidityMap=liquidityMap; this.volFlow=volFlow;
+        this.chartVision=chartVision;
     }
 
     public boolean isCrypto(String t) { return t.startsWith("X:"); }
@@ -402,6 +409,9 @@ public class ScannerService {
                     } else if ("or-vwap".equals(strat)) {
                         stratSetups = orVwap.detect(bars, ticker, dailyAtr);
                         if (stratSetups.isEmpty() && phaseMsg.isEmpty()) phaseMsg = "Waiting for opening VWAP flush recovery...";
+                    } else if ("volflow".equals(strat)) {
+                        stratSetups = volFlow.detect(bars, ticker, dailyAtr);
+                        if (stratSetups.isEmpty() && phaseMsg.isEmpty()) phaseMsg = "Waiting for volume profile signal (VA re-entry / delta divergence / VPOC magnet)...";
                     } else {
                         // smc (default)
                         SetupDetector.DetectResult r = setupDetector.detectSetups(bars, htfBias, ticker, false, dailyAtr);
@@ -1128,12 +1138,14 @@ public class ScannerService {
                 if (s.getConfidence() > effectiveMaxConf) {
                     log.debug("{} OVEREXTENDED conf={} maxConf={} — skipping over-extended signal",
                             ticker, s.getConfidence(), effectiveMaxConf);
-                } else if (s.hasOptionsData() && s.getOptionsRR() > 0 && s.getOptionsRR() < 0.8) {
-                    log.info("{} OPTIONS_RR_BLOCK: optionsRR={} too weak for directional buy; stockRR={} entry={} tp={} sl={}",
-                            ticker, String.format("%.2f", s.getOptionsRR()),
+                } else if (s.hasOptionsData() && s.getOptionsRR() < 0.8) {
+                    // Block both negative R:R (lose money even at TP) and weak positive R:R (< 0.8)
+                    String rrTag = s.getOptionsRR() <= 0 ? "NEGATIVE (lose at TP)" : "too weak";
+                    log.info("{} OPTIONS_RR_BLOCK: optionsRR={} {} stockRR={} entry={} tp={} sl={}",
+                            ticker, String.format("%.2f", s.getOptionsRR()), rrTag,
                             String.format("%.2f", s.rrRatio()), s.getEntry(), s.getTakeProfit(), s.getStopLoss());
                     removeSetup(ticker);
-                    setTs(ticker, "idle", null, 0, "⊘ Options R:R too weak");
+                    setTs(ticker, "idle", null, 0, s.getOptionsRR() <= 0 ? "⊘ Options lose at TP" : "⊘ Options R:R too weak");
                     return;
                 } else if (scalpOptionSetup && strongFlowConflict) {
                     log.info("{} FLOW_CONFLICT_BLOCK: {} flow ratio={} conflicts with {} scalp",
@@ -1280,7 +1292,20 @@ public class ScannerService {
                                     log.info("INTRADAY ALERT {} {} conf={} entry={} adj=news{}/ctx{}/qual{}/flow{}/regime{}/corr{}/align{}/sma200{}/rsi{}/candle{}/vol{} vixBoost={} dynamicMin={}",
                                             ticker, s.getDirection().toUpperCase(), s.getConfidence(), s.getEntry(),
                                             newsAdj, ctxAdj, qualityAdj, flowAdj, regimeAdj, corrAdj, alignmentAdj, sma200Adj, rsiAdj, candleAdj, volAdj, vixBoost, dynamicMinConf);
-                                    discord.sendSetupAlert(s, sentiment, context, earningsCheck);
+                                    // ── Claude Vision gate ───────────────────────────────────────
+                                    // Render chart + ask Claude to visually verify before Discord.
+                                    // Fails open: API error or missing key never blocks an alert.
+                                    VisionVerdict vision = chartVision.analyze(bars, s);
+                                    if (!vision.approve()) {
+                                        log.info("VISION_REJECT {} {} conf={} score={} — {}",
+                                                ticker, s.getDirection().toUpperCase(), s.getConfidence(),
+                                                vision.score(), vision.reason());
+                                        setTs(ticker, "idle", null, 0, "⊘ Vision rejected: " + vision.reason());
+                                    } else {
+                                    if (!vision.failedOpen()) {
+                                        log.info("VISION_APPROVE {} score={} — {}", ticker, vision.score(), vision.reason());
+                                    }
+                                    discord.sendSetupAlert(s, sentiment, context, earningsCheck, vision);
                                     liveLog.recordTrade(s, stratType);
                                     tracker.recordStrategySignal(stratType, s.getConfidence());
                                     // ── Auto-trade via Alpaca (if enabled) ──────────
@@ -1313,6 +1338,7 @@ public class ScannerService {
                                             }
                                         }
                                     }
+                                    } // end vision approve block
                                 }
                             }
                             dedup.markSent(ticker, s.getDirection(), s.getEntry());

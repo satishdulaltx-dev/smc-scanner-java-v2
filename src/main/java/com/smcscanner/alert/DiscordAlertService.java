@@ -49,19 +49,25 @@ public class DiscordAlertService {
 
     public boolean sendSetupAlert(TradeSetup s, NewsSentiment sentiment, MarketContext context,
                                    EarningsCalendar.EarningsCheck earningsCheck) {
-        // Route to the correct channel based on strategy type
+        return sendSetupAlert(s, sentiment, context, earningsCheck, null);
+    }
+
+    public boolean sendSetupAlert(TradeSetup s, NewsSentiment sentiment, MarketContext context,
+                                   EarningsCalendar.EarningsCheck earningsCheck,
+                                   com.smcscanner.vision.VisionVerdict vision) {
         boolean isScalp = "scalp".equals(s.getVolatility());
         String url = isScalp ? config.getDiscordScalpWebhookUrl() : config.getDiscordWebhookUrl();
         if (url==null||url.isBlank()) { log.warn("No Discord webhook URL for strategy={}", s.getVolatility()); return false; }
-        return postEmbeds(url, List.of(buildEmbed(s, sentiment, context, earningsCheck)));
+        return postEmbeds(url, List.of(buildEmbed(s, sentiment, context, earningsCheck, vision)));
     }
 
     private Map<String,Object> buildEmbed(TradeSetup s) {
-        return buildEmbed(s, NewsSentiment.NONE, MarketContext.NONE, EarningsCalendar.EarningsCheck.NONE);
+        return buildEmbed(s, NewsSentiment.NONE, MarketContext.NONE, EarningsCalendar.EarningsCheck.NONE, null);
     }
 
     private Map<String,Object> buildEmbed(TradeSetup s, NewsSentiment sentiment, MarketContext context,
-                                              EarningsCalendar.EarningsCheck earningsCheck) {
+                                              EarningsCalendar.EarningsCheck earningsCheck,
+                                              com.smcscanner.vision.VisionVerdict vision) {
         boolean isLong="long".equals(s.getDirection());
         String arrow=isLong?"⬆️":"⬇️";
         String grade=s.getConfidence()>=85?"⭐":(s.getConfidence()>=75?"✅":(s.getConfidence()>=65?"🟡":"⚪"));
@@ -204,6 +210,17 @@ public class DiscordAlertService {
             fields.add(f("VIX Regime", context.vixLabel(), true));
         }
 
+        // ── Vision gate result ──────────────────────────────────────────────
+        if (vision != null && !vision.failedOpen()) {
+            String vLabel = vision.approve()
+                    ? "🤖 Vision (" + vision.score() + "/100) ✅"
+                    : "🤖 Vision (" + vision.score() + "/100) ⊘";
+            String vReason = vision.reason() != null
+                    ? (vision.reason().length() > 200 ? vision.reason().substring(0, 197) + "…" : vision.reason())
+                    : "—";
+            fields.add(f(vLabel, vReason, false));
+        }
+
         Map<String,Object> e=new HashMap<>();
         String devTag = config.isDev() ? "[DEV] " : "";
         String title = s.hasOptionsData()
@@ -213,6 +230,41 @@ public class DiscordAlertService {
                 : devTag + arrow + " " + s.getTicker() + " — " + s.getDirection().toUpperCase() + " Setup";
         e.put("title", title);
         e.put("color",isLong?0x2ECC71:0xE74C3C); e.put("fields",fields); e.put("footer",Map.of("text","SD Scanner | "+ts));
+        return e;
+    }
+
+    public boolean sendVisionGeneratedAlert(com.smcscanner.vision.VisionSetup vs) {
+        String url = config.getDiscordWebhookUrl();
+        if (url == null || url.isBlank()) return false;
+        return postEmbeds(url, List.of(buildVisionEmbed(vs)));
+    }
+
+    private Map<String,Object> buildVisionEmbed(com.smcscanner.vision.VisionSetup vs) {
+        boolean isLong = "long".equals(vs.direction());
+        String arrow   = isLong ? "⬆️" : "⬇️";
+        String grade   = vs.score() >= 85 ? "⭐" : (vs.score() >= 75 ? "✅" : "🟡");
+        double slPct   = vs.entry() > 0 ? Math.abs(vs.entry() - vs.stopLoss())   / vs.entry() * 100 : 0;
+        double tpPct   = vs.entry() > 0 ? Math.abs(vs.takeProfit() - vs.entry()) / vs.entry() * 100 : 0;
+        String ts      = java.time.ZonedDateTime.now(java.time.ZoneOffset.UTC)
+                         .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")) + " UTC";
+
+        List<Map<String,Object>> fields = new java.util.ArrayList<>(List.of(
+            f("Direction",   arrow + " " + vs.direction().toUpperCase(), true),
+            f("Vision Score",grade + " " + vs.score() + "/100",          true),
+            f("Pattern",     vs.pattern(),                               true),
+            f("Entry",       String.format("$%.2f", vs.entry()),         true),
+            f("Stop Loss",   String.format("$%.2f (-%.2f%%)", vs.stopLoss(),  slPct), true),
+            f("Take Profit", String.format("$%.2f (+%.2f%%)", vs.takeProfit(), tpPct), true),
+            f("R:R",         String.format("%.1f:1", vs.rrRatio()),      true),
+            f("🤖 Reason",   vs.reason(),                                false)
+        ));
+
+        String devTag = config.isDev() ? "[DEV] " : "";
+        Map<String,Object> e = new HashMap<>();
+        e.put("title",  devTag + "🤖 [VISION] " + arrow + " " + vs.ticker() + " — " + vs.direction().toUpperCase());
+        e.put("color",  isLong ? 0x1ABC9C : 0x9B59B6); // teal for long, purple for short (distinct from rule-based)
+        e.put("fields", fields);
+        e.put("footer", Map.of("text", "SD Scanner · Claude Vision | " + ts));
         return e;
     }
 

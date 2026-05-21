@@ -20,6 +20,7 @@ public class ScannerConfig {
 
     private String environment            = "prod"; // "dev" or "prod" — set via ENVIRONMENT env var
     private String polygonApiKey          = "";
+    private String anthropicApiKey        = ""; // set ANTHROPIC_API_KEY in Railway for vision analysis
     private String discordWebhookUrl      = "";
     private String discordEodWebhookUrl   = "";  // dedicated EOD report channel
     private String discordSwingWebhookUrl = "";  // swing trade alerts channel
@@ -69,6 +70,8 @@ public class ScannerConfig {
     public String getEnvironment()           { return environment; }
     public boolean isDev()                   { return "dev".equalsIgnoreCase(environment); }
     public String getPolygonApiKey()         { return polygonApiKey; }
+    public String getAnthropicApiKey()       { return anthropicApiKey; }
+    public void setAnthropicApiKey(String v) { this.anthropicApiKey = v; }
     public String getDiscordWebhookUrl()     { return discordWebhookUrl; }
     public String getDiscordEodWebhookUrl()  { return discordEodWebhookUrl; }
     public String getDiscordSwingWebhookUrl() { return discordSwingWebhookUrl; }

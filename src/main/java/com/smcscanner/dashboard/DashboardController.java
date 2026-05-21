@@ -59,6 +59,7 @@ public class DashboardController {
     private final ProfileOptimizer   optimizer;
     private final ResearchService    researchService;
     private final com.smcscanner.broker.AlpacaOrderService alpaca;
+    private final com.smcscanner.vision.ChartVisionService chartVision;
 
     private static final Map<String,String> TV_MAP = Map.of(
         "X:BTCUSD", "BINANCE:BTCUSDT",
@@ -79,12 +80,14 @@ public class DashboardController {
                                 AnalysisService analysisService, LiveTradeLog liveLog,
                                 PolygonClient polygon, ProfileOptimizer optimizer,
                                 ResearchService researchService,
-                                com.smcscanner.broker.AlpacaOrderService alpaca) {
+                                com.smcscanner.broker.AlpacaOrderService alpaca,
+                                com.smcscanner.vision.ChartVisionService chartVision) {
         this.state=state; this.config=config; this.sessionFilter=sessionFilter;
         this.tracker=tracker; this.eodReport=eodReport; this.discord=discord;
         this.reportCache=reportCache; this.backtestService=backtestService; this.adaptive=adaptive;
         this.analysisService=analysisService; this.liveLog=liveLog; this.polygon=polygon;
         this.optimizer=optimizer; this.researchService=researchService; this.alpaca=alpaca;
+        this.chartVision=chartVision;
     }
 
     /**
@@ -574,7 +577,7 @@ public class DashboardController {
         return analysisService.analyze(ticker);
     }
 
-    /** GET /api/backtest?ticker=AAPL&days=90&mode=INTRADAY&strategy=vsqueeze */
+    /** GET /api/backtest?ticker=AAPL&days=90&mode=INTRADAY&strategy=vsqueeze&force=true */
     @GetMapping("/api/backtest")
     @ResponseBody
     public ResponseEntity<Map<String,Object>> apiBacktest(
@@ -585,11 +588,12 @@ public class DashboardController {
             @org.springframework.web.bind.annotation.RequestParam(required=false)      String strategy,
             @org.springframework.web.bind.annotation.RequestParam(required=false)      Integer mc,
             @org.springframework.web.bind.annotation.RequestParam(required=false)      Double  sl,
-            @org.springframework.web.bind.annotation.RequestParam(required=false)      Double  tp) {
+            @org.springframework.web.bind.annotation.RequestParam(required=false)      Double  tp,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue="false") boolean force) {
         String sym = ticker.toUpperCase();
         // Apply inline param overrides for sweep testing (bypasses saved profile)
         com.smcscanner.model.TickerProfile savedProfile = null;
-        if (mc != null || sl != null || tp != null) {
+        if (mc != null || sl != null || tp != null || force) {
             com.smcscanner.model.TickerProfile orig = config.getTickerProfile(sym);
             com.smcscanner.model.TickerProfile override = new com.smcscanner.model.TickerProfile();
             override.setTicker(sym);
@@ -602,6 +606,28 @@ public class DashboardController {
             override.setDispAtrMult(orig.getDispAtrMult());
             override.setMinVolMult(orig.getMinVolMult());
             override.setIntradayRsGate(orig.isIntradayRsGate() ? Boolean.TRUE : null);
+            // force=true: clear all mode-level skip flags so disabled tickers can be sweep-tested
+            if (force) {
+                com.smcscanner.model.TickerProfile.ModeProfile enabledMode = new com.smcscanner.model.TickerProfile.ModeProfile();
+                enabledMode.setSkip(false);
+                com.smcscanner.model.TickerProfile.ModeProfile origIntraday = orig.getIntraday();
+                if (origIntraday != null) {
+                    enabledMode.setStrategyType(strategy != null && !strategy.isBlank() ? strategy : origIntraday.getStrategyType());
+                    enabledMode.setMinConfidence(origIntraday.getMinConfidence());
+                }
+                override.setIntraday(enabledMode);
+                com.smcscanner.model.TickerProfile.ModeProfile enabledScalp = new com.smcscanner.model.TickerProfile.ModeProfile();
+                enabledScalp.setSkip(false);
+                com.smcscanner.model.TickerProfile.ModeProfile origScalp = orig.getScalp();
+                if (origScalp != null) {
+                    enabledScalp.setStrategyType(origScalp.getStrategyType());
+                    enabledScalp.setMinConfidence(origScalp.getMinConfidence());
+                }
+                override.setScalp(enabledScalp);
+                com.smcscanner.model.TickerProfile.ModeProfile enabledSwing = new com.smcscanner.model.TickerProfile.ModeProfile();
+                enabledSwing.setSkip(false);
+                override.setSwing(enabledSwing);
+            }
             savedProfile = config.setProfileOverride(sym, override);
         }
         try {
@@ -1139,6 +1165,48 @@ public class DashboardController {
         }
         status.put("trailing_stops", trails);
         return ResponseEntity.ok(status);
+    }
+
+    /** GET /api/vision/test?ticker=AMD&dir=long — render chart + call Claude, return verdict */
+    @GetMapping("/api/vision/test")
+    @ResponseBody
+    public ResponseEntity<Map<String,Object>> visionTest(
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue="AMD") String ticker,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue="long") String dir) {
+        String sym = ticker.toUpperCase();
+        if (!chartVision.isEnabled()) {
+            return ResponseEntity.ok(Map.of("enabled", false, "message", "ANTHROPIC_API_KEY not set"));
+        }
+        try {
+            java.util.List<com.smcscanner.model.OHLCV> bars = polygon.getBars(sym, "5m", 100);
+            if (bars == null || bars.size() < 20) {
+                return ResponseEntity.ok(Map.of("error", "insufficient bar data for " + sym));
+            }
+            // Build a representative test signal using current price
+            double price = bars.get(bars.size()-1).getClose();
+            double atr   = price * 0.008; // ~0.8% as proxy ATR
+            com.smcscanner.model.TradeSetup signal = com.smcscanner.model.TradeSetup.builder()
+                .ticker(sym).direction(dir)
+                .entry(price)
+                .stopLoss( "long".equalsIgnoreCase(dir) ? price - atr : price + atr)
+                .takeProfit("long".equalsIgnoreCase(dir) ? price + atr*2 : price - atr*2)
+                .confidence(72).session("NYSE").volatility("test")
+                .atr(atr).hasBos(false).hasChoch(false).fvgTop(0).fvgBottom(0)
+                .timestamp(java.time.LocalDateTime.now())
+                .build();
+            com.smcscanner.vision.VisionVerdict verdict = chartVision.analyze(bars, signal);
+            return ResponseEntity.ok(Map.of(
+                "enabled",    true,
+                "ticker",     sym,
+                "direction",  dir,
+                "approve",    verdict.approve(),
+                "score",      verdict.score(),
+                "reason",     verdict.reason(),
+                "failed_open",verdict.failedOpen()
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
     }
 
     @GetMapping("/health")
