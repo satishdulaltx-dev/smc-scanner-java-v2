@@ -46,6 +46,7 @@ public class ChartVisionService {
     }
 
     public boolean isEnabled() {
+        if (config.isDev()) return false; // never call Anthropic API on dev — costs money
         String key = config.getAnthropicApiKey();
         return key != null && !key.isBlank();
     }
