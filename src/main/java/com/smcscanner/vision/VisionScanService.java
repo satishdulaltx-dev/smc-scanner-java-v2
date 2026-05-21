@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.*;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Runs Claude Vision independently every 30 min during market hours to find setups
@@ -57,23 +58,31 @@ public class VisionScanService {
 
         log.info("VISION_SCAN starting — {} tickers", tickers.size());
 
+        final int MAX_ALERTS_PER_CYCLE = 2; // never flood Discord — best 2 setups per 30-min window
+        AtomicInteger alertsFired = new AtomicInteger(0);
+
         for (String ticker : tickers) {
             if (ticker.startsWith("X:")) continue; // skip crypto for now
+            if (alertsFired.get() >= MAX_ALERTS_PER_CYCLE) {
+                log.info("VISION_SCAN cap reached ({}) — skipping remaining tickers", MAX_ALERTS_PER_CYCLE);
+                break;
+            }
             try {
                 List<OHLCV> bars = client.getBars(ticker, "5m", 100);
                 if (bars == null || bars.size() < 20) continue;
 
                 chartVision.proactiveScan(bars, ticker).ifPresent(vs -> {
-                    if (dedup.isDuplicate(ticker, vs.direction(), vs.entry(), 60)) {
+                    if (dedup.isDuplicate(ticker, vs.direction(), vs.entry(), 120)) {
                         log.info("VISION_SCAN_DEDUP {} — already alerted", ticker);
                         return;
                     }
                     log.info("VISION_SCAN_ALERT {} {} entry={} score={}", ticker, vs.direction(), vs.entry(), vs.score());
                     discord.sendVisionGeneratedAlert(vs);
                     dedup.markSent(ticker, vs.direction(), vs.entry());
+                    alertsFired.incrementAndGet();
                 });
 
-                Thread.sleep(300); // gentle rate limit between tickers
+                Thread.sleep(300);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 return;
@@ -82,6 +91,6 @@ public class VisionScanService {
             }
         }
 
-        log.info("VISION_SCAN complete");
+        log.info("VISION_SCAN complete — {} alert(s) fired", alertsFired.get());
     }
 }

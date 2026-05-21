@@ -231,7 +231,7 @@ public class ChartVisionService {
             if (!Boolean.TRUE.equals(r.get("setup_found"))) return java.util.Optional.empty();
 
             int score = r.get("score") instanceof Number ? ((Number) r.get("score")).intValue() : 0;
-            if (score < 65) return java.util.Optional.empty(); // proactive bar is higher than validator
+            if (score < 78) return java.util.Optional.empty(); // proactive needs high bar — no rule-based pre-filter
 
             String dir  = (String) r.getOrDefault("direction", "long");
             double entry = toDouble(r.get("entry"),     currentPrice);
