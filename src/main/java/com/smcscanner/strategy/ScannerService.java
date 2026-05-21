@@ -1138,12 +1138,14 @@ public class ScannerService {
                 if (s.getConfidence() > effectiveMaxConf) {
                     log.debug("{} OVEREXTENDED conf={} maxConf={} — skipping over-extended signal",
                             ticker, s.getConfidence(), effectiveMaxConf);
-                } else if (s.hasOptionsData() && s.getOptionsRR() > 0 && s.getOptionsRR() < 0.8) {
-                    log.info("{} OPTIONS_RR_BLOCK: optionsRR={} too weak for directional buy; stockRR={} entry={} tp={} sl={}",
-                            ticker, String.format("%.2f", s.getOptionsRR()),
+                } else if (s.hasOptionsData() && s.getOptionsRR() < 0.8) {
+                    // Block both negative R:R (lose money even at TP) and weak positive R:R (< 0.8)
+                    String rrTag = s.getOptionsRR() <= 0 ? "NEGATIVE (lose at TP)" : "too weak";
+                    log.info("{} OPTIONS_RR_BLOCK: optionsRR={} {} stockRR={} entry={} tp={} sl={}",
+                            ticker, String.format("%.2f", s.getOptionsRR()), rrTag,
                             String.format("%.2f", s.rrRatio()), s.getEntry(), s.getTakeProfit(), s.getStopLoss());
                     removeSetup(ticker);
-                    setTs(ticker, "idle", null, 0, "⊘ Options R:R too weak");
+                    setTs(ticker, "idle", null, 0, s.getOptionsRR() <= 0 ? "⊘ Options lose at TP" : "⊘ Options R:R too weak");
                     return;
                 } else if (scalpOptionSetup && strongFlowConflict) {
                     log.info("{} FLOW_CONFLICT_BLOCK: {} flow ratio={} conflicts with {} scalp",
