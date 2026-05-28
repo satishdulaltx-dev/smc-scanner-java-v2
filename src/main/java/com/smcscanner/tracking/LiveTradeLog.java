@@ -416,16 +416,10 @@ public class LiveTradeLog {
         for (Map.Entry<String, List<Map<String, Object>>> e : byTicker.entrySet()) {
             String ticker = e.getKey();
             try {
-                Double lastPrice = null;
-                boolean needsLastPrice = e.getValue().stream()
-                        .anyMatch(t -> brokerOpenTickers.contains(ticker)
-                                || "BROKER_RECON_PENDING".equals(String.valueOf(t.get("resolutionSource"))));
-                if (needsLastPrice) {
-                    List<OHLCV> bars = client.getBars(ticker, "5m", 80);
-                    if (bars != null && !bars.isEmpty()) {
-                        lastPrice = bars.get(bars.size() - 1).getClose();
-                    }
-                }
+                // Always fetch bars — needed for broker-open unrealized P&L AND stock-price fallback
+                List<OHLCV> bars = client.getBars(ticker, "5m", 100);
+                Double lastPrice = (bars != null && !bars.isEmpty())
+                        ? bars.get(bars.size() - 1).getClose() : null;
 
                 for (Map<String, Object> t : e.getValue()) {
                     double entry = ((Number) t.get("entry")).doubleValue();
@@ -449,9 +443,17 @@ public class LiveTradeLog {
                             outcome = (String) t.get("outcome");
                             pnlPct = ((Number) t.getOrDefault("pnlPct", 0.0)).doubleValue();
                         } else {
-                            t.put("resolutionSource", "BROKER_RECON_PENDING");
-                            t.put("brokerReconcileStatus", "NO_MATCHED_FILL");
-                            pendingBrokerMatch++;
+                            // ── Stock-price fallback for Discord-only alerts ───────────────
+                            // No Alpaca order found → check if the underlying hit SL or TP
+                            // in the bars since the signal fired. This resolves all non-auto-
+                            // traded alerts (the majority) so we can measure win rate properly.
+                            boolean resolvedFromPrice = resolveFromStockPrice(t, bars, isLong);
+                            if (resolvedFromPrice) {
+                                outcome = (String) t.get("outcome");
+                                pnlPct = ((Number) t.getOrDefault("pnlPct", 0.0)).doubleValue();
+                            } else {
+                                pendingBrokerMatch++;
+                            }
                         }
                     }
 
@@ -483,8 +485,7 @@ public class LiveTradeLog {
                             log.info("Still OPEN: {} {} entry={} last={} unrealPnl={}%",
                                     ticker, dir, entry, lastPrice, Math.round(pnlPct * 100.0) / 100.0);
                         } else {
-                            log.info("Still OPEN pending broker reconciliation: {} {} entry={} source={}",
-                                    ticker, dir, entry, t.get("resolutionSource"));
+                            log.debug("Still OPEN (within window): {} {} entry={}", ticker, dir, entry);
                         }
                     }
                 }
@@ -498,6 +499,91 @@ public class LiveTradeLog {
             log.info("Live trade reconciliation updated: resolved={} pendingBrokerMatch={}", resolved, pendingBrokerMatch);
         }
         backfillBrokerResolvedPnL();
+    }
+
+    /**
+     * Resolves a trade using stock price bars when no Alpaca order exists (Discord-only alerts).
+     * Walks bars since the signal timestamp and checks if TP or SL was hit.
+     * Falls back to TIMEOUT when the signal is old (> 8 hours) with no level hit.
+     *
+     * Returns true if the trade was resolved, false if still within the active window.
+     */
+    private boolean resolveFromStockPrice(Map<String, Object> trade, List<OHLCV> allBars, boolean isLong) {
+        long signalTs = ((Number) trade.getOrDefault("timestamp", 0L)).longValue();
+        if (signalTs <= 0 || allBars == null || allBars.isEmpty()) return false;
+
+        double sl    = toDouble(trade.get("stopLoss"));
+        double tp    = toDouble(trade.get("takeProfit"));
+        double entry = toDouble(trade.get("entry"));
+        if (sl <= 0 || tp <= 0 || entry <= 0) return false;
+
+        // Wait at least 5 minutes after signal before resolving (entry fill window)
+        long ageMs = System.currentTimeMillis() - signalTs;
+        if (ageMs < 5 * 60 * 1000L) return false;
+
+        // Bars after the signal fired
+        List<OHLCV> postSignal = allBars.stream()
+                .filter(b -> b.getTimestamp() >= signalTs)
+                .collect(Collectors.toList());
+
+        if (!postSignal.isEmpty()) {
+            for (OHLCV bar : postSignal) {
+                boolean tpHit = isLong ? bar.getHigh() >= tp   : bar.getLow()  <= tp;
+                boolean slHit = isLong ? bar.getLow()  <= sl   : bar.getHigh() >= sl;
+                if (tpHit || slHit) {
+                    // Both in the same bar → use close to break tie
+                    String result;
+                    double exitLevel;
+                    if (tpHit && slHit) {
+                        boolean closerToTp = Math.abs(bar.getClose() - tp) < Math.abs(bar.getClose() - sl);
+                        result     = closerToTp ? "WIN" : "LOSS";
+                        exitLevel  = closerToTp ? tp : sl;
+                    } else if (tpHit) {
+                        result    = "WIN";
+                        exitLevel = tp;
+                    } else {
+                        result    = "LOSS";
+                        exitLevel = sl;
+                    }
+                    double pnlPct = isLong
+                            ? (exitLevel - entry) / entry * 100.0
+                            : (entry - exitLevel) / entry * 100.0;
+                    trade.put("outcome", result);
+                    trade.put("pnlPct", Math.round(pnlPct * 100.0) / 100.0);
+                    trade.put("pnlAmount", null);
+                    trade.put("exitPrice", exitLevel);
+                    trade.put("resolutionSource", "STOCK_PRICE");
+                    trade.put("resolvedAt", ZonedDateTime.now(ET).toInstant().toEpochMilli());
+                    log.info("STOCK_PRICE_RESOLVED {} {} entry={} exit={} → {} pnl={}%",
+                            trade.get("ticker"), trade.get("direction"), entry, exitLevel,
+                            result, Math.round(pnlPct * 100.0) / 100.0);
+                    return true;
+                }
+            }
+        }
+
+        // Neither level hit yet. If signal is > 8 hours old (next day or end of session),
+        // resolve as TIMEOUT at last known price.
+        if (ageMs > 8 * 60 * 60 * 1000L) {
+            double lastPrice = postSignal.isEmpty()
+                    ? allBars.get(allBars.size() - 1).getClose()
+                    : postSignal.get(postSignal.size() - 1).getClose();
+            double pnlPct = isLong
+                    ? (lastPrice - entry) / entry * 100.0
+                    : (entry - lastPrice) / entry * 100.0;
+            trade.put("outcome", "TIMEOUT");
+            trade.put("pnlPct", Math.round(pnlPct * 100.0) / 100.0);
+            trade.put("pnlAmount", null);
+            trade.put("exitPrice", lastPrice);
+            trade.put("resolutionSource", "STOCK_PRICE_TIMEOUT");
+            trade.put("resolvedAt", ZonedDateTime.now(ET).toInstant().toEpochMilli());
+            log.info("STOCK_PRICE_TIMEOUT {} {} entry={} last={} pnl={}%",
+                    trade.get("ticker"), trade.get("direction"), entry, lastPrice,
+                    Math.round(pnlPct * 100.0) / 100.0);
+            return true;
+        }
+
+        return false; // still within active window — check again at 4:30 PM
     }
 
     private ZonedDateTime resolveSignalTime(TradeSetup setup) {
