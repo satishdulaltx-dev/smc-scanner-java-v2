@@ -1309,33 +1309,11 @@ public class ScannerService {
                                     liveLog.recordTrade(s, stratType);
                                     tracker.recordStrategySignal(stratType, s.getConfidence());
                                     // ── Auto-trade via Alpaca (if enabled) ──────────
-                                    // Two gates: R:R must be ≥ alpacaMinRR AND confidence must be ≥ dynamicMinConf.
-                                    // dynamicMinConf = effectiveMinConf + vixBoost — same threshold backtest uses,
-                                    // so live auto-executes exactly the same signals backtest would trade.
+                                    // Discord alert IS the quality gate — place immediately.
                                     if (alpaca.isEnabled()) {
-                                        double rr = s.rrRatio();
-                                        int    liveConf = s.getConfidence();
-                                        if (rr < config.getAlpacaMinRR()) {
-                                            log.info("ALPACA SKIPPED {} {} rr={} < minRR={} — alert only",
-                                                    ticker, s.getDirection().toUpperCase(),
-                                                    String.format("%.2f", rr), config.getAlpacaMinRR());
-                                        } else if (liveConf < dynamicMinConf) {
-                                            log.info("ALPACA SKIPPED {} {} conf={} < dynamicMinConf={} — alert only",
-                                                    ticker, s.getDirection().toUpperCase(),
-                                                    liveConf, dynamicMinConf);
-                                        } else if (!ticker.startsWith("X:") && !liquidityMap.isNearLevel(ticker, s.getEntry(), dailyAtr)) {
-                                            log.info("ALPACA SKIPPED {} {} entry={} — not near a liquidity level (location gate)",
-                                                    ticker, s.getDirection().toUpperCase(),
-                                                    String.format("%.2f", s.getEntry()));
-                                        } else if (!ticker.startsWith("X:") && !liquidityMap.isLevelFresh(ticker, s.getEntry(), dailyAtr)) {
-                                            log.info("ALPACA SKIPPED {} {} entry={} — level already tested 2× this session (third-push filter)",
-                                                    ticker, s.getDirection().toUpperCase(),
-                                                    String.format("%.2f", s.getEntry()));
-                                        } else {
-                                            String orderId = alpaca.placeOrder(s);
-                                            if (orderId != null) {
-                                                log.info("ALPACA ORDER {} {} orderId={}", ticker, s.getDirection(), orderId);
-                                            }
+                                        String orderId = alpaca.placeOrder(s);
+                                        if (orderId != null) {
+                                            log.info("ALPACA ORDER {} {} orderId={}", ticker, s.getDirection(), orderId);
                                         }
                                     }
                                     } // end vision approve block
