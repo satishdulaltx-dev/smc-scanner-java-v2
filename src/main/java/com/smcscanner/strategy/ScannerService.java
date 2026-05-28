@@ -1301,6 +1301,7 @@ public class ScannerService {
                                                 ticker, s.getDirection().toUpperCase(), s.getConfidence(),
                                                 vision.score(), vision.reason());
                                         setTs(ticker, "idle", null, 0, "⊘ Vision rejected: " + vision.reason());
+                                        discord.sendVisionRejection(s, vision);
                                     } else {
                                     if (!vision.failedOpen()) {
                                         log.info("VISION_APPROVE {} score={} — {}", ticker, vision.score(), vision.reason());

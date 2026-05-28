@@ -394,6 +394,31 @@ public class DiscordAlertService {
         return postEmbeds(url, List.of(embed));
     }
 
+    /** Send a Vision rejection notice — compact embed so it's visible but not noisy. */
+    public boolean sendVisionRejection(com.smcscanner.model.TradeSetup s, com.smcscanner.vision.VisionVerdict v) {
+        String url = config.getDiscordWebhookUrl();
+        if (url == null || url.isBlank()) return false;
+        boolean isLong = "long".equals(s.getDirection());
+        String arrow = isLong ? "⬆️" : "⬇️";
+        String reason = v.reason() != null && !v.reason().isBlank() ? v.reason() : "no reason returned";
+        String ts = ZonedDateTime.now(ZoneOffset.UTC).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")) + " UTC";
+
+        List<Map<String, Object>> fields = List.of(
+            f("Ticker",     s.getTicker(),                                                   true),
+            f("Direction",  arrow + " " + s.getDirection().toUpperCase(),                    true),
+            f("Confidence", s.getConfidence() + "/100",                                      true),
+            f("Vision Score", v.score() + "/100 ⊘ REJECTED",                                true),
+            f("Claude says", reason,                                                          false)
+        );
+
+        Map<String, Object> embed = new HashMap<>();
+        embed.put("title", "🤖 Vision Rejected — " + s.getTicker());
+        embed.put("color", 0x95A5A6); // grey — not a trade alert
+        embed.put("fields", fields);
+        embed.put("footer", Map.of("text", "SD Scanner (Vision gate) | " + ts));
+        return postEmbeds(url, List.of(embed));
+    }
+
     /** Send a plain text alert to the main webhook channel. */
     public boolean sendAlert(String message) {
         String url = config.getDiscordWebhookUrl();
