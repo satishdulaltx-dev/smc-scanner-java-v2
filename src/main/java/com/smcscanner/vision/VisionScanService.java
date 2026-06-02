@@ -58,15 +58,10 @@ public class VisionScanService {
 
         log.info("VISION_SCAN starting — {} tickers", tickers.size());
 
-        final int MAX_ALERTS_PER_CYCLE = 2; // never flood Discord — best 2 setups per 30-min window
         AtomicInteger alertsFired = new AtomicInteger(0);
 
         for (String ticker : tickers) {
             if (ticker.startsWith("X:")) continue; // skip crypto for now
-            if (alertsFired.get() >= MAX_ALERTS_PER_CYCLE) {
-                log.info("VISION_SCAN cap reached ({}) — skipping remaining tickers", MAX_ALERTS_PER_CYCLE);
-                break;
-            }
             try {
                 List<OHLCV> bars = client.getBars(ticker, "5m", 100);
                 if (bars == null || bars.size() < 20) continue;
