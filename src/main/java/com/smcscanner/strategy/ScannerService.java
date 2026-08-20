@@ -1309,22 +1309,27 @@ public class ScannerService {
                                     discord.sendSetupAlert(s, sentiment, context, earningsCheck, vision);
                                     liveLog.recordTrade(s, stratType);
                                     tracker.recordStrategySignal(stratType, s.getConfidence());
-                                    // ── Auto-trade via Alpaca (if enabled) ──────────
-                                    // Discord alert IS the quality gate — place immediately.
-                                    if (alpaca.isEnabled()) {
-                                        String orderId = alpaca.placeOrder(s);
-                                        if (orderId != null) {
-                                            log.info("ALPACA ORDER {} {} orderId={}", ticker, s.getDirection(), orderId);
-                                        }
-                                    }
                                     } // end vision approve block
                                 }
                             }
                             dedup.markSent(ticker, s.getDirection(), s.getEntry());
                         }
                     } else if (s.getConfidence() < effectiveMinConf) {
+                        // ── Pre-signal: setup forming, not yet confirmed ────────────────
+                        // Fire a warning alert when confidence is within 12 points of threshold
+                        // so the trader can get positioned and ready.
+                        int gap = effectiveMinConf - s.getConfidence();
+                        if (gap <= 12 && !dedup.isStartupQuiet()
+                                && !dedup.isPreSignalDuplicate(ticker, s.getDirection())) {
+                            String confirmed = s.getFactorBreakdown() != null ? s.getFactorBreakdown() : "Structure forming";
+                            String toWatch = buildWhatToWatch(s, newsAdj, volAdj, flowAdj, ctxAdj, regimeAdj);
+                            log.info("PRE_SIGNAL {} {} conf={} needed={} — firing warning alert", ticker, s.getDirection().toUpperCase(), s.getConfidence(), effectiveMinConf);
+                            discord.sendPreSignalAlert(s, s.getConfidence(), effectiveMinConf, confirmed, toWatch);
+                            dedup.markPreSignalSent(ticker, s.getDirection());
+                        }
+
                         // Warn loudly when a strong base setup gets filtered — helps catch over-filtering
-                        int baseConf = setups.get(0).getConfidence(); // raw score before any adjustments
+                        int baseConf = setups.get(0).getConfidence();
                         if (baseConf >= 85) {
                             log.warn("SUPPRESSED_STRONG {} {} baseConf={} finalConf={} min={} | breakdown: news{} ctx{} qual{} flow{} regime{} corr{} align{} (rawAdj={} clampedAdj={})",
                                     ticker, s.getDirection().toUpperCase(), baseConf, s.getConfidence(), effectiveMinConf,
@@ -1496,7 +1501,6 @@ public class ScannerService {
                                 tracker.recordStrategySignal("gap_overnight", gapSig.gapScore());
                                 if (gapNightSetup.hasOptionsData()) {
                                     discord.sendOvernightHoldAlert(gapNightSetup, gapSig.gapScore(), gapSig.reason());
-                                    if (alpaca.isEnabled()) alpaca.placeOrder(gapNightSetup);
                                 }
                             }
                             break; // only one direction per ticker per scan
@@ -1558,7 +1562,6 @@ public class ScannerService {
                                 liveLog.recordTrade(pegSetup, "peg");
                                 tracker.recordStrategySignal("peg", peg.confidence());
                                 dedup.markSent(pegKey, peg.direction(), peg.entry());
-                                if (alpaca.isEnabled()) alpaca.placeOrder(pegSetup);
                             }
                         }
                     }
@@ -1595,6 +1598,27 @@ public class ScannerService {
      * Only shows factors that moved confidence by ±2 or more — keeps it readable.
      * Example: "news +8 | RS -5 | regime -15 | vix gate +5"
      */
+
+    /**
+     * Tells the trader what still needs to happen before the pre-signal becomes a full alert.
+     * Looks at which adjustment factors are negative and translates them into plain English.
+     */
+    private String buildWhatToWatch(com.smcscanner.model.TradeSetup s,
+                                    int newsAdj, int volAdj, int flowAdj, int ctxAdj, int regimeAdj) {
+        List<String> missing = new ArrayList<>();
+        if (volAdj < 0)    missing.add("volume needs to pick up (RVOL < 1.5x)");
+        if (flowAdj < 0)   missing.add("options flow conflicting — wait for alignment");
+        if (newsAdj < 0)   missing.add("news is bearish/conflicting — watch reaction");
+        if (ctxAdj < 0)    missing.add("RS vs SPY weak — wait for relative strength");
+        if (regimeAdj < 0) missing.add("market regime unfavorable — needs regime shift");
+        if (missing.isEmpty()) missing.add("watch for retest of entry area + volume confirmation on next 1-2 candles");
+        String base = String.join(" | ", missing);
+        // Add strategy-specific confirmation hint
+        if (s.isHasBos()) base += "\n✓ BOS confirmed — wait for retest into FVG/OB";
+        if (s.isHasChoch()) base += "\n✓ CHoCH confirmed — watch for momentum continuation";
+        return base;
+    }
+
     private String buildFactorBreakdown(int newsAdj, int ctxAdj, int qualityAdj,
                                          int flowAdj, int regimeAdj, int corrAdj,
                                          int bias15mAdj, int vixBoost, int finalConf,

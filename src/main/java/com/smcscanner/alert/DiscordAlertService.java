@@ -210,6 +210,36 @@ public class DiscordAlertService {
             fields.add(f("VIX Regime", context.vixLabel(), true));
         }
 
+        // ── WHY THIS SETUP IS STRONG ────────────────────────────────────────
+        // Synthesize all signal sources into one block so you can decide fast.
+        StringBuilder why = new StringBuilder();
+        if (s.getFactorBreakdown() != null && !s.getFactorBreakdown().isBlank()) {
+            why.append("📌 **Signals:** ").append(s.getFactorBreakdown()).append("\n");
+        }
+        if (s.getConvictionTier() != null && !s.getConvictionTier().isBlank()) {
+            why.append("🏆 **Conviction:** ").append(s.getConvictionTier()).append("\n");
+        }
+        if (sentiment != null && sentiment.hasNews() && sentiment.label() != null && !sentiment.isConflicting(s.getDirection())) {
+            why.append("📰 **News aligned:** ").append(sentiment.label());
+            if (sentiment.headline() != null) why.append(" — ").append(sentiment.headline().length() > 80 ? sentiment.headline().substring(0, 77) + "…" : sentiment.headline());
+            why.append("\n");
+        }
+        if (vision != null && !vision.failedOpen() && vision.reason() != null && !vision.reason().isBlank()) {
+            why.append("🤖 **Claude sees:** ").append(vision.reason()).append(" (score ").append(vision.score()).append("/100)").append("\n");
+        }
+        if (s.getOptionsFlowLabel() != null && s.getOptionsFlowDir() != null) {
+            boolean flowAligned = ("long".equals(s.getDirection())  && !"BEARISH".equals(s.getOptionsFlowDir()))
+                               || ("short".equals(s.getDirection()) && !"BULLISH".equals(s.getOptionsFlowDir()));
+            if (flowAligned) {
+                why.append("💹 **Flow aligned:** ").append(s.getOptionsFlowLabel()).append("\n");
+            }
+        }
+        if (why.length() > 0) {
+            String whyText = why.toString().trim();
+            if (whyText.length() > 900) whyText = whyText.substring(0, 897) + "…";
+            fields.add(f("━━━ WHY THIS SETUP ━━━", whyText, false));
+        }
+
         // ── Vision gate result ──────────────────────────────────────────────
         if (vision != null && !vision.failedOpen()) {
             String vLabel = vision.approve()
@@ -391,6 +421,41 @@ public class DiscordAlertService {
         if (embed == null) return true; // no trades = nothing to send
         String url = config.resolveDailyReportWebhookUrl();
         if (url == null || url.isBlank()) { log.warn("No daily report webhook URL"); return false; }
+        return postEmbeds(url, List.of(embed));
+    }
+
+    /**
+     * Stage 1: Pre-signal warning — setup is forming but not yet confirmed.
+     * Fires 5-15 min before the full alert so the trader can get ready.
+     */
+    public boolean sendPreSignalAlert(com.smcscanner.model.TradeSetup s, int currentConf, int neededConf, String whatIsConfirmed, String whatToWatch) {
+        String url = config.getDiscordWebhookUrl();
+        if (url == null || url.isBlank()) return false;
+        boolean isLong = "long".equals(s.getDirection());
+        String arrow = isLong ? "⬆️" : "⬇️";
+        String ts = java.time.ZonedDateTime.now(java.time.ZoneOffset.UTC)
+                .format(java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")) + " UTC";
+        int gap = neededConf - currentConf;
+
+        List<Map<String, Object>> fields = new java.util.ArrayList<>();
+        fields.add(f("Direction",        arrow + " " + s.getDirection().toUpperCase(), true));
+        fields.add(f("Confidence",       currentConf + "/" + neededConf + " needed  (−" + gap + ")", true));
+        fields.add(f("Entry Area",       String.format("~$%.2f", s.getEntry()), true));
+        fields.add(f("Stop Loss",        String.format("$%.2f", s.getStopLoss()), true));
+        fields.add(f("Take Profit",      String.format("$%.2f  (R:R %.1f:1)", s.getTakeProfit(), s.rrRatio()), true));
+        fields.add(f("ATR",              String.format("$%.2f", s.getAtr()), true));
+        if (whatIsConfirmed != null && !whatIsConfirmed.isBlank()) {
+            fields.add(f("✅ Already confirmed", whatIsConfirmed, false));
+        }
+        if (whatToWatch != null && !whatToWatch.isBlank()) {
+            fields.add(f("👀 Watch for", whatToWatch, false));
+        }
+
+        Map<String, Object> embed = new java.util.HashMap<>();
+        embed.put("title", "⚠️ PRE-SIGNAL — " + s.getTicker() + " setup forming, be ready");
+        embed.put("color", 0xF39C12); // orange — not a trade yet
+        embed.put("fields", fields);
+        embed.put("footer", Map.of("text", "SD Scanner (pre-signal) | " + ts));
         return postEmbeds(url, List.of(embed));
     }
 

@@ -19,10 +19,14 @@ public class AlertDedup {
     private static final int STARTUP_QUIET_SEC = 180; // 3 minutes
     private final Instant startupTime = Instant.now();
 
+    private static final int PRE_SIGNAL_COOLDOWN_MIN = 15; // 15 min — don't spam pre-alerts every scan
+
     private final ConcurrentHashMap<String, Instant> last = new ConcurrentHashMap<>();
     // Ticker-level cooldown: prevents same ticker from alerting multiple times when
     // entry price shifts slightly between scans (e.g. AAPL $228.50 → $228.51 → $228.52)
     private final ConcurrentHashMap<String, Instant> tickerLast = new ConcurrentHashMap<>();
+    // Pre-signal dedup — separate from main alert, lighter cooldown
+    private final ConcurrentHashMap<String, Instant> preSignalLast = new ConcurrentHashMap<>();
 
     // Key includes entry price (rounded to 2dp) so same FVG zone isn't re-fired
     private String key(String ticker, String dir, double entry) {
@@ -67,10 +71,22 @@ public class AlertDedup {
         // intentionally NOT updating tickerLast — startup should not block fresh alerts
     }
 
+    /** True if a pre-signal already fired for this ticker+direction in the last 15 min. */
+    public boolean isPreSignalDuplicate(String ticker, String dir) {
+        Instant l = preSignalLast.get(ticker + ":" + dir);
+        return l != null && Instant.now().isBefore(l.plusSeconds(PRE_SIGNAL_COOLDOWN_MIN * 60L));
+    }
+
+    public void markPreSignalSent(String ticker, String dir) {
+        preSignalLast.put(ticker + ":" + dir, Instant.now());
+    }
+
     public void cleanup() {
         Instant cut = Instant.now().minusSeconds(COOLDOWN_MIN * 60L);
         last.entrySet().removeIf(e -> e.getValue().isBefore(cut));
         Instant tickerCut = Instant.now().minusSeconds(TICKER_COOLDOWN_MIN * 60L);
         tickerLast.entrySet().removeIf(e -> e.getValue().isBefore(tickerCut));
+        Instant preCut = Instant.now().minusSeconds(PRE_SIGNAL_COOLDOWN_MIN * 60L);
+        preSignalLast.entrySet().removeIf(e -> e.getValue().isBefore(preCut));
     }
 }
