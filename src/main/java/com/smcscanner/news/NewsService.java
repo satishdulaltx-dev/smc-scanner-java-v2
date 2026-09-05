@@ -3,6 +3,7 @@ package com.smcscanner.news;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smcscanner.config.ScannerConfig;
+import com.smcscanner.data.HistoricalDataException;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -69,7 +70,7 @@ public class NewsService {
 
         Instant to   = Instant.ofEpochMilli(now);
         Instant from = Instant.ofEpochMilli(now - 48 * 3600_000L);
-        NewsSentiment result = fetchFromPolygon(ticker, from, to);
+        NewsSentiment result = fetchFromPolygon(ticker, from, to, false);
         return cache(ticker, result);
     }
 
@@ -84,8 +85,8 @@ public class NewsService {
     public NewsSentiment getSentimentAt(String ticker, long atEpochMs) {
         if (ticker.startsWith("X:")) return NewsSentiment.NONE;
 
-        // Cache key encodes ticker + day bucket (per-day granularity is fine for backtest)
-        String cacheKey = ticker + "_" + (atEpochMs / 86_400_000L);
+        // Cache key encodes ticker + day bucket (exact cutoff prevents future news leaking into earlier queries)
+        String cacheKey = ticker + "_" + atEpochMs;
         long[] ts = cacheTs.get(cacheKey);
         long now = System.currentTimeMillis();
         if (ts != null && (now - ts[0]) < CACHE_TTL_MS) {
@@ -94,9 +95,9 @@ public class NewsService {
 
         Instant to   = Instant.ofEpochMilli(atEpochMs);
         Instant from = Instant.ofEpochMilli(atEpochMs - 48 * 3600_000L);
-        NewsSentiment result = fetchFromPolygon(ticker, from, to);
+        NewsSentiment result = fetchFromPolygon(ticker, from, to, true);
 
-        // Cache under the day-bucket key
+        // Cache under the exact historical cutoff key.
         cacheTs.put(cacheKey, new long[]{ now });
         cacheVal.put(cacheKey, result);
         return result;
@@ -163,9 +164,10 @@ public class NewsService {
      * @param from    window start (inclusive)
      * @param to      window end   (inclusive)
      */
-    private NewsSentiment fetchFromPolygon(String ticker, Instant from, Instant to) {
+    private NewsSentiment fetchFromPolygon(String ticker, Instant from, Instant to, boolean strict) {
         String apiKey = config.getPolygonApiKey();
         if (apiKey == null || apiKey.isBlank()) {
+            if (strict) throw new HistoricalDataException("Historical news credential is not configured");
             log.warn("No Polygon API key — skipping news for {}", ticker);
             return NewsSentiment.NONE;
         }
@@ -186,6 +188,7 @@ public class NewsService {
             Request req = new Request.Builder().url(url).get().build();
             try (Response resp = http.newCall(req).execute()) {
                 if (!resp.isSuccessful()) {
+                    if (strict) throw new HistoricalDataException(ticker + ": historical news HTTP " + resp.code());
                     log.warn("Polygon news {} → HTTP {}", ticker, resp.code());
                     return NewsSentiment.NONE;
                 }
@@ -193,7 +196,10 @@ public class NewsService {
                 JsonNode root = mapper.readTree(body);
                 return parse(ticker, root);
             }
+        } catch (HistoricalDataException e) {
+            throw e;
         } catch (Exception e) {
+            if (strict) throw new HistoricalDataException(ticker + ": historical news transport/parse failure");
             log.warn("Polygon news fetch error for {}: {}", ticker, e.getMessage());
             return NewsSentiment.NONE;
         }

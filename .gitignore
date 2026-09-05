@@ -38,3 +38,6 @@ trades_history.txt
 
 # Ad-hoc scripts
 scripts/
+!scripts/
+scripts/*
+!scripts/run_backtest_experiments.py

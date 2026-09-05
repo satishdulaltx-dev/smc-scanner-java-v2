@@ -21,12 +21,22 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class PolygonClient {
     private static final Logger log = LoggerFactory.getLogger(PolygonClient.class);
+    private static final long HISTORICAL_REQUEST_INTERVAL_MS = 12_500L;
+    private static final int HISTORICAL_CACHE_LIMIT = 256;
 
     private final ScannerConfig config;
     private final DataCache     cache;
     private final ObjectMapper  mapper = new ObjectMapper();
     private final OkHttpClient  http   = new OkHttpClient.Builder()
             .connectTimeout(10, TimeUnit.SECONDS).readTimeout(15, TimeUnit.SECONDS).build();
+    private final Object historicalRateLock = new Object();
+    private long nextHistoricalRequestAtMs;
+    private final Map<String, List<OHLCV>> historicalCache = Collections.synchronizedMap(
+            new LinkedHashMap<>(64, 0.75f, true) {
+                @Override protected boolean removeEldestEntry(Map.Entry<String, List<OHLCV>> eldest) {
+                    return size() > HISTORICAL_CACHE_LIMIT;
+                }
+            });
 
     public PolygonClient(ScannerConfig config, DataCache cache) {
         this.config = config; this.cache = cache;
@@ -96,6 +106,98 @@ public class PolygonClient {
         }
         String[] tf = TF_MAP.getOrDefault(timeframe.toLowerCase(), new String[]{"5", "minute"});
         return fetchPolygonRange(ticker, tf, limit, fromEpochMs, toEpochMs);
+    }
+
+    /** Strict, fully paginated historical fetch. Dates are inclusive; live reads are unchanged. */
+    public List<OHLCV> getHistoricalBars(String ticker, String timeframe, LocalDate from, LocalDate to) {
+        if (from.isAfter(to)) throw new IllegalArgumentException("Historical start follows end");
+        String[] tf = TF_MAP.get(timeframe);
+        if (tf == null) throw new IllegalArgumentException("Unsupported timeframe: " + timeframe);
+        String cacheKey = ticker + "/" + timeframe + "/" + from + "/" + to;
+        List<OHLCV> cached = historicalCache.get(cacheKey);
+        if (cached != null) return cached;
+        String apiKey = config.getPolygonApiKey();
+        if (apiKey == null || apiKey.isBlank()) throw new HistoricalDataException("Market-data credential is not configured");
+        String url = String.format("https://api.polygon.io/v2/aggs/ticker/%s/range/%s/%s/%s/%s?adjusted=true&sort=asc&limit=50000",
+                ticker, tf[0], tf[1], from, to);
+        List<OHLCV> bars = new ArrayList<>();
+        Set<String> pages = new HashSet<>();
+        while (url != null) {
+            if (!pages.add(url) || pages.size() > 1000)
+                throw new HistoricalDataException(ticker + " " + timeframe + ": incomplete pagination");
+            okhttp3.HttpUrl parsed = okhttp3.HttpUrl.parse(url);
+            if (parsed == null || !"https".equals(parsed.scheme()) || !"api.polygon.io".equals(parsed.host()))
+                throw new HistoricalDataException("Unexpected market-data pagination destination");
+            Request request = new Request.Builder().url(parsed).header("Authorization", "Bearer " + apiKey).build();
+            JsonNode root = null;
+            for (int attempt = 0; attempt < 6; attempt++) {
+                paceHistoricalRequest();
+                try (Response response = http.newCall(request).execute()) {
+                    int code = response.code();
+                    if ((code == 429 || code >= 500) && attempt < 5) {
+                        long retryMs = code == 429 ? retryDelayMs(response.header("Retry-After"))
+                                : 1000L * (attempt + 1);
+                        Thread.sleep(retryMs);
+                        continue;
+                    }
+                    if (!response.isSuccessful() || response.body() == null)
+                        throw new HistoricalDataException(ticker + " " + timeframe + ": provider HTTP " + code);
+                    root = mapper.readTree(response.body().string());
+                    if (root == null || "ERROR".equals(root.path("status").asText()))
+                        throw new HistoricalDataException(ticker + " " + timeframe + ": provider rejected historical request");
+                    break;
+                } catch (HistoricalDataException e) { throw e; }
+                catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new HistoricalDataException("Historical fetch interrupted");
+                } catch (Exception e) {
+                    if (attempt == 2) throw new HistoricalDataException(ticker + " " + timeframe + ": historical transport/parse failure");
+                }
+            }
+            if (root == null) throw new HistoricalDataException(ticker + ": historical response missing");
+            for (JsonNode b : root.path("results")) {
+                for (String field : List.of("t", "o", "h", "l", "c", "v"))
+                    if (!b.path(field).isNumber()) throw new HistoricalDataException(ticker + ": malformed historical bar");
+                double o=b.path("o").asDouble(), h=b.path("h").asDouble(), l=b.path("l").asDouble(), c=b.path("c").asDouble();
+                if (!(l > 0 && h >= Math.max(o,c) && l <= Math.min(o,c)) || b.path("v").asDouble() < 0)
+                    throw new HistoricalDataException(ticker + ": invalid OHLC/volume");
+                bars.add(OHLCV.builder().timestamp(b.path("t").asLong()).open(o).high(h).low(l).close(c)
+                        .volume(b.path("v").asDouble()).build());
+            }
+            url = root.hasNonNull("next_url") ? root.get("next_url").asText() : null;
+        }
+        bars.sort(Comparator.comparingLong(OHLCV::getTimestamp));
+        long previous = Long.MIN_VALUE;
+        for (OHLCV b : bars) {
+            if (b.getTimestamp() <= previous) throw new HistoricalDataException(ticker + ": duplicate historical timestamp");
+            previous = b.getTimestamp();
+        }
+        if (bars.isEmpty()) throw new HistoricalDataException(ticker + " " + timeframe + ": no historical bars for " + from + " through " + to);
+        List<OHLCV> immutable = List.copyOf(bars);
+        historicalCache.put(cacheKey, immutable);
+        return immutable;
+    }
+
+    private void paceHistoricalRequest() throws HistoricalDataException {
+        synchronized (historicalRateLock) {
+            long waitMs = nextHistoricalRequestAtMs - System.currentTimeMillis();
+            if (waitMs > 0) {
+                try { Thread.sleep(waitMs); }
+                catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new HistoricalDataException("Historical fetch interrupted");
+                }
+            }
+            nextHistoricalRequestAtMs = System.currentTimeMillis() + HISTORICAL_REQUEST_INTERVAL_MS;
+        }
+    }
+
+    private long retryDelayMs(String retryAfter) {
+        if (retryAfter != null) {
+            try { return Math.max(HISTORICAL_REQUEST_INTERVAL_MS, Long.parseLong(retryAfter) * 1000L); }
+            catch (NumberFormatException ignored) { }
+        }
+        return HISTORICAL_REQUEST_INTERVAL_MS;
     }
 
     private List<OHLCV> getPolygonBars(String ticker, String timeframe, int limit) {

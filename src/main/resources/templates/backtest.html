@@ -225,7 +225,7 @@
     <div class="ctrl-group">
         <label>Exit Model</label>
         <select id="exit-style" autocomplete="off">
-            <option value="HYBRID" selected>Hybrid Trail After 1.5R ✓</option>
+            <option value="HYBRID" selected>Hybrid Trail (2R scalp / 2.5R other) ✓</option>
             <option value="LIVE_PARITY">Live Parity Trail</option>
             <option value="CLASSIC">Classic TP / SL</option>
         </select>
@@ -347,6 +347,7 @@
         </div>
     </div>
     <div class="batch-summary" id="batch-summary"></div>
+    <div id="batch-errors" style="display:none;margin:0 24px 14px;padding:12px;border:1px solid rgba(248,81,73,.5);border-radius:6px;color:var(--red);font-size:12px"></div>
 
     <!-- Capital Simulation Panel -->
     <div id="capital-sim-box" style="display:none; padding:0 24px 16px;">
@@ -1425,6 +1426,20 @@ let _simDayBalance   = {};          // "YYYY-MM-DD" → end-of-day running balan
 let _simTradeActuals = {};          // simKey → { actual (contracts), actualPnl, actualCost }
 function renderBatch(results, days) {
     show('batch-results');
+    const failures = results.filter(d => d.error && !d.disabled);
+    const disabled = results.filter(d => d.disabled);
+    results = results.filter(d => !d.error && !d.disabled);
+    const errorBox = document.getElementById('batch-errors');
+    if (failures.length || disabled.length) {
+        errorBox.style.display = 'block';
+        errorBox.innerHTML = [
+            ...failures.map(d => `<div><strong>${d.ticker}</strong>: ${d.error}</div>`),
+            ...disabled.map(d => `<div style="color:var(--muted)"><strong>${d.ticker}</strong>: ${d.warnings?.[0] || 'disabled'}</div>`)
+        ].join('');
+    } else {
+        errorBox.style.display = 'none';
+        errorBox.innerHTML = '';
+    }
     _batchLossData = results; // store for loss breakdown panel
     _lastBatchDays = days;
     // Reset by-day panel when new results load
@@ -1448,7 +1463,7 @@ function renderBatch(results, days) {
         totalTrades  += (d.total_trades || 0);
         totalWins    += (d.wins   || 0);
         totalLosses  += (d.losses || 0);
-        totalFiltered += (d.news_filtered||0) + (d.ctx_filtered||0) + (d.quality_filtered||0);
+        totalFiltered += (d.filtered_total || 0);
         totalOptPnl  += (d.opt_total_pnl || 0);
         if (d.avg_contracts && d.avg_contracts > 0) { sumAvgContracts += d.avg_contracts; tickersWithContracts++; }
         if ((d.wins   || 0) > 0) sumWinPnl  += (d.avg_win_pct  || 0) * d.wins;
@@ -1541,7 +1556,7 @@ function renderBatch(results, days) {
 
     // ── Filtered trades box (hidden by default) ───────────────────────────────
     document.getElementById('filtered-grid').innerHTML = results
-        .map(d => ({ ticker: d.ticker, filtered: (d.news_filtered||0)+(d.ctx_filtered||0)+(d.quality_filtered||0) }))
+        .map(d => ({ ticker: d.ticker, filtered: (d.filtered_total||0) }))
         .filter(d => d.filtered > 0)
         .sort((a,b) => b.filtered - a.filtered)
         .map(d => `<div style="background:rgba(139,148,158,.07);border:1px solid var(--border);border-radius:6px;padding:8px 10px;font-size:11px;">

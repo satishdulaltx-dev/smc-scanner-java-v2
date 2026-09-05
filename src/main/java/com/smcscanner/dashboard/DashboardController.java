@@ -2,6 +2,7 @@ package com.smcscanner.dashboard;
 
 import com.smcscanner.analysis.AnalysisService;
 import com.smcscanner.backtest.BacktestExitStyle;
+import com.smcscanner.backtest.BacktestRun;
 import com.smcscanner.backtest.BacktestService;
 import com.smcscanner.backtest.ProfileOptimizer;
 import com.smcscanner.config.ScannerConfig;
@@ -35,6 +36,7 @@ import org.springframework.web.servlet.view.RedirectView;
 
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -589,6 +591,10 @@ public class DashboardController {
             @org.springframework.web.bind.annotation.RequestParam(required=false)      Integer mc,
             @org.springframework.web.bind.annotation.RequestParam(required=false)      Double  sl,
             @org.springframework.web.bind.annotation.RequestParam(required=false)      Double  tp,
+            @org.springframework.web.bind.annotation.RequestParam(required=false)      LocalDate start,
+            @org.springframework.web.bind.annotation.RequestParam(required=false)      LocalDate end,
+            @org.springframework.web.bind.annotation.RequestParam(required=false)      String pattern,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue="")     String filters,
             @org.springframework.web.bind.annotation.RequestParam(defaultValue="false") boolean force) {
         String sym = ticker.toUpperCase();
         // Apply inline param overrides for sweep testing (bypasses saved profile)
@@ -633,13 +639,33 @@ public class DashboardController {
         try {
             var btMode = com.smcscanner.backtest.BacktestMode.fromString(mode);
             var btExit = BacktestExitStyle.fromString(exitStyle);
-            var result = backtestService.run(sym, days, btMode,
-                    (strategy != null && !strategy.isBlank()) ? strategy : null, btExit);
+            BacktestService.BacktestResult result;
+            if (pattern != null || start != null || end != null || !filters.isBlank()) {
+                if (pattern == null || start == null || end == null) {
+                    throw new IllegalArgumentException("Research runs require pattern, start, and end");
+                }
+                Set<String> enabledFilters = filters.isBlank() ? Set.of()
+                        : Arrays.stream(filters.split(",")).map(String::trim)
+                                .filter(v -> !v.isBlank()).collect(Collectors.toUnmodifiableSet());
+                result = backtestService.run(sym, btMode, null, btExit,
+                        new BacktestRun(start, end, pattern, enabledFilters));
+            } else {
+                result = backtestService.run(sym, days, btMode,
+                        (strategy != null && !strategy.isBlank()) ? strategy : null, btExit);
+            }
             Map<String,Object> resp = new LinkedHashMap<>();
             resp.put("ticker",        result.ticker);
             resp.put("lookback_days", result.lookbackDays);
             resp.put("mode",          result.mode.name());
             resp.put("exit_style",    btExit.name());
+            resp.put("start_date",    result.startDate);
+            resp.put("end_date",      result.endDate);
+            resp.put("disabled",      result.disabled);
+            resp.put("coverage",      result.coverage);
+            resp.put("warnings",      result.warnings);
+            resp.put("filtered_total", result.filteredTotal);
+            resp.put("filtered_by_reason", result.filteredByReason);
+            resp.put("research_rejections", result.rejectionCounts);
             resp.put("total_trades",  result.total);
             resp.put("wins",          result.wins);
             resp.put("losses",        result.losses);
@@ -680,6 +706,8 @@ public class DashboardController {
                 m.put("dir", t.direction()); m.put("strategy", t.strategy()); m.put("entry", t.entry());
                 m.put("sl", t.sl()); m.put("tp", t.tp());
                 m.put("outcome", t.outcome()); m.put("pnl_pct", t.pnlPct());
+                m.put("risk_multiple", Math.round(t.riskMultiple() * 1000.0) / 1000.0);
+                m.put("pattern", t.pattern());
                 m.put("confidence", t.confidence()); m.put("atr", t.atr());
                 if (t.factorBreakdown() != null) m.put("factor_breakdown", t.factorBreakdown());
                 if (t.newsAdjustment() != 0) m.put("news_adj",   t.newsAdjustment());
