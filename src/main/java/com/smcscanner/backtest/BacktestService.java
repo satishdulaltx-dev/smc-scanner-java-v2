@@ -514,7 +514,7 @@ public class BacktestService {
                         bSetups = List.of();
                         for (String tryDir : List.of("long", "short")) {
                             boolean hasCat = !ticker.startsWith("X:")
-                                    && newsService.getSentimentAt(ticker, scanTs).isAligned(tryDir);
+                                    && backtestNews(run, ticker).isAligned(tryDir);
                             OvernightMomentumService.HoldSignal sig =
                                     overnightService.evaluate(ticker, rthBars, tryDir, hasCat, spyForEntry);
                             if (sig.shouldHold()) {
@@ -556,7 +556,7 @@ public class BacktestService {
                     // (bullish news for gap-up, bearish for gap-down = earnings catalyst).
                     // This filters out macro/tariff selloff gaps that aren't earnings-driven.
                     final long pegScanTs = dayBars.get(end - 1).getTimestamp();
-                    NewsSentiment pegSentiment = newsService.getSentimentAt(ticker, pegScanTs);
+                    NewsSentiment pegSentiment = backtestNews(run, ticker);
                     if (!isOpenWindow || pegSession.size() < 3 || pegPrevClose <= 0) {
                         bSetups = List.of();
                     } else {
@@ -879,7 +879,7 @@ public class BacktestService {
 
                 // News: 48h window ending at entry timestamp
                 NewsSentiment sentiment = ticker.startsWith("X:") ? NewsSentiment.NONE
-                        : newsService.getSentimentAt(ticker, entryEpochMs);
+                        : backtestNews(run, ticker);
                 int newsAdj = sentiment.confidenceDelta(setup.getDirection(), effectiveStrat);
 
                 // ── Ticker DNA gates — mirrors live ScannerService ────────────
@@ -1745,6 +1745,24 @@ public class BacktestService {
         return fwdBars.get(fwdBars.size() - 1).getTimestamp();
     }
     private double round2(double v) { return Math.round(v * 100.0) / 100.0; }
+
+    /**
+     * Point-in-time news is optional until the replay can preload and validate a
+     * complete article timeline. Per-signal API calls are rate-limited and would
+     * otherwise mix available and missing context inside one result set.
+     */
+    private NewsSentiment backtestNews(BacktestRun run, String ticker) {
+        if (ticker.startsWith("X:")) return NewsSentiment.NONE;
+        String key = ticker + "/historical-news";
+        if (!run.coverage.containsKey(key)) {
+            String reason = "complete point-in-time news history is not loaded";
+            run.coverage.put(key, Map.of("available", false, "reason", reason));
+            String warning = ticker + " historical news unavailable; news-dependent adjustments are omitted ("
+                    + reason + ")";
+            if (!run.warnings.contains(warning)) run.warnings.add(warning);
+        }
+        return NewsSentiment.NONE;
+    }
 
     /** Compact context label for the trade log (e.g. "RS+2.4% | VIX 28.1 volatile"). */
     private String buildContextLabel(MarketContext ctx) {
