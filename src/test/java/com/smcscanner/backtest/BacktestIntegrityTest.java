@@ -90,6 +90,27 @@ class BacktestIntegrityTest {
         assertEquals(false, ((Map<?, ?>) run.coverage.values().iterator().next()).get("available"));
     }
 
+    @Test
+    void tinySparseMinuteCoverageIsWarnedInsteadOfDiscardingTheSymbol() {
+        LocalDate day = LocalDate.of(2026, 6, 1);
+        List<OHLCV> benchmark = new java.util.ArrayList<>();
+        List<OHLCV> ticker = new java.util.ArrayList<>();
+        for (int dateOffset = 0; dateOffset < 3; dateOffset++) {
+            long open = day.plusDays(dateOffset).atTime(9, 30).atZone(ET).toInstant().toEpochMilli();
+            for (int minute = 0; minute < 390; minute++) {
+                OHLCV bar = bar(open + minute * 60_000L, 1, 1, 1, 1);
+                benchmark.add(bar);
+                if (dateOffset != 1 || minute != 100) ticker.add(bar);
+            }
+        }
+        BacktestRun run = new BacktestRun(day, day.plusDays(2));
+
+        run.requireSlotsAllowSparse("TEST 1m", ticker, benchmark);
+
+        assertEquals(1, run.warnings.size());
+        assertTrue(run.warnings.get(0).contains("1 missing of 1170"));
+    }
+
     private static BacktestService.TradeResult trade(String outcome, double pnl) {
         return new BacktestService.TradeResult("TEST", "long", "scalp", 100, 99, 102,
                 outcome, pnl, "", "", 0, 0, "sweep-flip-long", 80, 1,

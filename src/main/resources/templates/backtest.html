@@ -1431,16 +1431,25 @@ function renderBatch(results, days) {
     show('batch-results');
     const failures = results.filter(d => d.error && !d.disabled);
     const disabled = results.filter(d => d.disabled);
-    const warnings = results.flatMap(d => (d.warnings || []).map(w => ({ticker:d.ticker, warning:w})));
+    const rawWarnings = results.flatMap(d => (d.warnings || []).map(w => ({ticker:d.ticker, warning:w})));
+    const vixWarning = rawWarnings.find(d => d.warning.includes('I:VIX 1d unavailable'));
+    const newsWarningTickers = [...new Set(rawWarnings
+        .filter(d => d.warning.includes('historical news unavailable')).map(d => d.ticker))];
+    const warnings = rawWarnings.filter(d =>
+        !d.warning.includes('I:VIX 1d unavailable')
+        && !d.warning.includes('historical news unavailable')
+        && !d.warning.includes('disabled by ticker profile'));
     results = results.filter(d => !d.error && !d.disabled);
     const errorBox = document.getElementById('batch-errors');
-    if (failures.length || disabled.length || warnings.length) {
+    if (failures.length || disabled.length || warnings.length || vixWarning || newsWarningTickers.length) {
         errorBox.style.display = 'block';
         errorBox.style.borderColor = failures.length ? 'rgba(248,81,73,.5)' : 'rgba(210,153,34,.5)';
         errorBox.style.color = failures.length ? 'var(--red)' : 'var(--yellow)';
         errorBox.innerHTML = [
             ...failures.map(d => `<div><strong>${d.ticker}</strong>: ${d.error}</div>`),
             ...disabled.map(d => `<div style="color:var(--muted)"><strong>${d.ticker}</strong>: ${d.warnings?.[0] || 'disabled'}</div>`),
+            ...(vixWarning ? [`<div style="color:var(--yellow)"><strong>Market context</strong>: ⚠ ${vixWarning.warning}</div>`] : []),
+            ...(newsWarningTickers.length ? [`<div style="color:var(--yellow)"><strong>${newsWarningTickers.length} tickers</strong>: ⚠ historical news adjustments omitted because complete point-in-time history is not loaded</div>`] : []),
             ...warnings.map(d => `<div style="color:var(--yellow)"><strong>${d.ticker}</strong>: ⚠ ${d.warning}</div>`)
         ].join('');
     } else {

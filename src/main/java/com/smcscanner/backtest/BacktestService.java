@@ -306,12 +306,12 @@ public class BacktestService {
                 : List.of();
 
         if (!ticker.startsWith("X:")) {
-            BacktestRun.requireSlots(ticker + " 5m", allBars, spy5mBars, run.start, run.end);
+            run.requireSlotsAllowSparse(ticker + " 5m", allBars, spy5mBars);
             BacktestRun.requireDailySessions(dailyBars, spy5mBars, run.start, run.end);
             BacktestRun.requireDailySessions(spyBars, spy5mBars, run.start, run.end);
             if (needsScalp1m) {
                 List<OHLCV> spy1m = run.bars(client, "SPY", "1m", 0);
-                BacktestRun.requireSlots(ticker + " 1m", all1mBars, spy1m, run.start, run.end);
+                run.requireSlotsAllowSparse(ticker + " 1m", all1mBars, spy1m);
                 BacktestRun.requireMinuteExpansion(spy5mBars, spy1m, run.start, run.end);
             }
         }
