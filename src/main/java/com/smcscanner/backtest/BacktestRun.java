@@ -37,6 +37,20 @@ public final class BacktestRun {
             return List.copyOf(bars);
         });
     }
+    /** Load nonessential context without converting its absence into fake market data. */
+    public List<OHLCV> optionalBars(PolygonClient client, String ticker, String timeframe,
+                                    int warmupDays, String omittedBehavior) {
+        try {
+            return bars(client, ticker, timeframe, warmupDays);
+        } catch (HistoricalDataException e) {
+            String key = ticker + "/" + timeframe + "/" + start.minusDays(warmupDays) + "/" + end;
+            coverage.put(key, Map.of("available", false, "error", e.getMessage()));
+            String warning = ticker + " " + timeframe + " unavailable; " + omittedBehavior
+                    + " (" + e.getMessage() + ")";
+            if (!warnings.contains(warning)) warnings.add(warning);
+            return List.of();
+        }
+    }
     /** Compare required intraday slots to a liquid benchmark, with no silent fallback. */
     public static void requireSlots(String ticker, List<OHLCV> bars, List<OHLCV> benchmark, LocalDate start, LocalDate end) {
         Set<Long> available=new HashSet<>();

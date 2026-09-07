@@ -945,7 +945,10 @@ function renderSingle(d) {
     const wrColor = wr >= 60 ? 'var(--green)' : wr >= 45 ? 'var(--yellow)' : 'var(--red)';
     const exColor = d.expectancy >= 0 ? 'var(--green)' : 'var(--red)';
 
+    const warningHtml = (d.warnings || []).map(w =>
+        `<div style="grid-column:1/-1;color:var(--yellow);padding:8px 0">⚠ ${w}</div>`).join('');
     document.getElementById('stats-grid').innerHTML = `
+        ${warningHtml}
         <div class="stat-card"><div class="val" style="color:var(--blue)">${d.total_trades}</div><div class="lbl">Total Trades</div></div>
         <div class="stat-card"><div class="val" style="color:${wrColor}">${wr}%</div><div class="lbl">Win Rate</div></div>
         <div class="stat-card"><div class="val" style="color:var(--green)">${d.wins}</div><div class="lbl">Wins</div></div>
@@ -1428,13 +1431,17 @@ function renderBatch(results, days) {
     show('batch-results');
     const failures = results.filter(d => d.error && !d.disabled);
     const disabled = results.filter(d => d.disabled);
+    const warnings = results.flatMap(d => (d.warnings || []).map(w => ({ticker:d.ticker, warning:w})));
     results = results.filter(d => !d.error && !d.disabled);
     const errorBox = document.getElementById('batch-errors');
-    if (failures.length || disabled.length) {
+    if (failures.length || disabled.length || warnings.length) {
         errorBox.style.display = 'block';
+        errorBox.style.borderColor = failures.length ? 'rgba(248,81,73,.5)' : 'rgba(210,153,34,.5)';
+        errorBox.style.color = failures.length ? 'var(--red)' : 'var(--yellow)';
         errorBox.innerHTML = [
             ...failures.map(d => `<div><strong>${d.ticker}</strong>: ${d.error}</div>`),
-            ...disabled.map(d => `<div style="color:var(--muted)"><strong>${d.ticker}</strong>: ${d.warnings?.[0] || 'disabled'}</div>`)
+            ...disabled.map(d => `<div style="color:var(--muted)"><strong>${d.ticker}</strong>: ${d.warnings?.[0] || 'disabled'}</div>`),
+            ...warnings.map(d => `<div style="color:var(--yellow)"><strong>${d.ticker}</strong>: ⚠ ${d.warning}</div>`)
         ].join('');
     } else {
         errorBox.style.display = 'none';

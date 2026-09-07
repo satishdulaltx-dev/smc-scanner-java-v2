@@ -1,11 +1,15 @@
 package com.smcscanner.backtest;
 
 import com.smcscanner.data.HistoricalDataException;
+import com.smcscanner.data.DataCache;
+import com.smcscanner.data.PolygonClient;
+import com.smcscanner.config.ScannerConfig;
 import com.smcscanner.model.OHLCV;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
 import java.time.*;
+import java.util.Map;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -67,6 +71,23 @@ class BacktestIntegrityTest {
         assertEquals(0.0, result.expectancy, 0.0001);
         assertEquals(1, result.filteredTotal);
         assertEquals(1L, result.filteredByReason.get("TRAP_FILTERED"));
+    }
+
+    @Test
+    void unavailableOptionalContextBecomesAVisibleWarning() {
+        PolygonClient deniedClient = new PolygonClient(new ScannerConfig(), new DataCache()) {
+            @Override public synchronized List<OHLCV> getHistoricalBars(
+                    String ticker, String timeframe, LocalDate from, LocalDate to) {
+                throw new HistoricalDataException(ticker + " " + timeframe + ": provider HTTP 403");
+            }
+        };
+        BacktestRun run = new BacktestRun(LocalDate.of(2026, 6, 1), LocalDate.of(2026, 6, 5));
+
+        assertTrue(run.optionalBars(deniedClient, "I:VIX", "1d", 450,
+                "VIX-dependent adjustments are omitted").isEmpty());
+        assertEquals(1, run.warnings.size());
+        assertTrue(run.warnings.get(0).contains("VIX-dependent adjustments are omitted"));
+        assertEquals(false, ((Map<?, ?>) run.coverage.values().iterator().next()).get("available"));
     }
 
     private static BacktestService.TradeResult trade(String outcome, double pnl) {

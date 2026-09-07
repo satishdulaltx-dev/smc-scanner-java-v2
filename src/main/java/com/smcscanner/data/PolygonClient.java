@@ -31,6 +31,7 @@ public class PolygonClient {
             .connectTimeout(10, TimeUnit.SECONDS).readTimeout(15, TimeUnit.SECONDS).build();
     private final Object historicalRateLock = new Object();
     private long nextHistoricalRequestAtMs;
+    private final Map<String, String> historicalEntitlementFailures = new HashMap<>();
     private final Map<String, List<OHLCV>> historicalCache = Collections.synchronizedMap(
             new LinkedHashMap<>(64, 0.75f, true) {
                 @Override protected boolean removeEldestEntry(Map.Entry<String, List<OHLCV>> eldest) {
@@ -109,13 +110,15 @@ public class PolygonClient {
     }
 
     /** Strict, fully paginated historical fetch. Dates are inclusive; live reads are unchanged. */
-    public List<OHLCV> getHistoricalBars(String ticker, String timeframe, LocalDate from, LocalDate to) {
+    public synchronized List<OHLCV> getHistoricalBars(String ticker, String timeframe, LocalDate from, LocalDate to) {
         if (from.isAfter(to)) throw new IllegalArgumentException("Historical start follows end");
         String[] tf = TF_MAP.get(timeframe);
         if (tf == null) throw new IllegalArgumentException("Unsupported timeframe: " + timeframe);
         String cacheKey = ticker + "/" + timeframe + "/" + from + "/" + to;
         List<OHLCV> cached = historicalCache.get(cacheKey);
         if (cached != null) return cached;
+        String cachedFailure = historicalEntitlementFailures.get(cacheKey);
+        if (cachedFailure != null) throw new HistoricalDataException(cachedFailure);
         String apiKey = config.getPolygonApiKey();
         if (apiKey == null || apiKey.isBlank()) throw new HistoricalDataException("Market-data credential is not configured");
         String url = String.format("https://api.polygon.io/v2/aggs/ticker/%s/range/%s/%s/%s/%s?adjusted=true&sort=asc&limit=50000",
@@ -139,6 +142,11 @@ public class PolygonClient {
                                 : 1000L * (attempt + 1);
                         Thread.sleep(retryMs);
                         continue;
+                    }
+                    if (code == 403) {
+                        String message = ticker + " " + timeframe + ": provider HTTP 403";
+                        historicalEntitlementFailures.put(cacheKey, message);
+                        throw new HistoricalDataException(message);
                     }
                     if (!response.isSuccessful() || response.body() == null)
                         throw new HistoricalDataException(ticker + " " + timeframe + ": provider HTTP " + code);

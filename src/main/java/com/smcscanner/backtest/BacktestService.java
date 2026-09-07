@@ -248,7 +248,10 @@ public class BacktestService {
         // getContextAt() slices these in-memory per trade — no extra API calls.
         List<OHLCV> spyBars = run.bars(client, "SPY", "1d", 450);
         List<OHLCV> vixBars = List.of();
-        if (!run.research) vixBars = run.bars(client, "I:VIX", "1d", 450);
+        if (!run.research) {
+            vixBars = run.optionalBars(client, "I:VIX", "1d", 450,
+                    "VIX-dependent adjustments are omitted");
+        }
 
         // Pre-fetch SPY 5m bars for intraday RS gate (only if this ticker uses it)
         TickerProfile preProfile = config.getTickerProfile(ticker);
