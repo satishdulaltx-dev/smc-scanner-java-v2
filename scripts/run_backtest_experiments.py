@@ -100,7 +100,7 @@ def main():
     report = {
         "method": "one detector with embedded gates, one optional filter, normalized initial risk, session-close exit; drawdown uses realized exits, not mark-to-market equity; daily candidate selection can change with filters",
         "exit_style": args.exit_style,
-        "exit_policy": {"FIXED_R": "fixed initial stop and 2R target", "CLASSIC": "2R target and breakeven after 1R", "HYBRID": "hybrid breakeven and trailing"}[args.exit_style],
+        "exit_policy": {"FIXED_R": "fixed initial stop and 2R target", "CLASSIC": "2R target and breakeven after 1R", "HYBRID": "2R-capped hybrid: trailing at 2.5R is unreachable"}[args.exit_style],
         "validation_opened": args.open_validation,
         "tickers": tickers,
         "training_range": [args.train_start, args.train_end],

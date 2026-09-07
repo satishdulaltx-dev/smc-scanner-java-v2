@@ -121,6 +121,14 @@ class BacktestIntegrityTest {
     }
 
     @Test
+    void slippageCannotResurrectASetupWhoseStopWasAlreadyCrossed() {
+        assertFalse(BacktestService.validEntryStop(342.235,342.0638825,342.0642,"short"));
+        assertFalse(BacktestService.validEntryStop(99,99.0495,99.02,"long"));
+        assertTrue(BacktestService.validEntryStop(100,100.05,99,"long"));
+        assertTrue(BacktestService.validEntryStop(100,99.95,101,"short"));
+    }
+
+    @Test
     void gapThroughStopFillsAtOpenInBothDirectionsAndAllTouchStopModels() throws Exception {
         for (String model : List.of("simulateClassicExit", "simulateHybridExit", "simulateScalpExit")) {
             for (String dir : List.of("long", "short")) {

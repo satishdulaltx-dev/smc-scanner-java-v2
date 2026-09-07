@@ -10,6 +10,15 @@ from run_backtest_experiments import PATTERNS, FILTERS, fetch, summarize
 ET = ZoneInfo("America/New_York")
 
 
+def executable(candidate):
+    # Older ledgers stored fill but not the original open. Reconstruct the
+    # deterministic 5bps entry adjustment; never use the outcome to reject a row.
+    long = candidate["direction"] == "long"
+    market_open = candidate.get("market_open", candidate["entry"] / (1.0005 if long else 0.9995))
+    return (min(market_open, candidate["entry"]) > candidate["sl"] if long
+            else max(market_open, candidate["entry"]) < candidate["sl"])
+
+
 def compare(rows):
     results = []
     for exit_style in ("FIXED_R", "CLASSIC", "HYBRID"):
@@ -19,6 +28,8 @@ def compare(rows):
                 for row in rows:
                     seen = set()
                     for candidate in sorted(row["candidate_ledger"], key=lambda c: c["entry_ts"]):
+                        if not executable(candidate):
+                            continue
                         day = datetime.fromtimestamp(candidate["entry_ts"] / 1000, ET).date()
                         if day in seen:
                             continue
@@ -45,6 +56,8 @@ def main():
     output.mkdir(parents=True, exist_ok=True)
     report = {"period": [args.start, args.end], "purpose": "diagnosis on already-used training data",
               "risk": "one initial-risk unit per selected trade; no options sizing",
+              "exit_policies": {"FIXED_R": "fixed stop, 2R target", "CLASSIC": "breakeven at 1R, 2R target",
+                                "HYBRID": "2R-capped hybrid; 2.5R trailing is unreachable, so this is a redundancy check, not a trailing experiment"},
               "limitations": ["detector-internal gates remain embedded", "realized exit drawdown, no capital limits",
                                "one first detector signal per decision time; overlapping candidates are not independent"],
               "patterns": {}}

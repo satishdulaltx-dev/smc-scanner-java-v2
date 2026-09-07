@@ -483,7 +483,7 @@ public class BacktestService {
                         throw new HistoricalDataException("Missing immediate entry minute for " + ticker);
                     double fill = forward.get(0).getOpen() * ("long".equals(candidate.getDirection()) ? 1.0005 : 0.9995);
                     double stop = candidate.getStopLoss();
-                    if (("long".equals(candidate.getDirection()) && stop >= fill) || ("short".equals(candidate.getDirection()) && stop <= fill)) {
+                    if (!validEntryStop(forward.get(0).getOpen(),fill,stop,candidate.getDirection())) {
                         run.reject("invalid_stop"); continue;
                     }
                     // Same 2R target and fixed initial risk for every pattern/filter experiment.
@@ -497,6 +497,7 @@ public class BacktestService {
                     Map<String,Object> ledger = new LinkedHashMap<>();
                     ledger.put("id",ticker+":"+run.pattern+":"+decisionMs+":"+candidate.getDirection());
                     ledger.put("entry_ts",decisionMs); ledger.put("entry",fill); ledger.put("sl",stop);
+                    ledger.put("market_open",forward.get(0).getOpen());
                     ledger.put("tp",target); ledger.put("direction",candidate.getDirection());
                     boolean longCandidate = "long".equals(candidate.getDirection());
                     double highAfterEntry = forward.stream().mapToDouble(OHLCV::getHigh).max().orElse(fill);
@@ -1214,7 +1215,8 @@ public class BacktestService {
                 double sl    = setup.getStopLoss();
                 double tp    = setup.getTakeProfit();
                 String dir   = setup.getDirection();
-                if (("long".equals(dir) && (sl >= entry || tp <= entry))
+                if (!validEntryStop(dayBars.get(end).getOpen(),entry,sl,dir)
+                        || ("long".equals(dir) && (sl >= entry || tp <= entry))
                         || ("short".equals(dir) && (sl <= entry || tp >= entry))) {
                     run.reject("invalid_entry_levels"); continue;
                 }
@@ -1409,6 +1411,9 @@ public class BacktestService {
     }
 
     static long completedAt(OHLCV bar, int minutes) { return bar.getTimestamp()+minutes*60_000L; }
+    static boolean validEntryStop(double marketOpen,double fill,double stop,String direction) {
+        return "long".equals(direction) ? marketOpen > stop && fill > stop : marketOpen < stop && fill < stop;
+    }
     static List<OHLCV> completedBars(List<OHLCV> bars,int minutes,long decision) {
         return bars.stream().filter(b -> completedAt(b,minutes)<=decision).toList();
     }
