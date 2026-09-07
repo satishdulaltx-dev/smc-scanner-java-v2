@@ -1534,7 +1534,7 @@ function renderBatch(results, days) {
         <div class="bs-sep"></div>
         <div class="bs-stat">
             <div class="bs-val" style="color:${totalOptPnl >= 0 ? 'var(--green)' : 'var(--red)'}">${totalOptPnl >= 0 ? '+' : ''}$${totalOptPnl.toFixed(0)}</div>
-            <div class="bs-lbl">Options P&L (${avgContracts} avg contracts)</div>
+            <div class="bs-lbl">Estimated options P&L (${avgContracts} avg contracts)</div>
         </div>
         ${totalFiltered > 0 ? `<div class="bs-stat"><div class="bs-val" style="color:var(--muted)">${totalFiltered}</div><div class="bs-lbl">Filtered</div></div>` : ''}
         ${bestTicker  ? `<div class="bs-stat"><div class="bs-val" style="color:var(--green);font-size:15px">${bestTicker.ticker}</div><div class="bs-lbl">Best (+${bestTicker.expectancy}%)</div></div>` : ''}
@@ -1566,7 +1566,7 @@ function renderBatch(results, days) {
                 <span class="bt-val" style="color:${positive ? '#3fb950' : '#f85149'}">${d.expectancy >= 0 ? '+' : ''}${d.expectancy}%</span>
             </div>
             <div class="bt-row"><span>Avg Win</span><span class="bt-val c-green">+${(d.avg_win_pct||0).toFixed(2)}%</span></div>
-            ${d.opt_total_pnl ? `<div class="bt-row"><span>Opt P&L</span><span class="bt-val" style="color:${d.opt_total_pnl >= 0 ? '#3fb950' : '#f85149'}">${d.opt_total_pnl >= 0 ? '+' : ''}$${d.opt_total_pnl.toFixed(0)}</span></div>` : ''}
+            ${d.opt_total_pnl ? `<div class="bt-row"><span>Estimated opt P&L</span><span class="bt-val" style="color:${d.opt_total_pnl >= 0 ? '#3fb950' : '#f85149'}">${d.opt_total_pnl >= 0 ? '+' : ''}$${d.opt_total_pnl.toFixed(0)}</span></div>` : ''}
         </div>`;
     }).join('');
 

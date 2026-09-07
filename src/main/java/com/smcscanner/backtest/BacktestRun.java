@@ -85,8 +85,9 @@ public final class BacktestRun {
         if (missing <= 5 && missingRatio <= 0.001) {
             coverage.put(label + "/slot-check", Map.of("expected", expected, "missing", missing,
                     "missing_ratio", missingRatio, "sparse_tolerance_applied", true));
-            warnings.add(label + ": sparse regular-session coverage (" + missing + " missing of "
-                    + expected + " benchmark slots); affected minutes are skipped");
+            String warning = label + ": sparse regular-session coverage (" + missing + " missing of "
+                    + expected + " benchmark slots); affected minutes are skipped";
+            if (!warnings.contains(warning)) warnings.add(warning);
             return;
         }
         throw new HistoricalDataException(label + ": incomplete regular-session coverage ("
