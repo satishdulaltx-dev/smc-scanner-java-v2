@@ -918,7 +918,10 @@ async function runBatch() {
         const done = Math.min(i + BATCH, tickers.length);
         if (loadBtn) loadBtn.textContent = `⏳ ${done} / ${tickers.length}`;
         const chunk = await Promise.all(
-            group.map(t => fetch(`/api/backtest?ticker=${t}&days=${days}&mode=${stratMode}${exitParamBatch}${stratParamBatch}`).then(r => r.json()).catch(() => null))
+            group.map(t => fetch(`/api/backtest?ticker=${t}&days=${days}&mode=${stratMode}${exitParamBatch}${stratParamBatch}`)
+                .then(async r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return await r.json(); })
+                .then(d => ({...d, ticker: t, total_trades: d.total_trades ?? 0}))
+                .catch(e => ({ticker: t, total_trades: 0, error: `Request failed: ${e.message}`})))
         );
         all.push(...chunk);
     }

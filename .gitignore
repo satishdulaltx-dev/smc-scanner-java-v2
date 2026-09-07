@@ -41,3 +41,4 @@ scripts/
 !scripts/
 scripts/*
 !scripts/run_backtest_experiments.py
+!scripts/compare_candidate_ledger.py

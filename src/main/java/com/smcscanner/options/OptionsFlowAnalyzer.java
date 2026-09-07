@@ -353,7 +353,7 @@ public class OptionsFlowAnalyzer {
      * @param entry           underlying entry price
      * @param exitPrice       underlying exit price
      * @param direction       "long" or "short"
-     * @param holdDays        number of trading days held
+     * @param holdDays        elapsed calendar days held (bar-based approximation in replay)
      * @param dailyAtr        daily ATR for premium estimation
      * @return estimated options P&L percentage (on premium invested)
      */

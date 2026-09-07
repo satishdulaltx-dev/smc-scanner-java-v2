@@ -666,6 +666,7 @@ public class DashboardController {
             resp.put("filtered_total", result.filteredTotal);
             resp.put("filtered_by_reason", result.filteredByReason);
             resp.put("research_rejections", result.rejectionCounts);
+            resp.put("candidate_ledger", result.candidates);
             resp.put("total_trades",  result.total);
             resp.put("wins",          result.wins);
             resp.put("losses",        result.losses);

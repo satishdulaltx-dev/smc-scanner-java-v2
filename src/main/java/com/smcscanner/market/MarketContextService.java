@@ -295,8 +295,12 @@ public class MarketContextService {
 
     private List<OHLCV> sliceTo(List<OHLCV> bars, long cutoffEpochMs) {
         if (bars == null || bars.isEmpty()) return List.of();
+        // Daily aggregates are stamped at midnight, before their close is known.
+        long sessionStart = java.time.Instant.ofEpochMilli(cutoffEpochMs)
+                .atZone(java.time.ZoneId.of("America/New_York")).toLocalDate()
+                .atStartOfDay(java.time.ZoneId.of("America/New_York")).toInstant().toEpochMilli();
         return bars.stream()
-                .filter(b -> b.getTimestamp() < cutoffEpochMs)
+                .filter(b -> b.getTimestamp() < sessionStart)
                 .collect(Collectors.toList());
     }
 

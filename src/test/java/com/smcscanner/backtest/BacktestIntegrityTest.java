@@ -18,6 +18,16 @@ class BacktestIntegrityTest {
     private static final ZoneId ET = ZoneId.of("America/New_York");
 
     @Test
+    void morningContextCannotSeeTodaysDailyClose() {
+        var service = new com.smcscanner.market.MarketContextService(null);
+        var yesterday = bar(at("2026-06-01T00:00"), 20, 20, 20, 20);
+        var today = bar(at("2026-06-02T00:00"), 20, 40, 20, 40);
+        var context = service.getContextAt("AMD", List.of(), List.of(),
+                List.of(yesterday, today), at("2026-06-02T10:00"));
+        assertEquals(20, context.vixLevel());
+    }
+
+    @Test
     void onlyCompletedCandlesAreVisibleAtDecisionTime() {
         OHLCV five = bar(at("2026-06-01T09:30"), 100, 101, 99, 100);
         OHLCV fifteen = bar(at("2026-06-01T09:30"), 100, 102, 98, 101);
@@ -91,7 +101,7 @@ class BacktestIntegrityTest {
     }
 
     @Test
-    void tinySparseMinuteCoverageIsWarnedInsteadOfDiscardingTheSymbol() {
+    void evenOneUnresolvedMinuteFailsCoverage() {
         LocalDate day = LocalDate.of(2026, 6, 1);
         List<OHLCV> benchmark = new java.util.ArrayList<>();
         List<OHLCV> ticker = new java.util.ArrayList<>();
@@ -105,10 +115,73 @@ class BacktestIntegrityTest {
         }
         BacktestRun run = new BacktestRun(day, day.plusDays(2));
 
-        run.requireSlotsAllowSparse("TEST 1m", ticker, benchmark);
+        var error = assertThrows(HistoricalDataException.class,
+                () -> run.requireSlotsAllowSparse("TEST 1m", ticker, benchmark));
+        assertTrue(error.getMessage().contains("1 missing of 1170"));
+    }
 
-        assertEquals(1, run.warnings.size());
-        assertTrue(run.warnings.get(0).contains("1 missing of 1170"));
+    @Test
+    void gapThroughStopFillsAtOpenInBothDirectionsAndAllTouchStopModels() throws Exception {
+        for (String model : List.of("simulateClassicExit", "simulateHybridExit", "simulateScalpExit")) {
+            for (String dir : List.of("long", "short")) {
+                boolean buy = dir.equals("long");
+                var bars = List.of(bar(at("2026-06-02T09:30"), buy ? 97 : 103, buy ? 98 : 104,
+                        buy ? 96 : 102, buy ? 97 : 103));
+                Object exit = exit(model, bars, buy ? 99 : 101, buy ? 102 : 98, dir, true);
+                assertEquals(-3.0, value(exit, "pnlPct"), model + " " + dir);
+                assertEquals("LOSS", value(exit, "outcome"));
+            }
+        }
+    }
+
+    @Test
+    void fixedStopRemainsInPlaceAfterOneRWhileClassicMovesToBreakeven() throws Exception {
+        var bars = List.of(bar(at("2026-06-01T10:00"), 100, 101.2, 99.5, 101),
+                bar(at("2026-06-01T10:01"), 100.5, 102.2, 99.5, 102));
+        assertEquals("WIN", value(exit("simulateClassicExit", bars,99,102,"long",false),"outcome"));
+        assertEquals("BE_STOP", value(exit("simulateClassicExit", bars,99,102,"long",true),"outcome"));
+    }
+
+    @Test
+    void gapPastBreakevenIsALossRatherThanABreakeven() throws Exception {
+        var bars = List.of(bar(at("2026-06-01T15:55"),100,101.2,99.5,101),
+                bar(at("2026-06-02T09:30"),98,99,97,98));
+        Object result = exit("simulateClassicExit",bars,99,102,"long",true);
+        assertEquals("LOSS",value(result,"outcome"));
+        assertEquals(-2.0,value(result,"pnlPct"));
+    }
+
+    @Test
+    void priorDayRejectionCanTriggerWithHistoryButNotWithoutIt() {
+        var bars = new java.util.ArrayList<OHLCV>();
+        for (int i=0;i<78;i++) bars.add(bar(at("2026-06-01T09:30")+i*300_000L,100,101,99,100));
+        var today = new java.util.ArrayList<OHLCV>();
+        for (int i=0;i<4;i++) today.add(bar(at("2026-06-02T09:30")+i*300_000L,100,100.5,99.5,100));
+        today.add(bar(at("2026-06-02T09:50"),100.5,101.5,100,100.5));
+        bars.addAll(today);
+        var detector = new com.smcscanner.strategy.PdhPdlDetector();
+        assertTrue(detector.detect(today,"TEST",2,true).isEmpty());
+        assertFalse(detector.detect(bars,"TEST",2,true).isEmpty());
+    }
+
+    private Object exit(String name, List<OHLCV> bars, double stop, double target, String dir, boolean be) throws Exception {
+        var service = new BacktestService(null,null,null,null,null,null,null,null,null,null,
+                null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null);
+        Method method;
+        if (name.equals("simulateClassicExit")) {
+            method = BacktestService.class.getDeclaredMethod(name,List.class,double.class,double.class,double.class,String.class,boolean.class);
+            method.setAccessible(true);
+            return method.invoke(service,bars,100.0,stop,target,dir,be);
+        }
+        method=BacktestService.class.getDeclaredMethod(name,List.class,List.class,double.class,double.class,double.class,String.class);
+        method.setAccessible(true);
+        return method.invoke(service,List.of(),bars,100.0,stop,target,dir);
+    }
+
+    private Object value(Object result,String field) throws Exception {
+        Method method=result.getClass().getDeclaredMethod(field);
+        method.setAccessible(true);
+        return method.invoke(result);
     }
 
     private static BacktestService.TradeResult trade(String outcome, double pnl) {

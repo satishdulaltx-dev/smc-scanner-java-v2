@@ -12,6 +12,7 @@ public final class BacktestRun {
     public final Map<String, Object> coverage = new LinkedHashMap<>();
     public final Map<String, Long> rejected = new TreeMap<>();
     public final List<String> warnings = new ArrayList<>();
+    public final List<Map<String,Object>> candidates = new ArrayList<>();
     public final String pattern;
     public final Set<String> filters;
     public final boolean research;
@@ -65,33 +66,9 @@ public final class BacktestRun {
         if (expected==0 || missing>0) throw new HistoricalDataException(ticker+": incomplete regular-session coverage ("+missing+" missing of "+expected+" benchmark slots)");
     }
 
-    /** Permit only tiny sparse-print gaps while recording them in the result. */
+    /** Compatibility entry point: reject every unresolved benchmark gap. */
     public void requireSlotsAllowSparse(String label, List<OHLCV> bars, List<OHLCV> benchmark) {
-        Set<Long> available = new HashSet<>();
-        for (OHLCV bar : bars) available.add(bar.getTimestamp());
-        int expected = 0, missing = 0;
-        for (OHLCV bar : benchmark) {
-            ZonedDateTime time = Instant.ofEpochMilli(bar.getTimestamp())
-                    .atZone(ZoneId.of("America/New_York"));
-            if (time.toLocalDate().isBefore(start) || time.toLocalDate().isAfter(end)
-                    || time.toLocalTime().isBefore(LocalTime.of(9, 30))
-                    || !time.toLocalTime().isBefore(LocalTime.of(16, 0))) continue;
-            expected++;
-            if (!available.contains(bar.getTimestamp())) missing++;
-        }
-        if (expected == 0) throw new HistoricalDataException(label + ": no benchmark session coverage");
-        if (missing == 0) return;
-        double missingRatio = missing / (double) expected;
-        if (missing <= 5 && missingRatio <= 0.001) {
-            coverage.put(label + "/slot-check", Map.of("expected", expected, "missing", missing,
-                    "missing_ratio", missingRatio, "sparse_tolerance_applied", true));
-            String warning = label + ": sparse regular-session coverage (" + missing + " missing of "
-                    + expected + " benchmark slots); affected minutes are skipped";
-            if (!warnings.contains(warning)) warnings.add(warning);
-            return;
-        }
-        throw new HistoricalDataException(label + ": incomplete regular-session coverage ("
-                + missing + " missing of " + expected + " benchmark slots)");
+        requireSlots(label, bars, benchmark, start, end);
     }
 
     public static void requireDailySessions(List<OHLCV> dailyBars, List<OHLCV> benchmark,

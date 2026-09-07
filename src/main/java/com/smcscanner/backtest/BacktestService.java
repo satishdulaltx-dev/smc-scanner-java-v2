@@ -164,6 +164,7 @@ public class BacktestService {
         catch (HistoricalDataException e) { result = BacktestResult.failed(ticker, days, mode, e.getMessage()); }
         result.coverage = Map.copyOf(run.coverage);
         result.rejectionCounts = Map.copyOf(run.rejected);
+        result.candidates = List.copyOf(run.candidates);
         result.warnings = List.copyOf(run.warnings);
         result.startDate = run.start.toString(); result.endDate = run.end.toString();
         return result;
@@ -214,7 +215,7 @@ public class BacktestService {
         }
 
         // Fetch 5m bars for the full lookback — one API call gets it all
-        List<OHLCV> allBars = run.bars(client, ticker, "5m", 0);
+        List<OHLCV> allBars = run.bars(client, ticker, "5m", 10);
         if (allBars == null || allBars.size() < 30) {
             return BacktestResult.failed(ticker, lookbackDays, mode,
                     "Insufficient data (" + (allBars==null?0:allBars.size()) + " bars)");
@@ -266,7 +267,7 @@ public class BacktestService {
                 || "gap".equals(preProfile.getStrategyType())
                 || "gap".equals(strategyOverride);
         List<OHLCV> spy5mBars = needsSpy5m
-                ? run.bars(client, "SPY", "5m", 0)
+                ? run.bars(client, "SPY", "5m", 10)
                 : List.of();
         // Group SPY 5m bars by date for per-day slicing
         TreeMap<LocalDate, List<OHLCV>> spy5mByDate = new TreeMap<>();
@@ -306,7 +307,7 @@ public class BacktestService {
                 : List.of();
 
         if (!ticker.startsWith("X:")) {
-            run.requireSlotsAllowSparse(ticker + " 5m", allBars, spy5mBars);
+            BacktestRun.requireSlots(ticker + " 5m", allBars, spy5mBars, run.start.minusDays(10), run.end);
             BacktestRun.requireDailySessions(dailyBars, spy5mBars, run.start, run.end);
             BacktestRun.requireDailySessions(spyBars, spy5mBars, run.start, run.end);
             if (needsScalp1m) {
@@ -328,6 +329,7 @@ public class BacktestService {
 
         for (int di = 0; di < dates.size(); di++) {
             LocalDate date = dates.get(di);
+            if (date.isBefore(run.start) || date.isAfter(run.end)) continue;
             List<OHLCV> dayBars = byDate.get(date);
             if (dayBars.size() < 20) continue;
 
@@ -414,7 +416,7 @@ public class BacktestService {
                 prevDaysBars = List.of();
             }
             boolean tradePlacedToday = false;
-            for (int end = minBars; end <= dayBars.size() && !tradePlacedToday; end++) {
+            for (int end = minBars; end <= dayBars.size() && (run.research || !tradePlacedToday); end++) {
                 // ALL equity strategies: skip pre-market and stop at regular session close.
                 // Without the after-hours break, session-based detectors (keylevel, vwap, etc.)
                 // keep re-evaluating on stale RTH data as after-hours bars extend the window —
@@ -426,6 +428,9 @@ public class BacktestService {
                     if (!barTime.isBefore(LocalTime.of(16, 0))) break; // stop at RTH close
                 }
                 List<OHLCV> window = dayBars.subList(0, end);
+                List<OHLCV> priorSessionWindow = new ArrayList<>();
+                if (di > 0) priorSessionWindow.addAll(byDate.get(dates.get(di - 1)));
+                priorSessionWindow.addAll(window);
                 long decisionMs = completedAt(dayBars.get(end - 1), 5);
                 if (!ticker.startsWith("X:") && !Instant.ofEpochMilli(decisionMs).atZone(ET).toLocalTime().isBefore(LocalTime.of(16,0))) break;
                 long barEpochMs = dayBars.get(end - 1).getTimestamp();
@@ -459,16 +464,23 @@ public class BacktestService {
                     bSetups = switch(run.pattern) {
                         case "scalp" -> scalpDetector.detect(window,spy,ticker,dailyAtr,true);
                         case "sweep-flip" -> sweepFlipDetector.detect(window,ticker,dailyAtr,true);
-                        case "pdh-pdl" -> pdhPdlDetector.detect(window,ticker,dailyAtr,true);
+                        case "pdh-pdl" -> pdhPdlDetector.detect(priorSessionWindow,ticker,dailyAtr,true);
                         case "choch-primary" -> setupDetector.detectChochPrimary(window,ticker,dailyAtr,true);
                         default -> throw new IllegalArgumentException("Unknown pattern");
                     };
                     if (bSetups.isEmpty()) continue;
                     TradeSetup candidate = bSetups.get(0);
-                    if (!researchAccepts(candidate,window,spy,all15mBars,decisionMs,btRegime,run)) continue;
+                    Map<String,Boolean> gatePass = new TreeMap<>();
+                    for (String gate : BacktestRun.FILTERS) {
+                        BacktestRun gateRun = new BacktestRun(run.start,run.end,run.pattern,Set.of(gate));
+                        gatePass.put(gate,researchAccepts(candidate,window,spy,all15mBars,decisionMs,btRegime,gateRun));
+                    }
+                    boolean accepted = run.filters.stream().allMatch(gatePass::get);
                     List<OHLCV> forward = byDate1m.getOrDefault(date,List.of()).stream()
                             .filter(b -> b.getTimestamp() >= decisionMs).filter(this::isRegularSessionBar).toList();
                     if (forward.isEmpty()) throw new HistoricalDataException("Missing 1m exits for " + ticker);
+                    if (forward.get(0).getTimestamp() != decisionMs)
+                        throw new HistoricalDataException("Missing immediate entry minute for " + ticker);
                     double fill = forward.get(0).getOpen() * ("long".equals(candidate.getDirection()) ? 1.0005 : 0.9995);
                     double stop = candidate.getStopLoss();
                     if (("long".equals(candidate.getDirection()) && stop >= fill) || ("short".equals(candidate.getDirection()) && stop <= fill)) {
@@ -476,7 +488,33 @@ public class BacktestService {
                     }
                     // Same 2R target and fixed initial risk for every pattern/filter experiment.
                     double target = fill + ("long".equals(candidate.getDirection()) ? 2 : -2) * Math.abs(fill-stop);
-                    ExitResult exit = simulateClassicExit(forward,fill,stop,target,candidate.getDirection());
+                    Map<BacktestExitStyle,ExitResult> exits = new EnumMap<>(BacktestExitStyle.class);
+                    exits.put(BacktestExitStyle.FIXED_R,simulateClassicExit(forward,fill,stop,target,candidate.getDirection(),false));
+                    exits.put(BacktestExitStyle.CLASSIC,simulateClassicExit(forward,fill,stop,target,candidate.getDirection()));
+                    exits.put(BacktestExitStyle.HYBRID,simulateHybridExit(completedBars(byDate1m.getOrDefault(date,List.of()),1,decisionMs),forward,fill,stop,target,candidate.getDirection()));
+                    ExitResult exit = exits.get(exitStyle);
+                    if (exit == null) throw new IllegalArgumentException("Research supports FIXED_R, CLASSIC or HYBRID");
+                    Map<String,Object> ledger = new LinkedHashMap<>();
+                    ledger.put("id",ticker+":"+run.pattern+":"+decisionMs+":"+candidate.getDirection());
+                    ledger.put("entry_ts",decisionMs); ledger.put("entry",fill); ledger.put("sl",stop);
+                    ledger.put("tp",target); ledger.put("direction",candidate.getDirection());
+                    boolean longCandidate = "long".equals(candidate.getDirection());
+                    double highAfterEntry = forward.stream().mapToDouble(OHLCV::getHigh).max().orElse(fill);
+                    double lowAfterEntry = forward.stream().mapToDouble(OHLCV::getLow).min().orElse(fill);
+                    ledger.put("session_mfe_r",Math.max(0,longCandidate ? highAfterEntry-fill : fill-lowAfterEntry)/Math.abs(fill-stop));
+                    ledger.put("session_mae_r",Math.max(0,longCandidate ? fill-lowAfterEntry : highAfterEntry-fill)/Math.abs(fill-stop));
+                    ledger.put("gate_pass",gatePass); ledger.put("selected",accepted && !tradePlacedToday);
+                    Map<String,Object> comparisons = new TreeMap<>();
+                    for (var variant : exits.entrySet()) {
+                        ExitResult outcome = variant.getValue();
+                        comparisons.put(variant.getKey().name(),Map.of("outcome",outcome.outcome(),
+                                "risk_multiple",outcome.pnlPct()/100*fill/Math.abs(fill-stop),
+                                "exit_ts",resolveExitEpochMs(forward,outcome.exitTime(),decisionMs)));
+                    }
+                    ledger.put("exits",comparisons);
+                    run.candidates.add(ledger);
+                    if (!accepted) { run.reject("optional_filter"); continue; }
+                    if (tradePlacedToday) continue;
                     trades.add(new TradeResult(ticker,candidate.getDirection(),run.pattern,fill,stop,target,exit.outcome(),exit.pnlPct(),
                             toDateTime(decisionMs),exit.exitTime(),decisionMs,resolveExitEpochMs(forward,exit.exitTime(),decisionMs),
                             candidate.getFactorBreakdown(),candidate.getConfidence(),candidate.getAtr(),0,null,0,null,0,null,0,0,0,0,1));
@@ -623,7 +661,7 @@ public class BacktestService {
                         && !"choch-primary".equals(effectiveStrat)) {
                     java.util.List<TradeSetup> ov = new java.util.ArrayList<>();
                     ov.addAll(sweepFlipDetector.detect(window, ticker, dailyAtr, true));
-                    ov.addAll(pdhPdlDetector.detect(window, ticker, dailyAtr, true));
+                    ov.addAll(pdhPdlDetector.detect(priorSessionWindow, ticker, dailyAtr, true));
                     ov.addAll(setupDetector.detectChochPrimary(window, ticker, dailyAtr, true));
                     if (vwapLongOnly) ov.removeIf(s -> "short".equals(s.getDirection()));
                     if (!ov.isEmpty()) {
@@ -1164,17 +1202,23 @@ public class BacktestService {
                 int contracts = adjConf >= 90 ? 3 : adjConf >= 82 ? 2 : 1;
                 log.debug("{} CONVICTION: conf={} → {} contract(s)", ticker, adjConf, contracts);
 
-                tradePlacedToday = true;
-
                 // Apply entry slippage: live orders are marketable limits at the ask price.
                 // Model underlying entry with 5 BPS adverse slippage; TP/SL resolved on underlying.
+                if (end >= dayBars.size() || dayBars.get(end).getTimestamp() != decisionMs) {
+                    run.reject("missing_entry_bar"); continue;
+                }
                 double slippageFactor = ENTRY_SLIPPAGE_BPS / 10000.0;
                 double entry = "long".equals(setup.getDirection())
-                        ? setup.getEntry() * (1 + slippageFactor)
-                        : setup.getEntry() * (1 - slippageFactor);
+                        ? dayBars.get(end).getOpen() * (1 + slippageFactor)
+                        : dayBars.get(end).getOpen() * (1 - slippageFactor);
                 double sl    = setup.getStopLoss();
                 double tp    = setup.getTakeProfit();
                 String dir   = setup.getDirection();
+                if (("long".equals(dir) && (sl >= entry || tp <= entry))
+                        || ("short".equals(dir) && (sl <= entry || tp >= entry))) {
+                    run.reject("invalid_entry_levels"); continue;
+                }
+                tradePlacedToday = true;
                 String entryTime = toDateTime(entryEpochMs);
 
                 // ── Overnight hold gate — mirrors live OvernightMomentumService ─────────────
@@ -1293,7 +1337,10 @@ public class BacktestService {
                     if (fwdBarsForExit.isEmpty()) fwdBarsForExit = fwdBars; // fallback
                 }
 
+                if (exitStyle == BacktestExitStyle.FIXED_R)
+                    tp = entry + ("long".equals(dir) ? 2 : -2) * Math.abs(entry-sl);
                 ExitResult exit = switch (exitStyle) {
+                    case FIXED_R -> simulateClassicExit(fwdBars, entry, sl, tp, dir, false);
                     case LIVE_PARITY -> scalpManaged
                             ? simulateScalpExit(windowForExit, fwdBarsForExit, entry, sl, tp, dir)
                             : simulateLiveParityExit(window, fwdBars, entry, sl, tp, dir);
@@ -1329,8 +1376,10 @@ public class BacktestService {
                     optEst = new OptionsFlowAnalyzer.BacktestOptionsEstimate(0, 0, 0, 0);
                     scaledPnlPerContract = 0;
                 } else {
-                    double holdDays = 1.0; // most intraday setups resolve within 1 trading day
-                    optEst = optionsAnalyzer.estimateBacktestOptionsPnl(entry, exitPrice, dir, holdDays, setup.getAtr(), contracts);
+                    // Bar-based elapsed calendar time; options remain a sensitivity estimate.
+                    long exitMs = resolveExitEpochMs(fwdBarsForExit, exitTime, entryEpochMs);
+                    double holdDays = Math.max(0, exitMs - entryEpochMs) / 86_400_000.0;
+                    optEst = optionsAnalyzer.estimateBacktestOptionsPnl(entry, exitPrice, dir, holdDays, dailyAtr, contracts);
                     scaledPnlPerContract = round2(optEst.pnlPerContract() * contracts);
                 }
 
@@ -1386,6 +1435,11 @@ public class BacktestService {
     }
 
     private ExitResult simulateClassicExit(List<OHLCV> fwdBars, double entry, double sl, double tp, String dir) {
+        return simulateClassicExit(fwdBars, entry, sl, tp, dir, true);
+    }
+
+    private ExitResult simulateClassicExit(List<OHLCV> fwdBars, double entry, double sl, double tp,
+                                          String dir, boolean useBreakeven) {
         String outcome = "EXPIRED";
         String exitTime = null;
         double pnlPct = 0.0;
@@ -1396,6 +1450,13 @@ public class BacktestService {
         for (OHLCV fb : fwdBars) {
             double hi = fb.getHigh(), lo = fb.getLow();
             double activeSl = beActive ? entry : sl;
+            if (("long".equals(dir) && fb.getOpen() <= activeSl)
+                    || ("short".equals(dir) && fb.getOpen() >= activeSl)) {
+                pnlPct = round2(("long".equals(dir) ? fb.getOpen() - entry : entry - fb.getOpen()) / entry * 100);
+                outcome = pnlPct == 0 ? "BE_STOP" : "LOSS";
+                exitTime = toDateTime(fb.getTimestamp());
+                break;
+            }
 
             // OHLC bars do not reveal whether their high or low happened first.
             // Resolve the stop that was active at the bar open before using this
@@ -1409,7 +1470,7 @@ public class BacktestService {
                 if (lo <= tp)       { outcome = "WIN"; exitTime = toDateTime(fb.getTimestamp()); pnlPct = round2((entry - tp) / entry * 100); break; }
             }
 
-            if (!beActive) {
+            if (useBreakeven && !beActive) {
                 if ("long".equals(dir) && hi >= beLevel) beActive = true;
                 if ("short".equals(dir) && lo <= beLevel) beActive = true;
             }
@@ -1509,13 +1570,13 @@ public class BacktestService {
             // ── SL check (intrabar) — live stop orders fire on touch, not close ──
             boolean stopBreached = isLong ? low <= currentStop : high >= currentStop;
             if (stopBreached) {
-                double exitPrice = currentStop; // fill at stop level, matching live behavior
+                double exitPrice = isLong ? Math.min(currentStop, fb.getOpen()) : Math.max(currentStop, fb.getOpen());
                 double pnlPct = isLong
                         ? round2((exitPrice - entry) / entry * 100)
                         : round2((entry - exitPrice) / entry * 100);
                 String outcome;
                 if (trailActive) outcome = pnlPct > 0 ? "TRAIL_WIN" : "TRAIL_LOSS";
-                else outcome = beActive ? "BE_STOP" : "LOSS";
+                else outcome = beActive && pnlPct == 0 ? "BE_STOP" : "LOSS";
                 return new ExitResult(outcome, toDateTime(fb.getTimestamp()), pnlPct);
             }
 
@@ -1605,13 +1666,13 @@ public class BacktestService {
             // ── SL check (intrabar) ───────────────────────────────────────────────
             boolean stopBreached = isLong ? low <= currentStop : high >= currentStop;
             if (stopBreached) {
-                double exitPrice = currentStop;
+                double exitPrice = isLong ? Math.min(currentStop, fb.getOpen()) : Math.max(currentStop, fb.getOpen());
                 double pnlPct = isLong
                         ? round2((exitPrice - entry) / entry * 100)
                         : round2((entry - exitPrice) / entry * 100);
                 String outcome;
                 if (trailActive) outcome = pnlPct > 0 ? "TRAIL_WIN" : "TRAIL_LOSS";
-                else outcome = beActive ? "BE_STOP" : "LOSS";
+                else outcome = beActive && pnlPct == 0 ? "BE_STOP" : "LOSS";
                 return new ExitResult(outcome, toDateTime(fb.getTimestamp()), pnlPct);
             }
 
@@ -1822,6 +1883,7 @@ public class BacktestService {
         public boolean disabled;
         public Map<String,Object> coverage=Map.of();
         public Map<String,Long> rejectionCounts=Map.of();
+        public List<Map<String,Object>> candidates=List.of();
         public List<String> warnings=List.of();
         public final Map<String,Long> filteredByReason;
         public final int filteredTotal;

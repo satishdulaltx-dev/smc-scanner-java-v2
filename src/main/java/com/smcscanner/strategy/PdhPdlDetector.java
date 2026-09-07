@@ -49,9 +49,9 @@ public class PdhPdlDetector {
 
         if (!backtestMode) {
             if (!today.equals(LocalDate.now(ET))) return result;
-            LocalTime lastTime = Instant.ofEpochMilli(lastBar.getTimestamp()).atZone(ET).toLocalTime();
-            if (lastTime.isBefore(LocalTime.of(9, 45)) || !lastTime.isBefore(LocalTime.of(15, 30))) return result;
         }
+        LocalTime lastTime = Instant.ofEpochMilli(lastBar.getTimestamp()).atZone(ET).toLocalTime();
+        if (lastTime.isBefore(LocalTime.of(9, 45)) || !lastTime.isBefore(LocalTime.of(15, 30))) return result;
 
         LocalTime mktOpen  = LocalTime.of(9, 30);
         LocalTime mktClose = LocalTime.of(16, 0);
