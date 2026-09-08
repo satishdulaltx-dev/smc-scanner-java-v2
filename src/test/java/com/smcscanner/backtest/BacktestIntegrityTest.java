@@ -33,7 +33,8 @@ class BacktestIntegrityTest {
     void researchAcceptsScalpCandidateFamiliesAndBoundedHolds() {
         LocalDate start = LocalDate.of(2026, 6, 1);
         LocalDate end = LocalDate.of(2026, 6, 5);
-        for (String pattern : List.of("scalp", "scalp-early", "vwap", "vwap-cont-long", "vwap-cont-short",
+        for (String pattern : List.of("scalp", "scalp-early", "scalp-core", "scalp-rvol", "scalp-structure",
+                "scalp-spy", "scalp-chase", "vwap", "vwap-cont-long", "vwap-cont-short",
                 "vwap-reversion-long", "vwap-reversion-short", "breakout", "keylevel", "vsqueeze", "or-vwap", "idiv")) {
             BacktestRun run = new BacktestRun(start, end, pattern, Set.of(), 30);
             assertEquals(pattern, run.pattern);
@@ -185,6 +186,14 @@ class BacktestIntegrityTest {
         assertTrue(detector.detect(bars,List.of(),"TEST",2,true).isEmpty());
         assertFalse(detector.detectEarlyResearch(bars,List.of(),"TEST",2).isEmpty());
         assertTrue(detector.detect(bars,List.of(),"TEST",2,true).isEmpty());
+    }
+
+    @Test
+    void scalpResearchRejectsUnknownEmbeddedLayer() {
+        var detector=new com.smcscanner.strategy.ScalpMomentumDetector(null,
+                new com.smcscanner.indicator.VolumeProfileCalculator(),null);
+        assertThrows(IllegalArgumentException.class,
+                () -> detector.detectResearchLayer(List.of(),List.of(),"TEST",2,"unknown"));
     }
 
     @Test

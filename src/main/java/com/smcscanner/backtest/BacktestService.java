@@ -374,7 +374,8 @@ public class BacktestService {
             String stratType;
             if (run.research) {
                 stratType = switch (run.pattern) {
-                    case "scalp", "scalp-early" -> "scalp";
+                    case "scalp", "scalp-early", "scalp-core", "scalp-rvol", "scalp-structure",
+                         "scalp-spy", "scalp-chase" -> "scalp";
                     case "vwap", "vwap-cont-long", "vwap-cont-short",
                          "vwap-reversion-long", "vwap-reversion-short" -> "vwap";
                     case "breakout", "keylevel", "vsqueeze", "or-vwap", "idiv" -> run.pattern;
@@ -428,7 +429,7 @@ public class BacktestService {
                 prevDaysBars = List.of();
             }
             boolean tradePlacedToday = false;
-            if (run.research && "scalp-early".equals(run.pattern)) minBars = 8;
+            if (run.research && run.pattern.startsWith("scalp-") && !"scalp".equals(run.pattern)) minBars = 8;
             for (int end = minBars; end <= dayBars.size() && (run.research || !tradePlacedToday); end++) {
                 // ALL equity strategies: skip pre-market and stop at regular session close.
                 // Without the after-hours break, session-based detectors (keylevel, vwap, etc.)
@@ -481,6 +482,11 @@ public class BacktestService {
                     bSetups = switch(run.pattern) {
                         case "scalp" -> scalpDetector.detect(window,spy,ticker,dailyAtr,true);
                         case "scalp-early" -> scalpDetector.detectEarlyResearch(window,spy,ticker,dailyAtr);
+                        case "scalp-core" -> scalpDetector.detectResearchLayer(window,spy,ticker,dailyAtr,"core");
+                        case "scalp-rvol" -> scalpDetector.detectResearchLayer(window,spy,ticker,dailyAtr,"rvol");
+                        case "scalp-structure" -> scalpDetector.detectResearchLayer(window,spy,ticker,dailyAtr,"structure");
+                        case "scalp-spy" -> scalpDetector.detectResearchLayer(window,spy,ticker,dailyAtr,"spy");
+                        case "scalp-chase" -> scalpDetector.detectResearchLayer(window,spy,ticker,dailyAtr,"chase");
                         case "vwap" -> vwapDetector.detect(window,ticker,dailyAtr,true,vwapLongOnly);
                         case "vwap-cont-long" -> researchSubtype(
                                 vwapDetector.detect(window,ticker,dailyAtr,true,vwapLongOnly), "vwap-continuation-long");

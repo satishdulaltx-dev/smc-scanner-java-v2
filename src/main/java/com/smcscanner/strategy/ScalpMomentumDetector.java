@@ -14,6 +14,7 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * VWAP Standard-Deviation Band Scalp Detector.
@@ -44,6 +45,7 @@ public class ScalpMomentumDetector {
     private static final double LEVEL_TOUCH_ATR = 0.45;
     // Minimum volume multiplier on the rejection bar
     private static final double MIN_VOL_RATIO   = 1.4;
+    private static final Set<String> RESEARCH_LAYERS = Set.of("core", "rvol", "structure", "spy", "chase");
     // Reject obvious chase entries after two same-direction expansion bars
 
     private final PolygonClient              polygon;
@@ -66,16 +68,27 @@ public class ScalpMomentumDetector {
     }
 
     public List<TradeSetup> detect(List<OHLCV> bars, List<OHLCV> spyBars, String ticker, double dailyAtr, boolean backtestMode) {
-        return detectInternal(bars,spyBars,ticker,dailyAtr,backtestMode,20,25);
+        return detectInternal(bars,spyBars,ticker,dailyAtr,backtestMode,20,25,
+                Set.of("rvol", "structure", "spy", "chase"));
     }
 
     /** Explicit historical experiment; live callers retain their existing warm-up. */
     public List<TradeSetup> detectEarlyResearch(List<OHLCV> bars,List<OHLCV> spyBars,String ticker,double dailyAtr) {
-        return detectInternal(bars,spyBars,ticker,dailyAtr,true,8,8);
+        return detectInternal(bars,spyBars,ticker,dailyAtr,true,8,8,
+                Set.of("rvol", "structure", "spy", "chase"));
+    }
+
+    /** Historical-only ablation: test one confirmation on top of the shared VWAP/candle core. */
+    public List<TradeSetup> detectResearchLayer(List<OHLCV> bars,List<OHLCV> spyBars,String ticker,
+                                                double dailyAtr,String layer) {
+        if (!RESEARCH_LAYERS.contains(layer)) throw new IllegalArgumentException("Unsupported scalp research layer");
+        Set<String> enabled = "core".equals(layer) ? Set.of() : Set.of(layer);
+        return detectInternal(bars,spyBars,ticker,dailyAtr,true,8,8,enabled);
     }
 
     private List<TradeSetup> detectInternal(List<OHLCV> bars,List<OHLCV> spyBars,String ticker,
-                                           double dailyAtr,boolean backtestMode,int sessionWarmup,int totalWarmup) {
+                                           double dailyAtr,boolean backtestMode,int sessionWarmup,int totalWarmup,
+                                           Set<String> requiredLayers) {
         List<TradeSetup> result = new ArrayList<>();
         if (bars == null || bars.size() < totalWarmup) return result;
 
@@ -165,17 +178,17 @@ public class ScalpMomentumDetector {
         // ── Core setup gates ──────────────────────────────────────────────────
         boolean setupLong = longLevel != null
                 && lastGreen && lastBodyPct >= 0.40 && closeNearHigh
-                && volRatio >= MIN_VOL_RATIO
-                && bullStructure
-                && !isLateExpansionChase(sessionBars, n, atr, true)
-                && !spyBear && rsLead > -0.002;
+                && (!requiredLayers.contains("rvol") || volRatio >= MIN_VOL_RATIO)
+                && (!requiredLayers.contains("structure") || bullStructure)
+                && (!requiredLayers.contains("chase") || !isLateExpansionChase(sessionBars, n, atr, true))
+                && (!requiredLayers.contains("spy") || (!spyBear && rsLead > -0.002));
 
         boolean setupShort = shortLevel != null
                 && lastRed && lastBodyPct >= 0.40 && closeNearLow
-                && volRatio >= MIN_VOL_RATIO
-                && bearStructure
-                && !isLateExpansionChase(sessionBars, n, atr, false)
-                && !spyBull && rsLead < 0.002;
+                && (!requiredLayers.contains("rvol") || volRatio >= MIN_VOL_RATIO)
+                && (!requiredLayers.contains("structure") || bearStructure)
+                && (!requiredLayers.contains("chase") || !isLateExpansionChase(sessionBars, n, atr, false))
+                && (!requiredLayers.contains("spy") || (!spyBull && rsLead < 0.002));
 
         if (!setupLong && !setupShort) return result;
 
