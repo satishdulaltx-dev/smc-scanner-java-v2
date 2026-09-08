@@ -21,7 +21,10 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class PolygonClient {
     private static final Logger log = LoggerFactory.getLogger(PolygonClient.class);
-    private static final long HISTORICAL_REQUEST_INTERVAL_MS = 12_500L;
+    // Paid stock history permits materially more than the old 5-calls/minute free tier.
+    // A 1.5s page cadence keeps a complete intraday run below the Railway request timeout;
+    // explicit 429 responses still trigger the longer adaptive backoff below.
+    private static final long HISTORICAL_REQUEST_INTERVAL_MS = 1_500L;
     private static final int HISTORICAL_CACHE_LIMIT = 256;
 
     private final ScannerConfig config;
@@ -138,7 +141,7 @@ public class PolygonClient {
                 try (Response response = http.newCall(request).execute()) {
                     int code = response.code();
                     if ((code == 429 || code >= 500) && attempt < 5) {
-                        long retryMs = code == 429 ? retryDelayMs(response.header("Retry-After"))
+                        long retryMs = code == 429 ? retryDelayMs(response.header("Retry-After"), attempt)
                                 : 1000L * (attempt + 1);
                         Thread.sleep(retryMs);
                         continue;
@@ -200,12 +203,12 @@ public class PolygonClient {
         }
     }
 
-    private long retryDelayMs(String retryAfter) {
+    private long retryDelayMs(String retryAfter, int attempt) {
         if (retryAfter != null) {
             try { return Math.max(HISTORICAL_REQUEST_INTERVAL_MS, Long.parseLong(retryAfter) * 1000L); }
             catch (NumberFormatException ignored) { }
         }
-        return HISTORICAL_REQUEST_INTERVAL_MS;
+        return Math.min(30_000L, Math.max(5_000L, 2_000L << Math.min(attempt, 4)));
     }
 
     private List<OHLCV> getPolygonBars(String ticker, String timeframe, int limit) {
