@@ -17,14 +17,14 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
 
 @Service
 public class PolygonClient {
     private static final Logger log = LoggerFactory.getLogger(PolygonClient.class);
-    // Paid stock history permits materially more than the old 5-calls/minute free tier.
-    // A 1.5s page cadence keeps a complete intraday run below the Railway request timeout;
-    // explicit 429 responses still trigger the longer adaptive backoff below.
-    private static final long HISTORICAL_REQUEST_INTERVAL_MS = 1_500L;
+    // The configured provider plan enforces five requests per minute. Keep a small
+    // safety margin so historical pages do not repeatedly enter the 429 backoff path.
+    private static final long HISTORICAL_REQUEST_INTERVAL_MS = 12_500L;
     private static final int HISTORICAL_CACHE_LIMIT = 256;
 
     private final ScannerConfig config;
@@ -33,6 +33,8 @@ public class PolygonClient {
     private final OkHttpClient  http   = new OkHttpClient.Builder()
             .connectTimeout(10, TimeUnit.SECONDS).readTimeout(15, TimeUnit.SECONDS).build();
     private final Object historicalRateLock = new Object();
+    private final ReentrantLock historicalSessionLock = new ReentrantLock(true);
+    private volatile boolean historicalSessionActive;
     private long nextHistoricalRequestAtMs;
     private final Map<String, String> historicalEntitlementFailures = new HashMap<>();
     private final Map<String, List<OHLCV>> historicalCache = Collections.synchronizedMap(
@@ -44,6 +46,22 @@ public class PolygonClient {
 
     public PolygonClient(ScannerConfig config, DataCache cache) {
         this.config = config; this.cache = cache;
+    }
+
+    /** Reserve the provider quota for one controlled historical run. */
+    public void beginHistoricalSession() {
+        historicalSessionLock.lock();
+        historicalSessionActive = true;
+    }
+
+    public void endHistoricalSession() {
+        historicalSessionActive = false;
+        historicalSessionLock.unlock();
+    }
+
+    /** Used only to pause fresh bulk scans; broker/order schedules keep running. */
+    public boolean isHistoricalSessionActive() {
+        return historicalSessionActive;
     }
 
     private static final Map<String, String[]> TF_MAP = Map.of(

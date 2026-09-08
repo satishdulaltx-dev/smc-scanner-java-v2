@@ -4,6 +4,7 @@ import com.smcscanner.alert.AlertDedup;
 import com.smcscanner.alert.DiscordAlertService;
 import com.smcscanner.broker.AlpacaOrderService;
 import com.smcscanner.config.ScannerConfig;
+import com.smcscanner.data.PolygonClient;
 import com.smcscanner.model.TickerStatus;
 import com.smcscanner.model.eod.TickerReport;
 import com.smcscanner.state.ReportCache;
@@ -82,17 +83,24 @@ public class ScannerScheduler {
     private final ReportCache        reportCache;
     private final LiveTradeLog       liveLog;
     private final AlpacaOrderService alpaca;
+    private final PolygonClient      polygon;
 
     public ScannerScheduler(ScannerConfig config, ScannerService scanner, EodReportService eodReport,
                              DiscordAlertService discord, AlertDedup dedup, SharedState state,
-                             ReportCache reportCache, LiveTradeLog liveLog, AlpacaOrderService alpaca) {
+                             ReportCache reportCache, LiveTradeLog liveLog, AlpacaOrderService alpaca,
+                             PolygonClient polygon) {
         this.config=config; this.scanner=scanner; this.eodReport=eodReport;
         this.discord=discord; this.dedup=dedup; this.state=state; this.reportCache=reportCache;
         this.liveLog=liveLog; this.alpaca=alpaca;
+        this.polygon=polygon;
     }
 
     @Scheduled(fixedRateString="${scanner.scan-interval:15}000")
     public void runScan() {
+        if (polygon.isHistoricalSessionActive()) {
+            state.setStatus("research");
+            return;
+        }
         List<String> tickers=config.loadWatchlist();
         if (tickers.isEmpty()) return;
         ZonedDateTime nowZdt=ZonedDateTime.now(ET);
@@ -105,6 +113,10 @@ public class ScannerScheduler {
         state.setStatus("running");
         state.setLastScan(ZonedDateTime.now(ET).format(DateTimeFormatter.ofPattern("h:mm:ss a")));
         for (String ticker:tickers) {
+            if (polygon.isHistoricalSessionActive()) {
+                state.setStatus("research");
+                return;
+            }
             boolean isC=ticker.startsWith("X:");
             if (!isC&&!inNy) {
                 state.updateTicker(TickerStatus.builder().ticker(ticker).status("idle").direction(null).confidence(0).phaseMsg("Outside session — skipped").build());

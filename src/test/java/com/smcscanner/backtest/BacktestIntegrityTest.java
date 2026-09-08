@@ -17,6 +17,19 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class BacktestIntegrityTest {
     @Test
+    void historicalSessionReservationIsVisibleAndReleased() {
+        PolygonClient client = new PolygonClient(new ScannerConfig(), new DataCache());
+        assertFalse(client.isHistoricalSessionActive());
+        client.beginHistoricalSession();
+        try {
+            assertTrue(client.isHistoricalSessionActive());
+        } finally {
+            client.endHistoricalSession();
+        }
+        assertFalse(client.isHistoricalSessionActive());
+    }
+
+    @Test
     void researchAcceptsScalpCandidateFamiliesAndBoundedHolds() {
         LocalDate start = LocalDate.of(2026, 6, 1);
         LocalDate end = LocalDate.of(2026, 6, 5);

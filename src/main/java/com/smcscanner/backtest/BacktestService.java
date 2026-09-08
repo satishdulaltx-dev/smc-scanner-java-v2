@@ -160,8 +160,10 @@ public class BacktestService {
     public BacktestResult run(String ticker, BacktestMode mode, String strategyOverride, BacktestExitStyle exitStyle, BacktestRun run) {
         BacktestResult result;
         int days = (int) java.time.temporal.ChronoUnit.DAYS.between(run.start,run.end)+1;
+        if (run.research) client.beginHistoricalSession();
         try { result = runInternal(ticker, days, mode, strategyOverride, exitStyle, run); }
         catch (HistoricalDataException e) { result = BacktestResult.failed(ticker, days, mode, e.getMessage()); }
+        finally { if (run.research) client.endHistoricalSession(); }
         result.coverage = Map.copyOf(run.coverage);
         result.rejectionCounts = Map.copyOf(run.rejected);
         result.candidates = List.copyOf(run.candidates);
@@ -234,20 +236,20 @@ public class BacktestService {
         // have enough history even when backtesting 180+ days into the past
         List<OHLCV> dailyBars = run.bars(client, ticker, "1d", 450);
 
-        // Fetch 15m bars for the full backtest period — used for 15m alignment check
-        // and fractal anchor squeeze detection (mirrors live ScannerService).
-        List<OHLCV> all15mBars = ticker.startsWith("X:") ? List.of()
+        // Controlled runs load 15m history only when that one optional filter is
+        // under test. Live-parity runs retain all normal context.
+        List<OHLCV> all15mBars = ticker.startsWith("X:") || (run.research && !run.filters.contains("15m")) ? List.of()
                 : run.bars(client, ticker, "15m", 10);
 
         // Fetch hourly bars — used to compute HTF bias via structure analysis,
         // matching live ScannerService which calls mtf.getHtfBias(hourlyBars).
         // Daily bars are kept only for ATR + keylevel history (not bias).
-        List<OHLCV> allHourlyBars = ticker.startsWith("X:") ? List.of()
+        List<OHLCV> allHourlyBars = ticker.startsWith("X:") || run.research ? List.of()
                 : run.bars(client, ticker, "60m", 30);
 
         // Pre-fetch SPY and VIX bars once for market context computation.
         // getContextAt() slices these in-memory per trade — no extra API calls.
-        List<OHLCV> spyBars = run.bars(client, "SPY", "1d", 450);
+        List<OHLCV> spyBars = run.research ? List.of() : run.bars(client, "SPY", "1d", 450);
         List<OHLCV> vixBars = List.of();
         if (!run.research) {
             vixBars = run.optionalBars(client, "I:VIX", "1d", 450,
@@ -309,11 +311,15 @@ public class BacktestService {
         if (!ticker.startsWith("X:")) {
             BacktestRun.requireSlots(ticker + " 5m", allBars, spy5mBars, run.start.minusDays(10), run.end);
             BacktestRun.requireDailySessions(dailyBars, spy5mBars, run.start, run.end);
-            BacktestRun.requireDailySessions(spyBars, spy5mBars, run.start, run.end);
+            if (!run.research) BacktestRun.requireDailySessions(spyBars, spy5mBars, run.start, run.end);
             if (needsScalp1m) {
-                List<OHLCV> spy1m = run.bars(client, "SPY", "1m", 0);
-                run.requireSlotsAllowSparse(ticker + " 1m", all1mBars, spy1m);
-                BacktestRun.requireMinuteExpansion(spy5mBars, spy1m, run.start, run.end);
+                if (run.research) {
+                    BacktestRun.requireMinuteExpansion(allBars, all1mBars, run.start, run.end);
+                } else {
+                    List<OHLCV> spy1m = run.bars(client, "SPY", "1m", 0);
+                    run.requireSlotsAllowSparse(ticker + " 1m", all1mBars, spy1m);
+                    BacktestRun.requireMinuteExpansion(spy5mBars, spy1m, run.start, run.end);
+                }
             }
         }
 
@@ -497,7 +503,7 @@ public class BacktestService {
                     if (bSetups.isEmpty()) continue;
                     TradeSetup candidate = bSetups.get(0);
                     Map<String,Boolean> gatePass = new TreeMap<>();
-                    for (String gate : BacktestRun.FILTERS) {
+                    for (String gate : run.filters) {
                         BacktestRun gateRun = new BacktestRun(run.start,run.end,run.pattern,Set.of(gate));
                         gatePass.put(gate,researchAccepts(candidate,window,spy,all15mBars,decisionMs,btRegime,gateRun));
                     }

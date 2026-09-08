@@ -254,7 +254,8 @@
     <summary style="cursor:pointer;color:var(--blue);font-weight:600">Controlled experiments — compare one change at a time</summary>
     <p style="color:var(--muted);font-size:13px">Historical tests only. Each run uses one pattern, the first passing entry per session, normalized risk, live entry hours, and 0.10% round-trip execution friction.
         Scalp early warm-up uses 8 completed five-minute session bars (earliest decision around 10:10), versus 20 in the baseline.
-        Embedded pattern rules remain active. These experiments do not change live alerts or trading settings.</p>
+        Embedded pattern rules remain active. Fresh scans pause while historical pages load so they do not share the provider quota; order monitoring remains active.
+        These experiments do not change live alerts or trading settings.</p>
     <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:end">
         <div class="ctrl-group"><label for="experiment-ticker">Ticker</label><input id="experiment-ticker" value="AMD" maxlength="10" style="width:90px"></div>
         <div class="ctrl-group"><label for="experiment-start">Start</label><input id="experiment-start" type="date" value="2026-03-02"></div>
