@@ -2,8 +2,9 @@ package com.smcscanner.backtest;
 
 public enum BacktestExitStyle {
     FIXED_R("Fixed stop and 2R target"),
+    TRAIL_3R("Experimental: 3R target, trailing arms at 2.5R"),
     CLASSIC("Classic TP/SL + breakeven"),
-    HYBRID("Classic TP then trail after 1.5R"),
+    HYBRID("Profile target; trail arms at 2R scalp / 2.5R other"),
     LIVE_PARITY("Live-style ATR trailing");
 
     private final String label;

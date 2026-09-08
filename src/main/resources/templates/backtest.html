@@ -225,9 +225,11 @@
     <div class="ctrl-group">
         <label>Exit Model</label>
         <select id="exit-style" autocomplete="off">
-            <option value="HYBRID" selected>Hybrid Trail (2R scalp / 2.5R other) ✓</option>
+            <option value="FIXED_R">Fixed stop / 2R target</option>
+            <option value="TRAIL_3R">Experimental trail: 3R target, arm at 2.5R</option>
+            <option value="HYBRID" selected>Profile target + hybrid trail</option>
             <option value="LIVE_PARITY">Live Parity Trail</option>
-            <option value="CLASSIC">Classic TP / SL</option>
+            <option value="CLASSIC">Classic target + breakeven at 1R</option>
         </select>
     </div>
     <div class="ctrl-group">
@@ -247,6 +249,34 @@
     <button class="run-btn" id="run-btn" onclick="runBacktest()">▶ Run Backtest</button>
     <button class="run-btn" id="optimize-btn" onclick="runOptimize()" style="background:#bc8cff;margin-left:8px;">🧠 Optimize</button>
 </div>
+
+<details style="margin:16px 24px;padding:16px;border:1px solid var(--border);border-radius:8px">
+    <summary style="cursor:pointer;color:var(--blue);font-weight:600">Controlled experiments — compare one change at a time</summary>
+    <p style="color:var(--muted);font-size:13px">Historical tests only. Each run uses one pattern, the first passing entry per session, and normalized risk.
+        Scalp early warm-up uses 8 completed five-minute session bars (earliest decision around 10:10), versus 20 in the baseline.
+        Embedded pattern rules remain active. These experiments do not change live alerts or trading settings.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:end">
+        <div class="ctrl-group"><label for="experiment-ticker">Ticker</label><input id="experiment-ticker" value="AMD" maxlength="10" style="width:90px"></div>
+        <div class="ctrl-group"><label for="experiment-start">Start</label><input id="experiment-start" type="date" value="2026-03-02"></div>
+        <div class="ctrl-group"><label for="experiment-end">End</label><input id="experiment-end" type="date" value="2026-07-17"></div>
+        <div class="ctrl-group"><label for="experiment-pattern">Pattern</label><select id="experiment-pattern">
+            <option value="scalp">Scalp baseline — 20 bars</option><option value="scalp-early">Scalp experiment — 8 bars</option>
+            <option value="sweep-flip">Sweep-flip</option><option value="choch-primary">CHOCH</option><option value="pdh-pdl">Prior-day high / low</option>
+        </select></div>
+        <div class="ctrl-group"><label for="experiment-filter">One optional filter</label><select id="experiment-filter">
+            <option value="">None</option><option value="spy">SPY alignment</option><option value="15m">15m alignment</option>
+            <option value="volume">Volume</option><option value="regime">Market regime</option><option value="time">Time of day</option>
+        </select></div>
+        <div class="ctrl-group"><label for="experiment-exit">Exit rule</label><select id="experiment-exit">
+            <option value="FIXED_R">Fixed stop / 2R</option><option value="CLASSIC">Breakeven at 1R / target 2R</option>
+            <option value="TRAIL_3R">Trail at 2.5R / target 3R</option>
+        </select></div>
+        <button class="run-btn" id="experiment-run" onclick="runControlledExperiment()">Run experiment</button>
+    </div>
+    <p style="color:var(--muted);font-size:12px">Dates default to the previously used training period. Keep any unused validation period closed while changing rules.
+        Start with one ticker; historical downloads can take several minutes.</p>
+</details>
+<div id="experiment-note" style="display:none;margin:16px 24px;padding:12px;border:1px solid var(--blue);border-radius:6px"></div>
 
 <!-- Loading -->
 <div class="loading" id="loading">
@@ -824,7 +854,27 @@ function checkDaysWarning() {
     document.getElementById('days-warn').style.display = days >= 365 ? 'block' : 'none';
 }
 
+async function runControlledExperiment() {
+    const ticker = document.getElementById('experiment-ticker').value.trim().toUpperCase();
+    const start = document.getElementById('experiment-start').value;
+    const end = document.getElementById('experiment-end').value;
+    if (!ticker || !start || !end || start > end) { alert('Enter a ticker and an ordered date range.'); return; }
+    const params = new URLSearchParams({ticker, start, end, mode:'INTRADAY',
+        pattern:document.getElementById('experiment-pattern').value,
+        filters:document.getElementById('experiment-filter').value,
+        exitStyle:document.getElementById('experiment-exit').value});
+    const button = document.getElementById('experiment-run');
+    button.disabled = true; button.textContent = 'Running experiment…'; setLoading(true);
+    try {
+        const response = await fetch(`/api/backtest?${params}`);
+        if (!response.ok) throw new Error(`Request failed (HTTP ${response.status})`);
+        renderSingle(await response.json());
+    } catch (error) { alert(error.message); }
+    finally { setLoading(false); button.disabled = false; button.textContent = 'Run experiment'; }
+}
+
 function runBacktest() {
+    hide('experiment-note');
     const mode = document.getElementById('mode').value;
     if (mode === 'batch') { runBatch(); return; }
     const ticker = document.getElementById('ticker').value;
@@ -932,6 +982,10 @@ async function runBatch() {
 }
 
 function renderSingle(d) {
+    const note = document.getElementById('experiment-note');
+    note.style.display = d.research ? 'block' : 'none';
+    if (d.research) note.textContent = `Experiment: ${d.pattern} · ${d.exit_style} · optional filter: ${d.filters || 'none'} · ${d.start_date} to ${d.end_date}. `
+        + (d.error ? 'Run incomplete; do not interpret zero trades as a strategy result.' : `Mean result: ${Number(d.mean_r).toFixed(3)}R per trade. Options estimates are not used in this experiment.`);
     hide('batch-results'); hide('empty-state');
     show('single-results');
 

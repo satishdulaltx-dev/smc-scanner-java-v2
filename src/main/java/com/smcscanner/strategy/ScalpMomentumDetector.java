@@ -66,11 +66,21 @@ public class ScalpMomentumDetector {
     }
 
     public List<TradeSetup> detect(List<OHLCV> bars, List<OHLCV> spyBars, String ticker, double dailyAtr, boolean backtestMode) {
+        return detectInternal(bars,spyBars,ticker,dailyAtr,backtestMode,20,25);
+    }
+
+    /** Explicit historical experiment; live callers retain their existing warm-up. */
+    public List<TradeSetup> detectEarlyResearch(List<OHLCV> bars,List<OHLCV> spyBars,String ticker,double dailyAtr) {
+        return detectInternal(bars,spyBars,ticker,dailyAtr,true,8,8);
+    }
+
+    private List<TradeSetup> detectInternal(List<OHLCV> bars,List<OHLCV> spyBars,String ticker,
+                                           double dailyAtr,boolean backtestMode,int sessionWarmup,int totalWarmup) {
         List<TradeSetup> result = new ArrayList<>();
-        if (bars == null || bars.size() < 25) return result;
+        if (bars == null || bars.size() < totalWarmup) return result;
 
         List<OHLCV> sessionBars = regularSessionBarsForToday(bars);
-        if (sessionBars.size() < 20) return result;
+        if (sessionBars.size() < sessionWarmup) return result;
 
         OHLCV last = sessionBars.get(sessionBars.size() - 1);
 

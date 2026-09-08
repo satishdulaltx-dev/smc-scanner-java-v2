@@ -416,6 +416,7 @@ public class BacktestService {
                 prevDaysBars = List.of();
             }
             boolean tradePlacedToday = false;
+            if (run.research && "scalp-early".equals(run.pattern)) minBars = 8;
             for (int end = minBars; end <= dayBars.size() && (run.research || !tradePlacedToday); end++) {
                 // ALL equity strategies: skip pre-market and stop at regular session close.
                 // Without the after-hours break, session-based detectors (keylevel, vwap, etc.)
@@ -463,6 +464,7 @@ public class BacktestService {
                     List<OHLCV> spy = completedBars(spy5mByDate.getOrDefault(date,List.of()),5,decisionMs);
                     bSetups = switch(run.pattern) {
                         case "scalp" -> scalpDetector.detect(window,spy,ticker,dailyAtr,true);
+                        case "scalp-early" -> scalpDetector.detectEarlyResearch(window,spy,ticker,dailyAtr);
                         case "sweep-flip" -> sweepFlipDetector.detect(window,ticker,dailyAtr,true);
                         case "pdh-pdl" -> pdhPdlDetector.detect(priorSessionWindow,ticker,dailyAtr,true);
                         case "choch-primary" -> setupDetector.detectChochPrimary(window,ticker,dailyAtr,true);
@@ -492,8 +494,10 @@ public class BacktestService {
                     exits.put(BacktestExitStyle.FIXED_R,simulateClassicExit(forward,fill,stop,target,candidate.getDirection(),false));
                     exits.put(BacktestExitStyle.CLASSIC,simulateClassicExit(forward,fill,stop,target,candidate.getDirection()));
                     exits.put(BacktestExitStyle.HYBRID,simulateHybridExit(completedBars(byDate1m.getOrDefault(date,List.of()),1,decisionMs),forward,fill,stop,target,candidate.getDirection()));
+                    double experimentalTarget = fill + ("long".equals(candidate.getDirection()) ? 3 : -3) * Math.abs(fill-stop);
+                    exits.put(BacktestExitStyle.TRAIL_3R,simulateHybridExit(completedBars(byDate1m.getOrDefault(date,List.of()),1,decisionMs),forward,fill,stop,experimentalTarget,candidate.getDirection()));
                     ExitResult exit = exits.get(exitStyle);
-                    if (exit == null) throw new IllegalArgumentException("Research supports FIXED_R, CLASSIC or HYBRID");
+                    if (exit == null) throw new IllegalArgumentException("Research supports FIXED_R, CLASSIC, HYBRID or TRAIL_3R");
                     Map<String,Object> ledger = new LinkedHashMap<>();
                     ledger.put("id",ticker+":"+run.pattern+":"+decisionMs+":"+candidate.getDirection());
                     ledger.put("entry_ts",decisionMs); ledger.put("entry",fill); ledger.put("sl",stop);
@@ -516,7 +520,7 @@ public class BacktestService {
                     run.candidates.add(ledger);
                     if (!accepted) { run.reject("optional_filter"); continue; }
                     if (tradePlacedToday) continue;
-                    trades.add(new TradeResult(ticker,candidate.getDirection(),run.pattern,fill,stop,target,exit.outcome(),exit.pnlPct(),
+                    trades.add(new TradeResult(ticker,candidate.getDirection(),run.pattern,fill,stop,exitStyle == BacktestExitStyle.TRAIL_3R ? experimentalTarget : target,exit.outcome(),exit.pnlPct(),
                             toDateTime(decisionMs),exit.exitTime(),decisionMs,resolveExitEpochMs(forward,exit.exitTime(),decisionMs),
                             candidate.getFactorBreakdown(),candidate.getConfidence(),candidate.getAtr(),0,null,0,null,0,null,0,0,0,0,1));
                     tradePlacedToday=true;
@@ -1341,7 +1345,10 @@ public class BacktestService {
 
                 if (exitStyle == BacktestExitStyle.FIXED_R)
                     tp = entry + ("long".equals(dir) ? 2 : -2) * Math.abs(entry-sl);
+                if (exitStyle == BacktestExitStyle.TRAIL_3R)
+                    tp = entry + ("long".equals(dir) ? 3 : -3) * Math.abs(entry-sl);
                 ExitResult exit = switch (exitStyle) {
+                    case TRAIL_3R -> simulateHybridExit(window, fwdBars, entry, sl, tp, dir);
                     case FIXED_R -> simulateClassicExit(fwdBars, entry, sl, tp, dir, false);
                     case LIVE_PARITY -> scalpManaged
                             ? simulateScalpExit(windowForExit, fwdBarsForExit, entry, sl, tp, dir)

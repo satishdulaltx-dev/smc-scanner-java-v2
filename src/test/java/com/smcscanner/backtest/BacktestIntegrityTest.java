@@ -121,6 +121,30 @@ class BacktestIntegrityTest {
     }
 
     @Test
+    void threeRTargetAllowsTrailingToActivateBeforeTakeProfit() throws Exception {
+        var bars = List.of(bar(at("2026-06-01T10:00"),100,102.7,99.8,102.6),
+                bar(at("2026-06-01T10:01"),102.6,102.8,102.4,102.5));
+        Object result=exit("simulateHybridExit",bars,99,103,"long",true);
+        assertEquals("TRAIL_WIN",value(result,"outcome"));
+        assertEquals(2.5,value(result,"pnlPct"));
+        assertEquals("WIN",value(exit("simulateHybridExit",bars,99,102,"long",true),"outcome"));
+    }
+
+    @Test
+    void earlyScalpCanEvaluateMorningSignalWithoutChangingBaselineWarmup() {
+        var bars = new java.util.ArrayList<OHLCV>();
+        for (int i=0;i<7;i++) bars.add(bar(at("2026-06-01T09:30")+i*300_000L,
+                100+i*.1,101.1,99.8,100+i*.1));
+        bars.add(OHLCV.builder().timestamp(at("2026-06-01T10:05")).open(100.5).high(101.1)
+                .low(100.4).close(101.1).volume(250).build());
+        var detector=new com.smcscanner.strategy.ScalpMomentumDetector(null,
+                new com.smcscanner.indicator.VolumeProfileCalculator(),null);
+        assertTrue(detector.detect(bars,List.of(),"TEST",2,true).isEmpty());
+        assertFalse(detector.detectEarlyResearch(bars,List.of(),"TEST",2).isEmpty());
+        assertTrue(detector.detect(bars,List.of(),"TEST",2,true).isEmpty());
+    }
+
+    @Test
     void slippageCannotResurrectASetupWhoseStopWasAlreadyCrossed() {
         assertFalse(BacktestService.validEntryStop(342.235,342.0638825,342.0642,"short"));
         assertFalse(BacktestService.validEntryStop(99,99.0495,99.02,"long"));

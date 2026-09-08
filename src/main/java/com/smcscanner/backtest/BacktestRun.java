@@ -16,7 +16,7 @@ public final class BacktestRun {
     public final String pattern;
     public final Set<String> filters;
     public final boolean research;
-    public static final Set<String> PATTERNS = Set.of("scalp", "sweep-flip", "choch-primary", "pdh-pdl");
+    public static final Set<String> PATTERNS = Set.of("scalp", "scalp-early", "sweep-flip", "choch-primary", "pdh-pdl");
     public static final Set<String> FILTERS = Set.of("spy", "15m", "volume", "regime", "time");
 
     public BacktestRun(LocalDate start, LocalDate end) { this(start,end,null,Set.of()); }

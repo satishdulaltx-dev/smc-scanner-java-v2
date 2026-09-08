@@ -667,6 +667,12 @@ public class DashboardController {
             resp.put("filtered_by_reason", result.filteredByReason);
             resp.put("research_rejections", result.rejectionCounts);
             resp.put("candidate_ledger", result.candidates);
+            resp.put("research", pattern != null);
+            if (pattern != null) {
+                resp.put("pattern", pattern);
+                resp.put("filters", filters);
+                resp.put("mean_r", result.trades.stream().mapToDouble(BacktestService.TradeResult::riskMultiple).average().orElse(0));
+            }
             resp.put("total_trades",  result.total);
             resp.put("wins",          result.wins);
             resp.put("losses",        result.losses);
