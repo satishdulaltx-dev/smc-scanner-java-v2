@@ -129,4 +129,47 @@ public final class BacktestRun {
                     + " benchmark minute bars missing)");
         }
     }
+
+    /**
+     * Polygon can omit isolated one-minute aggregates when no trade is reported while
+     * still returning the containing five-minute aggregate. Represent those isolated
+     * slots as flat, zero-volume bars. Reject complete parent gaps and material outages.
+     */
+    public List<OHLCV> normalizeSparseMinuteBars(String label,List<OHLCV> fiveMinuteBars,
+                                                  List<OHLCV> oneMinuteBars) {
+        ZoneId et=ZoneId.of("America/New_York");
+        TreeMap<Long,OHLCV> normalized=new TreeMap<>();
+        for (OHLCV bar:oneMinuteBars) normalized.put(bar.getTimestamp(),bar);
+        int expected=0,missing=0,emptyParents=0;
+        for (OHLCV parent:fiveMinuteBars) {
+            ZonedDateTime time=Instant.ofEpochMilli(parent.getTimestamp()).atZone(et);
+            if (time.toLocalDate().isBefore(start)||time.toLocalDate().isAfter(end)
+                    ||time.toLocalTime().isBefore(LocalTime.of(9,30))
+                    ||!time.toLocalTime().isBefore(LocalTime.of(16,0))) continue;
+            int present=0;
+            for (int minute=0;minute<5;minute++) if (normalized.containsKey(parent.getTimestamp()+minute*60_000L)) present++;
+            if (present==0) {emptyParents++;continue;}
+            double carry=parent.getOpen();
+            for (int minute=0;minute<5;minute++) {
+                long timestamp=parent.getTimestamp()+minute*60_000L;
+                expected++;
+                OHLCV existing=normalized.get(timestamp);
+                if (existing!=null) {carry=existing.getClose();continue;}
+                missing++;
+                normalized.put(timestamp,OHLCV.builder().timestamp(timestamp).open(carry).high(carry)
+                        .low(carry).close(carry).volume(0).build());
+            }
+        }
+        int allowed=Math.max(20,(int)Math.ceil(expected*0.001));
+        if (emptyParents>0||missing>allowed) {
+            throw new HistoricalDataException(label+": material one-minute outage ("+missing
+                    +" isolated slots, "+emptyParents+" complete five-minute blocks missing)");
+        }
+        if (missing>0) {
+            warnings.add(label+": filled "+missing+" isolated zero-trade one-minute slots from complete five-minute parents");
+            coverage.put(label+"/minute_normalization",Map.of("expected",expected,"filled_zero_trade_slots",missing,
+                    "complete_parent_gaps",emptyParents));
+        }
+        return List.copyOf(normalized.values());
+    }
 }

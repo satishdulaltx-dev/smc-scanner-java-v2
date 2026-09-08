@@ -287,6 +287,9 @@ public class BacktestService {
         List<OHLCV> all1mBars = needsScalp1m
                 ? run.bars(client, ticker, "1m", 0)
                 : List.of();
+        if (run.research && needsScalp1m && !ticker.startsWith("X:")) {
+            all1mBars=run.normalizeSparseMinuteBars(ticker+" 1m",allBars,all1mBars);
+        }
         TreeMap<LocalDate, List<OHLCV>> byDate1m = new TreeMap<>();
         for (OHLCV bar : all1mBars) {
             LocalDate d = Instant.ofEpochMilli(bar.getTimestamp()).atZone(ET).toLocalDate();

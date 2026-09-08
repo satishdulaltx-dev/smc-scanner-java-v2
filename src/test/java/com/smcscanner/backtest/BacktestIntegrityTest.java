@@ -165,6 +165,25 @@ class BacktestIntegrityTest {
     }
 
     @Test
+    void isolatedEmptyMinuteIsNormalizedButCompleteParentGapFails() {
+        LocalDate day=LocalDate.of(2026,6,1);
+        long open=day.atTime(9,30).atZone(ET).toInstant().toEpochMilli();
+        OHLCV parent=bar(open,100,101,99,100.5);
+        List<OHLCV> minutes=new java.util.ArrayList<>();
+        for (int minute=0;minute<5;minute++) if (minute!=2)
+            minutes.add(bar(open+minute*60_000L,100+minute*.1,100.2+minute*.1,99.9+minute*.1,100.1+minute*.1));
+        BacktestRun run=new BacktestRun(day,day);
+        List<OHLCV> normalized=run.normalizeSparseMinuteBars("TEST 1m",List.of(parent),minutes);
+        assertEquals(5,normalized.stream().filter(b->b.getTimestamp()>=open&&b.getTimestamp()<open+300_000L).count());
+        OHLCV filled=normalized.stream().filter(b->b.getTimestamp()==open+120_000L).findFirst().orElseThrow();
+        assertEquals(0,filled.getVolume());
+        assertEquals(filled.getOpen(),filled.getClose());
+        assertTrue(run.warnings.get(0).contains("filled 1"));
+        assertThrows(HistoricalDataException.class,
+                ()->new BacktestRun(day,day).normalizeSparseMinuteBars("TEST 1m",List.of(parent),List.of()));
+    }
+
+    @Test
     void threeRTargetAllowsTrailingToActivateBeforeTakeProfit() throws Exception {
         var bars = List.of(bar(at("2026-06-01T10:00"),100,102.7,99.8,102.6),
                 bar(at("2026-06-01T10:01"),102.6,102.8,102.4,102.5));
