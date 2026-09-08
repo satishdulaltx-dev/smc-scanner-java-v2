@@ -109,11 +109,16 @@ public class IndexDivergenceDetector {
                 if (aaplLast.getVolume() > avgVol * 1.5) conf += 5;
 
                 if (sl < entry && tp > entry) {
+                    String detail = String.format(Locale.US,
+                            "idiv-long | SPY30=%+.2f%% | ticker30=%+.2f%% | divergence=%+.2f%% | vol=%.1f×avg",
+                            spyReturn * 100, aaplReturn * 100, divergence * 100,
+                            avgVol > 0 ? aaplLast.getVolume() / avgVol : 0);
                     result.add(TradeSetup.builder()
                             .ticker(ticker).direction("long")
                             .entry(entry).stopLoss(sl).takeProfit(tp)
                             .confidence(conf).session("NYSE").volatility("idiv")
                             .atr(atr).hasBos(false).hasChoch(false)
+                            .factorBreakdown(detail)
                             .fvgTop(r4(aaplClose + atr)).fvgBottom(r4(aaplClose - atr))
                             .timestamp(Instant.ofEpochMilli(aaplLast.getTimestamp()).atZone(ET).toLocalDateTime()).build());
                 }
@@ -138,11 +143,16 @@ public class IndexDivergenceDetector {
                 if (aaplLast.getVolume() > avgVol * 1.5) conf += 5;
 
                 if (sl > entry && tp < entry) {
+                    String detail = String.format(Locale.US,
+                            "idiv-short | SPY30=%+.2f%% | ticker30=%+.2f%% | divergence=%+.2f%% | vol=%.1f×avg",
+                            spyReturn * 100, aaplReturn * 100, divergence * 100,
+                            avgVol > 0 ? aaplLast.getVolume() / avgVol : 0);
                     result.add(TradeSetup.builder()
                             .ticker(ticker).direction("short")
                             .entry(entry).stopLoss(sl).takeProfit(tp)
                             .confidence(conf).session("NYSE").volatility("idiv")
                             .atr(atr).hasBos(false).hasChoch(false)
+                            .factorBreakdown(detail)
                             .fvgTop(r4(aaplClose + atr)).fvgBottom(r4(aaplClose - atr))
                             .timestamp(Instant.ofEpochMilli(aaplLast.getTimestamp()).atZone(ET).toLocalDateTime()).build());
                 }

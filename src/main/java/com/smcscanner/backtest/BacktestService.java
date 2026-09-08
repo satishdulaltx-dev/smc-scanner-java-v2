@@ -367,7 +367,13 @@ public class BacktestService {
             // SWING      → swing sub-profile strategyType
             String stratType;
             if (run.research) {
-                stratType = "scalp".equals(run.pattern) ? "scalp" : "smc";
+                stratType = switch (run.pattern) {
+                    case "scalp", "scalp-early" -> "scalp";
+                    case "vwap", "vwap-cont-long", "vwap-cont-short",
+                         "vwap-reversion-long", "vwap-reversion-short" -> "vwap";
+                    case "breakout", "keylevel", "vsqueeze", "or-vwap", "idiv" -> run.pattern;
+                    default -> "smc";
+                };
             } else if (strategyOverride != null && !strategyOverride.isBlank()) {
                 stratType = strategyOverride;
             } else if (mode == BacktestMode.SCALP) {
@@ -434,6 +440,10 @@ public class BacktestService {
                 priorSessionWindow.addAll(window);
                 long decisionMs = completedAt(dayBars.get(end - 1), 5);
                 if (!ticker.startsWith("X:") && !Instant.ofEpochMilli(decisionMs).atZone(ET).toLocalTime().isBefore(LocalTime.of(16,0))) break;
+                if (run.research && !researchEntryWindowAllows(run.pattern, decisionMs, ticker.startsWith("X:"))) {
+                    run.reject("entry_window");
+                    continue;
+                }
                 long barEpochMs = dayBars.get(end - 1).getTimestamp();
 
                 // ── Per-ticker dead zone hard block ───────────────────────────
@@ -465,6 +475,20 @@ public class BacktestService {
                     bSetups = switch(run.pattern) {
                         case "scalp" -> scalpDetector.detect(window,spy,ticker,dailyAtr,true);
                         case "scalp-early" -> scalpDetector.detectEarlyResearch(window,spy,ticker,dailyAtr);
+                        case "vwap" -> vwapDetector.detect(window,ticker,dailyAtr,true,vwapLongOnly);
+                        case "vwap-cont-long" -> researchSubtype(
+                                vwapDetector.detect(window,ticker,dailyAtr,true,vwapLongOnly), "vwap-continuation-long");
+                        case "vwap-cont-short" -> researchSubtype(
+                                vwapDetector.detect(window,ticker,dailyAtr,true,vwapLongOnly), "vwap-continuation-short");
+                        case "vwap-reversion-long" -> researchSubtype(
+                                vwapDetector.detect(window,ticker,dailyAtr,true,vwapLongOnly), "vwap-reversion-long");
+                        case "vwap-reversion-short" -> researchSubtype(
+                                vwapDetector.detect(window,ticker,dailyAtr,true,vwapLongOnly), "vwap-reversion-short");
+                        case "breakout" -> breakoutDetector.detect(window,ticker,dailyAtr,true);
+                        case "keylevel" -> keyLevelDetector.detect(window,htfSlice,ticker,dailyAtr,bp,true);
+                        case "vsqueeze" -> vSqueezeDetector.detect(window,ticker,dailyAtr,true);
+                        case "or-vwap" -> orVwapDetector.detect(window,ticker,dailyAtr,true);
+                        case "idiv" -> indexDivDetector.detect(window,spy,ticker,dailyAtr);
                         case "sweep-flip" -> sweepFlipDetector.detect(window,ticker,dailyAtr,true);
                         case "pdh-pdl" -> pdhPdlDetector.detect(priorSessionWindow,ticker,dailyAtr,true);
                         case "choch-primary" -> setupDetector.detectChochPrimary(window,ticker,dailyAtr,true);
@@ -478,11 +502,14 @@ public class BacktestService {
                         gatePass.put(gate,researchAccepts(candidate,window,spy,all15mBars,decisionMs,btRegime,gateRun));
                     }
                     boolean accepted = run.filters.stream().allMatch(gatePass::get);
-                    List<OHLCV> forward = byDate1m.getOrDefault(date,List.of()).stream()
+                    List<OHLCV> completeForward = byDate1m.getOrDefault(date,List.of()).stream()
                             .filter(b -> b.getTimestamp() >= decisionMs).filter(this::isRegularSessionBar).toList();
-                    if (forward.isEmpty()) throw new HistoricalDataException("Missing 1m exits for " + ticker);
-                    if (forward.get(0).getTimestamp() != decisionMs)
+                    if (completeForward.isEmpty()) throw new HistoricalDataException("Missing 1m exits for " + ticker);
+                    if (completeForward.get(0).getTimestamp() != decisionMs)
                         throw new HistoricalDataException("Missing immediate entry minute for " + ticker);
+                    long holdEndExclusive = decisionMs + run.maxHoldMinutes * 60_000L;
+                    List<OHLCV> forward = completeForward.stream()
+                            .filter(b -> b.getTimestamp() < holdEndExclusive).toList();
                     double fill = forward.get(0).getOpen() * ("long".equals(candidate.getDirection()) ? 1.0005 : 0.9995);
                     double stop = candidate.getStopLoss();
                     if (!validEntryStop(forward.get(0).getOpen(),fill,stop,candidate.getDirection())) {
@@ -491,11 +518,11 @@ public class BacktestService {
                     // Same 2R target and fixed initial risk for every pattern/filter experiment.
                     double target = fill + ("long".equals(candidate.getDirection()) ? 2 : -2) * Math.abs(fill-stop);
                     Map<BacktestExitStyle,ExitResult> exits = new EnumMap<>(BacktestExitStyle.class);
-                    exits.put(BacktestExitStyle.FIXED_R,simulateClassicExit(forward,fill,stop,target,candidate.getDirection(),false));
-                    exits.put(BacktestExitStyle.CLASSIC,simulateClassicExit(forward,fill,stop,target,candidate.getDirection()));
-                    exits.put(BacktestExitStyle.HYBRID,simulateHybridExit(completedBars(byDate1m.getOrDefault(date,List.of()),1,decisionMs),forward,fill,stop,target,candidate.getDirection()));
+                    exits.put(BacktestExitStyle.FIXED_R,withResearchExitFriction(simulateClassicExit(forward,fill,stop,target,candidate.getDirection(),false)));
+                    exits.put(BacktestExitStyle.CLASSIC,withResearchExitFriction(simulateClassicExit(forward,fill,stop,target,candidate.getDirection())));
+                    exits.put(BacktestExitStyle.HYBRID,withResearchExitFriction(simulateHybridExit(completedBars(byDate1m.getOrDefault(date,List.of()),1,decisionMs),forward,fill,stop,target,candidate.getDirection())));
                     double experimentalTarget = fill + ("long".equals(candidate.getDirection()) ? 3 : -3) * Math.abs(fill-stop);
-                    exits.put(BacktestExitStyle.TRAIL_3R,simulateHybridExit(completedBars(byDate1m.getOrDefault(date,List.of()),1,decisionMs),forward,fill,stop,experimentalTarget,candidate.getDirection()));
+                    exits.put(BacktestExitStyle.TRAIL_3R,withResearchExitFriction(simulateHybridExit(completedBars(byDate1m.getOrDefault(date,List.of()),1,decisionMs),forward,fill,stop,experimentalTarget,candidate.getDirection())));
                     ExitResult exit = exits.get(exitStyle);
                     if (exit == null) throw new IllegalArgumentException("Research supports FIXED_R, CLASSIC, HYBRID or TRAIL_3R");
                     Map<String,Object> ledger = new LinkedHashMap<>();
@@ -503,6 +530,13 @@ public class BacktestService {
                     ledger.put("entry_ts",decisionMs); ledger.put("entry",fill); ledger.put("sl",stop);
                     ledger.put("market_open",forward.get(0).getOpen());
                     ledger.put("tp",target); ledger.put("direction",candidate.getDirection());
+                    ledger.put("max_hold_minutes",run.maxHoldMinutes);
+                    ledger.put("round_trip_cost_bps",BacktestRun.RESEARCH_ROUND_TRIP_COST_BPS);
+                    ledger.put("confidence",candidate.getConfidence());
+                    ledger.put("factor_breakdown",candidate.getFactorBreakdown());
+                    ledger.put("signal_entry",candidate.getEntry());
+                    ledger.put("signal_tp",candidate.getTakeProfit());
+                    ledger.put("atr",candidate.getAtr());
                     boolean longCandidate = "long".equals(candidate.getDirection());
                     double highAfterEntry = forward.stream().mapToDouble(OHLCV::getHigh).max().orElse(fill);
                     double lowAfterEntry = forward.stream().mapToDouble(OHLCV::getLow).min().orElse(fill);
@@ -1423,6 +1457,25 @@ public class BacktestService {
     }
     static List<OHLCV> completedBars(List<OHLCV> bars,int minutes,long decision) {
         return bars.stream().filter(b -> completedAt(b,minutes)<=decision).toList();
+    }
+    static boolean researchEntryWindowAllows(String pattern, long decisionMs, boolean crypto) {
+        if (crypto) return true;
+        LocalTime decisionTime = Instant.ofEpochMilli(decisionMs).atZone(ET).toLocalTime();
+        if (!decisionTime.isBefore(LocalTime.of(15, 30))) return false;
+        return !decisionTime.isBefore(LocalTime.of(9, 45)) || "or-vwap".equals(pattern);
+    }
+    static double netResearchPnlPct(double grossPnlPct) {
+        // Entry is already filled 5 BPS adversely. Charge another 5 BPS on exit.
+        return Math.round((grossPnlPct - BacktestRun.RESEARCH_ROUND_TRIP_COST_BPS / 2.0 / 100.0) * 100.0) / 100.0;
+    }
+    static List<TradeSetup> researchSubtype(List<TradeSetup> setups, String subtype) {
+        if (setups == null || setups.isEmpty()) return List.of();
+        return setups.stream().filter(s -> s.getFactorBreakdown() != null
+                && s.getFactorBreakdown().startsWith(subtype)).toList();
+    }
+    private ExitResult withResearchExitFriction(ExitResult gross) {
+        if (gross == null) return null;
+        return new ExitResult(gross.outcome(), gross.exitTime(), netResearchPnlPct(gross.pnlPct()));
     }
     private boolean researchAccepts(TradeSetup s,List<OHLCV> window,List<OHLCV> spy,List<OHLCV> m15,long decision,
                                     MarketRegimeDetector.Regime regime,BacktestRun run) {

@@ -15,17 +15,31 @@ public final class BacktestRun {
     public final List<Map<String,Object>> candidates = new ArrayList<>();
     public final String pattern;
     public final Set<String> filters;
+    public final int maxHoldMinutes;
     public final boolean research;
-    public static final Set<String> PATTERNS = Set.of("scalp", "scalp-early", "sweep-flip", "choch-primary", "pdh-pdl");
+    public static final Set<String> PATTERNS = Set.of(
+            "scalp", "scalp-early", "vwap", "vwap-cont-long", "vwap-cont-short",
+            "vwap-reversion-long", "vwap-reversion-short",
+            "breakout", "keylevel", "vsqueeze", "or-vwap", "idiv",
+            "sweep-flip", "choch-primary", "pdh-pdl");
     public static final Set<String> FILTERS = Set.of("spy", "15m", "volume", "regime", "time");
+    public static final Set<Integer> HOLD_MINUTES = Set.of(15, 30, 60, 120, 390);
+    /** 5 BPS adverse entry fill plus 5 BPS adverse exit fill in controlled research. */
+    public static final double RESEARCH_ROUND_TRIP_COST_BPS = 10.0;
 
-    public BacktestRun(LocalDate start, LocalDate end) { this(start,end,null,Set.of()); }
+    public BacktestRun(LocalDate start, LocalDate end) { this(start,end,null,Set.of(),390); }
     public BacktestRun(LocalDate start, LocalDate end, String pattern, Set<String> filters) {
+        this(start,end,pattern,filters,390);
+    }
+    public BacktestRun(LocalDate start, LocalDate end, String pattern, Set<String> filters, int maxHoldMinutes) {
         if (start == null || end == null || start.isAfter(end) || !end.isBefore(LocalDate.now(ZoneId.of("America/New_York"))))
             throw new IllegalArgumentException("Use an ordered range ending before today (completed sessions only)");
         if (pattern != null && !PATTERNS.contains(pattern)) throw new IllegalArgumentException("Unsupported research pattern");
         if (!FILTERS.containsAll(filters)) throw new IllegalArgumentException("Unsupported research filter");
-        this.start=start;this.end=end;this.pattern=pattern;this.filters=Set.copyOf(filters);this.research=pattern!=null;
+        if (pattern != null && !HOLD_MINUTES.contains(maxHoldMinutes))
+            throw new IllegalArgumentException("Research hold must be 15, 30, 60, 120, or 390 minutes");
+        this.start=start;this.end=end;this.pattern=pattern;this.filters=Set.copyOf(filters);
+        this.maxHoldMinutes=maxHoldMinutes;this.research=pattern!=null;
     }
     public void reject(String reason) { rejected.merge(reason,1L,Long::sum); }
     public List<OHLCV> bars(PolygonClient client, String ticker, String timeframe, int warmupDays) {

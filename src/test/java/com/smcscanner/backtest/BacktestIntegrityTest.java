@@ -11,10 +11,40 @@ import java.lang.reflect.Method;
 import java.time.*;
 import java.util.Map;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class BacktestIntegrityTest {
+    @Test
+    void researchAcceptsScalpCandidateFamiliesAndBoundedHolds() {
+        LocalDate start = LocalDate.of(2026, 6, 1);
+        LocalDate end = LocalDate.of(2026, 6, 5);
+        for (String pattern : List.of("scalp", "scalp-early", "vwap", "vwap-cont-long", "vwap-cont-short",
+                "vwap-reversion-long", "vwap-reversion-short", "breakout", "keylevel", "vsqueeze", "or-vwap", "idiv")) {
+            BacktestRun run = new BacktestRun(start, end, pattern, Set.of(), 30);
+            assertEquals(pattern, run.pattern);
+            assertEquals(30, run.maxHoldMinutes);
+        }
+        assertThrows(IllegalArgumentException.class,
+                () -> new BacktestRun(start, end, "scalp", Set.of(), 45));
+    }
+
+    @Test
+    void researchUsesLiveEntryHoursIncludingOpeningRangeException() {
+        assertFalse(BacktestService.researchEntryWindowAllows("scalp", at("2026-06-01T09:40"), false));
+        assertTrue(BacktestService.researchEntryWindowAllows("or-vwap", at("2026-06-01T09:40"), false));
+        assertTrue(BacktestService.researchEntryWindowAllows("scalp", at("2026-06-01T09:45"), false));
+        assertFalse(BacktestService.researchEntryWindowAllows("scalp", at("2026-06-01T15:30"), false));
+        assertTrue(BacktestService.researchEntryWindowAllows("scalp", at("2026-06-01T18:00"), true));
+    }
+
+    @Test
+    void researchChargesTheExitHalfOfRoundTripExecutionFriction() {
+        assertEquals(1.95, BacktestService.netResearchPnlPct(2.0));
+        assertEquals(-1.05, BacktestService.netResearchPnlPct(-1.0));
+        assertEquals(-0.05, BacktestService.netResearchPnlPct(0.0));
+    }
     private static final ZoneId ET = ZoneId.of("America/New_York");
 
     @Test

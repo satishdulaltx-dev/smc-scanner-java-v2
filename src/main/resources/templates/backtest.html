@@ -252,7 +252,7 @@
 
 <details style="margin:16px 24px;padding:16px;border:1px solid var(--border);border-radius:8px">
     <summary style="cursor:pointer;color:var(--blue);font-weight:600">Controlled experiments — compare one change at a time</summary>
-    <p style="color:var(--muted);font-size:13px">Historical tests only. Each run uses one pattern, the first passing entry per session, and normalized risk.
+    <p style="color:var(--muted);font-size:13px">Historical tests only. Each run uses one pattern, the first passing entry per session, normalized risk, live entry hours, and 0.10% round-trip execution friction.
         Scalp early warm-up uses 8 completed five-minute session bars (earliest decision around 10:10), versus 20 in the baseline.
         Embedded pattern rules remain active. These experiments do not change live alerts or trading settings.</p>
     <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:end">
@@ -261,6 +261,11 @@
         <div class="ctrl-group"><label for="experiment-end">End</label><input id="experiment-end" type="date" value="2026-07-17"></div>
         <div class="ctrl-group"><label for="experiment-pattern">Pattern</label><select id="experiment-pattern">
             <option value="scalp">Scalp baseline — 20 bars</option><option value="scalp-early">Scalp experiment — 8 bars</option>
+            <option value="breakout">Opening-range breakout</option><option value="vwap">All VWAP setups</option>
+            <option value="vwap-cont-long">VWAP continuation — long</option><option value="vwap-cont-short">VWAP continuation — short</option>
+            <option value="vwap-reversion-long">VWAP reversion — long</option><option value="vwap-reversion-short">VWAP reversion — short</option>
+            <option value="or-vwap">Opening-range VWAP</option><option value="keylevel">Key-level rejection</option>
+            <option value="vsqueeze">Volatility squeeze</option><option value="idiv">Index divergence</option>
             <option value="sweep-flip">Sweep-flip</option><option value="choch-primary">CHOCH</option><option value="pdh-pdl">Prior-day high / low</option>
         </select></div>
         <div class="ctrl-group"><label for="experiment-filter">One optional filter</label><select id="experiment-filter">
@@ -270,6 +275,10 @@
         <div class="ctrl-group"><label for="experiment-exit">Exit rule</label><select id="experiment-exit">
             <option value="FIXED_R">Fixed stop / 2R</option><option value="CLASSIC">Breakeven at 1R / target 2R</option>
             <option value="TRAIL_3R">Trail at 2.5R / target 3R</option>
+        </select></div>
+        <div class="ctrl-group"><label for="experiment-hold">Maximum hold</label><select id="experiment-hold">
+            <option value="15">15 minutes</option><option value="30" selected>30 minutes</option>
+            <option value="60">60 minutes</option><option value="120">120 minutes</option><option value="390">Session close</option>
         </select></div>
         <button class="run-btn" id="experiment-run" onclick="runControlledExperiment()">Run experiment</button>
     </div>
@@ -862,6 +871,7 @@ async function runControlledExperiment() {
     const params = new URLSearchParams({ticker, start, end, mode:'INTRADAY',
         pattern:document.getElementById('experiment-pattern').value,
         filters:document.getElementById('experiment-filter').value,
+        holdMinutes:document.getElementById('experiment-hold').value,
         exitStyle:document.getElementById('experiment-exit').value});
     const button = document.getElementById('experiment-run');
     button.disabled = true; button.textContent = 'Running experiment…'; setLoading(true);
@@ -984,7 +994,7 @@ async function runBatch() {
 function renderSingle(d) {
     const note = document.getElementById('experiment-note');
     note.style.display = d.research ? 'block' : 'none';
-    if (d.research) note.textContent = `Experiment: ${d.pattern} · ${d.exit_style} · optional filter: ${d.filters || 'none'} · ${d.start_date} to ${d.end_date}. `
+    if (d.research) note.textContent = `Experiment: ${d.pattern} · ${d.exit_style} · max hold: ${d.max_hold_minutes}m · execution friction: ${(Number(d.round_trip_cost_bps) / 100).toFixed(2)}% round trip · optional filter: ${d.filters || 'none'} · ${d.start_date} to ${d.end_date}. `
         + (d.error ? 'Run incomplete; do not interpret zero trades as a strategy result.' : `Mean result: ${Number(d.mean_r).toFixed(3)}R per trade. Options estimates are not used in this experiment.`);
     hide('batch-results'); hide('empty-state');
     show('single-results');

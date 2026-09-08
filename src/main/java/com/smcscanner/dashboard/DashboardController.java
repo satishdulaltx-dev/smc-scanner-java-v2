@@ -595,6 +595,7 @@ public class DashboardController {
             @org.springframework.web.bind.annotation.RequestParam(required=false)      LocalDate end,
             @org.springframework.web.bind.annotation.RequestParam(required=false)      String pattern,
             @org.springframework.web.bind.annotation.RequestParam(defaultValue="")     String filters,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue="390")  int holdMinutes,
             @org.springframework.web.bind.annotation.RequestParam(defaultValue="false") boolean force) {
         String sym = ticker.toUpperCase();
         // Apply inline param overrides for sweep testing (bypasses saved profile)
@@ -648,7 +649,7 @@ public class DashboardController {
                         : Arrays.stream(filters.split(",")).map(String::trim)
                                 .filter(v -> !v.isBlank()).collect(Collectors.toUnmodifiableSet());
                 result = backtestService.run(sym, btMode, null, btExit,
-                        new BacktestRun(start, end, pattern, enabledFilters));
+                        new BacktestRun(start, end, pattern, enabledFilters, holdMinutes));
             } else {
                 result = backtestService.run(sym, days, btMode,
                         (strategy != null && !strategy.isBlank()) ? strategy : null, btExit);
@@ -671,6 +672,8 @@ public class DashboardController {
             if (pattern != null) {
                 resp.put("pattern", pattern);
                 resp.put("filters", filters);
+                resp.put("max_hold_minutes", holdMinutes);
+                resp.put("round_trip_cost_bps", BacktestRun.RESEARCH_ROUND_TRIP_COST_BPS);
                 resp.put("mean_r", result.trades.stream().mapToDouble(BacktestService.TradeResult::riskMultiple).average().orElse(0));
             }
             resp.put("total_trades",  result.total);
