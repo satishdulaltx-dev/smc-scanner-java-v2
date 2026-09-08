@@ -1483,6 +1483,12 @@ public class BacktestService {
         // Entry is already filled 5 BPS adversely. Charge another 5 BPS on exit.
         return Math.round((grossPnlPct - BacktestRun.RESEARCH_ROUND_TRIP_COST_BPS / 2.0 / 100.0) * 100.0) / 100.0;
     }
+    static boolean researchRiskSupportsCosts(double entry,double stop) {
+        if (entry<=0) return false;
+        double riskPct=Math.abs(entry-stop)/entry;
+        double modeledRoundTrip=BacktestRun.RESEARCH_ROUND_TRIP_COST_BPS/10_000.0;
+        return riskPct>=modeledRoundTrip*4.0;
+    }
     static List<TradeSetup> researchSubtype(List<TradeSetup> setups, String subtype) {
         if (setups == null || setups.isEmpty()) return List.of();
         return setups.stream().filter(s -> s.getFactorBreakdown() != null
@@ -1510,6 +1516,7 @@ public class BacktestService {
         if (run.filters.contains("regime") && (regime==MarketRegimeDetector.Regime.LOW_LIQUIDITY || regime==MarketRegimeDetector.Regime.VOLATILE)) reason="regime";
         int hour=Instant.ofEpochMilli(decision).atZone(ET).getHour();
         if (run.filters.contains("time") && (hour==11||hour==13||hour>=15)) reason="time";
+        if (run.filters.contains("cost") && !researchRiskSupportsCosts(s.getEntry(),s.getStopLoss())) reason="cost";
         if (reason!=null) {run.reject(reason);return false;}
         return true;
     }

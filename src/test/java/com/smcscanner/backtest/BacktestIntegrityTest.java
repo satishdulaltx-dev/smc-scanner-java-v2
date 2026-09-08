@@ -58,6 +58,8 @@ class BacktestIntegrityTest {
         assertEquals(1.95, BacktestService.netResearchPnlPct(2.0));
         assertEquals(-1.05, BacktestService.netResearchPnlPct(-1.0));
         assertEquals(-0.05, BacktestService.netResearchPnlPct(0.0));
+        assertFalse(BacktestService.researchRiskSupportsCosts(100,99.7));
+        assertTrue(BacktestService.researchRiskSupportsCosts(100,99.5));
     }
     private static final ZoneId ET = ZoneId.of("America/New_York");
 

@@ -23,7 +23,7 @@ public final class BacktestRun {
             "vwap-reversion-long", "vwap-reversion-short",
             "breakout", "keylevel", "vsqueeze", "or-vwap", "idiv",
             "sweep-flip", "choch-primary", "pdh-pdl");
-    public static final Set<String> FILTERS = Set.of("spy", "15m", "volume", "regime", "time");
+    public static final Set<String> FILTERS = Set.of("spy", "15m", "volume", "regime", "time", "cost");
     public static final Set<Integer> HOLD_MINUTES = Set.of(15, 30, 60, 120, 390);
     /** 5 BPS adverse entry fill plus 5 BPS adverse exit fill in controlled research. */
     public static final double RESEARCH_ROUND_TRIP_COST_BPS = 10.0;
