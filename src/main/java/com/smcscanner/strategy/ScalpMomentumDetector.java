@@ -89,9 +89,8 @@ public class ScalpMomentumDetector {
     /** Historical-only experiment using prior-session volume from the same clock time. */
     public List<TradeSetup> detectTimeOfDayRvolResearch(List<OHLCV> bars,List<OHLCV> spyBars,String ticker,
                                                         double dailyAtr,double expectedSlotVolume) {
-        Double ratio = expectedSlotVolume > 0 && bars != null && !bars.isEmpty()
-                ? bars.get(bars.size()-1).getVolume() / expectedSlotVolume
-                : null;
+        if (expectedSlotVolume <= 0 || bars == null || bars.isEmpty()) return List.of();
+        double ratio = bars.get(bars.size()-1).getVolume() / expectedSlotVolume;
         return detectInternal(bars,spyBars,ticker,dailyAtr,true,8,8,Set.of("tod-rvol"),ratio);
     }
 

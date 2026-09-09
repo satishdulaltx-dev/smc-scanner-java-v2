@@ -206,6 +206,7 @@ class BacktestIntegrityTest {
                 new com.smcscanner.indicator.VolumeProfileCalculator(),null);
         assertTrue(detector.detect(bars,List.of(),"TEST",2,true).isEmpty());
         assertFalse(detector.detectEarlyResearch(bars,List.of(),"TEST",2).isEmpty());
+        assertTrue(detector.detectTimeOfDayRvolResearch(bars,List.of(),"TEST",2,0).isEmpty());
         assertTrue(detector.detect(bars,List.of(),"TEST",2,true).isEmpty());
     }
 
