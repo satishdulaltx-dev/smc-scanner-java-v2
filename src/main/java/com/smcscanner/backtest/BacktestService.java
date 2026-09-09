@@ -236,9 +236,10 @@ public class BacktestService {
         // have enough history even when backtesting 180+ days into the past
         List<OHLCV> dailyBars = run.bars(client, ticker, "1d", 450);
 
-        // Controlled runs load 15m history only when that one optional filter is
-        // under test. Live-parity runs retain all normal context.
-        List<OHLCV> all15mBars = ticker.startsWith("X:") || (run.research && !run.filters.contains("15m")) ? List.of()
+        // Controlled runs retain 15m history so every optional filter can be scored
+        // against the exact same candidate ledger in one pass. This avoids rerunning
+        // the detector and accidentally comparing different samples.
+        List<OHLCV> all15mBars = ticker.startsWith("X:") ? List.of()
                 : run.bars(client, ticker, "15m", 10);
 
         // Fetch hourly bars — used to compute HTF bias via structure analysis,
@@ -526,7 +527,7 @@ public class BacktestService {
                     if (bSetups.isEmpty()) continue;
                     TradeSetup candidate = bSetups.get(0);
                     Map<String,Boolean> gatePass = new TreeMap<>();
-                    for (String gate : run.filters) {
+                    for (String gate : BacktestRun.FILTERS) {
                         BacktestRun gateRun = new BacktestRun(run.start,run.end,run.pattern,Set.of(gate));
                         gatePass.put(gate,researchAccepts(candidate,window,spy,all15mBars,decisionMs,btRegime,gateRun));
                     }
