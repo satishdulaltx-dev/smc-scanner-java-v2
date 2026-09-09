@@ -130,6 +130,35 @@ class BacktestIntegrityTest {
     }
 
     @Test
+    void researchEvidenceRejectsAConsistentlyLosingSample() {
+        List<BacktestService.TradeResult> rows = new java.util.ArrayList<>();
+        for (int i = 0; i < 40; i++) rows.add(tradeAt("LOSS", -1.0,
+                LocalDate.of(2025, 1, 2).plusDays(i).atTime(10, 0)));
+
+        ResearchStatistics.Summary evidence = ResearchStatistics.summarize(rows);
+
+        assertEquals("REJECTED", evidence.verdict());
+        assertEquals(-1.0, evidence.meanR());
+        assertTrue(evidence.ciHighR() <= 0);
+        assertEquals(0.0, evidence.profitFactor());
+    }
+
+    @Test
+    void researchEvidenceDoesNotPromoteFourLuckyTrades() {
+        List<BacktestService.TradeResult> rows = List.of(
+                tradeAt("WIN", 2.0, LocalDateTime.of(2025, 1, 2, 10, 0)),
+                tradeAt("WIN", 2.0, LocalDateTime.of(2025, 2, 2, 10, 0)),
+                tradeAt("WIN", 2.0, LocalDateTime.of(2025, 3, 2, 10, 0)),
+                tradeAt("WIN", 2.0, LocalDateTime.of(2025, 4, 2, 10, 0)));
+
+        ResearchStatistics.Summary evidence = ResearchStatistics.summarize(rows);
+
+        assertEquals("INSUFFICIENT_SAMPLE", evidence.verdict());
+        assertEquals(4, evidence.trades());
+        assertEquals(4, evidence.positiveMonths());
+    }
+
+    @Test
     void unavailableOptionalContextBecomesAVisibleWarning() {
         PolygonClient deniedClient = new PolygonClient(new ScannerConfig(), new DataCache()) {
             @Override public synchronized List<OHLCV> getHistoricalBars(
@@ -349,8 +378,13 @@ class BacktestIntegrityTest {
     }
 
     private static BacktestService.TradeResult trade(String outcome, double pnl) {
+        return tradeAt(outcome, pnl, LocalDateTime.of(2026, 6, 1, 10, 0));
+    }
+
+    private static BacktestService.TradeResult tradeAt(String outcome, double pnl, LocalDateTime entry) {
+        long entryMs = entry.atZone(ET).toInstant().toEpochMilli();
         return new BacktestService.TradeResult("TEST", "long", "scalp", 100, 99, 102,
-                outcome, pnl, "", "", 0, 0, "sweep-flip-long", 80, 1,
+                outcome, pnl, "", "", entryMs, entryMs + 60_000, "sweep-flip-long", 80, 1,
                 0, null, 0, null, 0, null, 0, 0, 0, 0, 1);
     }
 

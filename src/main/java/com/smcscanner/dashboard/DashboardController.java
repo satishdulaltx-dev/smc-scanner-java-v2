@@ -5,6 +5,7 @@ import com.smcscanner.backtest.BacktestExitStyle;
 import com.smcscanner.backtest.BacktestRun;
 import com.smcscanner.backtest.BacktestService;
 import com.smcscanner.backtest.ProfileOptimizer;
+import com.smcscanner.backtest.ResearchStatistics;
 import com.smcscanner.config.ScannerConfig;
 import com.smcscanner.data.PolygonClient;
 import com.smcscanner.filter.AdaptiveSuppressor;
@@ -684,7 +685,16 @@ public class DashboardController {
                 resp.put("filters", filters);
                 resp.put("max_hold_minutes", holdMinutes);
                 resp.put("round_trip_cost_bps", BacktestRun.RESEARCH_ROUND_TRIP_COST_BPS);
-                resp.put("mean_r", result.trades.stream().mapToDouble(BacktestService.TradeResult::riskMultiple).average().orElse(0));
+                ResearchStatistics.Summary evidence = ResearchStatistics.summarize(result.trades);
+                resp.put("mean_r", evidence.meanR());
+                resp.put("total_r", evidence.totalR());
+                resp.put("profit_factor", evidence.profitFactor());
+                resp.put("mean_r_ci_low", evidence.ciLowR());
+                resp.put("mean_r_ci_high", evidence.ciHighR());
+                resp.put("positive_months", evidence.positiveMonths());
+                resp.put("active_months", evidence.activeMonths());
+                resp.put("research_verdict", evidence.verdict());
+                resp.put("research_explanation", evidence.explanation());
             }
             resp.put("total_trades",  result.total);
             resp.put("wins",          result.wins);
