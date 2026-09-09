@@ -33,7 +33,7 @@ class BacktestIntegrityTest {
     void researchAcceptsScalpCandidateFamiliesAndBoundedHolds() {
         LocalDate start = LocalDate.of(2026, 6, 1);
         LocalDate end = LocalDate.of(2026, 6, 5);
-        for (String pattern : List.of("scalp", "scalp-early", "scalp-core", "scalp-rvol", "scalp-tod-rvol", "scalp-breakout", "scalp-structure",
+        for (String pattern : List.of("scalp", "scalp-early", "scalp-core", "scalp-rvol", "scalp-tod-rvol", "scalp-breakout", "scalp-breakout-retest", "scalp-structure",
                 "scalp-spy", "scalp-chase", "vwap", "vwap-cont-long", "vwap-cont-short",
                 "vwap-reversion-long", "vwap-reversion-short", "breakout", "keylevel", "vsqueeze", "or-vwap", "idiv")) {
             BacktestRun run = new BacktestRun(start, end, pattern, Set.of(), 30);
@@ -232,6 +232,21 @@ class BacktestIntegrityTest {
         weak.set(7,OHLCV.builder().timestamp(at("2026-06-01T10:05")).open(100.25).high(100.68)
                 .low(100.2).close(100.65).volume(120).build());
         assertTrue(detector.detectBreakoutResearch(weak,"TEST",2).isEmpty());
+    }
+
+    @Test
+    void momentumRetestWaitsForReclaimInsteadOfBuyingTheBreakoutBar() {
+        var bars=new java.util.ArrayList<OHLCV>();
+        for (int i=0;i<7;i++) bars.add(OHLCV.builder().timestamp(at("2026-06-01T09:30")+i*300_000L)
+                .open(100).high(100.5).low(99.8).close(100.1).volume(100).build());
+        bars.add(OHLCV.builder().timestamp(at("2026-06-01T10:05")).open(100.25).high(100.82)
+                .low(100.2).close(100.78).volume(250).build());
+        var detector=new com.smcscanner.strategy.ScalpMomentumDetector(null,
+                new com.smcscanner.indicator.VolumeProfileCalculator(),null);
+        assertTrue(detector.detectBreakoutRetestResearch(bars,"TEST",2).isEmpty());
+        bars.add(OHLCV.builder().timestamp(at("2026-06-01T10:10")).open(100.48).high(100.72)
+                .low(100.45).close(100.68).volume(130).build());
+        assertFalse(detector.detectBreakoutRetestResearch(bars,"TEST",2).isEmpty());
     }
 
     @Test

@@ -141,6 +141,73 @@ public class ScalpMomentumDetector {
                 .timestamp(Instant.ofEpochMilli(last.getTimestamp()).atZone(ET).toLocalDateTime()).build());
     }
 
+    /** Historical-only continuation: wait up to three bars for a broken range to be reclaimed on a retest. */
+    public List<TradeSetup> detectBreakoutRetestResearch(List<OHLCV> bars,String ticker,double dailyAtr) {
+        if (bars == null || bars.size()<9) return List.of();
+        List<OHLCV> session=regularSessionBarsForToday(bars);
+        if (session.size()<9) return List.of();
+        int n=session.size();
+        OHLCV last=session.get(n-1);
+        LocalTime now=Instant.ofEpochMilli(last.getTimestamp()).atZone(ET).toLocalTime();
+        boolean active=(!now.isBefore(SESSION_OPEN) && now.isBefore(DEAD_ZONE_START))
+                || (!now.isBefore(DEAD_ZONE_END) && now.isBefore(SESSION_CLOSE));
+        if (!active) return List.of();
+
+        double atr=Math.max(computeAtr(session,8),last.getClose()*0.0012);
+        for (int breakoutIndex=n-2;breakoutIndex>=Math.max(6,n-4);breakoutIndex--) {
+            OHLCV breakout=session.get(breakoutIndex);
+            List<OHLCV> base=session.subList(breakoutIndex-6,breakoutIndex);
+            double high=base.stream().mapToDouble(OHLCV::getHigh).max().orElse(breakout.getHigh());
+            double low=base.stream().mapToDouble(OHLCV::getLow).min().orElse(breakout.getLow());
+            double avgVol=base.stream().mapToDouble(OHLCV::getVolume).average().orElse(0);
+            double breakoutRange=Math.max(0.0001,breakout.getHigh()-breakout.getLow());
+            double breakoutBody=Math.abs(breakout.getClose()-breakout.getOpen())/breakoutRange;
+            if (breakout.getVolume()<avgVol*1.5 || breakoutBody<0.60) continue;
+            VwapBands breakoutVwap=computeVwapBands(session,breakoutIndex);
+            if (breakoutVwap==null) continue;
+
+            boolean brokeLong=breakout.getClose()>high && breakout.getClose()>breakout.getOpen()
+                    && (breakout.getHigh()-breakout.getClose())<=breakoutRange*0.20
+                    && breakout.getClose()>breakoutVwap.vwap && breakout.getClose()-high<=atr*0.50;
+            boolean brokeShort=breakout.getClose()<low && breakout.getClose()<breakout.getOpen()
+                    && (breakout.getClose()-breakout.getLow())<=breakoutRange*0.20
+                    && breakout.getClose()<breakoutVwap.vwap && low-breakout.getClose()<=atr*0.50;
+            if (!brokeLong && !brokeShort) continue;
+
+            double level=brokeLong?high:low;
+            boolean held=true;
+            for (int i=breakoutIndex+1;i<n-1;i++) {
+                if ((brokeLong && session.get(i).getClose()<level-atr*0.10)
+                        || (brokeShort && session.get(i).getClose()>level+atr*0.10)) held=false;
+            }
+            if (!held) continue;
+            double lastRange=Math.max(0.0001,last.getHigh()-last.getLow());
+            double lastBody=Math.abs(last.getClose()-last.getOpen())/lastRange;
+            boolean confirmLong=brokeLong && last.getLow()<=level+atr*0.15 && last.getClose()>level
+                    && last.getClose()>last.getOpen() && lastBody>=0.40;
+            boolean confirmShort=brokeShort && last.getHigh()>=level-atr*0.15 && last.getClose()<level
+                    && last.getClose()<last.getOpen() && lastBody>=0.40;
+            if (!confirmLong && !confirmShort) continue;
+
+            boolean isLong=confirmLong;
+            double entry=round4(last.getClose());
+            double stop=round4(isLong?last.getLow()-atr*0.10:last.getHigh()+atr*0.10);
+            double risk=Math.abs(entry-stop);
+            if (risk<=0 || risk>atr*1.20) continue;
+            double target=round4(entry+(isLong?2:-2)*risk);
+            double volRatio=breakout.getVolume()/Math.max(1.0,avgVol);
+            int confidence=78+(volRatio>=2?5:0)+(lastBody>=0.65?4:0);
+            String factors=String.format("momentum-retest-%s | six-bar level=%.2f | breakout vol x%.1f | reclaim body %.0f%%",
+                    isLong?"long":"short",level,volRatio,lastBody*100);
+            return List.of(TradeSetup.builder().ticker(ticker).direction(isLong?"long":"short")
+                    .entry(entry).stopLoss(stop).takeProfit(target).confidence(confidence)
+                    .session("NYSE").volatility("scalp").atr(round4(atr)).hasBos(false).hasChoch(false)
+                    .factorBreakdown(factors)
+                    .timestamp(Instant.ofEpochMilli(last.getTimestamp()).atZone(ET).toLocalDateTime()).build());
+        }
+        return List.of();
+    }
+
     private List<TradeSetup> detectInternal(List<OHLCV> bars,List<OHLCV> spyBars,String ticker,
                                            double dailyAtr,boolean backtestMode,int sessionWarmup,int totalWarmup,
                                            Set<String> requiredLayers) {

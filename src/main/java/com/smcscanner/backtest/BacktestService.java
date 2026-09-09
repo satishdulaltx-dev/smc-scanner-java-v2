@@ -377,7 +377,7 @@ public class BacktestService {
             String stratType;
             if (run.research) {
                 stratType = switch (run.pattern) {
-                    case "scalp", "scalp-early", "scalp-core", "scalp-rvol", "scalp-tod-rvol", "scalp-breakout", "scalp-structure",
+                    case "scalp", "scalp-early", "scalp-core", "scalp-rvol", "scalp-tod-rvol", "scalp-breakout", "scalp-breakout-retest", "scalp-structure",
                          "scalp-spy", "scalp-chase" -> "scalp";
                     case "vwap", "vwap-cont-long", "vwap-cont-short",
                          "vwap-reversion-long", "vwap-reversion-short" -> "vwap";
@@ -494,6 +494,7 @@ public class BacktestService {
                                 priorSlotVolume.getOrDefault(Instant.ofEpochMilli(window.get(window.size()-1).getTimestamp())
                                         .atZone(ET).toLocalTime(),0.0));
                         case "scalp-breakout" -> scalpDetector.detectBreakoutResearch(window,ticker,dailyAtr);
+                        case "scalp-breakout-retest" -> scalpDetector.detectBreakoutRetestResearch(window,ticker,dailyAtr);
                         case "scalp-structure" -> scalpDetector.detectResearchLayer(window,spy,ticker,dailyAtr,"structure");
                         case "scalp-spy" -> scalpDetector.detectResearchLayer(window,spy,ticker,dailyAtr,"spy");
                         case "scalp-chase" -> scalpDetector.detectResearchLayer(window,spy,ticker,dailyAtr,"chase");

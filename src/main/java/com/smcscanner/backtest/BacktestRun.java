@@ -18,7 +18,7 @@ public final class BacktestRun {
     public final int maxHoldMinutes;
     public final boolean research;
     public static final Set<String> PATTERNS = Set.of(
-            "scalp", "scalp-early", "scalp-core", "scalp-rvol", "scalp-tod-rvol", "scalp-breakout", "scalp-structure", "scalp-spy", "scalp-chase",
+            "scalp", "scalp-early", "scalp-core", "scalp-rvol", "scalp-tod-rvol", "scalp-breakout", "scalp-breakout-retest", "scalp-structure", "scalp-spy", "scalp-chase",
             "vwap", "vwap-cont-long", "vwap-cont-short",
             "vwap-reversion-long", "vwap-reversion-short",
             "breakout", "keylevel", "vsqueeze", "or-vwap", "idiv",
