@@ -1499,6 +1499,22 @@ public class BacktestService {
     static List<OHLCV> completedBars(List<OHLCV> bars,int minutes,long decision) {
         return bars.stream().filter(b -> completedAt(b,minutes)<=decision).toList();
     }
+    static List<OHLCV> recentCompletedRegularBars(List<OHLCV> bars,int minutes,long decision,int limit) {
+        if (bars.isEmpty() || limit <= 0) return List.of();
+        int low=0,high=bars.size();
+        while (low<high) {
+            int middle=(low+high)>>>1;
+            if (completedAt(bars.get(middle),minutes)<=decision) low=middle+1;
+            else high=middle;
+        }
+        List<OHLCV> recent=new ArrayList<>(limit);
+        for (int i=low-1;i>=0 && recent.size()<limit;i--) {
+            OHLCV bar=bars.get(i);
+            if (isRegularSession(bar)) recent.add(bar);
+        }
+        Collections.reverse(recent);
+        return List.copyOf(recent);
+    }
     static boolean researchEntryWindowAllows(String pattern, long decisionMs, boolean crypto) {
         if (crypto) return true;
         LocalTime decisionTime = Instant.ofEpochMilli(decisionMs).atZone(ET).toLocalTime();
@@ -1586,8 +1602,7 @@ public class BacktestService {
             double move=spy.get(spy.size()-1).getClose()/spy.get(0).getOpen()-1;
             if ((move>0 && "short".equals(s.getDirection())) || (move<0 && "long".equals(s.getDirection()))) reason="spy";
         }
-        List<OHLCV> complete15=completedBars(m15,15,decision).stream()
-                .filter(this::isRegularSessionBar).toList();
+        List<OHLCV> complete15=recentCompletedRegularBars(m15,15,decision,20);
         if (run.filters.contains("15m")) {
             if (complete15.size()<20) throw new HistoricalDataException("Insufficient completed 15m warmup");
             double avg=complete15.subList(complete15.size()-20,complete15.size()).stream().mapToDouble(OHLCV::getClose).average().orElseThrow();

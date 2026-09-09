@@ -99,6 +99,22 @@ class BacktestIntegrityTest {
     }
 
     @Test
+    void researchFilterReadsOnlyTheRecentCompletedRegularBars() {
+        List<OHLCV> bars = List.of(
+                bar(at("2026-06-01T08:00"), 90, 90, 90, 90),
+                bar(at("2026-06-01T09:30"), 100, 100, 100, 100),
+                bar(at("2026-06-01T09:45"), 101, 101, 101, 101),
+                bar(at("2026-06-01T10:00"), 102, 102, 102, 102));
+
+        List<OHLCV> recent = BacktestService.recentCompletedRegularBars(
+                bars, 15, at("2026-06-01T10:10"), 2);
+
+        assertEquals(2, recent.size());
+        assertEquals(at("2026-06-01T09:30"), recent.get(0).getTimestamp());
+        assertEquals(at("2026-06-01T09:45"), recent.get(1).getTimestamp());
+    }
+
+    @Test
     void missingBenchmarkSlotFailsCoverageInsteadOfReturningZeroTrades() {
         LocalDate day = LocalDate.of(2026, 6, 1);
         List<OHLCV> benchmark = List.of(
