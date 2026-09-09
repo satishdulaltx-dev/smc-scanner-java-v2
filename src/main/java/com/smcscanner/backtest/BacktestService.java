@@ -377,7 +377,7 @@ public class BacktestService {
             String stratType;
             if (run.research) {
                 stratType = switch (run.pattern) {
-                    case "scalp", "scalp-early", "scalp-core", "scalp-rvol", "scalp-structure",
+                    case "scalp", "scalp-early", "scalp-core", "scalp-rvol", "scalp-tod-rvol", "scalp-structure",
                          "scalp-spy", "scalp-chase" -> "scalp";
                     case "vwap", "vwap-cont-long", "vwap-cont-short",
                          "vwap-reversion-long", "vwap-reversion-short" -> "vwap";
@@ -433,6 +433,9 @@ public class BacktestService {
             }
             boolean tradePlacedToday = false;
             if (run.research && run.pattern.startsWith("scalp-") && !"scalp".equals(run.pattern)) minBars = 8;
+            Map<LocalTime,Double> priorSlotVolume = "scalp-tod-rvol".equals(run.pattern)
+                    ? priorSessionMedianVolume(byDate,dates,di,20)
+                    : Map.of();
             for (int end = minBars; end <= dayBars.size() && (run.research || !tradePlacedToday); end++) {
                 // ALL equity strategies: skip pre-market and stop at regular session close.
                 // Without the after-hours break, session-based detectors (keylevel, vwap, etc.)
@@ -487,6 +490,9 @@ public class BacktestService {
                         case "scalp-early" -> scalpDetector.detectEarlyResearch(window,spy,ticker,dailyAtr);
                         case "scalp-core" -> scalpDetector.detectResearchLayer(window,spy,ticker,dailyAtr,"core");
                         case "scalp-rvol" -> scalpDetector.detectResearchLayer(window,spy,ticker,dailyAtr,"rvol");
+                        case "scalp-tod-rvol" -> scalpDetector.detectTimeOfDayRvolResearch(window,spy,ticker,dailyAtr,
+                                priorSlotVolume.getOrDefault(Instant.ofEpochMilli(window.get(window.size()-1).getTimestamp())
+                                        .atZone(ET).toLocalTime(),0.0));
                         case "scalp-structure" -> scalpDetector.detectResearchLayer(window,spy,ticker,dailyAtr,"structure");
                         case "scalp-spy" -> scalpDetector.detectResearchLayer(window,spy,ticker,dailyAtr,"spy");
                         case "scalp-chase" -> scalpDetector.detectResearchLayer(window,spy,ticker,dailyAtr,"chase");
@@ -2094,6 +2100,33 @@ public class BacktestService {
         public static BacktestResult failed(String t, int days, BacktestMode mode, String error) {
             return new BacktestResult(t, List.of(), days, error, mode);
         }
+    }
+
+    /**
+     * Expected volume for each five-minute clock slot, using only sessions that
+     * ended before the decision date. A median keeps one earnings/news spike
+     * from redefining normal volume for the next several weeks.
+     */
+    static Map<LocalTime,Double> priorSessionMedianVolume(
+            NavigableMap<LocalDate,List<OHLCV>> byDate,List<LocalDate> dates,int dateIndex,int maxSessions) {
+        Map<LocalTime,List<Double>> samples=new HashMap<>();
+        int first=Math.max(0,dateIndex-maxSessions);
+        for (int i=first;i<dateIndex;i++) {
+            for (OHLCV bar:byDate.getOrDefault(dates.get(i),List.of())) {
+                LocalTime time=Instant.ofEpochMilli(bar.getTimestamp()).atZone(ET).toLocalTime();
+                if (time.isBefore(LocalTime.of(9,30)) || !time.isBefore(LocalTime.of(16,0))) continue;
+                if (bar.getVolume()>0) samples.computeIfAbsent(time,k->new ArrayList<>()).add(bar.getVolume());
+            }
+        }
+        Map<LocalTime,Double> medians=new HashMap<>();
+        samples.forEach((time,values)->{
+            if (values.size()<3) return;
+            values.sort(Double::compareTo);
+            int middle=values.size()/2;
+            double median=values.size()%2==1 ? values.get(middle) : (values.get(middle-1)+values.get(middle))/2.0;
+            medians.put(time,median);
+        });
+        return Map.copyOf(medians);
     }
 
     /**

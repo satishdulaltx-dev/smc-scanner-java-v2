@@ -33,7 +33,7 @@ class BacktestIntegrityTest {
     void researchAcceptsScalpCandidateFamiliesAndBoundedHolds() {
         LocalDate start = LocalDate.of(2026, 6, 1);
         LocalDate end = LocalDate.of(2026, 6, 5);
-        for (String pattern : List.of("scalp", "scalp-early", "scalp-core", "scalp-rvol", "scalp-structure",
+        for (String pattern : List.of("scalp", "scalp-early", "scalp-core", "scalp-rvol", "scalp-tod-rvol", "scalp-structure",
                 "scalp-spy", "scalp-chase", "vwap", "vwap-cont-long", "vwap-cont-short",
                 "vwap-reversion-long", "vwap-reversion-short", "breakout", "keylevel", "vsqueeze", "or-vwap", "idiv")) {
             BacktestRun run = new BacktestRun(start, end, pattern, Set.of(), 30);
@@ -215,6 +215,25 @@ class BacktestIntegrityTest {
                 new com.smcscanner.indicator.VolumeProfileCalculator(),null);
         assertThrows(IllegalArgumentException.class,
                 () -> detector.detectResearchLayer(List.of(),List.of(),"TEST",2,"unknown"));
+    }
+
+    @Test
+    void timeOfDayVolumeBaselineUsesOnlyPriorSessionsAndResistsOneSpike() {
+        var byDate=new java.util.TreeMap<LocalDate,List<OHLCV>>();
+        var dates=new java.util.ArrayList<LocalDate>();
+        double[] volumes={100,110,10_000,90,120};
+        for (int i=0;i<volumes.length;i++) {
+            LocalDate day=LocalDate.of(2026,6,1).plusDays(i);
+            dates.add(day);
+            byDate.put(day,List.of(OHLCV.builder().timestamp(day.atTime(10,0).atZone(ET).toInstant().toEpochMilli())
+                    .open(100).high(101).low(99).close(100).volume(volumes[i]).build()));
+        }
+        LocalDate decision=LocalDate.of(2026,6,8);
+        dates.add(decision);
+        byDate.put(decision,List.of(OHLCV.builder().timestamp(decision.atTime(10,0).atZone(ET).toInstant().toEpochMilli())
+                .open(100).high(101).low(99).close(100).volume(50_000).build()));
+        Map<LocalTime,Double> baseline=BacktestService.priorSessionMedianVolume(byDate,dates,5,20);
+        assertEquals(110.0,baseline.get(LocalTime.of(10,0)));
     }
 
     @Test

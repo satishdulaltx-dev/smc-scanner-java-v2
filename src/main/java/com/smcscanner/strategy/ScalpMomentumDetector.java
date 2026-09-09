@@ -83,12 +83,27 @@ public class ScalpMomentumDetector {
                                                 double dailyAtr,String layer) {
         if (!RESEARCH_LAYERS.contains(layer)) throw new IllegalArgumentException("Unsupported scalp research layer");
         Set<String> enabled = "core".equals(layer) ? Set.of() : Set.of(layer);
-        return detectInternal(bars,spyBars,ticker,dailyAtr,true,8,8,enabled);
+        return detectInternal(bars,spyBars,ticker,dailyAtr,true,8,8,enabled,null);
+    }
+
+    /** Historical-only experiment using prior-session volume from the same clock time. */
+    public List<TradeSetup> detectTimeOfDayRvolResearch(List<OHLCV> bars,List<OHLCV> spyBars,String ticker,
+                                                        double dailyAtr,double expectedSlotVolume) {
+        Double ratio = expectedSlotVolume > 0 && bars != null && !bars.isEmpty()
+                ? bars.get(bars.size()-1).getVolume() / expectedSlotVolume
+                : null;
+        return detectInternal(bars,spyBars,ticker,dailyAtr,true,8,8,Set.of("tod-rvol"),ratio);
     }
 
     private List<TradeSetup> detectInternal(List<OHLCV> bars,List<OHLCV> spyBars,String ticker,
                                            double dailyAtr,boolean backtestMode,int sessionWarmup,int totalWarmup,
                                            Set<String> requiredLayers) {
+        return detectInternal(bars,spyBars,ticker,dailyAtr,backtestMode,sessionWarmup,totalWarmup,requiredLayers,null);
+    }
+
+    private List<TradeSetup> detectInternal(List<OHLCV> bars,List<OHLCV> spyBars,String ticker,
+                                           double dailyAtr,boolean backtestMode,int sessionWarmup,int totalWarmup,
+                                           Set<String> requiredLayers,Double volumeRatioOverride) {
         List<TradeSetup> result = new ArrayList<>();
         if (bars == null || bars.size() < totalWarmup) return result;
 
@@ -115,7 +130,9 @@ public class ScalpMomentumDetector {
 
         double atr     = Math.max(computeAtr(sessionBars, 8), last.getClose() * 0.0012);
         double avgVol  = averageVolume(sessionBars, n - 7, n - 2);
-        double volRatio = last.getVolume() / Math.max(1.0, avgVol);
+        double volRatio = volumeRatioOverride != null
+                ? volumeRatioOverride
+                : last.getVolume() / Math.max(1.0, avgVol);
 
         // ── VWAP Standard Deviation Bands (session-anchored) ─────────────────
         VwapBands vb = computeVwapBands(sessionBars, n - 1);
@@ -178,14 +195,14 @@ public class ScalpMomentumDetector {
         // ── Core setup gates ──────────────────────────────────────────────────
         boolean setupLong = longLevel != null
                 && lastGreen && lastBodyPct >= 0.40 && closeNearHigh
-                && (!requiredLayers.contains("rvol") || volRatio >= MIN_VOL_RATIO)
+                && (!(requiredLayers.contains("rvol") || requiredLayers.contains("tod-rvol")) || volRatio >= MIN_VOL_RATIO)
                 && (!requiredLayers.contains("structure") || bullStructure)
                 && (!requiredLayers.contains("chase") || !isLateExpansionChase(sessionBars, n, atr, true))
                 && (!requiredLayers.contains("spy") || (!spyBear && rsLead > -0.002));
 
         boolean setupShort = shortLevel != null
                 && lastRed && lastBodyPct >= 0.40 && closeNearLow
-                && (!requiredLayers.contains("rvol") || volRatio >= MIN_VOL_RATIO)
+                && (!(requiredLayers.contains("rvol") || requiredLayers.contains("tod-rvol")) || volRatio >= MIN_VOL_RATIO)
                 && (!requiredLayers.contains("structure") || bearStructure)
                 && (!requiredLayers.contains("chase") || !isLateExpansionChase(sessionBars, n, atr, false))
                 && (!requiredLayers.contains("spy") || (!spyBull && rsLead < 0.002));
