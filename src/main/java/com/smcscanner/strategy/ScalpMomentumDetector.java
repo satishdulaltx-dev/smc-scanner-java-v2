@@ -94,6 +94,62 @@ public class ScalpMomentumDetector {
         return detectInternal(bars,spyBars,ticker,dailyAtr,true,8,8,Set.of("tod-rvol"),ratio);
     }
 
+    /**
+     * Research-only one-minute continuation candidate. It requires a meaningful move
+     * from the open, a fresh ten-minute range break, VWAP agreement, and a structural
+     * stop wide enough to keep the modeled round-trip cost below 0.25R.
+     */
+    public List<TradeSetup> detectOpeningMomentumResearch(List<OHLCV> bars,String ticker) {
+        if (bars == null || bars.size() < 20) return List.of();
+        List<OHLCV> session=regularSessionBarsForToday(bars);
+        if (session.size()<20) return List.of();
+        int n=session.size();
+        OHLCV last=session.get(n-1);
+        LocalTime time=Instant.ofEpochMilli(last.getTimestamp()).atZone(ET).toLocalTime();
+        if (time.isBefore(LocalTime.of(9,49)) || !time.isBefore(LocalTime.of(11,30))) return List.of();
+
+        List<OHLCV> prior=session.subList(n-11,n-1);
+        double priorHigh=prior.stream().mapToDouble(OHLCV::getHigh).max().orElseThrow();
+        double priorLow=prior.stream().mapToDouble(OHLCV::getLow).min().orElseThrow();
+        double range=Math.max(last.getHigh()-last.getLow(),last.getClose()*0.00001);
+        double body=Math.abs(last.getClose()-last.getOpen())/range;
+        boolean longBreak=last.getClose()>priorHigh && last.getClose()>last.getOpen()
+                && last.getHigh()-last.getClose()<=range*.20 && body>=.55;
+        boolean shortBreak=last.getClose()<priorLow && last.getClose()<last.getOpen()
+                && last.getClose()-last.getLow()<=range*.20 && body>=.55;
+        if (!longBreak && !shortBreak) return List.of();
+
+        double pv=0,volume=0;
+        for (OHLCV bar:session) {
+            pv+=((bar.getHigh()+bar.getLow()+bar.getClose())/3.0)*bar.getVolume();
+            volume+=bar.getVolume();
+        }
+        double vwap=volume>0?pv/volume:last.getClose();
+        double open=session.get(0).getOpen();
+        boolean isLong=longBreak;
+        double directionalMove=(isLong?1:-1)*(last.getClose()/open-1);
+        if (directionalMove<.004 || (isLong?last.getClose()<=vwap:last.getClose()>=vwap)) return List.of();
+
+        List<OHLCV> stopWindow=session.subList(Math.max(0,n-15),n);
+        double entry=round4(last.getClose());
+        double stop=round4(isLong
+                ? stopWindow.stream().mapToDouble(OHLCV::getLow).min().orElseThrow()
+                : stopWindow.stream().mapToDouble(OHLCV::getHigh).max().orElseThrow());
+        double risk=Math.abs(entry-stop);
+        double riskPct=risk/entry;
+        double atr=Math.max(computeAtr(session,14),entry*.0002);
+        if (risk<=0 || riskPct<.004 || risk>atr*8) return List.of();
+        double target=round4(entry+(isLong?2:-2)*risk);
+        String factors=String.format(
+                "opening-momentum-1m-%s | move=%.2f%% | 10m level=%.2f | VWAP=%.2f | risk=%.2f%%",
+                isLong?"long":"short",directionalMove*100,isLong?priorHigh:priorLow,vwap,riskPct*100);
+        return List.of(TradeSetup.builder().ticker(ticker).direction(isLong?"long":"short")
+                .entry(entry).stopLoss(stop).takeProfit(target).confidence(75).session("NYSE")
+                .volatility("scalp").atr(round4(atr)).hasBos(false).hasChoch(false)
+                .factorBreakdown(factors)
+                .timestamp(Instant.ofEpochMilli(last.getTimestamp()).atZone(ET).toLocalDateTime()).build());
+    }
+
     /** Historical-only momentum continuation: a fresh six-bar range break with expansion. */
     public List<TradeSetup> detectBreakoutResearch(List<OHLCV> bars,String ticker,double dailyAtr) {
         if (bars == null || bars.size() < 8) return List.of();

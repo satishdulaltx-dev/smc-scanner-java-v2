@@ -340,7 +340,7 @@ public class BacktestService {
         Map<String, java.util.ArrayDeque<Boolean>> btOutcomes = new HashMap<>();
 
         List<TradeResult> trades = new ArrayList<>();
-        boolean oneMinuteResearch = run.research && "ict-sweep-fvg-1m".equals(run.pattern);
+        boolean oneMinuteResearch = run.research && Set.of("ict-sweep-fvg-1m", "opening-momentum-1m").contains(run.pattern);
         Map<LocalDate,List<OHLCV>> decisionBarsByDate = oneMinuteResearch ? byDate1m : byDate;
         List<LocalDate> dates = new ArrayList<>(decisionBarsByDate.keySet());
 
@@ -385,7 +385,7 @@ public class BacktestService {
             String stratType;
             if (run.research) {
                 stratType = switch (run.pattern) {
-                    case "scalp", "scalp-early", "scalp-core", "scalp-rvol", "scalp-tod-rvol", "scalp-breakout", "scalp-breakout-retest", "scalp-structure", "ict-sweep-fvg-1m",
+                    case "scalp", "scalp-early", "scalp-core", "scalp-rvol", "scalp-tod-rvol", "scalp-breakout", "scalp-breakout-retest", "scalp-structure", "ict-sweep-fvg-1m", "opening-momentum-1m",
                          "scalp-spy", "scalp-chase" -> "scalp";
                     case "vwap", "vwap-cont-long", "vwap-cont-short",
                          "vwap-reversion-long", "vwap-reversion-short" -> "vwap";
@@ -525,6 +525,7 @@ public class BacktestService {
                         case "idiv" -> indexDivDetector.detect(window,spy,ticker,dailyAtr);
                         case "sweep-flip" -> sweepFlipDetector.detect(window,ticker,dailyAtr,true);
                         case "ict-sweep-fvg-1m" -> sweepFlipDetector.detectOneMinuteFvgResearch(window,ticker);
+                        case "opening-momentum-1m" -> scalpDetector.detectOpeningMomentumResearch(window,ticker);
                         case "pdh-pdl" -> pdhPdlDetector.detect(priorSessionWindow,ticker,dailyAtr,true);
                         case "choch-primary" -> setupDetector.detectChochPrimary(window,ticker,dailyAtr,true);
                         default -> throw new IllegalArgumentException("Unknown pattern");
