@@ -43,6 +43,9 @@ class BacktestIntegrityTest {
         }
         assertThrows(IllegalArgumentException.class,
                 () -> new BacktestRun(start, end, "scalp", Set.of(), 45));
+        assertEquals(1.0, new BacktestRun(start, end, "scalp", Set.of(), 30, 1.0).targetR);
+        assertThrows(IllegalArgumentException.class,
+                () -> new BacktestRun(start, end, "scalp", Set.of(), 30, 0.75));
     }
 
     @Test
@@ -61,6 +64,14 @@ class BacktestIntegrityTest {
         assertEquals(-0.05, BacktestService.netResearchPnlPct(0.0));
         assertFalse(BacktestService.researchRiskSupportsCosts(100,99.7));
         assertTrue(BacktestService.researchRiskSupportsCosts(100,99.5));
+    }
+
+    @Test
+    void controlledTargetKeepsInitialRiskFixedForLongsAndShorts() {
+        assertEquals(100.5, BacktestService.researchTarget(100,99,"long",0.5));
+        assertEquals(102.0, BacktestService.researchTarget(100,99,"long",2.0));
+        assertEquals(99.5, BacktestService.researchTarget(100,101,"short",0.5));
+        assertEquals(98.0, BacktestService.researchTarget(100,101,"short",2.0));
     }
     private static final ZoneId ET = ZoneId.of("America/New_York");
 

@@ -281,8 +281,11 @@
             <option value="cost">Cost-aware stop (risk ≥ 4× friction)</option>
         </select></div>
         <div class="ctrl-group"><label for="experiment-exit">Exit rule</label><select id="experiment-exit">
-            <option value="FIXED_R">Fixed stop / 2R</option><option value="CLASSIC">Breakeven at 1R / target 2R</option>
+            <option value="FIXED_R">Fixed stop / selected target</option><option value="CLASSIC">Breakeven at 1R / selected target</option>
             <option value="TRAIL_3R">Trail at 2.5R / target 3R</option>
+        </select></div>
+        <div class="ctrl-group"><label for="experiment-target">Profit target</label><select id="experiment-target">
+            <option value="0.5">0.5R</option><option value="1.0">1R</option><option value="1.5">1.5R</option><option value="2.0" selected>2R</option>
         </select></div>
         <div class="ctrl-group"><label for="experiment-hold">Maximum hold</label><select id="experiment-hold">
             <option value="15">15 minutes</option><option value="30" selected>30 minutes</option>
@@ -880,6 +883,7 @@ async function runControlledExperiment() {
         pattern:document.getElementById('experiment-pattern').value,
         filters:document.getElementById('experiment-filter').value,
         holdMinutes:document.getElementById('experiment-hold').value,
+        targetR:document.getElementById('experiment-target').value,
         exitStyle:document.getElementById('experiment-exit').value});
     const button = document.getElementById('experiment-run');
     button.disabled = true; button.textContent = 'Running experiment…'; setLoading(true);
@@ -1018,7 +1022,7 @@ function renderSingle(d) {
             : d.research_verdict === 'REJECTED' ? 'var(--red)' : 'var(--yellow)';
         note.style.borderColor = verdictColor;
         note.style.color = verdictColor;
-        note.textContent = `Experiment: ${d.pattern} · ${d.exit_style} · max hold: ${d.max_hold_minutes}m · execution friction: ${(Number(d.round_trip_cost_bps) / 100).toFixed(2)}% round trip · optional filter: ${d.filters || 'none'} · ${d.start_date} to ${d.end_date}. `
+        note.textContent = `Experiment: ${d.pattern} · ${d.exit_style} · target: ${Number(d.target_r).toFixed(1)}R · max hold: ${d.max_hold_minutes}m · execution friction: ${(Number(d.round_trip_cost_bps) / 100).toFixed(2)}% round trip · optional filter: ${d.filters || 'none'} · ${d.start_date} to ${d.end_date}. `
             + (d.error ? 'Run incomplete; do not interpret zero trades as a strategy result.'
                 : `${verdictLabel}: ${d.research_explanation} Mean ${Number(d.mean_r).toFixed(3)}R/trade; 95% range ${Number(d.mean_r_ci_low).toFixed(3)}R to ${Number(d.mean_r_ci_high).toFixed(3)}R; profit factor ${Number(d.profit_factor).toFixed(2)}; positive months ${d.positive_months}/${d.active_months}. Options estimates are excluded.`);
     }

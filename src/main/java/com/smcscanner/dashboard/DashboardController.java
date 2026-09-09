@@ -607,6 +607,7 @@ public class DashboardController {
             @org.springframework.web.bind.annotation.RequestParam(required=false)      String pattern,
             @org.springframework.web.bind.annotation.RequestParam(defaultValue="")     String filters,
             @org.springframework.web.bind.annotation.RequestParam(defaultValue="390")  int holdMinutes,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue="2.0")  double targetR,
             @org.springframework.web.bind.annotation.RequestParam(defaultValue="false") boolean force) {
         String sym = ticker.toUpperCase();
         // Apply inline param overrides for sweep testing (bypasses saved profile)
@@ -660,7 +661,7 @@ public class DashboardController {
                         : Arrays.stream(filters.split(",")).map(String::trim)
                                 .filter(v -> !v.isBlank()).collect(Collectors.toUnmodifiableSet());
                 result = backtestService.run(sym, btMode, null, btExit,
-                        new BacktestRun(start, end, pattern, enabledFilters, holdMinutes));
+                        new BacktestRun(start, end, pattern, enabledFilters, holdMinutes, targetR));
             } else {
                 result = backtestService.run(sym, days, btMode,
                         (strategy != null && !strategy.isBlank()) ? strategy : null, btExit);
@@ -684,6 +685,7 @@ public class DashboardController {
                 resp.put("pattern", pattern);
                 resp.put("filters", filters);
                 resp.put("max_hold_minutes", holdMinutes);
+                resp.put("target_r", targetR);
                 resp.put("round_trip_cost_bps", BacktestRun.RESEARCH_ROUND_TRIP_COST_BPS);
                 ResearchStatistics.Summary evidence = ResearchStatistics.summarize(result.trades);
                 resp.put("mean_r", evidence.meanR());
@@ -777,13 +779,14 @@ public class DashboardController {
             @org.springframework.web.bind.annotation.RequestParam LocalDate end,
             @org.springframework.web.bind.annotation.RequestParam String pattern,
             @org.springframework.web.bind.annotation.RequestParam(defaultValue="") String filters,
-            @org.springframework.web.bind.annotation.RequestParam(defaultValue="390") int holdMinutes) {
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue="390") int holdMinutes,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue="2.0") double targetR) {
         try {
             com.smcscanner.backtest.BacktestMode.fromString(mode);
             BacktestExitStyle.fromString(exitStyle);
             Set<String> enabledFilters=filters.isBlank()?Set.of():Arrays.stream(filters.split(","))
                     .map(String::trim).filter(v->!v.isBlank()).collect(Collectors.toUnmodifiableSet());
-            new BacktestRun(start,end,pattern,enabledFilters,holdMinutes);
+            new BacktestRun(start,end,pattern,enabledFilters,holdMinutes,targetR);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error",e.getMessage()));
         }
@@ -797,7 +800,7 @@ public class DashboardController {
             job.put("status","running");
             try {
                 ResponseEntity<Map<String,Object>> response=apiBacktest(ticker,90,mode,exitStyle,
-                        null,null,null,null,start,end,pattern,filters,holdMinutes,false);
+                        null,null,null,null,start,end,pattern,filters,holdMinutes,targetR,false);
                 Map<String,Object> body=response.getBody();
                 job.put("result",body==null?Map.of("error","Backtest returned no result"):body);
                 job.put("status","complete");

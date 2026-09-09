@@ -544,8 +544,8 @@ public class BacktestService {
                     if (!validEntryStop(forward.get(0).getOpen(),fill,stop,candidate.getDirection())) {
                         run.reject("invalid_stop"); continue;
                     }
-                    // Same 2R target and fixed initial risk for every pattern/filter experiment.
-                    double target = fill + ("long".equals(candidate.getDirection()) ? 2 : -2) * Math.abs(fill-stop);
+                    // Target is the only variable in target-size experiments; initial risk remains fixed.
+                    double target = researchTarget(fill,stop,candidate.getDirection(),run.targetR);
                     Map<BacktestExitStyle,ExitResult> exits = new EnumMap<>(BacktestExitStyle.class);
                     exits.put(BacktestExitStyle.FIXED_R,withResearchExitFriction(simulateClassicExit(forward,fill,stop,target,candidate.getDirection(),false)));
                     exits.put(BacktestExitStyle.CLASSIC,withResearchExitFriction(simulateClassicExit(forward,fill,stop,target,candidate.getDirection())));
@@ -560,6 +560,7 @@ public class BacktestService {
                     ledger.put("market_open",forward.get(0).getOpen());
                     ledger.put("tp",target); ledger.put("direction",candidate.getDirection());
                     ledger.put("max_hold_minutes",run.maxHoldMinutes);
+                    ledger.put("target_r",run.targetR);
                     ledger.put("round_trip_cost_bps",BacktestRun.RESEARCH_ROUND_TRIP_COST_BPS);
                     ledger.put("confidence",candidate.getConfidence());
                     ledger.put("factor_breakdown",candidate.getFactorBreakdown());
@@ -1503,6 +1504,9 @@ public class BacktestService {
         double riskPct=Math.abs(entry-stop)/entry;
         double modeledRoundTrip=BacktestRun.RESEARCH_ROUND_TRIP_COST_BPS/10_000.0;
         return riskPct>=modeledRoundTrip*4.0;
+    }
+    static double researchTarget(double fill,double stop,String direction,double targetR) {
+        return fill + ("long".equals(direction) ? targetR : -targetR) * Math.abs(fill-stop);
     }
     /** Point-in-time numeric features for offline walk-forward studies. No forward bars are accepted here. */
     static Map<String,Double> researchFeatures(List<OHLCV> window,List<OHLCV> spy,TradeSetup setup,

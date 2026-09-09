@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import math
 import pathlib
 from collections import defaultdict
 from datetime import datetime
@@ -25,10 +26,14 @@ def load_rows(directory, development_end):
     for path in files:
         payload = json.loads(path.read_text())
         payload = payload.get("result", payload)
+        if "candidate_ledger" not in payload:
+            continue
         if payload.get("error"):
             raise ValueError(f"{path.name}: {payload['error']}")
         if payload.get("filters"):
             raise ValueError(f"{path.name}: model input must come from an ungated experiment")
+        if float(payload.get("target_r", 2.0)) != 2.0:
+            raise ValueError(f"{path.name}: this fixed model study requires 2R labels")
         if payload.get("end_date", "9999-12-31") > development_end:
             raise ValueError(f"{path.name}: input opens data after the declared development end")
         ticker = payload["ticker"]
@@ -38,10 +43,16 @@ def load_rows(directory, development_end):
             outcome = candidate.get("exits", {}).get("FIXED_R")
             if not outcome:
                 continue
+            feature_values = {name: float(value) for name, value in candidate["features"].items()}
+            if not all(math.isfinite(value) for value in feature_values.values()):
+                raise ValueError(f"{path.name}: candidate {candidate.get('id')} has a non-finite feature")
+            risk_multiple = float(outcome["risk_multiple"])
+            if not math.isfinite(risk_multiple):
+                raise ValueError(f"{path.name}: candidate {candidate.get('id')} has a non-finite outcome")
             at = datetime.fromtimestamp(candidate["entry_ts"] / 1000, ET)
             rows.append({"ticker": ticker, "entry_ts": candidate["entry_ts"],
                          "month": at.strftime("%Y-%m"), "date": at.date().isoformat(),
-                         "features": candidate["features"], "r": float(outcome["risk_multiple"])})
+                         "features": feature_values, "r": risk_multiple})
     rows.sort(key=lambda row: row["entry_ts"])
     if not rows:
         raise ValueError("No selected candidates with point-in-time features were found")
@@ -60,14 +71,16 @@ def fit_predict(train, test, names):
     scale[scale < 1e-9] = 1.0
     z_train = (x_train - mean) / scale
     z_train = np.column_stack([np.ones(len(z_train)), z_train])
-    penalty = np.eye(z_train.shape[1]) * RIDGE_PENALTY
+    penalty = np.eye(z_train.shape[1]) * np.sqrt(RIDGE_PENALTY)
     penalty[0, 0] = 0
-    weights = np.linalg.solve(z_train.T @ z_train + penalty, z_train.T @ y_train)
-    train_scores = z_train @ weights
+    augmented_x = np.vstack([z_train, penalty])
+    augmented_y = np.concatenate([y_train, np.zeros(z_train.shape[1])])
+    weights = np.linalg.lstsq(augmented_x, augmented_y, rcond=None)[0]
+    train_scores = np.sum(z_train * weights, axis=1)
     threshold = float(np.quantile(train_scores, SELECTION_QUANTILE))
     z_test = (matrix(test, names) - mean) / scale
     z_test = np.column_stack([np.ones(len(z_test)), z_test])
-    return z_test @ weights, threshold
+    return np.sum(z_test * weights, axis=1), threshold
 
 
 def summarize(rows):
