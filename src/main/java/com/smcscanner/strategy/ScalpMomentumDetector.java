@@ -94,6 +94,53 @@ public class ScalpMomentumDetector {
         return detectInternal(bars,spyBars,ticker,dailyAtr,true,8,8,Set.of("tod-rvol"),ratio);
     }
 
+    /** Historical-only momentum continuation: a fresh six-bar range break with expansion. */
+    public List<TradeSetup> detectBreakoutResearch(List<OHLCV> bars,String ticker,double dailyAtr) {
+        if (bars == null || bars.size() < 8) return List.of();
+        List<OHLCV> session=regularSessionBarsForToday(bars);
+        if (session.size()<8) return List.of();
+        OHLCV last=session.get(session.size()-1);
+        LocalTime now=Instant.ofEpochMilli(last.getTimestamp()).atZone(ET).toLocalTime();
+        boolean active=(!now.isBefore(SESSION_OPEN) && now.isBefore(DEAD_ZONE_START))
+                || (!now.isBefore(DEAD_ZONE_END) && now.isBefore(SESSION_CLOSE));
+        if (!active) return List.of();
+
+        int n=session.size();
+        List<OHLCV> base=session.subList(n-7,n-1);
+        double priorHigh=base.stream().mapToDouble(OHLCV::getHigh).max().orElse(last.getHigh());
+        double priorLow=base.stream().mapToDouble(OHLCV::getLow).min().orElse(last.getLow());
+        double avgVol=base.stream().mapToDouble(OHLCV::getVolume).average().orElse(0);
+        double volRatio=last.getVolume()/Math.max(1.0,avgVol);
+        double range=Math.max(0.0001,last.getHigh()-last.getLow());
+        double body=Math.abs(last.getClose()-last.getOpen())/range;
+        double atr=Math.max(computeAtr(session,8),last.getClose()*0.0012);
+        VwapBands bands=computeVwapBands(session,n-1);
+        if (bands==null || volRatio<1.5 || body<0.60) return List.of();
+
+        boolean longBreak=last.getClose()>priorHigh && last.getClose()>last.getOpen()
+                && (last.getHigh()-last.getClose())<=range*0.20 && last.getClose()>bands.vwap
+                && last.getClose()-priorHigh<=atr*0.50;
+        boolean shortBreak=last.getClose()<priorLow && last.getClose()<last.getOpen()
+                && (last.getClose()-last.getLow())<=range*0.20 && last.getClose()<bands.vwap
+                && priorLow-last.getClose()<=atr*0.50;
+        if (!longBreak && !shortBreak) return List.of();
+
+        boolean isLong=longBreak;
+        double entry=round4(last.getClose());
+        double stop=round4(isLong ? last.getLow()-atr*0.10 : last.getHigh()+atr*0.10);
+        double risk=Math.abs(entry-stop);
+        if (risk<=0 || risk>atr*1.20) return List.of();
+        double target=round4(entry+(isLong?2:-2)*risk);
+        int confidence=75+(volRatio>=2?5:0)+(body>=0.75?5:0);
+        String factors=String.format("momentum-breakout-%s | six-bar level=%.2f | vol x%.1f | body %.0f%% | VWAP=%.2f",
+                isLong?"long":"short",isLong?priorHigh:priorLow,volRatio,body*100,bands.vwap);
+        return List.of(TradeSetup.builder().ticker(ticker).direction(isLong?"long":"short")
+                .entry(entry).stopLoss(stop).takeProfit(target).confidence(confidence)
+                .session("NYSE").volatility("scalp").atr(round4(atr)).hasBos(false).hasChoch(false)
+                .factorBreakdown(factors)
+                .timestamp(Instant.ofEpochMilli(last.getTimestamp()).atZone(ET).toLocalDateTime()).build());
+    }
+
     private List<TradeSetup> detectInternal(List<OHLCV> bars,List<OHLCV> spyBars,String ticker,
                                            double dailyAtr,boolean backtestMode,int sessionWarmup,int totalWarmup,
                                            Set<String> requiredLayers) {
