@@ -671,6 +671,7 @@ public class DashboardController {
             resp.put("lookback_days", result.lookbackDays);
             resp.put("mode",          result.mode.name());
             resp.put("exit_style",    btExit.name());
+            resp.put("requested_start_date", result.requestedStartDate);
             resp.put("start_date",    result.startDate);
             resp.put("end_date",      result.endDate);
             resp.put("disabled",      result.disabled);

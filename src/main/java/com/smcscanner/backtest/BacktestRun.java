@@ -8,6 +8,7 @@ import java.util.*;
 /** Request-local dates, immutable fetched series and coverage. Never shared with the live scanner. */
 public final class BacktestRun {
     public final LocalDate start, end;
+    public LocalDate effectiveStart;
     public final Map<String, List<OHLCV>> snapshots = new LinkedHashMap<>();
     public final Map<String, Object> coverage = new LinkedHashMap<>();
     public final Map<String, Long> rejected = new TreeMap<>();
@@ -47,8 +48,15 @@ public final class BacktestRun {
             throw new IllegalArgumentException("Research hold must be 15, 30, 60, 120, or 390 minutes");
         if (pattern != null && !TARGET_R.contains(targetR))
             throw new IllegalArgumentException("Research target must be 0.5R, 1R, 1.5R, or 2R");
-        this.start=start;this.end=end;this.pattern=pattern;this.filters=Set.copyOf(filters);
+        this.start=start;this.end=end;this.effectiveStart=start;this.pattern=pattern;this.filters=Set.copyOf(filters);
         this.maxHoldMinutes=maxHoldMinutes;this.targetR=targetR;this.research=pattern!=null;
+    }
+    public void noteEffectiveStart(LocalDate firstAvailableSession) {
+        if (firstAvailableSession == null || !firstAvailableSession.isAfter(effectiveStart)) return;
+        effectiveStart=firstAvailableSession;
+        String warning="Requested start "+start+" precedes available intraday history; results begin "
+                +firstAvailableSession;
+        if (!warnings.contains(warning)) warnings.add(warning);
     }
     public void reject(String reason) { rejected.merge(reason,1L,Long::sum); }
     public List<OHLCV> bars(PolygonClient client, String ticker, String timeframe, int warmupDays) {

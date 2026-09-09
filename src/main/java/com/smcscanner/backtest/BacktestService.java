@@ -168,7 +168,8 @@ public class BacktestService {
         result.rejectionCounts = Map.copyOf(run.rejected);
         result.candidates = List.copyOf(run.candidates);
         result.warnings = List.copyOf(run.warnings);
-        result.startDate = run.start.toString(); result.endDate = run.end.toString();
+        result.requestedStartDate = run.start.toString();
+        result.startDate = run.effectiveStart.toString(); result.endDate = run.end.toString();
         return result;
     }
 
@@ -230,6 +231,10 @@ public class BacktestService {
         for (OHLCV bar : allBars) {
             LocalDate d = Instant.ofEpochMilli(bar.getTimestamp()).atZone(ET).toLocalDate();
             byDate.computeIfAbsent(d, k -> new ArrayList<>()).add(bar);
+        }
+        if (run.research) {
+            byDate.keySet().stream().filter(date -> !date.isBefore(run.start)).findFirst()
+                    .ifPresent(run::noteEffectiveStart);
         }
 
         // Fetch daily bars: 450 bars (~18 months) so SMA 200 + keylevel detector
@@ -1604,7 +1609,7 @@ public class BacktestService {
         }
         List<OHLCV> complete15=recentCompletedRegularBars(m15,15,decision,20);
         if (run.filters.contains("15m")) {
-            if (complete15.size()<20) throw new HistoricalDataException("Insufficient completed 15m warmup");
+            if (complete15.size()<20) { run.reject("15m_warmup"); return false; }
             double avg=complete15.subList(complete15.size()-20,complete15.size()).stream().mapToDouble(OHLCV::getClose).average().orElseThrow();
             boolean up=complete15.get(complete15.size()-1).getClose()>avg;
             if (up != "long".equals(s.getDirection())) reason="15m";
@@ -2063,7 +2068,7 @@ public class BacktestService {
 
     public static class BacktestResult {
         public final String ticker;
-        public String startDate, endDate;
+        public String requestedStartDate, startDate, endDate;
         public boolean disabled;
         public Map<String,Object> coverage=Map.of();
         public Map<String,Long> rejectionCounts=Map.of();

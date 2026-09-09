@@ -59,6 +59,18 @@ class BacktestIntegrityTest {
     }
 
     @Test
+    void researchReportsWhenProviderHistoryStartsAfterTheRequestedDate() {
+        BacktestRun run = new BacktestRun(LocalDate.of(2024, 7, 18), LocalDate.of(2026, 7, 17),
+                "scalp", Set.of(), 30);
+
+        run.noteEffectiveStart(LocalDate.of(2024, 9, 9));
+
+        assertEquals(LocalDate.of(2024, 9, 9), run.effectiveStart);
+        assertEquals(1, run.warnings.size());
+        assertTrue(run.warnings.get(0).contains("results begin 2024-09-09"));
+    }
+
+    @Test
     void researchChargesTheExitHalfOfRoundTripExecutionFriction() {
         assertEquals(1.95, BacktestService.netResearchPnlPct(2.0));
         assertEquals(-1.05, BacktestService.netResearchPnlPct(-1.0));
