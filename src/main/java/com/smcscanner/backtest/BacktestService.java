@@ -525,6 +525,11 @@ public class BacktestService {
                     boolean accepted = run.filters.stream().allMatch(gatePass::get);
                     List<OHLCV> completeForward = byDate1m.getOrDefault(date,List.of()).stream()
                             .filter(b -> b.getTimestamp() >= decisionMs).filter(this::isRegularSessionBar).toList();
+                    if (completeForward.isEmpty() && decisionIsAfterLastTradableMinute(
+                            byDate1m.getOrDefault(date,List.of()),decisionMs)) {
+                        run.reject("session_closed_before_entry");
+                        continue;
+                    }
                     if (completeForward.isEmpty()) throw new HistoricalDataException("Missing 1m exits for " + ticker);
                     if (completeForward.get(0).getTimestamp() != decisionMs)
                         throw new HistoricalDataException("Missing immediate entry minute for " + ticker);
@@ -2127,6 +2132,14 @@ public class BacktestService {
             medians.put(time,median);
         });
         return Map.copyOf(medians);
+    }
+
+    static boolean decisionIsAfterLastTradableMinute(List<OHLCV> dayMinutes,long decisionMs) {
+        long last=dayMinutes.stream().filter(b->{
+            LocalTime time=Instant.ofEpochMilli(b.getTimestamp()).atZone(ET).toLocalTime();
+            return !time.isBefore(LocalTime.of(9,30)) && time.isBefore(LocalTime.of(16,0));
+        }).mapToLong(OHLCV::getTimestamp).max().orElse(Long.MIN_VALUE);
+        return last!=Long.MIN_VALUE && decisionMs>last;
     }
 
     /**

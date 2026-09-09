@@ -238,6 +238,14 @@ class BacktestIntegrityTest {
     }
 
     @Test
+    void earlyCloseDecisionIsSkippedOnlyAfterTheLastTradableMinute() {
+        List<OHLCV> halfDay=List.of(bar(at("2026-07-03T12:58"),100,101,99,100),
+                bar(at("2026-07-03T12:59"),100,101,99,100));
+        assertFalse(BacktestService.decisionIsAfterLastTradableMinute(halfDay,at("2026-07-03T12:59")));
+        assertTrue(BacktestService.decisionIsAfterLastTradableMinute(halfDay,at("2026-07-03T13:00")));
+    }
+
+    @Test
     void slippageCannotResurrectASetupWhoseStopWasAlreadyCrossed() {
         assertFalse(BacktestService.validEntryStop(342.235,342.0638825,342.0642,"short"));
         assertFalse(BacktestService.validEntryStop(99,99.0495,99.02,"long"));
