@@ -686,6 +686,7 @@ public class DashboardController {
                 resp.put("filters", filters);
                 resp.put("max_hold_minutes", holdMinutes);
                 resp.put("target_r", targetR);
+                resp.put("decision_timeframe", "ict-sweep-fvg-1m".equals(pattern) ? "1m" : "5m");
                 resp.put("round_trip_cost_bps", BacktestRun.RESEARCH_ROUND_TRIP_COST_BPS);
                 ResearchStatistics.Summary evidence = ResearchStatistics.summarize(result.trades);
                 resp.put("mean_r", evidence.meanR());

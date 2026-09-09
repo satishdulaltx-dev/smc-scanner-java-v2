@@ -334,12 +334,14 @@ public class BacktestService {
         Map<String, java.util.ArrayDeque<Boolean>> btOutcomes = new HashMap<>();
 
         List<TradeResult> trades = new ArrayList<>();
-        List<LocalDate> dates = new ArrayList<>(byDate.keySet());
+        boolean oneMinuteResearch = run.research && "ict-sweep-fvg-1m".equals(run.pattern);
+        Map<LocalDate,List<OHLCV>> decisionBarsByDate = oneMinuteResearch ? byDate1m : byDate;
+        List<LocalDate> dates = new ArrayList<>(decisionBarsByDate.keySet());
 
         for (int di = 0; di < dates.size(); di++) {
             LocalDate date = dates.get(di);
             if (date.isBefore(run.start) || date.isAfter(run.end)) continue;
-            List<OHLCV> dayBars = byDate.get(date);
+            List<OHLCV> dayBars = decisionBarsByDate.get(date);
             if (dayBars.size() < 20) continue;
 
             // HTF bias + daily ATR using daily bars up to this date
@@ -377,7 +379,7 @@ public class BacktestService {
             String stratType;
             if (run.research) {
                 stratType = switch (run.pattern) {
-                    case "scalp", "scalp-early", "scalp-core", "scalp-rvol", "scalp-tod-rvol", "scalp-breakout", "scalp-breakout-retest", "scalp-structure",
+                    case "scalp", "scalp-early", "scalp-core", "scalp-rvol", "scalp-tod-rvol", "scalp-breakout", "scalp-breakout-retest", "scalp-structure", "ict-sweep-fvg-1m",
                          "scalp-spy", "scalp-chase" -> "scalp";
                     case "vwap", "vwap-cont-long", "vwap-cont-short",
                          "vwap-reversion-long", "vwap-reversion-short" -> "vwap";
@@ -432,6 +434,8 @@ public class BacktestService {
                 prevDaysBars = List.of();
             }
             boolean tradePlacedToday = false;
+            long nextResearchEntryMs = Long.MIN_VALUE;
+            boolean allowResearchReentry = "ict-sweep-fvg-1m".equals(run.pattern);
             if (run.research && run.pattern.startsWith("scalp-") && !"scalp".equals(run.pattern)) minBars = 8;
             Map<LocalTime,Double> priorSlotVolume = "scalp-tod-rvol".equals(run.pattern)
                     ? priorSessionMedianVolume(byDate,dates,di,20)
@@ -449,9 +453,9 @@ public class BacktestService {
                 }
                 List<OHLCV> window = dayBars.subList(0, end);
                 List<OHLCV> priorSessionWindow = new ArrayList<>();
-                if (di > 0) priorSessionWindow.addAll(byDate.get(dates.get(di - 1)));
+                if (di > 0) priorSessionWindow.addAll(byDate.getOrDefault(dates.get(di - 1),List.of()));
                 priorSessionWindow.addAll(window);
-                long decisionMs = completedAt(dayBars.get(end - 1), 5);
+                long decisionMs = completedAt(dayBars.get(end - 1), oneMinuteResearch ? 1 : 5);
                 if (!ticker.startsWith("X:") && !Instant.ofEpochMilli(decisionMs).atZone(ET).toLocalTime().isBefore(LocalTime.of(16,0))) break;
                 if (run.research && !researchEntryWindowAllows(run.pattern, decisionMs, ticker.startsWith("X:"))) {
                     run.reject("entry_window");
@@ -514,6 +518,7 @@ public class BacktestService {
                         case "or-vwap" -> orVwapDetector.detect(window,ticker,dailyAtr,true);
                         case "idiv" -> indexDivDetector.detect(window,spy,ticker,dailyAtr);
                         case "sweep-flip" -> sweepFlipDetector.detect(window,ticker,dailyAtr,true);
+                        case "ict-sweep-fvg-1m" -> sweepFlipDetector.detectOneMinuteFvgResearch(window,ticker);
                         case "pdh-pdl" -> pdhPdlDetector.detect(priorSessionWindow,ticker,dailyAtr,true);
                         case "choch-primary" -> setupDetector.detectChochPrimary(window,ticker,dailyAtr,true);
                         default -> throw new IllegalArgumentException("Unknown pattern");
@@ -567,13 +572,15 @@ public class BacktestService {
                     ledger.put("signal_entry",candidate.getEntry());
                     ledger.put("signal_tp",candidate.getTakeProfit());
                     ledger.put("atr",candidate.getAtr());
-                    ledger.put("features",researchFeatures(window,spy,candidate,btRegime,decisionMs));
+                    ledger.put("features",oneMinuteResearch ? Map.of()
+                            : researchFeatures(window,spy,candidate,btRegime,decisionMs));
                     boolean longCandidate = "long".equals(candidate.getDirection());
                     double highAfterEntry = forward.stream().mapToDouble(OHLCV::getHigh).max().orElse(fill);
                     double lowAfterEntry = forward.stream().mapToDouble(OHLCV::getLow).min().orElse(fill);
                     ledger.put("session_mfe_r",Math.max(0,longCandidate ? highAfterEntry-fill : fill-lowAfterEntry)/Math.abs(fill-stop));
                     ledger.put("session_mae_r",Math.max(0,longCandidate ? fill-lowAfterEntry : highAfterEntry-fill)/Math.abs(fill-stop));
-                    ledger.put("gate_pass",gatePass); ledger.put("selected",accepted && !tradePlacedToday);
+                    boolean entryAvailable = allowResearchReentry ? decisionMs>=nextResearchEntryMs : !tradePlacedToday;
+                    ledger.put("gate_pass",gatePass); ledger.put("selected",accepted && entryAvailable);
                     Map<String,Object> comparisons = new TreeMap<>();
                     for (var variant : exits.entrySet()) {
                         ExitResult outcome = variant.getValue();
@@ -584,11 +591,13 @@ public class BacktestService {
                     ledger.put("exits",comparisons);
                     run.candidates.add(ledger);
                     if (!accepted) { run.reject("optional_filter"); continue; }
-                    if (tradePlacedToday) continue;
+                    if (!entryAvailable) continue;
+                    long resolvedExitMs=resolveExitEpochMs(forward,exit.exitTime(),decisionMs);
                     trades.add(new TradeResult(ticker,candidate.getDirection(),run.pattern,fill,stop,exitStyle == BacktestExitStyle.TRAIL_3R ? experimentalTarget : target,exit.outcome(),exit.pnlPct(),
-                            toDateTime(decisionMs),exit.exitTime(),decisionMs,resolveExitEpochMs(forward,exit.exitTime(),decisionMs),
+                            toDateTime(decisionMs),exit.exitTime(),decisionMs,resolvedExitMs,
                             candidate.getFactorBreakdown(),candidate.getConfidence(),candidate.getAtr(),0,null,0,null,0,null,0,0,0,0,1));
-                    tradePlacedToday=true;
+                    if (allowResearchReentry) nextResearchEntryMs=Math.max(decisionMs+60_000L,resolvedExitMs+60_000L);
+                    else tradePlacedToday=true;
                     continue;
                 } else if ("scalp".equals(effectiveStrat)) {
                     List<OHLCV> spySlice = spy5mByDate.getOrDefault(date, List.of()).stream()

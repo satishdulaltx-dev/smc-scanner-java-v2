@@ -23,7 +23,7 @@ public final class BacktestRun {
             "vwap", "vwap-cont-long", "vwap-cont-short",
             "vwap-reversion-long", "vwap-reversion-short",
             "breakout", "keylevel", "vsqueeze", "or-vwap", "idiv",
-            "sweep-flip", "choch-primary", "pdh-pdl");
+            "sweep-flip", "ict-sweep-fvg-1m", "choch-primary", "pdh-pdl");
     public static final Set<String> FILTERS = Set.of("spy", "15m", "volume", "regime", "time", "cost");
     public static final Set<Integer> HOLD_MINUTES = Set.of(15, 30, 60, 120, 390);
     public static final Set<Double> TARGET_R = Set.of(0.5, 1.0, 1.5, 2.0);

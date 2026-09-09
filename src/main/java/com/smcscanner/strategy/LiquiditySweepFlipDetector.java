@@ -134,6 +134,77 @@ public class LiquiditySweepFlipDetector {
         return result;
     }
 
+    /**
+     * Research-only one-minute ICT sequence: sweep a recent 20-bar extreme, form an
+     * opposite-direction three-candle fair-value gap, then reclaim the gap midpoint.
+     * The caller enters on the next minute so every input candle is complete.
+     */
+    public List<TradeSetup> detectOneMinuteFvgResearch(List<OHLCV> bars, String ticker) {
+        if (bars == null || bars.size() < 25) return List.of();
+        LocalDate date = Instant.ofEpochMilli(bars.get(bars.size()-1).getTimestamp()).atZone(ET).toLocalDate();
+        List<OHLCV> session = bars.stream().filter(bar -> {
+            var at = Instant.ofEpochMilli(bar.getTimestamp()).atZone(ET);
+            LocalTime time = at.toLocalTime();
+            return at.toLocalDate().equals(date) && !time.isBefore(LocalTime.of(9,30))
+                    && time.isBefore(LocalTime.of(16,0));
+        }).toList();
+        if (session.size() < 25) return List.of();
+
+        int n = session.size();
+        int retestIndex = n - 1;
+        OHLCV retest = session.get(retestIndex);
+        double atr = Math.max(computeAtr(session), retest.getClose() * 0.0002);
+
+        // A complete sweep -> FVG -> retest sequence must fit in the most recent 20 minutes.
+        for (int sweepIndex = retestIndex - 3; sweepIndex >= Math.max(20,retestIndex-20); sweepIndex--) {
+            OHLCV sweep = session.get(sweepIndex);
+            List<OHLCV> liquidityWindow = session.subList(sweepIndex-20,sweepIndex);
+            double priorHigh = liquidityWindow.stream().mapToDouble(OHLCV::getHigh).max().orElseThrow();
+            double priorLow = liquidityWindow.stream().mapToDouble(OHLCV::getLow).min().orElseThrow();
+            // The reversal and FVG may form after the stop-run candle; requiring
+            // the sweep candle itself to reclaim the level removes valid sequences.
+            boolean bullSweep = sweep.getLow() < priorLow-atr*0.10;
+            boolean bearSweep = sweep.getHigh() > priorHigh+atr*0.10;
+            if (!bullSweep && !bearSweep) continue;
+
+            for (int fvgEnd = sweepIndex+2; fvgEnd < retestIndex; fvgEnd++) {
+                OHLCV first = session.get(fvgEnd-2);
+                OHLCV third = session.get(fvgEnd);
+                boolean bullishGap = bullSweep && third.getLow() > first.getHigh()+atr*0.02;
+                boolean bearishGap = bearSweep && third.getHigh() < first.getLow()-atr*0.02;
+                if (!bullishGap && !bearishGap) continue;
+                if (retestIndex-fvgEnd > 10) continue;
+
+                double gapTop = bullishGap ? third.getLow() : first.getLow();
+                double gapBottom = bullishGap ? first.getHigh() : third.getHigh();
+                double midpoint = (gapTop+gapBottom)/2.0;
+                boolean reclaimed = bullishGap
+                        ? retest.getLow() <= midpoint && retest.getClose() >= midpoint
+                        : retest.getHigh() >= midpoint && retest.getClose() <= midpoint;
+                if (!reclaimed) continue;
+
+                boolean invalidated = false;
+                for (int i=fvgEnd+1;i<retestIndex;i++) {
+                    if (bullishGap && session.get(i).getClose() < sweep.getLow()) invalidated=true;
+                    if (bearishGap && session.get(i).getClose() > sweep.getHigh()) invalidated=true;
+                }
+                if (invalidated) continue;
+
+                String direction = bullishGap ? "long" : "short";
+                double entry = r4(retest.getClose());
+                double stop = r4(bullishGap ? sweep.getLow()-atr*SL_BUFFER : sweep.getHigh()+atr*SL_BUFFER);
+                double risk = Math.abs(entry-stop);
+                if (risk <= 0 || risk > atr*4.0) continue;
+                double target = r4(entry+(bullishGap?2:-2)*risk);
+                String factors = String.format(
+                        "ict-sweep-fvg-1m-%s | liquidity=%.2f | sweep=%.2f | gap=[%.2f/%.2f] | retest=50%%",
+                        direction,bullishGap?priorLow:priorHigh,bullishGap?sweep.getLow():sweep.getHigh(),gapBottom,gapTop);
+                return List.of(build(ticker,direction,entry,stop,target,75,atr,retest,factors));
+            }
+        }
+        return List.of();
+    }
+
     private int baseConf(OHLCV bar, double avgVol, int age) {
         int c = 72;
         if (bar.getVolume() > avgVol * 2.0) c += 10;

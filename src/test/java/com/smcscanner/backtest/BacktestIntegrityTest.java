@@ -36,7 +36,8 @@ class BacktestIntegrityTest {
         LocalDate end = LocalDate.of(2026, 6, 5);
         for (String pattern : List.of("scalp", "scalp-early", "scalp-core", "scalp-rvol", "scalp-tod-rvol", "scalp-breakout", "scalp-breakout-retest", "scalp-structure",
                 "scalp-spy", "scalp-chase", "vwap", "vwap-cont-long", "vwap-cont-short",
-                "vwap-reversion-long", "vwap-reversion-short", "breakout", "keylevel", "vsqueeze", "or-vwap", "idiv")) {
+                "vwap-reversion-long", "vwap-reversion-short", "breakout", "keylevel", "vsqueeze", "or-vwap", "idiv",
+                "sweep-flip", "ict-sweep-fvg-1m", "choch-primary", "pdh-pdl")) {
             BacktestRun run = new BacktestRun(start, end, pattern, Set.of(), 30);
             assertEquals(pattern, run.pattern);
             assertEquals(30, run.maxHoldMinutes);
@@ -405,6 +406,25 @@ class BacktestIntegrityTest {
         var detector = new com.smcscanner.strategy.PdhPdlDetector();
         assertTrue(detector.detect(today,"TEST",2,true).isEmpty());
         assertFalse(detector.detect(bars,"TEST",2,true).isEmpty());
+    }
+
+    @Test
+    void oneMinuteIctResearchRequiresSweepThenGapThenCurrentRetest() {
+        var bars = new java.util.ArrayList<OHLCV>();
+        long start=at("2026-06-01T09:30");
+        for (int i=0;i<21;i++) bars.add(bar(start+i*60_000L,100,100.4,99.6,100));
+        bars.add(bar(start+21*60_000L,100,100.1,99.0,99.4));       // sweep; reversal follows
+        bars.add(bar(start+22*60_000L,99.4,100.5,99.4,100.4));
+        bars.add(bar(start+23*60_000L,100.5,101.0,100.3,100.9));  // bullish FVG above sweep bar
+        bars.add(bar(start+24*60_000L,100.3,100.7,100.15,100.4));// midpoint retest and reclaim
+        var detector = new com.smcscanner.strategy.LiquiditySweepFlipDetector(null);
+
+        assertTrue(detector.detectOneMinuteFvgResearch(bars.subList(0,24),"TEST").isEmpty());
+        var setups=detector.detectOneMinuteFvgResearch(bars,"TEST");
+        assertEquals(1,setups.size());
+        assertEquals("long",setups.get(0).getDirection());
+        assertTrue(setups.get(0).getStopLoss()<99.0);
+        assertTrue(setups.get(0).getTakeProfit()>setups.get(0).getEntry());
     }
 
     private Object exit(String name, List<OHLCV> bars, double stop, double target, String dir, boolean be) throws Exception {
