@@ -39,6 +39,10 @@ import java.time.ZonedDateTime;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.stream.Collectors;
 
 @Controller
@@ -62,6 +66,12 @@ public class DashboardController {
     private final ResearchService    researchService;
     private final com.smcscanner.broker.AlpacaOrderService alpaca;
     private final com.smcscanner.vision.ChartVisionService chartVision;
+    private final ConcurrentMap<String,Map<String,Object>> controlledJobs=new ConcurrentHashMap<>();
+    private final ExecutorService controlledExecutor=Executors.newSingleThreadExecutor(r -> {
+        Thread t=new Thread(r,"controlled-backtest");
+        t.setDaemon(true);
+        return t;
+    });
 
     private static final Map<String,String> TV_MAP = Map.of(
         "X:BTCUSD", "BINANCE:BTCUSDT",
@@ -744,6 +754,60 @@ public class DashboardController {
         } finally {
             if (savedProfile != null) config.restoreProfile(sym, savedProfile);
         }
+    }
+
+    /** Start a controlled experiment without holding the browser connection open. */
+    @PostMapping("/api/backtest/job")
+    @ResponseBody
+    public ResponseEntity<Map<String,Object>> startBacktestJob(
+            @org.springframework.web.bind.annotation.RequestParam String ticker,
+            @org.springframework.web.bind.annotation.RequestParam String mode,
+            @org.springframework.web.bind.annotation.RequestParam String exitStyle,
+            @org.springframework.web.bind.annotation.RequestParam LocalDate start,
+            @org.springframework.web.bind.annotation.RequestParam LocalDate end,
+            @org.springframework.web.bind.annotation.RequestParam String pattern,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue="") String filters,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue="390") int holdMinutes) {
+        try {
+            com.smcscanner.backtest.BacktestMode.fromString(mode);
+            BacktestExitStyle.fromString(exitStyle);
+            Set<String> enabledFilters=filters.isBlank()?Set.of():Arrays.stream(filters.split(","))
+                    .map(String::trim).filter(v->!v.isBlank()).collect(Collectors.toUnmodifiableSet());
+            new BacktestRun(start,end,pattern,enabledFilters,holdMinutes);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error",e.getMessage()));
+        }
+        long now=System.currentTimeMillis();
+        controlledJobs.entrySet().removeIf(e -> now-((Number)e.getValue().getOrDefault("created_at",now)).longValue()>3_600_000L);
+        String id=UUID.randomUUID().toString();
+        Map<String,Object> job=new ConcurrentHashMap<>();
+        job.put("status","queued");job.put("created_at",now);
+        controlledJobs.put(id,job);
+        controlledExecutor.submit(() -> {
+            job.put("status","running");
+            try {
+                ResponseEntity<Map<String,Object>> response=apiBacktest(ticker,90,mode,exitStyle,
+                        null,null,null,null,start,end,pattern,filters,holdMinutes,false);
+                Map<String,Object> body=response.getBody();
+                job.put("result",body==null?Map.of("error","Backtest returned no result"):body);
+                job.put("status","complete");
+            } catch (Exception e) {
+                log.error("Controlled backtest job failed: {}",e.getMessage());
+                job.put("error",e.getMessage()==null?"Controlled backtest failed":e.getMessage());
+                job.put("status","failed");
+            }
+            job.put("finished_at",System.currentTimeMillis());
+        });
+        return ResponseEntity.accepted().body(Map.of("job_id",id,"status","queued"));
+    }
+
+    @GetMapping("/api/backtest/job/{id}")
+    @ResponseBody
+    public ResponseEntity<Map<String,Object>> backtestJobStatus(
+            @org.springframework.web.bind.annotation.PathVariable String id) {
+        Map<String,Object> job=controlledJobs.get(id);
+        if (job==null) return ResponseEntity.status(404).body(Map.of("error","Backtest job was not found or expired"));
+        return ResponseEntity.ok(new LinkedHashMap<>(job));
     }
 
     @GetMapping("/api/backtest/trade-chart")

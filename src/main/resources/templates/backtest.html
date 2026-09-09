@@ -881,9 +881,19 @@ async function runControlledExperiment() {
     const button = document.getElementById('experiment-run');
     button.disabled = true; button.textContent = 'Running experiment…'; setLoading(true);
     try {
-        const response = await fetch(`/api/backtest?${params}`);
+        const response = await fetch(`/api/backtest/job?${params}`, {method:'POST'});
         if (!response.ok) throw new Error(`Request failed (HTTP ${response.status})`);
-        renderSingle(await response.json());
+        const started = await response.json();
+        if (!started.job_id) throw new Error(started.error || 'Experiment did not start');
+        while (true) {
+            await new Promise(resolve => setTimeout(resolve, 2000));
+            const check = await fetch(`/api/backtest/job/${encodeURIComponent(started.job_id)}`);
+            if (!check.ok) throw new Error(`Status check failed (HTTP ${check.status})`);
+            const job = await check.json();
+            button.textContent = job.status === 'queued' ? 'Waiting for data slot…' : 'Loading verified history…';
+            if (job.status === 'failed') throw new Error(job.error || 'Experiment failed');
+            if (job.status === 'complete') { renderSingle(job.result); break; }
+        }
     } catch (error) { alert(error.message); }
     finally { setLoading(false); button.disabled = false; button.textContent = 'Run experiment'; }
 }
