@@ -484,7 +484,8 @@ public class BacktestService {
                         : regimeDetector.detectForBacktest(window);
                 List<TradeSetup> bSetups;
                 if (run.research) {
-                    List<OHLCV> spy = completedBars(spy5mByDate.getOrDefault(date,List.of()),5,decisionMs);
+                    List<OHLCV> spy = completedBars(spy5mByDate.getOrDefault(date,List.of()),5,decisionMs).stream()
+                            .filter(this::isRegularSessionBar).toList();
                     bSetups = switch(run.pattern) {
                         case "scalp" -> scalpDetector.detect(window,spy,ticker,dailyAtr,true);
                         case "scalp-early" -> scalpDetector.detectEarlyResearch(window,spy,ticker,dailyAtr);
@@ -565,6 +566,7 @@ public class BacktestService {
                     ledger.put("signal_entry",candidate.getEntry());
                     ledger.put("signal_tp",candidate.getTakeProfit());
                     ledger.put("atr",candidate.getAtr());
+                    ledger.put("features",researchFeatures(window,spy,candidate,btRegime,decisionMs));
                     boolean longCandidate = "long".equals(candidate.getDirection());
                     double highAfterEntry = forward.stream().mapToDouble(OHLCV::getHigh).max().orElse(fill);
                     double lowAfterEntry = forward.stream().mapToDouble(OHLCV::getLow).min().orElse(fill);
@@ -1502,6 +1504,58 @@ public class BacktestService {
         double modeledRoundTrip=BacktestRun.RESEARCH_ROUND_TRIP_COST_BPS/10_000.0;
         return riskPct>=modeledRoundTrip*4.0;
     }
+    /** Point-in-time numeric features for offline walk-forward studies. No forward bars are accepted here. */
+    static Map<String,Double> researchFeatures(List<OHLCV> window,List<OHLCV> spy,TradeSetup setup,
+                                               MarketRegimeDetector.Regime regime,long decisionMs) {
+        List<OHLCV> session=window.stream().filter(BacktestService::isRegularSession).toList();
+        if (session.isEmpty()) return Map.of();
+        OHLCV last=session.get(session.size()-1);
+        double direction="long".equals(setup.getDirection())?1.0:-1.0;
+        double atr=Math.max(setup.getAtr(),last.getClose()*0.001);
+        double range=Math.max(last.getHigh()-last.getLow(),last.getClose()*0.00001);
+        int priorStart=Math.max(0,session.size()-7);
+        List<OHLCV> prior=session.subList(priorStart,Math.max(priorStart,session.size()-1));
+        double priorVolume=prior.stream().mapToDouble(OHLCV::getVolume).average().orElse(last.getVolume());
+        double pv=0,volume=0;
+        for (OHLCV bar:session) {
+            pv+=((bar.getHigh()+bar.getLow()+bar.getClose())/3.0)*bar.getVolume();
+            volume+=bar.getVolume();
+        }
+        double vwap=volume>0?pv/volume:last.getClose();
+        OHLCV threeBack=session.get(Math.max(0,session.size()-4));
+        OHLCV sixBack=session.get(Math.max(0,session.size()-7));
+        double tickerIntraday=last.getClose()/Math.max(0.0001,session.get(0).getOpen())-1;
+        List<OHLCV> spySession=spy.stream().filter(BacktestService::isRegularSession).toList();
+        double spyIntraday=spySession.isEmpty()?0:spySession.get(spySession.size()-1).getClose()
+                /Math.max(0.0001,spySession.get(0).getOpen())-1;
+        LocalTime decision=Instant.ofEpochMilli(decisionMs).atZone(ET).toLocalTime();
+        double minutesFromOpen=Math.max(0,Duration.between(LocalTime.of(9,30),decision).toMinutes());
+        Map<String,Double> f=new LinkedHashMap<>();
+        f.put("direction_long",direction>0?1.0:0.0);
+        f.put("minutes_from_open",minutesFromOpen);
+        f.put("confidence",(double)setup.getConfidence());
+        f.put("atr_pct",atr/Math.max(0.0001,last.getClose()));
+        f.put("risk_atr",Math.abs(setup.getEntry()-setup.getStopLoss())/atr);
+        f.put("bar_body_pct",Math.abs(last.getClose()-last.getOpen())/range);
+        f.put("directional_close_location",direction>0?(last.getClose()-last.getLow())/range:(last.getHigh()-last.getClose())/range);
+        f.put("bar_range_atr",range/atr);
+        f.put("volume_ratio_6",last.getVolume()/Math.max(1.0,priorVolume));
+        f.put("directional_return_5m",direction*(last.getClose()/Math.max(0.0001,last.getOpen())-1));
+        f.put("directional_return_15m",direction*(last.getClose()/Math.max(0.0001,threeBack.getClose())-1));
+        f.put("directional_return_30m",direction*(last.getClose()/Math.max(0.0001,sixBack.getClose())-1));
+        f.put("directional_vwap_distance_atr",direction*(last.getClose()-vwap)/atr);
+        f.put("directional_intraday_return",direction*tickerIntraday);
+        f.put("directional_spy_return",direction*spyIntraday);
+        f.put("directional_relative_strength",direction*(tickerIntraday-spyIntraday));
+        for (MarketRegimeDetector.Regime value:MarketRegimeDetector.Regime.values())
+            f.put("regime_"+value.name().toLowerCase(),regime==value?1.0:0.0);
+        return Map.copyOf(f);
+    }
+
+    private static boolean isRegularSession(OHLCV bar) {
+        LocalTime time=Instant.ofEpochMilli(bar.getTimestamp()).atZone(ET).toLocalTime();
+        return !time.isBefore(LocalTime.of(9,30))&&time.isBefore(LocalTime.of(16,0));
+    }
     static List<TradeSetup> researchSubtype(List<TradeSetup> setups, String subtype) {
         if (setups == null || setups.isEmpty()) return List.of();
         return setups.stream().filter(s -> s.getFactorBreakdown() != null
@@ -1518,7 +1572,8 @@ public class BacktestService {
             double move=spy.get(spy.size()-1).getClose()/spy.get(0).getOpen()-1;
             if ((move>0 && "short".equals(s.getDirection())) || (move<0 && "long".equals(s.getDirection()))) reason="spy";
         }
-        List<OHLCV> complete15=completedBars(m15,15,decision);
+        List<OHLCV> complete15=completedBars(m15,15,decision).stream()
+                .filter(this::isRegularSessionBar).toList();
         if (run.filters.contains("15m")) {
             if (complete15.size()<20) throw new HistoricalDataException("Insufficient completed 15m warmup");
             double avg=complete15.subList(complete15.size()-20,complete15.size()).stream().mapToDouble(OHLCV::getClose).average().orElseThrow();

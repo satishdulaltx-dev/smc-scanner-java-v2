@@ -5,6 +5,7 @@ import com.smcscanner.data.DataCache;
 import com.smcscanner.data.PolygonClient;
 import com.smcscanner.config.ScannerConfig;
 import com.smcscanner.model.OHLCV;
+import com.smcscanner.model.TradeSetup;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
@@ -156,6 +157,44 @@ class BacktestIntegrityTest {
         assertEquals("INSUFFICIENT_SAMPLE", evidence.verdict());
         assertEquals(4, evidence.trades());
         assertEquals(4, evidence.positiveMonths());
+    }
+
+    @Test
+    void researchFeatureSnapshotContainsOnlyPointInTimeInputs() {
+        List<OHLCV> bars = List.of(
+                OHLCV.builder().timestamp(at("2026-06-01T09:30")).open(100).high(101).low(99).close(100).volume(100).build(),
+                OHLCV.builder().timestamp(at("2026-06-01T09:35")).open(100).high(102).low(100).close(101.5).volume(200).build());
+        TradeSetup setup = TradeSetup.builder().ticker("TEST").direction("long").entry(101.5)
+                .stopLoss(100.5).takeProfit(103.5).confidence(80).atr(2).build();
+
+        Map<String,Double> features = BacktestService.researchFeatures(bars, bars, setup,
+                com.smcscanner.strategy.MarketRegimeDetector.Regime.TRENDING, at("2026-06-01T09:40"));
+
+        assertEquals(10.0, features.get("minutes_from_open"));
+        assertEquals(2.0, features.get("volume_ratio_6"));
+        assertEquals(1.0, features.get("regime_trending"));
+        assertEquals(0.0, features.get("regime_ranging"));
+        assertTrue(features.get("directional_return_5m") > 0);
+        assertFalse(features.containsKey("outcome"));
+        assertFalse(features.containsKey("mfe"));
+    }
+
+    @Test
+    void researchSpyFeatureIgnoresPremarketMove() {
+        List<OHLCV> bars = List.of(
+                OHLCV.builder().timestamp(at("2026-06-01T09:30")).open(100).high(101).low(99).close(100).volume(100).build(),
+                OHLCV.builder().timestamp(at("2026-06-01T09:35")).open(100).high(101).low(99).close(100).volume(100).build());
+        List<OHLCV> spy = List.of(
+                OHLCV.builder().timestamp(at("2026-06-01T08:00")).open(50).high(100).low(50).close(100).volume(100).build(),
+                OHLCV.builder().timestamp(at("2026-06-01T09:30")).open(100).high(101).low(99).close(100).volume(100).build(),
+                OHLCV.builder().timestamp(at("2026-06-01T09:35")).open(100).high(102).low(99).close(101).volume(100).build());
+        TradeSetup setup = TradeSetup.builder().ticker("TEST").direction("long").entry(100)
+                .stopLoss(99).takeProfit(102).confidence(80).atr(2).build();
+
+        Map<String,Double> features = BacktestService.researchFeatures(bars, spy, setup,
+                com.smcscanner.strategy.MarketRegimeDetector.Regime.RANGING, at("2026-06-01T09:40"));
+
+        assertEquals(0.01, features.get("directional_spy_return"), 0.000001);
     }
 
     @Test
