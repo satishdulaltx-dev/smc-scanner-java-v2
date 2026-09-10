@@ -6,6 +6,7 @@ import com.smcscanner.data.PolygonClient;
 import com.smcscanner.config.ScannerConfig;
 import com.smcscanner.model.OHLCV;
 import com.smcscanner.model.TradeSetup;
+import com.smcscanner.news.HistoricalNewsArticle;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
@@ -48,6 +49,23 @@ class BacktestIntegrityTest {
         assertEquals(1.0, new BacktestRun(start, end, "scalp", Set.of(), 30, 1.0).targetR);
         assertThrows(IllegalArgumentException.class,
                 () -> new BacktestRun(start, end, "scalp", Set.of(), 30, 0.75));
+        assertEquals(Set.of("news"),new BacktestRun(start,end,"scalp",Set.of("news"),30).filters);
+    }
+
+    @Test
+    void historicalNewsCutoffExcludesStaleAndFutureArticles() {
+        long decision=at("2026-06-01T10:00");
+        List<HistoricalNewsArticle> articles=List.of(
+                new HistoricalNewsArticle(at("2026-05-29T09:00"),"negative"),
+                new HistoricalNewsArticle(at("2026-06-01T09:00"),"positive"),
+                new HistoricalNewsArticle(at("2026-06-01T10:01"),"negative"));
+
+        var sentiment=BacktestService.historicalNewsAt(articles,"TEST",decision);
+
+        assertEquals(1,sentiment.positiveCount());
+        assertEquals(0,sentiment.negativeCount());
+        assertTrue(sentiment.isAligned("long"));
+        assertFalse(sentiment.isAligned("short"));
     }
 
     @Test

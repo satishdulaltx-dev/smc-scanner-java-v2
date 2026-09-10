@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.smcscanner.config.ScannerConfig;
 import com.smcscanner.model.OHLCV;
+import com.smcscanner.news.HistoricalNewsArticle;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -37,6 +38,12 @@ public class PolygonClient {
     private volatile boolean historicalSessionActive;
     private long nextHistoricalRequestAtMs;
     private final Map<String, String> historicalEntitlementFailures = new HashMap<>();
+    private final Map<String, List<HistoricalNewsArticle>> historicalNewsCache = Collections.synchronizedMap(
+            new LinkedHashMap<>(32, 0.75f, true) {
+                @Override protected boolean removeEldestEntry(Map.Entry<String, List<HistoricalNewsArticle>> eldest) {
+                    return size() > HISTORICAL_CACHE_LIMIT;
+                }
+            });
     private final Map<String, List<OHLCV>> historicalCache = Collections.synchronizedMap(
             new LinkedHashMap<>(64, 0.75f, true) {
                 @Override protected boolean removeEldestEntry(Map.Entry<String, List<OHLCV>> eldest) {
@@ -204,6 +211,70 @@ public class PolygonClient {
         if (bars.isEmpty()) throw new HistoricalDataException(ticker + " " + timeframe + ": no historical bars for " + from + " through " + to);
         List<OHLCV> immutable = List.copyOf(bars);
         historicalCache.put(cacheKey, immutable);
+        return immutable;
+    }
+
+    /** Fully paginate ticker-specific article sentiment for point-in-time research. */
+    public synchronized List<HistoricalNewsArticle> getHistoricalNews(String ticker, LocalDate from, LocalDate to) {
+        if (from.isAfter(to)) throw new IllegalArgumentException("Historical news start follows end");
+        String cacheKey=ticker+"/news/"+from+"/"+to;
+        List<HistoricalNewsArticle> cached=historicalNewsCache.get(cacheKey);
+        if (cached!=null) return cached;
+        String apiKey=config.getPolygonApiKey();
+        if (apiKey==null || apiKey.isBlank()) throw new HistoricalDataException("Historical news credential is not configured");
+        String url=String.format("https://api.polygon.io/v2/reference/news?ticker=%s&published_utc.gte=%sT00:00:00Z&published_utc.lte=%sT23:59:59Z&limit=1000&sort=published_utc&order=asc",
+                ticker,from,to);
+        List<HistoricalNewsArticle> articles=new ArrayList<>();
+        Set<String> pages=new HashSet<>();
+        while (url!=null) {
+            if (!pages.add(url) || pages.size()>1000)
+                throw new HistoricalDataException(ticker+": incomplete historical news pagination");
+            okhttp3.HttpUrl parsed=okhttp3.HttpUrl.parse(url);
+            if (parsed==null || !"https".equals(parsed.scheme()) || !"api.polygon.io".equals(parsed.host()))
+                throw new HistoricalDataException("Unexpected historical news pagination destination");
+            Request request=new Request.Builder().url(parsed).header("Authorization","Bearer "+apiKey).build();
+            JsonNode root=null;
+            for (int attempt=0;attempt<6;attempt++) {
+                paceHistoricalRequest();
+                try (Response response=http.newCall(request).execute()) {
+                    int code=response.code();
+                    if ((code==429 || code>=500) && attempt<5) {
+                        Thread.sleep(code==429?retryDelayMs(response.header("Retry-After"),attempt):1000L*(attempt+1));
+                        continue;
+                    }
+                    if (!response.isSuccessful() || response.body()==null)
+                        throw new HistoricalDataException(ticker+": historical news HTTP "+code);
+                    root=mapper.readTree(response.body().string());
+                    if (root==null || "ERROR".equals(root.path("status").asText()))
+                        throw new HistoricalDataException(ticker+": provider rejected historical news request");
+                    break;
+                } catch (HistoricalDataException e) { throw e; }
+                catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    throw new HistoricalDataException("Historical news fetch interrupted");
+                } catch (Exception e) {
+                    if (attempt==5) throw new HistoricalDataException(ticker+": historical news transport/parse failure");
+                }
+            }
+            if (root==null) throw new HistoricalDataException(ticker+": historical news response missing");
+            for (JsonNode article:root.path("results")) {
+                String published=article.path("published_utc").asText("");
+                if (published.isBlank()) throw new HistoricalDataException(ticker+": historical article timestamp missing");
+                long publishedMs;
+                try { publishedMs=Instant.parse(published).toEpochMilli(); }
+                catch (Exception e) { throw new HistoricalDataException(ticker+": malformed historical article timestamp"); }
+                for (JsonNode insight:article.path("insights")) {
+                    if (!ticker.equalsIgnoreCase(insight.path("ticker").asText(""))) continue;
+                    String sentiment=insight.path("sentiment").asText("neutral").toLowerCase(Locale.ROOT);
+                    if (!Set.of("positive","negative","neutral").contains(sentiment)) sentiment="neutral";
+                    articles.add(new HistoricalNewsArticle(publishedMs,sentiment));
+                }
+            }
+            url=root.hasNonNull("next_url")?root.get("next_url").asText():null;
+        }
+        articles.sort(Comparator.comparingLong(HistoricalNewsArticle::publishedEpochMs));
+        List<HistoricalNewsArticle> immutable=List.copyOf(articles);
+        historicalNewsCache.put(cacheKey,immutable);
         return immutable;
     }
 

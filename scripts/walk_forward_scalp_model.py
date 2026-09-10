@@ -50,7 +50,7 @@ def recorded_or_derived_features(candidate):
         "directional_vwap_distance_atr": direction * (signal - vwap) / atr if vwap else 0.0,
         "breakout_distance_atr": direction * (signal - level) / atr if level else 0.0,
     }
-    for gate in ("spy", "15m", "volume", "regime", "time", "cost"):
+    for gate in ("spy", "15m", "volume", "regime", "time", "cost", "news"):
         features[f"gate_{gate}"] = 1.0 if gates.get(gate, False) else 0.0
     return features
 

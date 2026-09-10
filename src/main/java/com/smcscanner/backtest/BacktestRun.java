@@ -2,6 +2,7 @@ package com.smcscanner.backtest;
 
 import com.smcscanner.data.*;
 import com.smcscanner.model.OHLCV;
+import com.smcscanner.news.HistoricalNewsArticle;
 import java.time.*;
 import java.util.*;
 
@@ -10,6 +11,7 @@ public final class BacktestRun {
     public final LocalDate start, end;
     public LocalDate effectiveStart;
     public final Map<String, List<OHLCV>> snapshots = new LinkedHashMap<>();
+    public final Map<String, List<HistoricalNewsArticle>> newsSnapshots = new LinkedHashMap<>();
     public final Map<String, Object> coverage = new LinkedHashMap<>();
     public final Map<String, Long> rejected = new TreeMap<>();
     public final List<String> warnings = new ArrayList<>();
@@ -26,7 +28,7 @@ public final class BacktestRun {
             "breakout", "keylevel", "vsqueeze", "or-vwap", "idiv",
             "sweep-flip", "ict-sweep-fvg-1m", "opening-momentum-1m", "opening-momentum-retest-1m",
             "choch-primary", "pdh-pdl");
-    public static final Set<String> FILTERS = Set.of("spy", "15m", "volume", "regime", "time", "cost");
+    public static final Set<String> FILTERS = Set.of("spy", "15m", "volume", "regime", "time", "cost", "news");
     public static final Set<Integer> HOLD_MINUTES = Set.of(15, 30, 60, 120, 390);
     public static final Set<Double> TARGET_R = Set.of(0.5, 1.0, 1.5, 2.0);
     /** 5 BPS adverse entry fill plus 5 BPS adverse exit fill in controlled research. */
@@ -83,6 +85,29 @@ public final class BacktestRun {
             if (!warnings.contains(warning)) warnings.add(warning);
             return List.of();
         }
+    }
+    /** Preload a complete article timeline once so every decision uses the same point-in-time data. */
+    public List<HistoricalNewsArticle> optionalNews(PolygonClient client,String ticker,int warmupDays) {
+        LocalDate from=start.minusDays(warmupDays);
+        String key=ticker+"/historical-news/"+from+"/"+end;
+        return newsSnapshots.computeIfAbsent(key,k -> {
+            try {
+                List<HistoricalNewsArticle> articles=client.getHistoricalNews(ticker,from,end);
+                Map<String,Object> details=new LinkedHashMap<>();
+                details.put("articles",articles.size()); details.put("pagination_complete",true);
+                if (!articles.isEmpty()) {
+                    details.put("first_ts",articles.get(0).publishedEpochMs());
+                    details.put("last_ts",articles.get(articles.size()-1).publishedEpochMs());
+                }
+                coverage.put(k,Map.copyOf(details));
+                return List.copyOf(articles);
+            } catch (HistoricalDataException e) {
+                coverage.put(k,Map.of("available",false,"error",e.getMessage()));
+                String warning=ticker+" historical news unavailable; news filter is disabled ("+e.getMessage()+")";
+                if (!warnings.contains(warning)) warnings.add(warning);
+                return List.of();
+            }
+        });
     }
     /** Compare required intraday slots to a liquid benchmark, with no silent fallback. */
     public static void requireSlots(String ticker, List<OHLCV> bars, List<OHLCV> benchmark, LocalDate start, LocalDate end) {

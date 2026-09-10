@@ -11,7 +11,7 @@ from statistics import NormalDist
 from zoneinfo import ZoneInfo
 
 ET = ZoneInfo("America/New_York")
-FILTERS = ["spy", "15m", "volume", "regime", "time", "cost"]
+FILTERS = ["spy", "15m", "volume", "regime", "time", "cost", "news"]
 
 
 def unwrap(path):

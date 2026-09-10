@@ -13,6 +13,7 @@ import com.smcscanner.model.TickerProfile;
 import com.smcscanner.model.TradeSetup;
 import com.smcscanner.news.NewsSentiment;
 import com.smcscanner.news.NewsService;
+import com.smcscanner.news.HistoricalNewsArticle;
 import com.smcscanner.options.OptionsFlowAnalyzer;
 import com.smcscanner.strategy.BreakoutStrategyDetector;
 import com.smcscanner.strategy.CapitulationReversalDetector;
@@ -246,6 +247,11 @@ public class BacktestService {
         // the detector and accidentally comparing different samples.
         List<OHLCV> all15mBars = ticker.startsWith("X:") ? List.of()
                 : run.bars(client, ticker, "15m", 10);
+
+        // Historical articles are fetched once and evaluated with a strict
+        // 48-hour cutoff at each decision. Missing news never fabricates context.
+        List<HistoricalNewsArticle> historicalNews = run.research && !ticker.startsWith("X:")
+                ? run.optionalNews(client,ticker,2) : List.of();
 
         // Fetch hourly bars — used to compute HTF bias via structure analysis,
         // matching live ScannerService which calls mtf.getHtfBias(hourlyBars).
@@ -535,9 +541,11 @@ public class BacktestService {
                     if (bSetups.isEmpty()) continue;
                     TradeSetup candidate = bSetups.get(0);
                     Map<String,Boolean> gatePass = new TreeMap<>();
+                    NewsSentiment candidateNews=historicalNewsAt(historicalNews,ticker,decisionMs);
                     for (String gate : BacktestRun.FILTERS) {
                         BacktestRun gateRun = new BacktestRun(run.start,run.end,run.pattern,Set.of(gate));
-                        gatePass.put(gate,researchAccepts(candidate,window,spy,all15mBars,decisionMs,btRegime,gateRun));
+                        gatePass.put(gate,researchAccepts(candidate,window,spy,all15mBars,decisionMs,btRegime,
+                                candidateNews,gateRun));
                     }
                     boolean accepted = run.filters.stream().allMatch(gatePass::get);
                     List<OHLCV> completeForward = byDate1m.getOrDefault(date,List.of()).stream()
@@ -581,9 +589,11 @@ public class BacktestService {
                     ledger.put("signal_entry",candidate.getEntry());
                     ledger.put("signal_tp",candidate.getTakeProfit());
                     ledger.put("atr",candidate.getAtr());
-                    ledger.put("features",oneMinuteResearch
+                    Map<String,Double> features=new LinkedHashMap<>(oneMinuteResearch
                             ? oneMinuteResearchFeatures(window,spy,candidate,btRegime,decisionMs)
                             : researchFeatures(window,spy,candidate,btRegime,decisionMs));
+                    gatePass.forEach((gate,passed)->features.put("gate_"+gate,passed?1.0:0.0));
+                    ledger.put("features",Map.copyOf(features));
                     boolean longCandidate = "long".equals(candidate.getDirection());
                     double highAfterEntry = forward.stream().mapToDouble(OHLCV::getHigh).max().orElse(fill);
                     double lowAfterEntry = forward.stream().mapToDouble(OHLCV::getLow).min().orElse(fill);
@@ -1652,8 +1662,30 @@ public class BacktestService {
         if (gross == null) return null;
         return new ExitResult(gross.outcome(), gross.exitTime(), netResearchPnlPct(gross.pnlPct()));
     }
+    static NewsSentiment historicalNewsAt(List<HistoricalNewsArticle> articles,String ticker,long decision) {
+        long from=decision-48L*60*60*1000;
+        int low=0,high=articles.size();
+        while (low<high) {
+            int middle=(low+high)>>>1;
+            if (articles.get(middle).publishedEpochMs()<from) low=middle+1; else high=middle;
+        }
+        int positive=0,negative=0,neutral=0;
+        for (int i=low;i<articles.size();i++) {
+            HistoricalNewsArticle article=articles.get(i);
+            if (article.publishedEpochMs()>decision) break;
+            switch (article.sentiment()) {
+                case "positive" -> positive++;
+                case "negative" -> negative++;
+                default -> neutral++;
+            }
+        }
+        int total=positive+negative+neutral;
+        double score=total==0?0:(double)(positive-negative)/total;
+        return total==0?NewsSentiment.NONE:new NewsSentiment(ticker,positive,negative,neutral,score,null);
+    }
+
     private boolean researchAccepts(TradeSetup s,List<OHLCV> window,List<OHLCV> spy,List<OHLCV> m15,long decision,
-                                    MarketRegimeDetector.Regime regime,BacktestRun run) {
+                                    MarketRegimeDetector.Regime regime,NewsSentiment news,BacktestRun run) {
         String reason=null;
         if (run.filters.contains("spy") && spy.size()>=2) {
             double move=spy.get(spy.size()-1).getClose()/spy.get(0).getOpen()-1;
@@ -1671,6 +1703,7 @@ public class BacktestService {
         int hour=Instant.ofEpochMilli(decision).atZone(ET).getHour();
         if (run.filters.contains("time") && (hour==11||hour==13||hour>=15)) reason="time";
         if (run.filters.contains("cost") && !researchRiskSupportsCosts(s.getEntry(),s.getStopLoss())) reason="cost";
+        if (run.filters.contains("news") && !news.isAligned(s.getDirection())) reason="news";
         if (reason!=null) {run.reject(reason);return false;}
         return true;
     }
