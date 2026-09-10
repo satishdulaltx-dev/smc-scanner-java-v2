@@ -47,18 +47,27 @@ def row(candidate, ticker):
     at = datetime.fromtimestamp(int(candidate["entry_ts"]) / 1000, ET)
     return {"ticker": ticker, "net_r": net_r, "raw_r": approximate_raw_r(candidate, net_r),
             "entry_ts": int(candidate["entry_ts"]), "exit_ts": int(outcome["exit_ts"]),
-            "month": at.strftime("%Y-%m")}
+            "session": at.date().isoformat(), "month": at.strftime("%Y-%m")}
 
 
-def select(candidates, ticker, filter_name):
+def select(candidates, ticker, pattern, filter_name):
     selected = []
+    selected_dates = set()
     next_entry = -1
     for candidate in sorted(candidates, key=lambda item: item["entry_ts"]):
-        if filter_name and not candidate["gate_pass"].get(filter_name, False):
-            continue
-        if int(candidate["entry_ts"]) < next_entry:
+        if filter_name is None:
+            if not candidate.get("selected", False):
+                continue
+        elif not candidate["gate_pass"].get(filter_name, False):
             continue
         chosen = row(candidate, ticker)
+        if pattern != "ict-sweep-fvg-1m":
+            session = (ticker, chosen["session"])
+            if session in selected_dates:
+                continue
+            selected_dates.add(session)
+        elif int(candidate["entry_ts"]) < next_entry:
+            continue
         selected.append(chosen)
         next_entry = chosen["exit_ts"] + 60_000
     return selected
@@ -112,7 +121,8 @@ def main():
         rows = []
         by_ticker = {}
         for payload in payloads:
-            chosen = select(payload["candidate_ledger"], payload["ticker"], filter_name)
+            chosen = select(payload["candidate_ledger"], payload["ticker"],
+                            payload.get("pattern"), filter_name)
             rows.extend(chosen)
             by_ticker[payload["ticker"]] = summarize(chosen, z_value)
         report["results"][filter_name or "none"] = {

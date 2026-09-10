@@ -340,7 +340,8 @@ public class BacktestService {
         Map<String, java.util.ArrayDeque<Boolean>> btOutcomes = new HashMap<>();
 
         List<TradeResult> trades = new ArrayList<>();
-        boolean oneMinuteResearch = run.research && Set.of("ict-sweep-fvg-1m", "opening-momentum-1m").contains(run.pattern);
+        boolean oneMinuteResearch = run.research && Set.of("ict-sweep-fvg-1m", "opening-momentum-1m",
+                "opening-momentum-retest-1m").contains(run.pattern);
         Map<LocalDate,List<OHLCV>> decisionBarsByDate = oneMinuteResearch ? byDate1m : byDate;
         List<LocalDate> dates = new ArrayList<>(decisionBarsByDate.keySet());
 
@@ -385,7 +386,7 @@ public class BacktestService {
             String stratType;
             if (run.research) {
                 stratType = switch (run.pattern) {
-                    case "scalp", "scalp-early", "scalp-core", "scalp-rvol", "scalp-tod-rvol", "scalp-breakout", "scalp-breakout-retest", "scalp-structure", "ict-sweep-fvg-1m", "opening-momentum-1m",
+                    case "scalp", "scalp-early", "scalp-core", "scalp-rvol", "scalp-tod-rvol", "scalp-breakout", "scalp-breakout-retest", "scalp-structure", "ict-sweep-fvg-1m", "opening-momentum-1m", "opening-momentum-retest-1m",
                          "scalp-spy", "scalp-chase" -> "scalp";
                     case "vwap", "vwap-cont-long", "vwap-cont-short",
                          "vwap-reversion-long", "vwap-reversion-short" -> "vwap";
@@ -526,6 +527,7 @@ public class BacktestService {
                         case "sweep-flip" -> sweepFlipDetector.detect(window,ticker,dailyAtr,true);
                         case "ict-sweep-fvg-1m" -> sweepFlipDetector.detectOneMinuteFvgResearch(window,ticker);
                         case "opening-momentum-1m" -> scalpDetector.detectOpeningMomentumResearch(window,ticker);
+                        case "opening-momentum-retest-1m" -> scalpDetector.detectOpeningMomentumRetestResearch(window,ticker);
                         case "pdh-pdl" -> pdhPdlDetector.detect(priorSessionWindow,ticker,dailyAtr,true);
                         case "choch-primary" -> setupDetector.detectChochPrimary(window,ticker,dailyAtr,true);
                         default -> throw new IllegalArgumentException("Unknown pattern");
@@ -579,7 +581,8 @@ public class BacktestService {
                     ledger.put("signal_entry",candidate.getEntry());
                     ledger.put("signal_tp",candidate.getTakeProfit());
                     ledger.put("atr",candidate.getAtr());
-                    ledger.put("features",oneMinuteResearch ? Map.of()
+                    ledger.put("features",oneMinuteResearch
+                            ? oneMinuteResearchFeatures(window,spy,candidate,btRegime,decisionMs)
                             : researchFeatures(window,spy,candidate,btRegime,decisionMs));
                     boolean longCandidate = "long".equals(candidate.getDirection());
                     double highAfterEntry = forward.stream().mapToDouble(OHLCV::getHigh).max().orElse(fill);
@@ -1539,6 +1542,54 @@ public class BacktestService {
     }
     static double researchTarget(double fill,double stop,String direction,double targetR) {
         return fill + ("long".equals(direction) ? targetR : -targetR) * Math.abs(fill-stop);
+    }
+    /** Point-in-time features whose return horizons match one-minute decisions. */
+    static Map<String,Double> oneMinuteResearchFeatures(List<OHLCV> window,List<OHLCV> spy,
+                                                        TradeSetup setup,MarketRegimeDetector.Regime regime,
+                                                        long decisionMs) {
+        List<OHLCV> session=window.stream().filter(BacktestService::isRegularSession).toList();
+        if (session.isEmpty()) return Map.of();
+        OHLCV last=session.get(session.size()-1);
+        double direction="long".equals(setup.getDirection())?1.0:-1.0;
+        double atr=Math.max(setup.getAtr(),last.getClose()*.0002);
+        double range=Math.max(last.getHigh()-last.getLow(),last.getClose()*.00001);
+        int priorStart=Math.max(0,session.size()-7);
+        List<OHLCV> prior=session.subList(priorStart,Math.max(priorStart,session.size()-1));
+        double priorVolume=prior.stream().mapToDouble(OHLCV::getVolume).average().orElse(last.getVolume());
+        double pv=0,volume=0;
+        for (OHLCV bar:session) {
+            pv+=((bar.getHigh()+bar.getLow()+bar.getClose())/3.0)*bar.getVolume();
+            volume+=bar.getVolume();
+        }
+        double vwap=volume>0?pv/volume:last.getClose();
+        OHLCV threeBack=session.get(Math.max(0,session.size()-4));
+        OHLCV sixBack=session.get(Math.max(0,session.size()-7));
+        double tickerIntraday=last.getClose()/Math.max(.0001,session.get(0).getOpen())-1;
+        List<OHLCV> spySession=spy.stream().filter(BacktestService::isRegularSession).toList();
+        double spyIntraday=spySession.isEmpty()?0:spySession.get(spySession.size()-1).getClose()
+                /Math.max(.0001,spySession.get(0).getOpen())-1;
+        LocalTime decision=Instant.ofEpochMilli(decisionMs).atZone(ET).toLocalTime();
+        double minutesFromOpen=Math.max(0,Duration.between(LocalTime.of(9,30),decision).toMinutes());
+        Map<String,Double> f=new LinkedHashMap<>();
+        f.put("direction_long",direction>0?1.0:0.0);
+        f.put("minutes_from_open",minutesFromOpen);
+        f.put("confidence",(double)setup.getConfidence());
+        f.put("atr_pct",atr/Math.max(.0001,last.getClose()));
+        f.put("risk_atr",Math.abs(setup.getEntry()-setup.getStopLoss())/atr);
+        f.put("bar_body_pct",Math.abs(last.getClose()-last.getOpen())/range);
+        f.put("directional_close_location",direction>0?(last.getClose()-last.getLow())/range:(last.getHigh()-last.getClose())/range);
+        f.put("bar_range_atr",range/atr);
+        f.put("volume_ratio_6",last.getVolume()/Math.max(1.0,priorVolume));
+        f.put("directional_return_1m",direction*(last.getClose()/Math.max(.0001,last.getOpen())-1));
+        f.put("directional_return_3m",direction*(last.getClose()/Math.max(.0001,threeBack.getClose())-1));
+        f.put("directional_return_6m",direction*(last.getClose()/Math.max(.0001,sixBack.getClose())-1));
+        f.put("directional_vwap_distance_atr",direction*(last.getClose()-vwap)/atr);
+        f.put("directional_intraday_return",direction*tickerIntraday);
+        f.put("directional_spy_return",direction*spyIntraday);
+        f.put("directional_relative_strength",direction*(tickerIntraday-spyIntraday));
+        for (MarketRegimeDetector.Regime value:MarketRegimeDetector.Regime.values())
+            f.put("regime_"+value.name().toLowerCase(),regime==value?1.0:0.0);
+        return Map.copyOf(f);
     }
     /** Point-in-time numeric features for offline walk-forward studies. No forward bars are accepted here. */
     static Map<String,Double> researchFeatures(List<OHLCV> window,List<OHLCV> spy,TradeSetup setup,

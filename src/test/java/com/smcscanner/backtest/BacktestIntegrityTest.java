@@ -37,7 +37,8 @@ class BacktestIntegrityTest {
         for (String pattern : List.of("scalp", "scalp-early", "scalp-core", "scalp-rvol", "scalp-tod-rvol", "scalp-breakout", "scalp-breakout-retest", "scalp-structure",
                 "scalp-spy", "scalp-chase", "vwap", "vwap-cont-long", "vwap-cont-short",
                 "vwap-reversion-long", "vwap-reversion-short", "breakout", "keylevel", "vsqueeze", "or-vwap", "idiv",
-                "sweep-flip", "ict-sweep-fvg-1m", "opening-momentum-1m", "choch-primary", "pdh-pdl")) {
+                "sweep-flip", "ict-sweep-fvg-1m", "opening-momentum-1m", "opening-momentum-retest-1m",
+                "choch-primary", "pdh-pdl")) {
             BacktestRun run = new BacktestRun(start, end, pattern, Set.of(), 30);
             assertEquals(pattern, run.pattern);
             assertEquals(30, run.maxHoldMinutes);
@@ -333,6 +334,27 @@ class BacktestIntegrityTest {
                 new com.smcscanner.indicator.VolumeProfileCalculator(),null);
 
         var setups=detector.detectOpeningMomentumResearch(bars,"TEST");
+
+        assertEquals(1,setups.size());
+        assertEquals("long",setups.get(0).getDirection());
+        assertTrue((setups.get(0).getEntry()-setups.get(0).getStopLoss())/setups.get(0).getEntry()>=.004);
+    }
+
+    @Test
+    void openingMomentumRetestWaitsForTheBrokenOneMinuteLevelToHold() {
+        var bars = new java.util.ArrayList<OHLCV>();
+        long open=at("2026-06-01T09:30");
+        for (int i=0;i<19;i++) bars.add(OHLCV.builder().timestamp(open+i*60_000L)
+                .open(100).high(100.20).low(99.75).close(100.05).volume(100).build());
+        bars.add(OHLCV.builder().timestamp(open+19*60_000L).open(100.18).high(100.68)
+                .low(100.15).close(100.65).volume(200).build());
+        var detector=new com.smcscanner.strategy.ScalpMomentumDetector(null,
+                new com.smcscanner.indicator.VolumeProfileCalculator(),null);
+
+        assertTrue(detector.detectOpeningMomentumRetestResearch(bars,"TEST").isEmpty());
+        bars.add(OHLCV.builder().timestamp(open+20*60_000L).open(100.22).high(100.29)
+                .low(100.18).close(100.27).volume(120).build());
+        var setups=detector.detectOpeningMomentumRetestResearch(bars,"TEST");
 
         assertEquals(1,setups.size());
         assertEquals("long",setups.get(0).getDirection());

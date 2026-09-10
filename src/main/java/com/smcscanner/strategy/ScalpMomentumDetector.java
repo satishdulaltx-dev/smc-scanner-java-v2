@@ -150,6 +150,97 @@ public class ScalpMomentumDetector {
                 .timestamp(Instant.ofEpochMilli(last.getTimestamp()).atZone(ET).toLocalDateTime()).build());
     }
 
+    /**
+     * Research-only opening continuation that waits for a broken ten-minute level
+     * to be tested and reclaimed. This avoids paying the spread at the initial
+     * expansion extreme and requires the level to remain valid before entry.
+     */
+    public List<TradeSetup> detectOpeningMomentumRetestResearch(List<OHLCV> bars,String ticker) {
+        if (bars == null || bars.size() < 21) return List.of();
+        List<OHLCV> session=regularSessionBarsForToday(bars);
+        if (session.size()<21) return List.of();
+        int n=session.size();
+        OHLCV last=session.get(n-1);
+        LocalTime time=Instant.ofEpochMilli(last.getTimestamp()).atZone(ET).toLocalTime();
+        if (time.isBefore(LocalTime.of(9,50)) || !time.isBefore(LocalTime.of(11,30))) return List.of();
+
+        double atr=Math.max(computeAtr(session,14),last.getClose()*.0002);
+        double currentRange=Math.max(last.getHigh()-last.getLow(),last.getClose()*.00001);
+        double currentBody=Math.abs(last.getClose()-last.getOpen())/currentRange;
+        if (currentBody<.40) return List.of();
+
+        for (int breakoutIndex=n-2;breakoutIndex>=Math.max(19,n-8);breakoutIndex--) {
+            OHLCV breakout=session.get(breakoutIndex);
+            List<OHLCV> base=session.subList(breakoutIndex-10,breakoutIndex);
+            double levelHigh=base.stream().mapToDouble(OHLCV::getHigh).max().orElseThrow();
+            double levelLow=base.stream().mapToDouble(OHLCV::getLow).min().orElseThrow();
+            double baseVolume=base.stream().mapToDouble(OHLCV::getVolume).average().orElse(0);
+            double breakoutRange=Math.max(breakout.getHigh()-breakout.getLow(),breakout.getClose()*.00001);
+            double breakoutBody=Math.abs(breakout.getClose()-breakout.getOpen())/breakoutRange;
+            if (breakoutBody<.55 || breakout.getVolume()<baseVolume*1.25) continue;
+
+            double pv=0,volume=0;
+            for (int i=0;i<=breakoutIndex;i++) {
+                OHLCV bar=session.get(i);
+                pv+=((bar.getHigh()+bar.getLow()+bar.getClose())/3.0)*bar.getVolume();
+                volume+=bar.getVolume();
+            }
+            double breakoutVwap=volume>0?pv/volume:breakout.getClose();
+            double open=session.get(0).getOpen();
+            boolean brokeLong=breakout.getClose()>levelHigh && breakout.getClose()>breakout.getOpen()
+                    && breakout.getHigh()-breakout.getClose()<=breakoutRange*.20
+                    && breakout.getClose()>breakoutVwap && breakout.getClose()/open-1>=.004;
+            boolean brokeShort=breakout.getClose()<levelLow && breakout.getClose()<breakout.getOpen()
+                    && breakout.getClose()-breakout.getLow()<=breakoutRange*.20
+                    && breakout.getClose()<breakoutVwap && 1-breakout.getClose()/open>=.004;
+            if (!brokeLong && !brokeShort) continue;
+
+            boolean isLong=brokeLong;
+            double level=isLong?levelHigh:levelLow;
+            boolean invalidated=false;
+            for (int i=breakoutIndex+1;i<n-1;i++) {
+                double close=session.get(i).getClose();
+                if ((isLong && close<level-atr*.15) || (!isLong && close>level+atr*.15)) invalidated=true;
+            }
+            if (invalidated) continue;
+
+            double pvNow=0,volumeNow=0;
+            for (OHLCV bar:session) {
+                pvNow+=((bar.getHigh()+bar.getLow()+bar.getClose())/3.0)*bar.getVolume();
+                volumeNow+=bar.getVolume();
+            }
+            double vwap=volumeNow>0?pvNow/volumeNow:last.getClose();
+            boolean confirms=isLong
+                    ? last.getLow()<=level+atr*.25 && last.getClose()>level && last.getClose()>last.getOpen()
+                        && last.getClose()>vwap && last.getHigh()-last.getClose()<=currentRange*.30
+                        && last.getClose()-level<=atr*.75
+                    : last.getHigh()>=level-atr*.25 && last.getClose()<level && last.getClose()<last.getOpen()
+                        && last.getClose()<vwap && last.getClose()-last.getLow()<=currentRange*.30
+                        && level-last.getClose()<=atr*.75;
+            if (!confirms) continue;
+
+            double entry=round4(last.getClose());
+            // The opposite side of the broken range is the invalidation point.
+            // A retest-bar-only stop is usually narrower than modeled friction can support.
+            double stop=round4(isLong
+                    ? Math.min(levelLow,session.subList(breakoutIndex,n).stream().mapToDouble(OHLCV::getLow).min().orElse(last.getLow()))
+                    : Math.max(levelHigh,session.subList(breakoutIndex,n).stream().mapToDouble(OHLCV::getHigh).max().orElse(last.getHigh())));
+            double risk=Math.abs(entry-stop);
+            double riskPct=risk/entry;
+            if (risk<=0 || riskPct<.004 || risk>atr*8) continue;
+            double target=round4(entry+(isLong?2:-2)*risk);
+            String factors=String.format(
+                    "opening-momentum-retest-1m-%s | move=%.2f%% | 10m level=%.2f | VWAP=%.2f | risk=%.2f%%",
+                    isLong?"long":"short",Math.abs(breakout.getClose()/open-1)*100,level,vwap,riskPct*100);
+            return List.of(TradeSetup.builder().ticker(ticker).direction(isLong?"long":"short")
+                    .entry(entry).stopLoss(stop).takeProfit(target).confidence(80).session("NYSE")
+                    .volatility("scalp").atr(round4(atr)).hasBos(false).hasChoch(false)
+                    .factorBreakdown(factors)
+                    .timestamp(Instant.ofEpochMilli(last.getTimestamp()).atZone(ET).toLocalDateTime()).build());
+        }
+        return List.of();
+    }
+
     /** Historical-only momentum continuation: a fresh six-bar range break with expansion. */
     public List<TradeSetup> detectBreakoutResearch(List<OHLCV> bars,String ticker,double dailyAtr) {
         if (bars == null || bars.size() < 8) return List.of();

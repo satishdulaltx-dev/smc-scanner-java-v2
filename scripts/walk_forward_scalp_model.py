@@ -5,6 +5,7 @@ import argparse
 import json
 import math
 import pathlib
+import re
 from collections import defaultdict
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -16,6 +17,42 @@ RIDGE_PENALTY = 10.0
 SELECTION_QUANTILE = 0.80
 MINIMUM_TRAINING_ROWS = 200
 MINIMUM_EVIDENCE_TRADES = 30
+
+
+def recorded_or_derived_features(candidate):
+    recorded = candidate.get("features") or {}
+    if recorded:
+        return {name: float(value) for name, value in recorded.items()}
+    market = float(candidate["market_open"])
+    signal = float(candidate.get("signal_entry", market))
+    stop = float(candidate["sl"])
+    atr = max(float(candidate.get("atr", 0)), market * 0.00001)
+    direction = 1.0 if candidate["direction"] == "long" else -1.0
+    at = datetime.fromtimestamp(candidate["entry_ts"] / 1000, ET)
+    factors = candidate.get("factor_breakdown", "")
+
+    def factor(name):
+        match = re.search(rf"(?:^|\|)\s*{re.escape(name)}=([-+]?\d+(?:\.\d+)?)", factors)
+        return float(match.group(1)) if match else 0.0
+
+    vwap = factor("VWAP")
+    level = factor("10m level")
+    gates = candidate.get("gate_pass", {})
+    features = {
+        "direction_long": 1.0 if direction > 0 else 0.0,
+        "minutes_from_open": max(0.0, (at.hour * 60 + at.minute) - (9 * 60 + 30)),
+        "confidence": float(candidate.get("confidence", 0)),
+        "atr_pct": atr / market,
+        "risk_pct": abs(signal - stop) / market,
+        "risk_atr": abs(signal - stop) / atr,
+        "directional_open_gap_atr": direction * (market - signal) / atr,
+        "directional_move_pct": factor("move") / 100.0,
+        "directional_vwap_distance_atr": direction * (signal - vwap) / atr if vwap else 0.0,
+        "breakout_distance_atr": direction * (signal - level) / atr if level else 0.0,
+    }
+    for gate in ("spy", "15m", "volume", "regime", "time", "cost"):
+        features[f"gate_{gate}"] = 1.0 if gates.get(gate, False) else 0.0
+    return features
 
 
 def load_rows(directory, development_end):
@@ -38,12 +75,10 @@ def load_rows(directory, development_end):
             raise ValueError(f"{path.name}: input opens data after the declared development end")
         ticker = payload["ticker"]
         for candidate in payload.get("candidate_ledger", []):
-            if not candidate.get("selected") or not candidate.get("features"):
-                continue
             outcome = candidate.get("exits", {}).get("FIXED_R")
             if not outcome:
                 continue
-            feature_values = {name: float(value) for name, value in candidate["features"].items()}
+            feature_values = recorded_or_derived_features(candidate)
             if not all(math.isfinite(value) for value in feature_values.values()):
                 raise ValueError(f"{path.name}: candidate {candidate.get('id')} has a non-finite feature")
             risk_multiple = float(outcome["risk_multiple"])
@@ -52,7 +87,8 @@ def load_rows(directory, development_end):
             at = datetime.fromtimestamp(candidate["entry_ts"] / 1000, ET)
             rows.append({"ticker": ticker, "entry_ts": candidate["entry_ts"],
                          "month": at.strftime("%Y-%m"), "date": at.date().isoformat(),
-                         "features": feature_values, "r": risk_multiple})
+                         "features": feature_values, "r": risk_multiple,
+                         "baseline_selected": bool(candidate.get("selected"))})
     rows.sort(key=lambda row: row["entry_ts"])
     if not rows:
         raise ValueError("No selected candidates with point-in-time features were found")
@@ -125,9 +161,16 @@ def walk_forward(rows):
         if len(train) < MINIMUM_TRAINING_ROWS or not test:
             continue
         scores, threshold = fit_predict(train, test, feature_names)
-        chosen = [row for row, score in zip(test, scores) if score >= threshold]
+        chosen = []
+        used_sessions = set()
+        for row, score in zip(test, scores):
+            session = (row["ticker"], row["date"])
+            if score < threshold or session in used_sessions:
+                continue
+            chosen.append(row)
+            used_sessions.add(session)
         selected.extend(chosen)
-        baseline.extend(test)
+        baseline.extend(row for row in test if row["baseline_selected"])
         folds.append({"month": month, "training_rows": len(train), "test_rows": len(test),
                       "selected_rows": len(chosen), "threshold": round(threshold, 4),
                       "selected_mean_r": round(sum(row["r"] for row in chosen) / len(chosen), 4) if chosen else 0})
