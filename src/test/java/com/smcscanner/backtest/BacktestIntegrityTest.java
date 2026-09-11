@@ -7,6 +7,7 @@ import com.smcscanner.config.ScannerConfig;
 import com.smcscanner.model.OHLCV;
 import com.smcscanner.model.TradeSetup;
 import com.smcscanner.news.HistoricalNewsArticle;
+import com.smcscanner.strategy.GapDetector;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
@@ -38,6 +39,7 @@ class BacktestIntegrityTest {
         for (String pattern : List.of("scalp", "scalp-early", "scalp-core", "scalp-rvol", "scalp-tod-rvol", "scalp-breakout", "scalp-breakout-retest", "scalp-structure",
                 "scalp-spy", "scalp-chase", "vwap", "vwap-cont-long", "vwap-cont-short",
                 "vwap-reversion-long", "vwap-reversion-short", "breakout", "keylevel", "vsqueeze", "or-vwap", "idiv",
+                "gap-continuation", "gap-trap", "gap-fill",
                 "sweep-flip", "ict-sweep-fvg-1m", "opening-momentum-1m", "opening-momentum-retest-1m",
                 "choch-primary", "pdh-pdl")) {
             BacktestRun run = new BacktestRun(start, end, pattern, Set.of(), 30);
@@ -66,6 +68,14 @@ class BacktestIntegrityTest {
         assertEquals(0,sentiment.negativeCount());
         assertTrue(sentiment.isAligned("long"));
         assertFalse(sentiment.isAligned("short"));
+    }
+
+    @Test
+    void controlledGapPatternsRemainSeparated() {
+        assertTrue(BacktestService.researchGapTypeMatches("gap-continuation",GapDetector.GapType.GAP_AND_GO));
+        assertTrue(BacktestService.researchGapTypeMatches("gap-trap",GapDetector.GapType.GAP_TRAP));
+        assertTrue(BacktestService.researchGapTypeMatches("gap-fill",GapDetector.GapType.GAP_FILL));
+        assertFalse(BacktestService.researchGapTypeMatches("gap-trap",GapDetector.GapType.GAP_AND_GO));
     }
 
     @Test

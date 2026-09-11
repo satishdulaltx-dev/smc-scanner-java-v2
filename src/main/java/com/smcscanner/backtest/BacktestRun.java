@@ -26,6 +26,7 @@ public final class BacktestRun {
             "vwap", "vwap-cont-long", "vwap-cont-short",
             "vwap-reversion-long", "vwap-reversion-short",
             "breakout", "keylevel", "vsqueeze", "or-vwap", "idiv",
+            "gap-continuation", "gap-trap", "gap-fill",
             "sweep-flip", "ict-sweep-fvg-1m", "opening-momentum-1m", "opening-momentum-retest-1m",
             "choch-primary", "pdh-pdl");
     public static final Set<String> FILTERS = Set.of("spy", "15m", "volume", "regime", "time", "cost", "news");

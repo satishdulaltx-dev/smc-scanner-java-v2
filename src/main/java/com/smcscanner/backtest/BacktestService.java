@@ -397,6 +397,7 @@ public class BacktestService {
                     case "vwap", "vwap-cont-long", "vwap-cont-short",
                          "vwap-reversion-long", "vwap-reversion-short" -> "vwap";
                     case "breakout", "keylevel", "vsqueeze", "or-vwap", "idiv" -> run.pattern;
+                    case "gap-continuation", "gap-trap", "gap-fill" -> "gap-open";
                     default -> "smc";
                 };
             } else if (strategyOverride != null && !strategyOverride.isBlank()) {
@@ -534,6 +535,17 @@ public class BacktestService {
                         case "ict-sweep-fvg-1m" -> sweepFlipDetector.detectOneMinuteFvgResearch(window,ticker);
                         case "opening-momentum-1m" -> scalpDetector.detectOpeningMomentumResearch(window,ticker);
                         case "opening-momentum-retest-1m" -> scalpDetector.detectOpeningMomentumRetestResearch(window,ticker);
+                        case "gap-continuation", "gap-trap", "gap-fill" -> {
+                            List<OHLCV> todayRth=window.stream().filter(this::isRegularSessionBar).toList();
+                            List<OHLCV> previousRth=di>0
+                                    ? byDate.getOrDefault(dates.get(di-1),List.of()).stream()
+                                            .filter(this::isRegularSessionBar).toList()
+                                    : List.of();
+                            GapDetector.GapSignal signal=gapDetector.detect(todayRth,previousRth,dailyAtr,ticker,btRegime);
+                            yield signal!=null && researchGapTypeMatches(run.pattern,signal.type())
+                                    ? List.of(buildGapSetup(signal,window.get(window.size()-1)))
+                                    : List.of();
+                        }
                         case "pdh-pdl" -> pdhPdlDetector.detect(priorSessionWindow,ticker,dailyAtr,true);
                         case "choch-primary" -> setupDetector.detectChochPrimary(window,ticker,dailyAtr,true);
                         default -> throw new IllegalArgumentException("Unknown pattern");
@@ -1657,6 +1669,14 @@ public class BacktestService {
         if (setups == null || setups.isEmpty()) return List.of();
         return setups.stream().filter(s -> s.getFactorBreakdown() != null
                 && s.getFactorBreakdown().startsWith(subtype)).toList();
+    }
+    static boolean researchGapTypeMatches(String pattern,GapDetector.GapType type) {
+        return switch(pattern) {
+            case "gap-continuation" -> type==GapDetector.GapType.GAP_AND_GO;
+            case "gap-trap" -> type==GapDetector.GapType.GAP_TRAP;
+            case "gap-fill" -> type==GapDetector.GapType.GAP_FILL;
+            default -> false;
+        };
     }
     private ExitResult withResearchExitFriction(ExitResult gross) {
         if (gross == null) return null;
