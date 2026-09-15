@@ -13,6 +13,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.time.Clock;
+import java.time.ZonedDateTime;
+import java.io.IOException;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -31,8 +34,9 @@ public class PolygonClient {
     private final ScannerConfig config;
     private final DataCache     cache;
     private final ObjectMapper  mapper = new ObjectMapper();
-    private final OkHttpClient  http   = new OkHttpClient.Builder()
-            .connectTimeout(10, TimeUnit.SECONDS).readTimeout(15, TimeUnit.SECONDS).build();
+    private final OkHttpClient http;
+    private final Clock clock;
+    private long liveRetryAtMs;
     private final Object historicalRateLock = new Object();
     private final ReentrantLock historicalSessionLock = new ReentrantLock(true);
     private volatile boolean historicalSessionActive;
@@ -51,8 +55,39 @@ public class PolygonClient {
                 }
             });
 
+    @org.springframework.beans.factory.annotation.Autowired
     public PolygonClient(ScannerConfig config, DataCache cache) {
-        this.config = config; this.cache = cache;
+        this(config, cache, new OkHttpClient.Builder()
+                .connectTimeout(10, TimeUnit.SECONDS).readTimeout(15, TimeUnit.SECONDS).build(), Clock.systemUTC());
+    }
+
+    PolygonClient(ScannerConfig config, DataCache cache, OkHttpClient http, Clock clock) {
+        this.config = config; this.cache = cache; this.http = http; this.clock = clock;
+    }
+
+    /** A provider-wide rejection must not fan out into another request per ticker.
+     * Historical reads retain their paced retry policy; broker management is separate. */
+    private synchronized Response executeLiveRequest(Request request) throws IOException {
+        long now = clock.millis();
+        if (now < liveRetryAtMs) return null;
+        Response response = http.newCall(request).execute();
+        if (response.code() == 429) {
+            long retryMs = 60_000L;
+            String retryAfter = response.header("Retry-After");
+            if (retryAfter != null) {
+                try {
+                    retryMs = Math.max(retryMs, Math.max(0L, Math.min(86_400L, Long.parseLong(retryAfter))) * 1000L);
+                } catch (NumberFormatException ignored) {
+                    try {
+                        retryMs = Math.max(retryMs, ZonedDateTime.parse(retryAfter,
+                                DateTimeFormatter.RFC_1123_DATE_TIME).toInstant().toEpochMilli() - clock.millis());
+                    } catch (java.time.DateTimeException invalidDate) { /* Keep the default cooldown. */ }
+                }
+            }
+            liveRetryAtMs = clock.millis() + retryMs;
+            log.warn("Market-data rate limit: pausing fresh provider reads for {} seconds", retryMs / 1000);
+        }
+        return response;
     }
 
     /** Reserve the provider quota for one controlled historical run. */
@@ -323,8 +358,8 @@ public class PolygonClient {
         try {
             while (url != null && maxPages-- > 0 && bars.size() < limit) {
                 String fetchUrl = url.contains("apiKey=") ? url : url + "&apiKey=" + apiKey;
-                try (Response resp = http.newCall(new Request.Builder().url(fetchUrl).build()).execute()) {
-                    if (!resp.isSuccessful() || resp.body() == null) break;
+                try (Response resp = executeLiveRequest(new Request.Builder().url(fetchUrl).build())) {
+                    if (resp == null || !resp.isSuccessful() || resp.body() == null) break;
                     JsonNode root    = mapper.readTree(resp.body().string());
                     JsonNode results = root.get("results");
                     if (results == null || !results.isArray() || results.size() == 0) break;
@@ -366,8 +401,8 @@ public class PolygonClient {
         try {
             String url = String.format(
                     "https://api.polygon.io/v2/last/nbbo/%s?apiKey=%s", ticker, apiKey);
-            try (Response resp = http.newCall(new Request.Builder().url(url).build()).execute()) {
-                if (!resp.isSuccessful() || resp.body() == null) return null;
+            try (Response resp = executeLiveRequest(new Request.Builder().url(url).build())) {
+                if (resp == null || !resp.isSuccessful() || resp.body() == null) return null;
                 JsonNode result = mapper.readTree(resp.body().string()).path("results");
                 if (result.isMissingNode()) return null;
                 return new NbboSnapshot(
@@ -396,8 +431,8 @@ public class PolygonClient {
             String url = String.format(
                     "https://api.polygon.io/v3/trades/%s?limit=%d&order=desc&apiKey=%s",
                     ticker, Math.min(limit, 50000), apiKey);
-            try (Response resp = http.newCall(new Request.Builder().url(url).build()).execute()) {
-                if (!resp.isSuccessful() || resp.body() == null) return List.of();
+            try (Response resp = executeLiveRequest(new Request.Builder().url(url).build())) {
+                if (resp == null || !resp.isSuccessful() || resp.body() == null) return List.of();
                 JsonNode results = mapper.readTree(resp.body().string()).path("results");
                 if (!results.isArray()) return List.of();
                 List<TradeRecord> trades = new ArrayList<>();
@@ -435,8 +470,8 @@ public class PolygonClient {
             String url = String.format(
                     "https://api.polygon.io/v3/quotes/%s?limit=%d&order=desc&apiKey=%s",
                     ticker, Math.min(limit, 50), apiKey);
-            try (Response resp = http.newCall(new Request.Builder().url(url).build()).execute()) {
-                if (!resp.isSuccessful() || resp.body() == null) return List.of();
+            try (Response resp = executeLiveRequest(new Request.Builder().url(url).build())) {
+                if (resp == null || !resp.isSuccessful() || resp.body() == null) return List.of();
                 JsonNode results = mapper.readTree(resp.body().string()).path("results");
                 if (!results.isArray()) return List.of();
                 List<QuoteRecord> quotes = new ArrayList<>();
@@ -469,8 +504,8 @@ public class PolygonClient {
         try {
             while (url != null && maxPages-- > 0 && bars.size() < limit) {
                 String fetchUrl = url.contains("apiKey=") ? url : url + "&apiKey=" + apiKey;
-                try (Response resp = http.newCall(new Request.Builder().url(fetchUrl).build()).execute()) {
-                    if (!resp.isSuccessful() || resp.body() == null) break;
+                try (Response resp = executeLiveRequest(new Request.Builder().url(fetchUrl).build())) {
+                    if (resp == null || !resp.isSuccessful() || resp.body() == null) break;
                     JsonNode root = mapper.readTree(resp.body().string());
                     JsonNode results = root.get("results");
                     if (results == null || !results.isArray() || results.size() == 0) break;
