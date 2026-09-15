@@ -38,6 +38,12 @@ public final class BacktestRun {
     /** 5 BPS adverse entry fill plus 5 BPS adverse exit fill in controlled research. */
     public static final double RESEARCH_ROUND_TRIP_COST_BPS = 10.0;
 
+    public static String decisionTimeframe(String pattern) {
+        return pattern != null && (Set.of("ict-sweep-fvg-1m", "opening-momentum-1m",
+                "opening-momentum-retest-1m").contains(pattern)
+                || pattern.startsWith("liquidity-sweep-1m-")) ? "1m" : "5m";
+    }
+
     public BacktestRun(LocalDate start, LocalDate end) { this(start,end,null,Set.of(),390,2.0); }
     public BacktestRun(LocalDate start, LocalDate end, String pattern, Set<String> filters) {
         this(start,end,pattern,filters,390,2.0);

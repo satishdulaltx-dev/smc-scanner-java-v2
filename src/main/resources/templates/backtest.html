@@ -1032,7 +1032,7 @@ function renderSingle(d) {
             : d.research_verdict === 'REJECTED' ? 'var(--red)' : 'var(--yellow)';
         note.style.borderColor = verdictColor;
         note.style.color = verdictColor;
-        note.textContent = `Experiment: ${d.pattern} · ${d.decision_timeframe || '5m'} decisions · ${d.exit_style} · target: ${Number(d.target_r).toFixed(1)}R · max hold: ${d.max_hold_minutes}m · execution friction: ${(Number(d.round_trip_cost_bps) / 100).toFixed(2)}% round trip · optional filter: ${d.filters || 'none'} · ${d.start_date} to ${d.end_date}. `
+        note.textContent = `Experiment: ${d.pattern} · ${d.decision_timeframe || '5m'} decisions · ${d.exit_style} · target: ${Number(d.target_r).toFixed(1)}R · max hold: ${d.max_hold_minutes}m · assumed execution cost: ${(Number(d.round_trip_cost_bps) / 100).toFixed(2)}% round trip (not measured from quotes) · optional filter: ${d.filters || 'none'} · ${d.start_date} to ${d.end_date}. `
             + (d.error ? 'Run incomplete; do not interpret zero trades as a strategy result.'
                 : `${verdictLabel}: ${d.research_explanation} Mean ${Number(d.mean_r).toFixed(3)}R/trade; 95% range ${Number(d.mean_r_ci_low).toFixed(3)}R to ${Number(d.mean_r_ci_high).toFixed(3)}R; profit factor ${Number(d.profit_factor).toFixed(2)}; positive months ${d.positive_months}/${d.active_months}. Options estimates are excluded.`);
     }

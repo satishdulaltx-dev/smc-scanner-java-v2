@@ -22,6 +22,14 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class BacktestIntegrityTest {
     @Test
+    void reportedTimeframeMatchesTheReplayForEveryMinutePattern() {
+        for (String pattern : BacktestRun.PATTERNS) {
+            boolean minute = pattern.contains("-1m");
+            assertEquals(minute ? "1m" : "5m", BacktestRun.decisionTimeframe(pattern), pattern);
+        }
+        assertEquals("5m",BacktestRun.decisionTimeframe(null));
+    }
+    @Test
     void historicalSessionReservationIsVisibleAndReleased() {
         PolygonClient client = new PolygonClient(new ScannerConfig(), new DataCache());
         assertFalse(client.isHistoricalSessionActive());
@@ -128,6 +136,27 @@ class BacktestIntegrityTest {
         assertEquals(-0.05, BacktestService.netResearchPnlPct(0.0));
         assertFalse(BacktestService.researchRiskSupportsCosts(100,99.7));
         assertTrue(BacktestService.researchRiskSupportsCosts(100,99.5));
+    }
+
+    @Test
+    void researchKeepsFractionalBasisPointsThroughTargetStopAndFriction() throws Exception {
+        var service = new BacktestService(null,null,null,null,null,null,null,null,null,null,
+                null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null);
+        Method method = BacktestService.class.getDeclaredMethod("simulateClassicExit",
+                List.class,double.class,double.class,double.class,String.class,boolean.class,boolean.class);
+        method.setAccessible(true);
+        for (String dir : List.of("long","short")) {
+            double sign=dir.equals("long")?1:-1;
+            double stop=100-sign*0.01234, target=100+sign*0.02468;
+            var winning=List.of(bar(at("2026-06-01T10:00"),100,
+                    dir.equals("long")?100.03:100.001,dir.equals("long")?99.999:99.97,100));
+            Object win=method.invoke(service,winning,100.0,stop,target,dir,false,false);
+            assertEquals(0.02468,(double)value(win,"pnlPct"),1e-10);
+            assertEquals(-0.02532,BacktestService.netResearchPnlPct((double)value(win,"pnlPct")),1e-10);
+            var losing=List.of(bar(at("2026-06-01T10:00"),100,100.02,99.98,100));
+            Object loss=method.invoke(service,losing,100.0,stop,target,dir,false,false);
+            assertEquals(-0.01234,(double)value(loss,"pnlPct"),1e-10);
+        }
     }
 
     @Test

@@ -346,9 +346,7 @@ public class BacktestService {
         Map<String, java.util.ArrayDeque<Boolean>> btOutcomes = new HashMap<>();
 
         List<TradeResult> trades = new ArrayList<>();
-        boolean oneMinuteResearch = run.research && (Set.of("ict-sweep-fvg-1m", "opening-momentum-1m",
-                "opening-momentum-retest-1m").contains(run.pattern)
-                || run.pattern.startsWith("liquidity-sweep-1m-"));
+        boolean oneMinuteResearch = run.research && "1m".equals(BacktestRun.decisionTimeframe(run.pattern));
         Map<LocalDate,List<OHLCV>> decisionBarsByDate = oneMinuteResearch ? byDate1m : byDate;
         List<LocalDate> dates = new ArrayList<>(decisionBarsByDate.keySet());
 
@@ -586,8 +584,8 @@ public class BacktestService {
                     // Target is the only variable in target-size experiments; initial risk remains fixed.
                     double target = researchTarget(fill,stop,candidate.getDirection(),run.targetR);
                     Map<BacktestExitStyle,ExitResult> exits = new EnumMap<>(BacktestExitStyle.class);
-                    exits.put(BacktestExitStyle.FIXED_R,withResearchExitFriction(simulateClassicExit(forward,fill,stop,target,candidate.getDirection(),false)));
-                    exits.put(BacktestExitStyle.CLASSIC,withResearchExitFriction(simulateClassicExit(forward,fill,stop,target,candidate.getDirection())));
+                    exits.put(BacktestExitStyle.FIXED_R,withResearchExitFriction(simulateClassicExit(forward,fill,stop,target,candidate.getDirection(),false,false)));
+                    exits.put(BacktestExitStyle.CLASSIC,withResearchExitFriction(simulateClassicExit(forward,fill,stop,target,candidate.getDirection(),true,false)));
                     exits.put(BacktestExitStyle.HYBRID,withResearchExitFriction(simulateHybridExit(completedBars(byDate1m.getOrDefault(date,List.of()),1,decisionMs),forward,fill,stop,target,candidate.getDirection())));
                     double experimentalTarget = fill + ("long".equals(candidate.getDirection()) ? 3 : -3) * Math.abs(fill-stop);
                     exits.put(BacktestExitStyle.TRAIL_3R,withResearchExitFriction(simulateHybridExit(completedBars(byDate1m.getOrDefault(date,List.of()),1,decisionMs),forward,fill,stop,experimentalTarget,candidate.getDirection())));
@@ -1559,7 +1557,7 @@ public class BacktestService {
     }
     static double netResearchPnlPct(double grossPnlPct) {
         // Entry is already filled 5 BPS adversely. Charge another 5 BPS on exit.
-        return Math.round((grossPnlPct - BacktestRun.RESEARCH_ROUND_TRIP_COST_BPS / 2.0 / 100.0) * 100.0) / 100.0;
+        return grossPnlPct - BacktestRun.RESEARCH_ROUND_TRIP_COST_BPS / 2.0 / 100.0;
     }
     static boolean researchRiskSupportsCosts(double entry,double stop) {
         if (entry<=0) return false;
@@ -1739,6 +1737,12 @@ public class BacktestService {
 
     private ExitResult simulateClassicExit(List<OHLCV> fwdBars, double entry, double sl, double tp,
                                           String dir, boolean useBreakeven) {
+        return simulateClassicExit(fwdBars,entry,sl,tp,dir,useBreakeven,true);
+    }
+
+    // Research risk multiples must retain sub-basis-point P&L precision.
+    private ExitResult simulateClassicExit(List<OHLCV> fwdBars, double entry, double sl, double tp,
+                                          String dir, boolean useBreakeven, boolean roundLegacyPnl) {
         String outcome = "EXPIRED";
         String exitTime = null;
         double pnlPct = 0.0;
@@ -1751,7 +1755,7 @@ public class BacktestService {
             double activeSl = beActive ? entry : sl;
             if (("long".equals(dir) && fb.getOpen() <= activeSl)
                     || ("short".equals(dir) && fb.getOpen() >= activeSl)) {
-                pnlPct = round2(("long".equals(dir) ? fb.getOpen() - entry : entry - fb.getOpen()) / entry * 100);
+                pnlPct = classicPnl(roundLegacyPnl, ("long".equals(dir) ? fb.getOpen() - entry : entry - fb.getOpen()) / entry * 100);
                 outcome = pnlPct == 0 ? "BE_STOP" : "LOSS";
                 exitTime = toDateTime(fb.getTimestamp());
                 break;
@@ -1762,11 +1766,11 @@ public class BacktestService {
             // bar's favorable extreme to move it. This is deterministic and
             // conservative instead of turning same-bar losses into breakevens.
             if ("long".equals(dir)) {
-                if (lo <= activeSl) { outcome = beActive ? "BE_STOP" : "LOSS"; exitTime = toDateTime(fb.getTimestamp()); pnlPct = round2((activeSl - entry) / entry * 100); break; }
-                if (hi >= tp)       { outcome = "WIN"; exitTime = toDateTime(fb.getTimestamp()); pnlPct = round2((tp - entry) / entry * 100); break; }
+                if (lo <= activeSl) { outcome = beActive ? "BE_STOP" : "LOSS"; exitTime = toDateTime(fb.getTimestamp()); pnlPct = classicPnl(roundLegacyPnl, (activeSl - entry) / entry * 100); break; }
+                if (hi >= tp)       { outcome = "WIN"; exitTime = toDateTime(fb.getTimestamp()); pnlPct = classicPnl(roundLegacyPnl, (tp - entry) / entry * 100); break; }
             } else {
-                if (hi >= activeSl) { outcome = beActive ? "BE_STOP" : "LOSS"; exitTime = toDateTime(fb.getTimestamp()); pnlPct = round2((entry - activeSl) / entry * 100); break; }
-                if (lo <= tp)       { outcome = "WIN"; exitTime = toDateTime(fb.getTimestamp()); pnlPct = round2((entry - tp) / entry * 100); break; }
+                if (hi >= activeSl) { outcome = beActive ? "BE_STOP" : "LOSS"; exitTime = toDateTime(fb.getTimestamp()); pnlPct = classicPnl(roundLegacyPnl, (entry - activeSl) / entry * 100); break; }
+                if (lo <= tp)       { outcome = "WIN"; exitTime = toDateTime(fb.getTimestamp()); pnlPct = classicPnl(roundLegacyPnl, (entry - tp) / entry * 100); break; }
             }
 
             if (useBreakeven && !beActive) {
@@ -1781,12 +1785,16 @@ public class BacktestService {
             double exitPrice = lastFwd.getClose();
             exitTime = toDateTime(lastFwd.getTimestamp());
             pnlPct = "long".equals(dir)
-                    ? round2((exitPrice - entry) / entry * 100)
-                    : round2((entry - exitPrice) / entry * 100);
+                    ? classicPnl(roundLegacyPnl, (exitPrice - entry) / entry * 100)
+                    : classicPnl(roundLegacyPnl, (entry - exitPrice) / entry * 100);
             outcome = "TIMEOUT";
         }
 
         return new ExitResult(outcome, exitTime, pnlPct);
+    }
+
+    private static double classicPnl(boolean roundLegacyPnl, double pnl) {
+        return roundLegacyPnl ? Math.round(pnl * 100.0) / 100.0 : pnl;
     }
 
     private ExitResult simulateLiveParityExit(List<OHLCV> entryWindow, List<OHLCV> fwdBars,

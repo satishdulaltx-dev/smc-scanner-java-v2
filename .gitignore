@@ -42,3 +42,5 @@ scripts/
 scripts/*
 !scripts/run_backtest_experiments.py
 !scripts/compare_candidate_ledger.py
+!scripts/audit_execution_costs.py
+!scripts/test_audit_execution_costs.py

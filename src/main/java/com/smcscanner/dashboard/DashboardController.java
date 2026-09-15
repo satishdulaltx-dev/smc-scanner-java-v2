@@ -687,8 +687,9 @@ public class DashboardController {
                 resp.put("filters", filters);
                 resp.put("max_hold_minutes", holdMinutes);
                 resp.put("target_r", targetR);
-                resp.put("decision_timeframe", Set.of("ict-sweep-fvg-1m", "opening-momentum-1m").contains(pattern) ? "1m" : "5m");
+                resp.put("decision_timeframe", BacktestRun.decisionTimeframe(pattern));
                 resp.put("round_trip_cost_bps", BacktestRun.RESEARCH_ROUND_TRIP_COST_BPS);
+                resp.put("execution_costs_measured", false);
                 ResearchStatistics.Summary evidence = ResearchStatistics.summarize(result.trades);
                 resp.put("mean_r", evidence.meanR());
                 resp.put("total_r", evidence.totalR());
