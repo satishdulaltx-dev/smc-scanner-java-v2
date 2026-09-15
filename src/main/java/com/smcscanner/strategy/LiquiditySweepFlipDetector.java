@@ -205,6 +205,47 @@ public class LiquiditySweepFlipDetector {
         return List.of();
     }
 
+    /**
+     * Research-only minimal sweep/reclaim rule. The latest completed one-minute
+     * candle must run a prior-window extreme by a declared ATR depth and close
+     * back through that level in the reversal direction. No FVG, bias, or clock
+     * filter is embedded; the caller enters at the next minute's open.
+     */
+    public List<TradeSetup> detectOneMinuteSweepResearch(List<OHLCV> bars,String ticker,
+                                                          int lookback,double minimumDepthAtr) {
+        if (bars==null || lookback<5 || minimumDepthAtr<0) return List.of();
+        LocalDate date=Instant.ofEpochMilli(bars.get(bars.size()-1).getTimestamp()).atZone(ET).toLocalDate();
+        List<OHLCV> session=bars.stream().filter(bar -> {
+            var at=Instant.ofEpochMilli(bar.getTimestamp()).atZone(ET);
+            LocalTime time=at.toLocalTime();
+            return at.toLocalDate().equals(date) && !time.isBefore(LocalTime.of(9,30))
+                    && time.isBefore(LocalTime.of(16,0));
+        }).toList();
+        if (session.size()<=lookback) return List.of();
+        OHLCV sweep=session.get(session.size()-1);
+        List<OHLCV> pool=session.subList(session.size()-1-lookback,session.size()-1);
+        double priorHigh=pool.stream().mapToDouble(OHLCV::getHigh).max().orElseThrow();
+        double priorLow=pool.stream().mapToDouble(OHLCV::getLow).min().orElseThrow();
+        double atr=Math.max(computeAtr(session),sweep.getClose()*0.0002);
+        boolean bull=sweep.getLow()<priorLow-minimumDepthAtr*atr
+                && sweep.getClose()>priorLow && sweep.getClose()>sweep.getOpen();
+        boolean bear=sweep.getHigh()>priorHigh+minimumDepthAtr*atr
+                && sweep.getClose()<priorHigh && sweep.getClose()<sweep.getOpen();
+        if (bull==bear) return List.of();
+        String direction=bull?"long":"short";
+        double entry=r4(sweep.getClose());
+        double stop=r4(bull?sweep.getLow()-atr*SL_BUFFER:sweep.getHigh()+atr*SL_BUFFER);
+        double risk=Math.abs(entry-stop);
+        if (risk<=0 || risk>atr*3.0) return List.of();
+        double target=r4(entry+(bull?2:-2)*risk);
+        double depth=(bull?priorLow-sweep.getLow():sweep.getHigh()-priorHigh)/atr;
+        String factors=String.format(
+                "liquidity-sweep-1m-%s | lookback=%d | level=%.2f | depth=%.2fATR | reclaim=close",
+                direction,lookback,bull?priorLow:priorHigh,depth);
+        int confidence=Math.min(90,72+(depth>=0.5?8:depth>=0.2?4:0));
+        return List.of(build(ticker,direction,entry,stop,target,confidence,atr,sweep,factors));
+    }
+
     private int baseConf(OHLCV bar, double avgVol, int age) {
         int c = 72;
         if (bar.getVolume() > avgVol * 2.0) c += 10;

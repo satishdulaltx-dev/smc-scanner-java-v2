@@ -27,7 +27,10 @@ public final class BacktestRun {
             "vwap-reversion-long", "vwap-reversion-short",
             "breakout", "keylevel", "vsqueeze", "or-vwap", "idiv",
             "gap-continuation", "gap-trap", "gap-fill",
-            "sweep-flip", "ict-sweep-fvg-1m", "opening-momentum-1m", "opening-momentum-retest-1m",
+            "sweep-flip", "ict-sweep-fvg-1m",
+            "liquidity-sweep-1m-20-soft", "liquidity-sweep-1m-20-deep",
+            "liquidity-sweep-1m-60-soft", "liquidity-sweep-1m-60-deep",
+            "opening-momentum-1m", "opening-momentum-retest-1m",
             "choch-primary", "pdh-pdl");
     public static final Set<String> FILTERS = Set.of("spy", "15m", "volume", "regime", "time", "cost", "news");
     public static final Set<Integer> HOLD_MINUTES = Set.of(15, 30, 60, 120, 390);

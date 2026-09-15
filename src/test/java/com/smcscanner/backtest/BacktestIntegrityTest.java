@@ -8,6 +8,8 @@ import com.smcscanner.model.OHLCV;
 import com.smcscanner.model.TradeSetup;
 import com.smcscanner.news.HistoricalNewsArticle;
 import com.smcscanner.strategy.GapDetector;
+import com.smcscanner.strategy.LiquiditySweepFlipDetector;
+import com.smcscanner.smc.StructureAnalyzer;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Method;
@@ -40,7 +42,8 @@ class BacktestIntegrityTest {
                 "scalp-spy", "scalp-chase", "vwap", "vwap-cont-long", "vwap-cont-short",
                 "vwap-reversion-long", "vwap-reversion-short", "breakout", "keylevel", "vsqueeze", "or-vwap", "idiv",
                 "gap-continuation", "gap-trap", "gap-fill",
-                "sweep-flip", "ict-sweep-fvg-1m", "opening-momentum-1m", "opening-momentum-retest-1m",
+                "sweep-flip", "ict-sweep-fvg-1m", "liquidity-sweep-1m-20-soft", "liquidity-sweep-1m-20-deep",
+                "liquidity-sweep-1m-60-soft", "liquidity-sweep-1m-60-deep", "opening-momentum-1m", "opening-momentum-retest-1m",
                 "choch-primary", "pdh-pdl")) {
             BacktestRun run = new BacktestRun(start, end, pattern, Set.of(), 30);
             assertEquals(pattern, run.pattern);
@@ -76,6 +79,25 @@ class BacktestIntegrityTest {
         assertTrue(BacktestService.researchGapTypeMatches("gap-trap",GapDetector.GapType.GAP_TRAP));
         assertTrue(BacktestService.researchGapTypeMatches("gap-fill",GapDetector.GapType.GAP_FILL));
         assertFalse(BacktestService.researchGapTypeMatches("gap-trap",GapDetector.GapType.GAP_AND_GO));
+    }
+
+    @Test
+    void oneMinuteSweepDepthIsAnExplicitResearchDial() {
+        var detector=new LiquiditySweepFlipDetector(new StructureAnalyzer());
+        List<OHLCV> bars=new java.util.ArrayList<>();
+        long open=at("2026-06-01T09:30");
+        for (int i=0;i<20;i++) bars.add(OHLCV.builder().timestamp(open+i*60_000L)
+                .open(100).high(100.10).low(99.90).close(100).volume(100).build());
+        bars.add(OHLCV.builder().timestamp(open+20*60_000L)
+                .open(99.89).high(100.02).low(99.88).close(99.95).volume(200).build());
+
+        var shallow=detector.detectOneMinuteSweepResearch(bars,"TEST",20,0.05);
+        var deep=detector.detectOneMinuteSweepResearch(bars,"TEST",20,0.20);
+
+        assertEquals(1,shallow.size());
+        assertEquals("long",shallow.get(0).getDirection());
+        assertTrue(shallow.get(0).getFactorBreakdown().contains("lookback=20"));
+        assertTrue(deep.isEmpty());
     }
 
     @Test
