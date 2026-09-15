@@ -15,7 +15,7 @@ import time
 from collections import defaultdict
 from datetime import datetime, time as daytime
 from urllib.error import HTTPError
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
 from urllib.request import Request, urlopen
 from zoneinfo import ZoneInfo
 
@@ -32,15 +32,17 @@ class Provider:
         parsed = urlparse(url)
         if parsed.scheme != "https" or parsed.hostname != "api.polygon.io":
             raise ValueError("Unexpected provider destination")
-        for attempt in range(6):
+        for attempt in range(10):
             time.sleep(max(0, 12.5 - (time.monotonic() - self.last)))
             self.last = time.monotonic()
             try:
                 with urlopen(Request(url, headers={"Authorization": "Bearer " + self.key}), timeout=30) as r:
                     return json.load(r)
             except HTTPError as e:
-                if (e.code == 429 or e.code >= 500) and attempt < 5:
-                    time.sleep(15 * (attempt + 1))
+                if (e.code == 429 or e.code >= 500) and attempt < 9:
+                    delay = min(60, 30 * (attempt + 1))
+                    print(f"Provider HTTP {e.code}; retry {attempt + 1} in {delay}s", flush=True)
+                    time.sleep(delay)
                     continue
                 raise RuntimeError(f"Provider HTTP {e.code}") from None
         raise RuntimeError("Provider retries exhausted")
@@ -51,6 +53,12 @@ class Provider:
             return json.loads(path.read_text())
         url = f"https://api.polygon.io/v2/aggs/ticker/{ticker}/range/1/minute/{start}/{end}?adjusted=true&sort=asc&limit=50000"
         rows, seen = [], set()
+        partial = path.with_suffix(".partial.json")
+        if partial.exists():
+            checkpoint = json.loads(partial.read_text())
+            rows, url, seen = checkpoint["rows"], checkpoint["next_url"], set(checkpoint["seen"])
+            print(f"Resuming {ticker} after {len(rows)} saved bars", flush=True)
+        cache.mkdir(parents=True, exist_ok=True)
         while url:
             if url in seen or len(seen) > 100:
                 raise ValueError("Incomplete provider pagination")
@@ -61,6 +69,16 @@ class Provider:
             rows.extend(page.get("results", []))
             print(f"Loaded {ticker}: page {len(seen)}, {len(rows)} bars", flush=True)
             url = page.get("next_url")
+            if url:
+                # Never persist a provider-supplied credential query parameter.
+                parsed = urlparse(url)
+                safe_query = [(k, v) for k, v in parse_qsl(parsed.query)
+                              if k.lower() not in {"apikey", "api_key", "token", "access_token"}]
+                url = urlunparse(parsed._replace(query=urlencode(safe_query)))
+            checkpoint = {"rows": rows, "next_url": url, "seen": sorted(seen)}
+            temp = partial.with_suffix(".tmp")
+            temp.write_text(json.dumps(checkpoint, separators=(",", ":")))
+            temp.replace(partial)
         if not rows:
             raise ValueError("No historical bars")
         cache.mkdir(parents=True, exist_ok=True)

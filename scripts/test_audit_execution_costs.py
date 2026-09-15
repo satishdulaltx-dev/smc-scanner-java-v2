@@ -1,8 +1,28 @@
 import unittest
-from audit_execution_costs import replay, session_bars
+import json
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import Mock
+from audit_execution_costs import Provider, replay, session_bars
 
 
 class ExecutionReplayTest(unittest.TestCase):
+    def test_interrupted_download_resumes_and_never_saves_credentials(self):
+        with TemporaryDirectory() as folder:
+            provider = Provider("secret-marker")
+            provider.get = Mock(side_effect=[
+                {"results": [{"t": 1}], "next_url": "https://api.polygon.io/next?cursor=abc&apiKey=secret-marker"},
+                RuntimeError("Provider HTTP 429")])
+            with self.assertRaises(RuntimeError):
+                provider.bars("TEST", "2026-06-01", "2026-06-02", Path(folder))
+            partial = next(Path(folder).glob("*.partial.json"))
+            self.assertNotIn("secret-marker", partial.read_text())
+            self.assertEqual(1, len(json.loads(partial.read_text())["rows"]))
+            provider.get = Mock(return_value={"results": [{"t": 2}]})
+            rows = provider.bars("TEST", "2026-06-01", "2026-06-02", Path(folder))
+            self.assertEqual([{"t": 1}, {"t": 2}], rows)
+            provider.get.assert_called_once_with("https://api.polygon.io/next?cursor=abc")
+
     def test_cost_changes_the_target_path_not_just_final_profit(self):
         candidate = {"direction": "long", "sl": 99.9, "target_r": 1.0}
         bars = [{"t": 1, "o": 100, "h": 100.15, "l": 99.95, "c": 100.01}]

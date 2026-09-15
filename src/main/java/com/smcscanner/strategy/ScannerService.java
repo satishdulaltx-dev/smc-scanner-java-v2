@@ -173,6 +173,12 @@ public class ScannerService {
             }
             if (bars.size() < 20) { setTs(ticker,"idle",null,0,"Waiting for bars..."); return; }
 
+            if (!isC && !com.smcscanner.data.MarketDataFreshness.isFreshCompletedBar(
+                    bars.get(bars.size()-1).getTimestamp(), System.currentTimeMillis(), 5L*60_000L)) {
+                setTs(ticker,"idle",null,0,"Price data is delayed — waiting for current bars");
+                return;
+            }
+
             // ── Market regime detection (live: 15-min cache per ticker) ───────
             // LOW_LIQUIDITY (RVOL < 0.8) gates out the scan entirely — signals on
             // thin volume are noise. Other regimes feed regimeStratAdj later.
