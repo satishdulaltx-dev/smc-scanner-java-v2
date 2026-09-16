@@ -53,3 +53,5 @@ scripts/*
 
 !scripts/historical-zone-study-design.json
 !scripts/historical-zone-options-design.json
+
+!scripts/ScalpLogicAudit.java

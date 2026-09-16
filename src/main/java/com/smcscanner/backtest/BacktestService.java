@@ -425,7 +425,7 @@ public class BacktestService {
                                   || "volflow".equals(stratType);
             // Minimum bars before we start checking each strategy
             int minBars = "breakout".equals(stratType)  ? 8
-                        : "scalp".equals(stratType)     ? 22
+                        : "scalp".equals(stratType)     ? ScalpMomentumDetector.DEFAULT_WARMUP_BARS
                         : "vwap".equals(stratType)      ? 12
                         : "keylevel".equals(stratType)  ? 20
                         : "gap".equals(stratType)       ? 20
@@ -504,18 +504,18 @@ public class BacktestService {
                     List<OHLCV> spy = completedBars(spy5mByDate.getOrDefault(date,List.of()),5,decisionMs).stream()
                             .filter(this::isRegularSessionBar).toList();
                     bSetups = switch(run.pattern) {
-                        case "scalp" -> scalpDetector.detect(window,spy,ticker,dailyAtr,true);
-                        case "scalp-early" -> scalpDetector.detectEarlyResearch(window,spy,ticker,dailyAtr);
-                        case "scalp-core" -> scalpDetector.detectResearchLayer(window,spy,ticker,dailyAtr,"core");
-                        case "scalp-rvol" -> scalpDetector.detectResearchLayer(window,spy,ticker,dailyAtr,"rvol");
-                        case "scalp-tod-rvol" -> scalpDetector.detectTimeOfDayRvolResearch(window,spy,ticker,dailyAtr,
+                        case "scalp" -> scalpDetector.detect(priorSessionWindow,spy,ticker,dailyAtr,true);
+                        case "scalp-early" -> scalpDetector.detectEarlyResearch(priorSessionWindow,spy,ticker,dailyAtr);
+                        case "scalp-core" -> scalpDetector.detectResearchLayer(priorSessionWindow,spy,ticker,dailyAtr,"core");
+                        case "scalp-rvol" -> scalpDetector.detectResearchLayer(priorSessionWindow,spy,ticker,dailyAtr,"rvol");
+                        case "scalp-tod-rvol" -> scalpDetector.detectTimeOfDayRvolResearch(priorSessionWindow,spy,ticker,dailyAtr,
                                 priorSlotVolume.getOrDefault(Instant.ofEpochMilli(window.get(window.size()-1).getTimestamp())
                                         .atZone(ET).toLocalTime(),0.0));
                         case "scalp-breakout" -> scalpDetector.detectBreakoutResearch(window,ticker,dailyAtr);
                         case "scalp-breakout-retest" -> scalpDetector.detectBreakoutRetestResearch(window,ticker,dailyAtr);
-                        case "scalp-structure" -> scalpDetector.detectResearchLayer(window,spy,ticker,dailyAtr,"structure");
-                        case "scalp-spy" -> scalpDetector.detectResearchLayer(window,spy,ticker,dailyAtr,"spy");
-                        case "scalp-chase" -> scalpDetector.detectResearchLayer(window,spy,ticker,dailyAtr,"chase");
+                        case "scalp-structure" -> scalpDetector.detectResearchLayer(priorSessionWindow,spy,ticker,dailyAtr,"structure");
+                        case "scalp-spy" -> scalpDetector.detectResearchLayer(priorSessionWindow,spy,ticker,dailyAtr,"spy");
+                        case "scalp-chase" -> scalpDetector.detectResearchLayer(priorSessionWindow,spy,ticker,dailyAtr,"chase");
                         case "vwap" -> vwapDetector.detect(window,ticker,dailyAtr,true,vwapLongOnly);
                         case "vwap-cont-long" -> researchSubtype(
                                 vwapDetector.detect(window,ticker,dailyAtr,true,vwapLongOnly), "vwap-continuation-long");
@@ -639,7 +639,7 @@ public class BacktestService {
                             .filter(this::isRegularSessionBar)
                             .filter(b -> b.getTimestamp() <= barEpochMs)
                             .collect(Collectors.toList());
-                    bSetups = scalpDetector.detect(window, spySlice, ticker, dailyAtr, true);
+                    bSetups = scalpDetector.detect(priorSessionWindow, spySlice, ticker, dailyAtr, true);
                 } else if ("vwap".equals(effectiveStrat)) {
                     bSetups = vwapDetector.detect(window, ticker, dailyAtr, true, vwapLongOnly);
                 } else if ("breakout".equals(effectiveStrat)) {
@@ -764,14 +764,14 @@ public class BacktestService {
 
                 // ── Capitulation reversal overlay — mirrors live ScannerService ──
                 // Skip for or-vwap: overlays would fill in wrong-direction trades labeled as or-vwap
-                if (bSetups.isEmpty() && !ticker.startsWith("X:") && !"or-vwap".equals(effectiveStrat)
+                if (mode != BacktestMode.SCALP && bSetups.isEmpty() && !ticker.startsWith("X:") && !"or-vwap".equals(effectiveStrat)
                         && btRegime != MarketRegimeDetector.Regime.VOLATILE) {
                     bSetups = capReversalDetector.detect(window, ticker, dailyAtr);
                 }
 
                 // ── Pattern overlays: sweep-flip, PDH/PDL, CHOCH primary ────────
                 // Mirrors live ScannerService overlay block — fires for all non-crypto tickers.
-                if (bSetups.isEmpty() && !ticker.startsWith("X:") && !"or-vwap".equals(effectiveStrat)
+                if (mode != BacktestMode.SCALP && bSetups.isEmpty() && !ticker.startsWith("X:") && !"or-vwap".equals(effectiveStrat)
                         && !"choch-primary".equals(effectiveStrat)) {
                     java.util.List<TradeSetup> ov = new java.util.ArrayList<>();
                     ov.addAll(sweepFlipDetector.detect(window, ticker, dailyAtr, true));
@@ -803,7 +803,7 @@ public class BacktestService {
                                         .filter(this::isRegularSessionBar)
                                         .filter(b -> b.getTimestamp() <= barEpochMs)
                                         .collect(Collectors.toList());
-                                yield scalpDetector.detect(window, spySlice, ticker, dailyAtr);
+                                yield scalpDetector.detect(priorSessionWindow, spySlice, ticker, dailyAtr, true);
                             }
                             case "smc" -> {
                                 SetupDetector.DetectResult fr = setupDetector.detectSetups(
@@ -821,6 +821,7 @@ public class BacktestService {
                 if (bSetups.isEmpty()) continue;
 
                 TradeSetup setup = bSetups.get(0);
+                boolean structuralScalp="scalp".equals(setup.getVolatility());
 
                 // or-bounce setups (Mode B) are unreliable in crash conditions: VWAP loses
                 // gravity when the stock has declined sharply over multiple days. The VWAP
@@ -847,7 +848,7 @@ public class BacktestService {
                 // regimes (e.g. April 2026 tariff market). Fix: scale TP by same factor
                 // so R:R is preserved. Wider SL + proportionally wider TP = same R:R,
                 // just more room for the trade to develop in choppy conditions.
-                if (btRegime == MarketRegimeDetector.Regime.VOLATILE && !ticker.startsWith("X:")) {
+                if (!structuralScalp && btRegime == MarketRegimeDetector.Regime.VOLATILE && !ticker.startsWith("X:")) {
                     double slFactor = regimeDetector.slExpansionFactor(btRegime);
                     double btEntry  = setup.getEntry();
                     double slDist   = Math.abs(setup.getStopLoss() - btEntry) * slFactor;
@@ -916,17 +917,19 @@ public class BacktestService {
                             pressureService.checkExhaustion(btSessionBarsEx, htfSlice);
                     if (exh.exhausted()) {
                         exhaustionAdj = -10;
-                        double btEntry = setup.getEntry();
-                        double risk    = Math.abs(setup.getStopLoss() - btEntry);
-                        double capTp   = "long".equals(setup.getDirection()) ? btEntry + risk : btEntry - risk;
-                        capTp = Math.round(capTp * 10000.0) / 10000.0;
-                        setup = TradeSetup.builder()
-                                .ticker(setup.getTicker()).direction(setup.getDirection())
-                                .entry(setup.getEntry()).stopLoss(setup.getStopLoss()).takeProfit(capTp)
-                                .confidence(setup.getConfidence()).session(setup.getSession()).volatility(setup.getVolatility())
-                                .atr(setup.getAtr()).hasBos(setup.isHasBos()).hasChoch(setup.isHasChoch())
-                                .fvgTop(setup.getFvgTop()).fvgBottom(setup.getFvgBottom()).timestamp(setup.getTimestamp())
-                                .factorBreakdown(setup.getFactorBreakdown()).build();
+                        if (!structuralScalp) {
+                            double btEntry = setup.getEntry();
+                            double risk    = Math.abs(setup.getStopLoss() - btEntry);
+                            double capTp   = "long".equals(setup.getDirection()) ? btEntry + risk : btEntry - risk;
+                            capTp = Math.round(capTp * 10000.0) / 10000.0;
+                            setup = TradeSetup.builder()
+                                    .ticker(setup.getTicker()).direction(setup.getDirection())
+                                    .entry(setup.getEntry()).stopLoss(setup.getStopLoss()).takeProfit(capTp)
+                                    .confidence(setup.getConfidence()).session(setup.getSession()).volatility(setup.getVolatility())
+                                    .atr(setup.getAtr()).hasBos(setup.isHasBos()).hasChoch(setup.isHasChoch())
+                                    .fvgTop(setup.getFvgTop()).fvgBottom(setup.getFvgBottom()).timestamp(setup.getTimestamp())
+                                    .factorBreakdown(setup.getFactorBreakdown()).build();
+                        }
                     }
                 }
 
@@ -984,7 +987,7 @@ public class BacktestService {
                 }
 
                 // ── RS continuous TP multiplier [0.7 → 1.5] — mirrors live ──
-                if (bp.isIntradayRsGate() && !ticker.startsWith("X:") && btIntradayRs > 0) {
+                if (!structuralScalp && bp.isIntradayRsGate() && !ticker.startsWith("X:") && btIntradayRs > 0) {
                     double rsMultiplier = 1.0;
                     if      (btIntradayRs > 1.3) rsMultiplier = Math.min(1.5, btIntradayRs);
                     else if (btIntradayRs < 0.8) rsMultiplier = Math.max(0.7, btIntradayRs);
@@ -1057,7 +1060,7 @@ public class BacktestService {
                 // News-aligned TP extension: widen TP to 3:1 R:R (but respect ticker tpRrRatio)
                 // If profile sets tpRrRatio (e.g. JPM=1.0), don't override — the low ratio is intentional
                 boolean hasTpOverride = bp.getTpRrRatio() != null;
-                if (sentiment.isAligned(setup.getDirection()) && !ticker.startsWith("X:") && !hasTpOverride) {
+                if (!structuralScalp && sentiment.isAligned(setup.getDirection()) && !ticker.startsWith("X:") && !hasTpOverride) {
                     double risk  = Math.abs(setup.getEntry() - setup.getStopLoss());
                     double tp3x  = "long".equals(setup.getDirection())
                             ? Math.round((setup.getEntry() + risk * 3.0) * 10000.0) / 10000.0
@@ -1073,7 +1076,7 @@ public class BacktestService {
 
                 // ── Fractal Anchor — mirrors live ScannerService ──────────────
                 // 15m SQUEEZE → cap TP to 1:1. Uses slice15Ref computed above.
-                if (!ticker.startsWith("X:") && !slice15Ref.isEmpty()
+                if (!structuralScalp && !ticker.startsWith("X:") && !slice15Ref.isEmpty()
                         && regimeDetector.detectSqueeze(slice15Ref)) {
                     double fa_entry = setup.getEntry();
                     double fa_risk  = Math.abs(setup.getStopLoss() - fa_entry);

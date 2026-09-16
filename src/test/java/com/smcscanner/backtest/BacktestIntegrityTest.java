@@ -384,7 +384,7 @@ class BacktestIntegrityTest {
     }
 
     @Test
-    void earlyScalpCanEvaluateMorningSignalWithoutChangingBaselineWarmup() {
+    void earlyScalpDoesNotInventTargetBeyondAnAlreadyConsumedBand() {
         var bars = new java.util.ArrayList<OHLCV>();
         for (int i=0;i<7;i++) bars.add(bar(at("2026-06-01T09:30")+i*300_000L,
                 100+i*.1,101.1,99.8,100+i*.1));
@@ -393,7 +393,9 @@ class BacktestIntegrityTest {
         var detector=new com.smcscanner.strategy.ScalpMomentumDetector(null,
                 new com.smcscanner.indicator.VolumeProfileCalculator(),null);
         assertTrue(detector.detect(bars,List.of(),"TEST",2,true).isEmpty());
-        assertFalse(detector.detectEarlyResearch(bars,List.of(),"TEST",2).isEmpty());
+        // This used to pass only because the detector manufactured a 1.5R target
+        // beyond the observed VWAP band. Earlier warm-up does not legitimize it.
+        assertTrue(detector.detectEarlyResearch(bars,List.of(),"TEST",2).isEmpty());
         assertTrue(detector.detectTimeOfDayRvolResearch(bars,List.of(),"TEST",2,0).isEmpty());
         assertTrue(detector.detect(bars,List.of(),"TEST",2,true).isEmpty());
     }

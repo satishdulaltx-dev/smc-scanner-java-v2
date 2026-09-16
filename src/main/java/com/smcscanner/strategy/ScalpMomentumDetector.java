@@ -26,10 +26,10 @@ import java.util.Set;
  *  3. TRIGGER — rejection candle at that level with volume surge
  *
  * Dead zone 11:30–13:30 ET is always skipped — historically low follow-through.
- * TP targets the next VWAP SD band, giving natural 1.5–2:1 R/R on most setups.
+ * TP respects the next observed band/obstacle; insufficient room rejects the setup.
  *
- * Layers 4–7 (Volume Profile, order-flow delta, NBBO, sweep) are carried
- * forward from the prior model and adjustable confidence.
+ * Volume profile adjusts the heuristic score. Live microstructure is informational,
+ * not a calibrated probability or a substitute for the price-structure rules.
  */
 @Service
 public class ScalpMomentumDetector {
@@ -45,6 +45,7 @@ public class ScalpMomentumDetector {
     private static final double LEVEL_TOUCH_ATR = 0.45;
     // Minimum volume multiplier on the rejection bar
     private static final double MIN_VOL_RATIO   = 1.4;
+    public static final int DEFAULT_WARMUP_BARS = 20;
     private static final Set<String> RESEARCH_LAYERS = Set.of("core", "rvol", "structure", "spy", "chase");
     // Reject obvious chase entries after two same-direction expansion bars
 
@@ -68,8 +69,16 @@ public class ScalpMomentumDetector {
     }
 
     public List<TradeSetup> detect(List<OHLCV> bars, List<OHLCV> spyBars, String ticker, double dailyAtr, boolean backtestMode) {
-        return detectInternal(bars,spyBars,ticker,dailyAtr,backtestMode,20,25,
-                Set.of("rvol", "structure", "spy", "chase"));
+        return inspect(bars,spyBars,ticker,dailyAtr,backtestMode).setups();
+    }
+
+    public record Detection(List<TradeSetup> setups, String reason) {}
+
+    public Detection inspect(List<OHLCV> bars,List<OHLCV> spyBars,String ticker,double dailyAtr,boolean historical) {
+        String[] reason = {"Waiting for a completed level rejection"};
+        List<TradeSetup> setups=detectInternal(bars,spyBars,ticker,dailyAtr,historical,DEFAULT_WARMUP_BARS,DEFAULT_WARMUP_BARS,
+                Set.of("rvol", "structure", "spy", "chase"),null, message -> reason[0]=message);
+        return new Detection(setups, setups.isEmpty()?reason[0]:"Confirmed VWAP rejection with structural room");
     }
 
     /** Explicit historical experiment; live callers retain their existing warm-up. */
@@ -364,13 +373,25 @@ public class ScalpMomentumDetector {
     private List<TradeSetup> detectInternal(List<OHLCV> bars,List<OHLCV> spyBars,String ticker,
                                            double dailyAtr,boolean backtestMode,int sessionWarmup,int totalWarmup,
                                            Set<String> requiredLayers,Double volumeRatioOverride) {
+        return detectInternal(bars,spyBars,ticker,dailyAtr,backtestMode,sessionWarmup,totalWarmup,
+                requiredLayers,volumeRatioOverride, message -> {});
+    }
+
+    private List<TradeSetup> detectInternal(List<OHLCV> bars,List<OHLCV> spyBars,String ticker,
+                                           double dailyAtr,boolean backtestMode,int sessionWarmup,int totalWarmup,
+                                           Set<String> requiredLayers,Double volumeRatioOverride,
+                                           java.util.function.Consumer<String> diagnostic) {
         List<TradeSetup> result = new ArrayList<>();
+        diagnostic.accept("Warming up: waiting for completed five-minute bars");
         if (bars == null || bars.size() < totalWarmup) return result;
 
         List<OHLCV> sessionBars = regularSessionBarsForToday(bars);
         if (sessionBars.size() < sessionWarmup) return result;
 
         OHLCV last = sessionBars.get(sessionBars.size() - 1);
+        long decisionMs = last.getTimestamp() + ScalpSetupRules.BAR_MS;
+        diagnostic.accept("Incomplete session data — cannot confirm scalp structure");
+        if (!ScalpSetupRules.contiguousFromOpen(sessionBars,decisionMs)) return result;
 
         // Staleness guard: skipped in backtest — the last bar date is historical by design.
         // Live: last session bar must be from today's wall-clock date (prevents stale scans).
@@ -378,7 +399,8 @@ public class ScalpMomentumDetector {
             return result;
         }
 
-        LocalTime now = Instant.ofEpochMilli(last.getTimestamp()).atZone(ET).toLocalTime();
+        diagnostic.accept("Outside the configured scalp entry window");
+        LocalTime now = Instant.ofEpochMilli(decisionMs).atZone(ET).toLocalTime();
 
         // Active windows: morning (9:35–11:30) and afternoon (13:30–15:30)
         boolean inMorning   = !now.isBefore(SESSION_OPEN)    && now.isBefore(DEAD_ZONE_START);
@@ -396,16 +418,21 @@ public class ScalpMomentumDetector {
 
         // ── VWAP Standard Deviation Bands (session-anchored) ─────────────────
         VwapBands vb = computeVwapBands(sessionBars, n - 1);
-        if (vb == null) return result;
+        VwapBands beforeLast = computeVwapBands(sessionBars, n - 2);
+        VwapBands beforePrev = computeVwapBands(sessionBars, n - 3);
+        diagnostic.accept("Insufficient volume to form VWAP levels");
+        if (vb == null || beforeLast == null || beforePrev == null) return result;
 
         double close  = last.getClose();
         double prevLo = prev.getLow(),  lastLo = last.getLow();
         double prevHi = prev.getHigh(), lastHi = last.getHigh();
 
         // ── SPY context ───────────────────────────────────────────────────────
-        double spyReturn  = intradayReturn(spyBars);
+        List<OHLCV> alignedSpy=ScalpSetupRules.sessionAsOf(spyBars,decisionMs);
+        boolean spyAvailable=ScalpSetupRules.contiguousFromOpen(alignedSpy,decisionMs);
+        double spyReturn  = spyAvailable ? intradayReturn(alignedSpy) : 0;
         double tickReturn = intradayReturn(sessionBars);
-        double rsLead     = tickReturn - spyReturn;
+        double rsLead     = spyAvailable ? tickReturn - spyReturn : 0;
         boolean spyBull   = spyReturn >  0.0015;
         boolean spyBear   = spyReturn < -0.0015;
 
@@ -420,53 +447,47 @@ public class ScalpMomentumDetector {
         boolean bullStructure = isBullStructure(sessionBars, n);
         boolean bearStructure = isBearStructure(sessionBars, n);
 
-        // ── Level detection ───────────────────────────────────────────────────
-        // A "touch" = last or prev bar's wick entered within LEVEL_TOUCH_ATR of the band.
-        // "Rejection" = close is back on the correct side of the band.
+        // Each touch uses the band known BEFORE that candle. A prior candle
+        // needs a subsequent break of its high/low, not merely a close near VWAP.
         double touch = atr * LEVEL_TOUCH_ATR;
-
-        // LONG levels (support): VWAP, VWAP+1SD (extended then pulled back)
-        boolean touchedVwapLong  = (lastLo <= vb.vwap + touch || prevLo <= vb.vwap + touch) && close > vb.vwap;
-        boolean touchedVwap1uLong = (lastLo <= vb.v1u + touch  || prevLo <= vb.v1u + touch)  && close > vb.v1u;
-
-        // SHORT levels (resistance): VWAP, VWAP-1SD
-        boolean touchedVwapShort  = (lastHi >= vb.vwap - touch || prevHi >= vb.vwap - touch) && close < vb.vwap;
-        boolean touchedVwap1dShort = (lastHi >= vb.v1d - touch  || prevHi >= vb.v1d - touch)  && close < vb.v1d;
-
-        // Pick the best level for each side
-        String longLevel; double longTpBand;
-        if (touchedVwapLong) {
-            longLevel = "vwap";  longTpBand = vb.v1u;
-        } else if (touchedVwap1uLong) {
-            longLevel = "vwap+1sd"; longTpBand = vb.v2u;
-        } else {
-            longLevel = null;    longTpBand = 0;
+        ScalpSetupRules.Rejection longTouch=ScalpSetupRules.rejection(sessionBars,beforeLast.vwap,beforePrev.vwap,touch,true);
+        ScalpSetupRules.Rejection shortTouch=ScalpSetupRules.rejection(sessionBars,beforeLast.vwap,beforePrev.vwap,touch,false);
+        String longLevel="vwap", shortLevel="vwap";
+        if (longTouch==null) {
+            longTouch=ScalpSetupRules.rejection(sessionBars,beforeLast.v1u,beforePrev.v1u,touch,true);
+            longLevel="vwap+1sd";
         }
-
-        String shortLevel; double shortTpBand;
-        if (touchedVwapShort) {
-            shortLevel = "vwap";   shortTpBand = vb.v1d;
-        } else if (touchedVwap1dShort) {
-            shortLevel = "vwap-1sd"; shortTpBand = vb.v2d;
-        } else {
-            shortLevel = null;     shortTpBand = 0;
+        if (shortTouch==null) {
+            shortTouch=ScalpSetupRules.rejection(sessionBars,beforeLast.v1d,beforePrev.v1d,touch,false);
+            shortLevel="vwap-1sd";
         }
+        if (longTouch==null) longLevel=null;
+        if (shortTouch==null) shortLevel=null;
+        diagnostic.accept(longTouch==null && shortTouch==null
+                ? "No ordered approach, level touch and confirmed rejection"
+                : "Level touched; waiting for candle, volume, trend or market confirmation");
 
-        // ── Core setup gates ──────────────────────────────────────────────────
-        boolean setupLong = longLevel != null
-                && lastGreen && lastBodyPct >= 0.40 && closeNearHigh
-                && (!(requiredLayers.contains("rvol") || requiredLayers.contains("tod-rvol")) || volRatio >= MIN_VOL_RATIO)
-                && (!requiredLayers.contains("structure") || bullStructure)
-                && (!requiredLayers.contains("chase") || !isLateExpansionChase(sessionBars, n, atr, true))
-                && (!requiredLayers.contains("spy") || (!spyBear && rsLead > -0.002));
-
-        boolean setupShort = shortLevel != null
-                && lastRed && lastBodyPct >= 0.40 && closeNearLow
-                && (!(requiredLayers.contains("rvol") || requiredLayers.contains("tod-rvol")) || volRatio >= MIN_VOL_RATIO)
-                && (!requiredLayers.contains("structure") || bearStructure)
-                && (!requiredLayers.contains("chase") || !isLateExpansionChase(sessionBars, n, atr, false))
-                && (!requiredLayers.contains("spy") || (!spyBull && rsLead < 0.002));
-
+        if (longTouch==null && shortTouch==null) return result;
+        diagnostic.accept("Level touched; confirmation candle is weak or closes away from its extreme");
+        boolean setupLong=longLevel!=null && lastGreen && lastBodyPct>=.40 && closeNearHigh;
+        boolean setupShort=shortLevel!=null && lastRed && lastBodyPct>=.40 && closeNearLow;
+        if (!setupLong && !setupShort) return result;
+        diagnostic.accept("Confirmation volume is below the configured relative-volume threshold");
+        if ((requiredLayers.contains("rvol") || requiredLayers.contains("tod-rvol")) && volRatio<MIN_VOL_RATIO) return result;
+        diagnostic.accept("Confirmation is not aligned with the configured local trend");
+        if (requiredLayers.contains("structure")) {setupLong &= bullStructure; setupShort &= bearStructure;}
+        if (!setupLong && !setupShort) return result;
+        diagnostic.accept("Entry is extended after consecutive expansion candles");
+        if (requiredLayers.contains("chase")) {
+            setupLong &= !isLateExpansionChase(sessionBars,n,atr,true);
+            setupShort &= !isLateExpansionChase(sessionBars,n,atr,false);
+        }
+        if (!setupLong && !setupShort) return result;
+        diagnostic.accept("Completed SPY session context conflicts with the setup");
+        if (requiredLayers.contains("spy") && spyAvailable) {
+            setupLong &= !spyBear && rsLead>-.002;
+            setupShort &= !spyBull && rsLead<.002;
+        }
         if (!setupLong && !setupShort) return result;
 
         // If both somehow trigger (very unlikely), prefer whichever has clearer structure
@@ -478,47 +499,36 @@ public class ScalpMomentumDetector {
         }
 
         String levelName   = isLong ? longLevel  : shortLevel;
-        double tpBand      = isLong ? longTpBand : shortTpBand;
+        ScalpSetupRules.Rejection rejection=isLong?longTouch:shortTouch;
+        VwapBands anchor=rejection.touchIndex()==n-1?beforeLast:beforePrev;
+        double tpBand=isLong ? ("vwap".equals(levelName)?anchor.v1u:anchor.v2u)
+                             : ("vwap".equals(levelName)?anchor.v1d:anchor.v2d);
         String setupType   = "vwap-scalp-" + levelName;
 
-        // ── Entry / SL / TP ───────────────────────────────────────────────────
-        // SL is placed just beyond the CURRENT bar's rejection wick only.
-        // Using prev bar's extreme can produce swing-size SLs on large prior candles.
-        // Max risk guard: skip if stop is more than 1.5× ATR away — not a tight scalp.
-        double entry = round4(close);
-        double stop, tp;
-
-        if (isLong) {
-            double slFallback = round4(lastLo - atr * 0.15);
-            stop = round4(SwingLevelFinder.swingLowSl(sessionBars, entry, atr, 15, slFallback));
-            double risk = Math.abs(entry - stop);
-            if (risk <= 0 || risk > atr * 1.5) return result;
-            if (isLateExpansionChase(sessionBars, n, atr, true) && (tpBand - entry) < risk * 0.8) return result;
-            tp = round4(Math.max(tpBand, entry + risk * 1.5));
-        } else {
-            double slFallback = round4(lastHi + atr * 0.15);
-            stop = round4(SwingLevelFinder.swingHighSl(sessionBars, entry, atr, 15, slFallback));
-            double risk = Math.abs(entry - stop);
-            if (risk <= 0 || risk > atr * 1.5) return result;
-            if (isLateExpansionChase(sessionBars, n, atr, false) && (entry - tpBand) < risk * 0.8) return result;
-            tp = round4(Math.min(tpBand, entry - risk * 1.5));
+        // The stop belongs to the actual rejection, including its prior wick.
+        // Do not replace it with an unrelated pivot or clamp it inside support.
+        double entry=round4(close);
+        double stop=round4(rejection.extreme() + (isLong?-1:1)*atr*.15);
+        double risk=(isLong?1:-1)*(entry-stop);
+        diagnostic.accept("Rejection invalidation is too far away for the configured scalp risk geometry");
+        if (risk<=0 || risk>atr*1.5) return result;
+        double tp=ScalpSetupRules.target(sessionBars,entry,tpBand,isLong);
+        double[] pdhl=prevDayHighLow(bars);
+        if (pdhl!=null) {
+            if (isLong && pdhl[0]>entry) tp=Math.min(tp,pdhl[0]);
+            if (!isLong && pdhl[1]<entry) tp=Math.max(tp,pdhl[1]);
         }
-
-        // Options viability gate: underlying must move enough for options premium to be recoverable.
-        // TP < 0.35% or SL < 0.12% on a $300+ stock = options R:R structurally negative after spread.
-        double tpMovePct = Math.abs(tp   - entry) / entry;
-        double slMovePct = Math.abs(stop - entry) / entry;
-        if (tpMovePct < 0.0035 || slMovePct < 0.0012) {
-            log.debug("{} scalp filtered — TP {}% SL {}% too tight for options (need TP>=0.35% SL>=0.12%)",
-                    ticker, String.format("%.2f", tpMovePct * 100), String.format("%.2f", slMovePct * 100));
-            return result;
-        }
+        tp=round4(tp);
+        diagnostic.accept("Not enough room to the next band or resistance/support for 1.5R");
+        if (!ScalpSetupRules.validRoom(entry,stop,tp,isLong,1.5)) return result;
+        // Option affordability/execution cannot be inferred from fixed stock-move
+        // percentages. The actual contract quote checks run separately.
 
         // ── Base confidence ───────────────────────────────────────────────────
         int confidence = 72;
         if (volRatio >= 2.0)             confidence += 5;
         else if (volRatio >= 1.6)        confidence += 3;
-        if (Math.abs(rsLead) >= 0.003)   confidence += 4;
+        if ((isLong?rsLead:-rsLead) >= 0.003) confidence += 4;
         if (inMorning)                   confidence += 3; // morning momentum is stronger
         if (isLong  && isBullSwing(sessionBars, n)) confidence += 4;
         if (!isLong && isBearSwing(sessionBars, n)) confidence += 4;
@@ -526,7 +536,7 @@ public class ScalpMomentumDetector {
         if ("vwap".equals(levelName))    confidence += 3;
         // VWAP + key level confluence: when VWAP band and prev-day H/L coincide,
         // institutional orders stack at the same price from two independent reasons.
-        double[] pdhl = prevDayHighLow(bars);
+
         if (pdhl != null) {
             double confluencePct = 0.003; // within 0.3%
             boolean atPdHigh = Math.abs(entry - pdhl[0]) / entry < confluencePct;
@@ -590,7 +600,9 @@ public class ScalpMomentumDetector {
                 " | VP: %s | %s",
                 setupType, volRatio, rsLead * 100.0,
                 vb.vwap, vb.v1d, vb.v1u, vb.v2d, vb.v2u,
-                vpLabel, micro.label());
+                vpLabel, micro.label()) + String.format(
+                " | rejection=%.4f wick=%.4f structural-stop=%.4f observed-target=%.4f | SPY=%s",
+                rejection.level(),rejection.extreme(),stop,tp,spyAvailable?"aligned completed session":"unavailable");
 
         result.add(TradeSetup.builder()
                 .ticker(ticker)
@@ -774,14 +786,22 @@ public class ScalpMomentumDetector {
         LocalDate today = Instant.ofEpochMilli(bars.get(bars.size() - 1).getTimestamp()).atZone(ET).toLocalDate();
         double ph = -1, pl = Double.MAX_VALUE;
         LocalDate prevDay = null;
+        List<OHLCV> previous=new ArrayList<>();
         for (int i = bars.size() - 1; i >= 0; i--) {
-            LocalDate d = Instant.ofEpochMilli(bars.get(i).getTimestamp()).atZone(ET).toLocalDate();
-            if (d.equals(today)) continue;
+            ZonedDateTime at=Instant.ofEpochMilli(bars.get(i).getTimestamp()).atZone(ET);
+            LocalDate d=at.toLocalDate();
+            if (d.equals(today) || at.toLocalTime().isBefore(LocalTime.of(9,30))
+                    || !at.toLocalTime().isBefore(LocalTime.of(16,0))) continue;
             if (prevDay == null) prevDay = d;
             if (!d.equals(prevDay)) break;
+            previous.add(0,bars.get(i));
             ph = Math.max(ph, bars.get(i).getHigh());
             pl = Math.min(pl, bars.get(i).getLow());
         }
+        // A truncated prior-day window is not a prior-day high/low. Without an
+        // exchange calendar here, omit early-close context rather than assume it.
+        if (prevDay==null || !ScalpSetupRules.contiguousFromOpen(previous,
+                prevDay.atTime(16,0).atZone(ET).toInstant().toEpochMilli())) return null;
         return (ph > 0 && pl < Double.MAX_VALUE) ? new double[]{ph, pl} : null;
     }
 }

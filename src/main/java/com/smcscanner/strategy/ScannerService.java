@@ -322,7 +322,7 @@ public class ScannerService {
                 java.util.Set<String> stratTypes = new java.util.LinkedHashSet<>();
                 // Add scalp sub-profile strategy if that mode is active
                 if (!scalpMode.isEffectiveSkip(rootSkip)) {
-                    String st = scalpMode.getStrategyType();
+                    String st = scalpMode.resolveStrategy(rootStratType);
                     if (st != null) stratTypes.add(st);
                 }
                 // Add intraday sub-profile strategy if that mode is active
@@ -341,7 +341,11 @@ public class ScannerService {
                 if (stratTypes.contains("scalp") || stratTypes.contains("idiv")) {
                     try {
                         List<OHLCV> sp = client.getBars("SPY", "5m", 100);
-                        if (sp != null) spyBars5m = sp;
+                        if (sp != null) {
+                            long decision=bars.get(bars.size()-1).getTimestamp()+ScalpSetupRules.BAR_MS;
+                            List<OHLCV> aligned=ScalpSetupRules.sessionAsOf(sp,decision);
+                            if (ScalpSetupRules.contiguousFromOpen(aligned,decision)) spyBars5m=aligned;
+                        }
                     } catch (Exception e) { log.debug("{} SPY 5m fetch error: {}", ticker, e.getMessage()); }
                 }
 
@@ -372,8 +376,9 @@ public class ScannerService {
                     if ("scalp".equals(strat) && scalpSuppressed) continue;
                     List<TradeSetup> stratSetups;
                     if ("scalp".equals(strat)) {
-                        stratSetups = scalpMomentum.detect(bars, spyBars5m, ticker, dailyAtr);
-                        if (stratSetups.isEmpty() && phaseMsg.isEmpty()) phaseMsg = "Waiting for Bollinger reclaim or squeeze break...";
+                        ScalpMomentumDetector.Detection scalpDecision=scalpMomentum.inspect(bars,spyBars5m,ticker,dailyAtr,false);
+                        stratSetups=scalpDecision.setups();
+                        if (stratSetups.isEmpty() && phaseMsg.isEmpty()) phaseMsg=scalpDecision.reason();
                     } else if ("vwap".equals(strat)) {
                         // 1-per-day cap: once a VWAP trade fires on this ticker today, skip all
                         // subsequent VWAP scans for the rest of the session (prevents "death by
@@ -489,7 +494,11 @@ public class ScannerService {
                             List<OHLCV> spyBars5m = List.of();
                             try {
                                 List<OHLCV> sp = client.getBars("SPY", "5m", 100);
-                                if (sp != null) spyBars5m = sp;
+                                if (sp != null) {
+                                    long decision=bars.get(bars.size()-1).getTimestamp()+ScalpSetupRules.BAR_MS;
+                                    List<OHLCV> aligned=ScalpSetupRules.sessionAsOf(sp,decision);
+                                    if (ScalpSetupRules.contiguousFromOpen(aligned,decision)) spyBars5m=aligned;
+                                }
                             } catch (Exception e) { log.debug("{} SPY 5m fetch error: {}", ticker, e.getMessage()); }
                             if (spyBars5m.size() >= 10) {
                                 double spyOpen = spyBars5m.get(0).getOpen();
@@ -513,6 +522,13 @@ public class ScannerService {
 
             if (!setups.isEmpty()) {
                 TradeSetup s=setups.get(0);
+                // A scalp's level-derived stop/target must survive later score adjustments.
+                boolean structuralScalp="scalp".equals(s.getVolatility());
+                String detectedStrategy=structuralScalp?"scalp":intradayStratType;
+                if (structuralScalp) {
+                    effectiveMinConf=scalpMode.resolveMinConfidence(parentMinConf,config.getMinConfidence());
+                    effectiveMaxConf=scalpMode.resolveMaxConfidence(parentMaxConf);
+                }
 
                 // ── Gap long block (hard gate for LONG on unresolved gap-up) ─
                 // Smart money sells into retail longs on gap-up opens. Hold off
@@ -532,7 +548,11 @@ public class ScannerService {
                     List<OHLCV> spyGateBars = List.of();
                     try {
                         List<OHLCV> sp = client.getBars("SPY", "5m", 80);
-                        if (sp != null) spyGateBars = pressureService.getSessionBars(sp);
+                        if (sp != null) {
+                            long decision=bars.get(bars.size()-1).getTimestamp()+ScalpSetupRules.BAR_MS;
+                            List<OHLCV> aligned=ScalpSetupRules.sessionAsOf(sp,decision);
+                            if (ScalpSetupRules.contiguousFromOpen(aligned,decision)) spyGateBars=aligned;
+                        }
                     } catch (Exception e) { log.debug("{} SPY gate fetch: {}", ticker, e.getMessage()); }
                     if (spyGateBars.size() >= 3) {
                         double spyOpen = spyGateBars.get(0).getOpen();
@@ -591,7 +611,7 @@ public class ScannerService {
                     // Prevents wick-out on low-price volatile stocks (SOFI: $0.05 ATR → $0.08 SL = dead).
                     double minSlPct = Math.max(profile.minSlPricePct(),
                             s.getEntry() < 30.0 ? 0.015 : 0.0);
-                    if (minSlPct > 0) {
+                    if (minSlPct > 0 && !structuralScalp) {
                         double entry = s.getEntry();
                         double slDist = Math.abs(s.getStopLoss() - entry);
                         double minSlDist = entry * minSlPct;
@@ -615,7 +635,7 @@ public class ScannerService {
                 // ── Volume pressure trap detection ────────────────────────────
                 // BOS with declining bar pressure = institutional trap. Bypassed
                 // for VWAP (mean-reversion) and SQUEEZE regime (volume naturally low).
-                String activeStrat = intradayStratType;
+                String activeStrat = detectedStrategy;
                 int trapAdj = !isC ? pressureService.computeTrapAdj(
                         bars, s.getDirection(), activeStrat, regime) : 0;
                 if (trapAdj != 0) {
@@ -632,19 +652,21 @@ public class ScannerService {
                             pressureService.checkExhaustion(sessionBars5m, dailyBars);
                     if (exh.exhausted()) {
                         exhaustionAdj = -10;
-                        double entry = s.getEntry();
-                        double risk  = Math.abs(s.getStopLoss() - entry);
-                        double capTp = "long".equals(s.getDirection()) ? entry + risk : entry - risk;
-                        capTp = Math.round(capTp * 10000.0) / 10000.0;
-                        s = TradeSetup.builder()
-                                .ticker(s.getTicker()).direction(s.getDirection())
-                                .entry(s.getEntry()).stopLoss(s.getStopLoss()).takeProfit(capTp)
-                                .confidence(s.getConfidence()).session(s.getSession()).volatility(s.getVolatility())
-                                .atr(s.getAtr()).hasBos(s.isHasBos()).hasChoch(s.isHasChoch())
-                                .fvgTop(s.getFvgTop()).fvgBottom(s.getFvgBottom()).timestamp(s.getTimestamp())
-                                .build();
-                        log.info("{} EXHAUSTION: rangeRatio={} → 1:1 TP={} adj={}",
-                                ticker, String.format("%.2f", exh.rangeRatio()), capTp, exhaustionAdj);
+                        if (!structuralScalp) {
+                            double entry = s.getEntry();
+                            double risk  = Math.abs(s.getStopLoss() - entry);
+                            double capTp = "long".equals(s.getDirection()) ? entry + risk : entry - risk;
+                            capTp = Math.round(capTp * 10000.0) / 10000.0;
+                            s = TradeSetup.builder()
+                                    .ticker(s.getTicker()).direction(s.getDirection())
+                                    .entry(s.getEntry()).stopLoss(s.getStopLoss()).takeProfit(capTp)
+                                    .confidence(s.getConfidence()).session(s.getSession()).volatility(s.getVolatility())
+                                    .atr(s.getAtr()).hasBos(s.isHasBos()).hasChoch(s.isHasChoch())
+                                    .fvgTop(s.getFvgTop()).fvgBottom(s.getFvgBottom()).timestamp(s.getTimestamp())
+                                    .build();
+                            log.info("{} EXHAUSTION: rangeRatio={} → 1:1 TP={} adj={}",
+                                    ticker, String.format("%.2f", exh.rangeRatio()), capTp, exhaustionAdj);
+                        }
                     }
                 }
 
@@ -666,7 +688,7 @@ public class ScannerService {
                 // ── RS continuous TP multiplier [0.7 → 1.5] ─────────────────
                 // Strong outperformance vs SPY → extend TP (stock has momentum).
                 // Lagging SPY → tighten TP (less room to run). Float, not boolean.
-                if (profile.isIntradayRsGate() && !isC && intradayRsVal > 0) {
+                if (!structuralScalp && profile.isIntradayRsGate() && !isC && intradayRsVal > 0) {
                     double rsMultiplier = 1.0;
                     if      (intradayRsVal > 1.3) rsMultiplier = Math.min(1.5, intradayRsVal);
                     else if (intradayRsVal < 0.8) rsMultiplier = Math.max(0.7, intradayRsVal);
@@ -693,7 +715,7 @@ public class ScannerService {
                 // CRITICAL: also scale TP by same factor to preserve R:R.
                 // Old code only widened SL → converted 1.5:1 trades to sub-1:1 in
                 // volatile regimes (e.g. April 2026 tariff market = 66% sub-1:1 R:R).
-                if (regime == MarketRegimeDetector.Regime.VOLATILE && !isC) {
+                if (!structuralScalp && regime == MarketRegimeDetector.Regime.VOLATILE && !isC) {
                     double slFactor = regimeDetector.slExpansionFactor(regime);
                     double entry   = s.getEntry();
                     double slDist  = Math.abs(s.getStopLoss() - entry) * slFactor;
@@ -717,7 +739,7 @@ public class ScannerService {
                 // Hard block was wiping valid counter-trend entries that had strong
                 // conviction from other signals (volume, key level, etc).
                 // BYPASS for VWAP: mean-reversion trades intentionally fight the trend.
-                String stratTypeForFilter = intradayStratType;
+                String stratTypeForFilter = detectedStrategy;
                 boolean is15mApplicable = !"vwap".equals(stratTypeForFilter) && !"vwap3d".equals(stratTypeForFilter);
                 int bias15mAdj = 0;
                 boolean is15mConflict = !isC && is15mApplicable && (
@@ -730,7 +752,7 @@ public class ScannerService {
 
                 // ── News sentiment check ──────────────────────────────────────
                 NewsSentiment sentiment = isC ? NewsSentiment.NONE : news.getSentiment(ticker);
-                String stratType = intradayStratType;
+                String stratType = detectedStrategy;
                 int newsAdj = sentiment.confidenceDelta(s.getDirection(), stratType);
                 if (newsAdj != 0) {
                     log.info("{} news adj={} score={} dir={}", ticker, newsAdj, sentiment.netScore(), s.getDirection());
@@ -739,7 +761,7 @@ public class ScannerService {
                 // ── News-aligned TP extension: widen TP to 3:1 ──────────────────
                 // Skip extension if ticker has explicit tpRrRatio override (e.g. JPM=1.0)
                 boolean hasTpOverride = profile.getTpRrRatio() != null;
-                if (!isC && sentiment.isAligned(s.getDirection()) && !hasTpOverride) {
+                if (!structuralScalp && !isC && sentiment.isAligned(s.getDirection()) && !hasTpOverride) {
                     double risk = Math.abs(s.getEntry() - s.getStopLoss());
                     double tp3x = "long".equals(s.getDirection())
                             ? Math.round((s.getEntry() + risk * 3.0) * 10000.0) / 10000.0
@@ -760,7 +782,7 @@ public class ScannerService {
                 // above 1:1 is premature — the squeeze hasn't resolved yet.
                 // Hard geometric cap; no confidence penalty (trade still fires, tighter).
                 boolean m15Squeeze = !isC && !bars15Ref.isEmpty() && regimeDetector.detectSqueeze(bars15Ref);
-                if (m15Squeeze) {
+                if (m15Squeeze && !structuralScalp) {
                     double fa_entry = s.getEntry();
                     double fa_risk  = Math.abs(s.getStopLoss() - fa_entry);
                     double fa_oneR  = "long".equals(s.getDirection()) ? fa_entry + fa_risk : fa_entry - fa_risk;
@@ -806,12 +828,9 @@ public class ScannerService {
                 // ── Signal quality (R:R + time-of-day + loss streak) ─────────
                 // The entry bar's timestamp drives both R:R and time-of-day checks.
                 // Streak comes from the live adaptive suppressor's file-backed state.
-                long barEpochMs   = s.getTimestamp() != null
-                        ? java.time.ZoneOffset.UTC.normalized()
-                                .equals(s.getTimestamp().atZone(java.time.ZoneOffset.UTC).getZone())
-                                ? s.getTimestamp().toInstant(java.time.ZoneOffset.UTC).toEpochMilli()
-                                : s.getTimestamp().atZone(java.time.ZoneId.of("America/New_York")).toInstant().toEpochMilli()
-                        : System.currentTimeMillis();
+                // Use the completed decision bar directly; detector timestamps are
+                // exchange-local bar opens, not UTC instants or execution times.
+                long barEpochMs = bars.get(bars.size()-1).getTimestamp() + 5L*60_000L;
                 int streak     = isC ? 0 : adaptive.getConsecutiveLosses(ticker);
                 int qualityAdj = isC ? 0 : qualityFilter.computeDelta(s, barEpochMs, streak);
                 if (qualityAdj != 0) {
@@ -1014,6 +1033,7 @@ public class ScannerService {
                             .session(s.getSession()).volatility(s.getVolatility()).atr(s.getAtr())
                             .hasBos(s.isHasBos()).hasChoch(s.isHasChoch())
                             .fvgTop(s.getFvgTop()).fvgBottom(s.getFvgBottom())
+                            .factorBreakdown(s.getFactorBreakdown())
                             .timestamp(s.getTimestamp());
                     // Attach options flow data
                     if (flow.hasData()) {
@@ -1067,7 +1087,7 @@ public class ScannerService {
                         sma200Adj, rsiAdj, candleAdj, volAdj, regimeStratAdj, pivotAdj,
                         trapAdj, exhaustionAdj, confluenceVetoAdj);
                 String smcSignals = s.getFactorBreakdown(); // raw SMC signals from SetupDetector
-                String factorBreakdown = (smcSignals != null && smcSignals.startsWith("smc-"))
+                String factorBreakdown = (smcSignals != null && (smcSignals.startsWith("smc-") || structuralScalp))
                         ? smcSignals + "\nadj: " + adjBreakdown
                         : adjBreakdown;
 
@@ -1193,7 +1213,7 @@ public class ScannerService {
                             // Prevents unrealistic TPs like TSLA $359→$386 (+5.76%)
                             // on intraday trades. Daily ATR is the max realistic
                             // single-day move; cap TP at 2x that from entry.
-                            if (!lateDay && dailyAtr > 0) {
+                            if (!structuralScalp && !lateDay && dailyAtr > 0) {
                                 double maxTpDist = dailyAtr * 2.0;
                                 double tpDist = Math.abs(s.getTakeProfit() - s.getEntry());
                                 if (tpDist > maxTpDist) {
