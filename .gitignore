@@ -44,3 +44,12 @@ scripts/*
 !scripts/compare_candidate_ledger.py
 !scripts/audit_execution_costs.py
 !scripts/test_audit_execution_costs.py
+
+!scripts/study_historical_zones.py
+!scripts/test_study_historical_zones.py
+!scripts/replay_zone_options.py
+!scripts/test_replay_zone_options.py
+!scripts/requirements-zone-research.txt
+
+!scripts/historical-zone-study-design.json
+!scripts/historical-zone-options-design.json

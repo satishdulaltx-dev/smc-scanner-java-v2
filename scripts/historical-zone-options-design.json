@@ -1,0 +1,19 @@
+{
+  "created_utc": "2026-09-16T01:19:09.783436+00:00",
+  "cohort": "Every entry in historical-zone-study-results.json, no selection by outcome",
+  "underlying_exit": "15m horizon at zero stock cost; stop/target levels fixed at entry",
+  "contract_selection": "nearest expiry 7-14 calendar DTE, then nearest strike to decision-time stock price; tie ITM side; calls for long, puts for short; standard 100-share contracts",
+  "entry_delay_minutes": 1,
+  "exit_delay": "one minute after the underlying trigger is observable; a touch becomes observable after its complete minute",
+  "data": "actual option minute trade-bar opens, not bid/ask quotes",
+  "cost_scenarios_round_trip_premium_pct": [
+    0,
+    2,
+    5,
+    10
+  ],
+  "fees": "excluded",
+  "missing_bars": "exclude price reference and report separately; never carry forward",
+  "engine_sha256": "7c9a2e60539fbedf39c14d9362c93722a5438e5530a52b353e190081c9a9abb2",
+  "promotion": "none; diagnostic only; no actual execution or profitability claim"
+}

@@ -1,0 +1,57 @@
+{
+  "created_utc": "2026-09-16T01:11:34.123389+00:00",
+  "version": "historical-zone-retest-v1",
+  "symbols": [
+    "AMD",
+    "TSLA"
+  ],
+  "period": [
+    "2024-09-23",
+    "2026-07-17"
+  ],
+  "stage": "development diagnostic only; these dates have been examined previously",
+  "rules": {
+    "history_sessions": 5,
+    "zone_timeframe_minutes": 15,
+    "pivot_left_right_bars": 2,
+    "zone_cluster_width_atr": 0.25,
+    "zone_edge_padding_atr": 0.1,
+    "zone_min_distinct_sessions": 2,
+    "decision_timeframe_minutes": 5,
+    "breakout_volume_multiple": 1.25,
+    "volume_reference_bars": 6,
+    "min_confirmation_body_fraction": 0.5,
+    "breakout_buffer_atr": 0.1,
+    "max_retest_bars": 6,
+    "stop_buffer_atr": 0.1,
+    "target": "nearest opposing historical zone edge",
+    "min_reward_risk_at_10bps": 1.5,
+    "entry": "next minute open after a completed retest-confirmation candle",
+    "entry_window_et": [
+      "10:00",
+      "14:30"
+    ],
+    "max_entries_per_symbol_per_session": 1,
+    "max_hold_minutes": [
+      15,
+      120
+    ],
+    "round_trip_underlying_cost_scenarios_bps": [
+      0,
+      2,
+      5,
+      10
+    ],
+    "intrabar_policy": "stop-first when OHLC touches both levels; adverse gaps fill at open",
+    "coverage": "NYSE calendar; reject incomplete current or any of five required prior sessions"
+  },
+  "not_included": [
+    "actual option contract P&L",
+    "historical order-book or resting-order claims",
+    "portfolio capital constraints",
+    "unused holdout validation",
+    "parameter optimization",
+    "live orders"
+  ],
+  "promotion_rule": "No live promotion from this study. A positive diagnostic result would require actual option execution-cost testing and new validation."
+}
