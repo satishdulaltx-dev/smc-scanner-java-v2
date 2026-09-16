@@ -18,8 +18,8 @@ import java.util.List;
  * Previous Day High / Previous Day Low (PDH/PDL) detector.
  *
  * Four patterns:
- *   1. PDH rejection (short): wick above PDH, close back below — institutions defending the level
- *   2. PDL rejection (long):  wick below PDL, close back above — institutions defending the level
+ *   1. PDH rejection (short): wick above PDH, close back below — observed rejection
+ *   2. PDL rejection (long):  wick below PDL, close back above — observed rejection
  *   3. PDH breakout retest (long):  broke above PDH earlier today, first pullback to test PDH from above
  *   4. PDL breakout retest (short): broke below PDL earlier today, first pullback to test PDL from below
  *
@@ -50,7 +50,8 @@ public class PdhPdlDetector {
         if (!backtestMode) {
             if (!today.equals(LocalDate.now(ET))) return result;
         }
-        LocalTime lastTime = Instant.ofEpochMilli(lastBar.getTimestamp()).atZone(ET).toLocalTime();
+        long decisionMs=lastBar.getTimestamp()+ScalpSetupRules.BAR_MS;
+        LocalTime lastTime = Instant.ofEpochMilli(decisionMs).atZone(ET).toLocalTime();
         if (lastTime.isBefore(LocalTime.of(9, 45)) || !lastTime.isBefore(LocalTime.of(15, 30))) return result;
 
         LocalTime mktOpen  = LocalTime.of(9, 30);
@@ -84,26 +85,32 @@ public class PdhPdlDetector {
             if (bDate.equals(fpd) && !bTime.isBefore(mktOpen) && bTime.isBefore(mktClose))
                 prevDayBars.add(bar);
         }
-        if (prevDayBars.isEmpty()) return result;
+        if (!ScalpSetupRules.contiguousFromOpen(todayBars,decisionMs)) return result;
+        // A partial previous session must never manufacture a false PDH/PDL.
+        // Early-close sessions are omitted until an exchange-calendar close is supplied.
+        if (!ScalpSetupRules.contiguousFromOpen(prevDayBars,
+                prevDate.atTime(16,0).atZone(ET).toInstant().toEpochMilli())) return result;
 
         double pdh = prevDayBars.stream().mapToDouble(OHLCV::getHigh).max().orElse(0);
         double pdl = prevDayBars.stream().mapToDouble(OHLCV::getLow).min().orElse(Double.MAX_VALUE);
         if (pdh <= 0 || pdl >= Double.MAX_VALUE || pdh <= pdl) return result;
 
-        double atr    = computeAtr(bars);
+        double atr    = computeAtr(todayBars);
         double curAtr = Math.max(atr, lastBar.getClose() * 0.001);
-        double avgVol = bars.stream().skip(Math.max(0, bars.size() - 30))
+        double avgVol = todayBars.subList(0,todayBars.size()-1).stream()
                            .mapToDouble(OHLCV::getVolume).average().orElse(1);
 
         OHLCV last = todayBars.get(todayBars.size() - 1);
 
         // ── Pattern 1: PDH rejection (short) ────────────────────────────────
-        if (last.getHigh() > pdh && last.getClose() < pdh) {
+        OHLCV preceding=todayBars.get(todayBars.size()-2);
+        if (preceding.getClose()<=pdh && last.getHigh()>pdh && last.getClose()<pdh && last.getClose()<last.getOpen()) {
             double entry = r4(last.getClose());
             double sl    = r4(last.getHigh() + curAtr * SL_BUFFER);
             double risk  = sl - entry;
             if (risk > 0 && risk <= curAtr * 2.5) {
                 double tp   = r4(entry - risk * 2.0);
+                if (tp>=pdl && ScalpSetupRules.validRoom(entry,sl,ScalpSetupRules.target(todayBars,entry,tp,false),false,2)) {
                 int    conf = baseConf(last, avgVol);
                 if (pdh - last.getClose() > curAtr * 0.3) conf += 5; // strong close below = cleaner rejection
                 String factors = String.format(
@@ -111,16 +118,18 @@ public class PdhPdlDetector {
                         pdh, last.getHigh(), last.getClose(), last.getVolume() / Math.max(avgVol, 1));
                 log.debug("{} PDH_REJECTION SHORT: {}", ticker, factors);
                 result.add(build(ticker, "short", entry, sl, tp, conf, curAtr, last, factors));
+                }
             }
         }
 
         // ── Pattern 2: PDL rejection (long) ─────────────────────────────────
-        if (last.getLow() < pdl && last.getClose() > pdl) {
+        if (preceding.getClose()>=pdl && last.getLow()<pdl && last.getClose()>pdl && last.getClose()>last.getOpen()) {
             double entry = r4(last.getClose());
             double sl    = r4(last.getLow() - curAtr * SL_BUFFER);
             double risk  = entry - sl;
             if (risk > 0 && risk <= curAtr * 2.5) {
                 double tp   = r4(entry + risk * 2.0);
+                if (tp<=pdh && ScalpSetupRules.validRoom(entry,sl,ScalpSetupRules.target(todayBars,entry,tp,true),true,2)) {
                 int    conf = baseConf(last, avgVol);
                 if (last.getClose() - pdl > curAtr * 0.3) conf += 5;
                 String factors = String.format(
@@ -128,65 +137,29 @@ public class PdhPdlDetector {
                         pdl, last.getLow(), last.getClose(), last.getVolume() / Math.max(avgVol, 1));
                 log.debug("{} PDL_REJECTION LONG: {}", ticker, factors);
                 result.add(build(ticker, "long", entry, sl, tp, conf, curAtr, last, factors));
-            }
-        }
-
-        // ── Pattern 3: PDH breakout retest (long) ────────────────────────────
-        // Price broke above PDH earlier today, now dipping back to test PDH from above
-        if (todayBars.size() >= 3) {
-            boolean prevBrokeAbovePdh = false;
-            for (int i = 0; i < todayBars.size() - 1; i++) {
-                if (todayBars.get(i).getClose() > pdh * (1 + LEVEL_TOL)) {
-                    prevBrokeAbovePdh = true;
-                    break;
-                }
-            }
-            boolean touchedPdh = last.getLow() <= pdh * (1 + LEVEL_TOL * 2);
-            boolean closedAbove = last.getClose() > pdh;
-            boolean nearPdh     = Math.abs(last.getClose() - pdh) / pdh < LEVEL_TOL * 2;
-            if (prevBrokeAbovePdh && touchedPdh && closedAbove && nearPdh) {
-                double entry = r4(last.getClose());
-                double sl    = r4(last.getLow() - curAtr * SL_BUFFER);
-                double risk  = entry - sl;
-                if (risk > 0 && risk <= curAtr * 2.5) {
-                    double tp   = r4(entry + risk * 2.0);
-                    int    conf = baseConf(last, avgVol) + 5; // breakout retest = higher quality
-                    String factors = String.format(
-                            "pdhpdl-breakout-retest-long | PDH=%.2f | close=%.2f | vol=%.1f×avg",
-                            pdh, last.getClose(), last.getVolume() / Math.max(avgVol, 1));
-                    log.debug("{} PDH_BREAKOUT_RETEST LONG: {}", ticker, factors);
-                    result.add(build(ticker, "long", entry, sl, tp, conf, curAtr, last, factors));
                 }
             }
         }
 
-        // ── Pattern 4: PDL breakout retest (short) ───────────────────────────
-        // Price broke below PDL earlier today, now bouncing up to test PDL from below
-        if (todayBars.size() >= 3) {
-            boolean prevBrokeBelowPdl = false;
-            for (int i = 0; i < todayBars.size() - 1; i++) {
-                if (todayBars.get(i).getClose() < pdl * (1 - LEVEL_TOL)) {
-                    prevBrokeBelowPdl = true;
-                    break;
-                }
-            }
-            boolean touchedPdl = last.getHigh() >= pdl * (1 - LEVEL_TOL * 2);
-            boolean closedBelow = last.getClose() < pdl;
-            boolean nearPdl     = Math.abs(last.getClose() - pdl) / pdl < LEVEL_TOL * 2;
-            if (prevBrokeBelowPdl && touchedPdl && closedBelow && nearPdl) {
-                double entry = r4(last.getClose());
-                double sl    = r4(last.getHigh() + curAtr * SL_BUFFER);
-                double risk  = sl - entry;
-                if (risk > 0 && risk <= curAtr * 2.5) {
-                    double tp   = r4(entry - risk * 2.0);
-                    int    conf = baseConf(last, avgVol) + 5;
-                    String factors = String.format(
-                            "pdhpdl-breakout-retest-short | PDL=%.2f | close=%.2f | vol=%.1f×avg",
-                            pdl, last.getClose(), last.getVolume() / Math.max(avgVol, 1));
-                    log.debug("{} PDL_BREAKOUT_RETEST SHORT: {}", ticker, factors);
-                    result.add(build(ticker, "short", entry, sl, tp, conf, curAtr, last, factors));
-                }
-            }
+        // A crossing, first retest and later confirmation must belong to the
+        // same still-valid breakout. Six 5m bars is an explicit expiry policy.
+        for (boolean bullish : new boolean[]{true,false}) {
+            double level=bullish?pdh:pdl;
+            var confirmation=BreakoutRetestSequence.atLastBar(todayBars,level,bullish,
+                    level*LEVEL_TOL,level*LEVEL_TOL,6);
+            if (confirmation==null) continue;
+            double entry=r4(last.getClose());
+            double sl=r4(confirmation.invalidationExtreme()+(bullish?-1:1)*curAtr*SL_BUFFER);
+            double risk=(bullish?1:-1)*(entry-sl);
+            if (risk<=0 || risk>curAtr*2.5) continue;
+            double tp=r4(entry+(bullish?2:-2)*risk);
+            double observed=ScalpSetupRules.target(todayBars,entry,tp,bullish);
+            if (!ScalpSetupRules.validRoom(entry,sl,observed,bullish,2)) continue;
+            String factors=String.format(
+                    "pdhpdl-breakout-retest-%s | level=%.4f | breakout=%d retest=%d confirmation=%d | invalidation-wick=%.4f | target=2R hypothesis",
+                    bullish?"long":"short",level,todayBars.get(confirmation.breakoutIndex()).getTimestamp(),
+                    todayBars.get(confirmation.retestIndex()).getTimestamp(),last.getTimestamp(),confirmation.invalidationExtreme());
+            result.add(build(ticker,bullish?"long":"short",entry,sl,tp,baseConf(last,avgVol)+5,curAtr,last,factors));
         }
 
         if (result.size() > 1) {

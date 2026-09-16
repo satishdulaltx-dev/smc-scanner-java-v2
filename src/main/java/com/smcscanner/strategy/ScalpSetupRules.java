@@ -81,6 +81,6 @@ public final class ScalpSetupRules {
 
     public static boolean validRoom(double entry, double stop, double target, boolean bullish, double minR) {
         double sign=bullish?1:-1, risk=sign*(entry-stop), reward=sign*(target-entry);
-        return Double.isFinite(risk) && Double.isFinite(reward) && risk>0 && reward>=risk*minR;
+        return Double.isFinite(risk) && Double.isFinite(reward) && risk>0 && reward+1e-8>=risk*minR;
     }
 }

@@ -553,7 +553,7 @@ class BacktestIntegrityTest {
         for (int i=0;i<78;i++) bars.add(bar(at("2026-06-01T09:30")+i*300_000L,100,101,99,100));
         var today = new java.util.ArrayList<OHLCV>();
         for (int i=0;i<4;i++) today.add(bar(at("2026-06-02T09:30")+i*300_000L,100,100.5,99.5,100));
-        today.add(bar(at("2026-06-02T09:50"),100.5,101.5,100,100.5));
+        today.add(bar(at("2026-06-02T09:50"),101.1,101.2,100.7,100.8));
         bars.addAll(today);
         var detector = new com.smcscanner.strategy.PdhPdlDetector();
         assertTrue(detector.detect(today,"TEST",2,true).isEmpty());

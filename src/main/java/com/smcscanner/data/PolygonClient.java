@@ -337,9 +337,18 @@ public class PolygonClient {
 
     private List<OHLCV> getPolygonBars(String ticker, String timeframe, int limit) {
         String[] tf   = TF_MAP.getOrDefault(timeframe.toLowerCase(), new String[]{"5", "minute"});
-        // Lookback window: daily uses 2x limit to ensure enough trading days; hourly=7d; minute=1d
-        int lookbackDays = tf[1].equals("day") ? Math.max(90, limit * 2) : (tf[1].equals("hour") ? 7 : 1);
+        // Calendar days are not trading sessions: a one-day minute window loses
+        // Friday's levels on Monday and after holidays. Include prior-session context.
+        int lookbackDays = liveLookbackDays(tf,limit);
         return fetchPolygon(ticker, tf, limit, lookbackDays);
+    }
+
+    static int liveLookbackDays(String[] timeframe,int limit) {
+        if (timeframe[1].equals("day")) return Math.max(90,limit*2);
+        if (timeframe[1].equals("hour")) return 7;
+        int minutes=Math.max(1,Integer.parseInt(timeframe[0]));
+        int sessions=(int)Math.ceil((double)Math.max(1,limit)*minutes/390);
+        return Math.max(5,sessions*2+2);
     }
 
     private List<OHLCV> fetchPolygon(String ticker, String[] tf, int limit, int lookbackDays) {

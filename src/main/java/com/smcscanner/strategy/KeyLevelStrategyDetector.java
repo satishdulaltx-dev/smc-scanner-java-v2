@@ -21,13 +21,9 @@ import java.util.List;
  * on daily (or hourly) bars, then fires alerts when price touches and rejects
  * from those levels on 5-minute bars.
  *
- * Why these levels work:
- *  - Large institutions place block orders at visible S/R levels to distribute/accumulate
- *  - Every market participant can see the same level → self-fulfilling prophecy
- *  - 3rd or 4th test of the same price is the highest-probability rejection
- *
- * Works best for large-cap, liquid stocks (AAPL, MSFT, META) where there is
- * enough institutional size to create persistent price memory.
+ * Repeated historical rejections are candidate levels, not evidence of resting
+ * orders or a calibrated win probability. Broken levels must re-establish
+ * their touch history before they can qualify again.
  */
 @Service
 public class KeyLevelStrategyDetector {
@@ -86,8 +82,11 @@ public class KeyLevelStrategyDetector {
             }
         }
 
-        // Require at least 5 session bars — skip the volatile opening bar(s)
-        if (sessionBars.size() < 5) return result;
+        // Only prior completed daily candles may build levels and trend context.
+        htfBars=htfBars.stream().filter(b -> Instant.ofEpochMilli(b.getTimestamp()).atZone(ET).toLocalDate().isBefore(today)).toList();
+        if (htfBars.size()<10 || sessionBars.size()<5) return result;
+        if (!ScalpSetupRules.contiguousFromOpen(sessionBars,
+                sessionBars.get(sessionBars.size()-1).getTimestamp()+ScalpSetupRules.BAR_MS)) return result;
 
         OHLCV last     = sessionBars.get(sessionBars.size() - 1);
         double curClose = last.getClose();
@@ -96,19 +95,16 @@ public class KeyLevelStrategyDetector {
         double curLow   = last.getLow();
 
         // 5m ATR computed from session bars only
-        double atr5m = computeAtr(sessionBars.size() >= 15 ? sessionBars : fiveMinBars);
+        double atr5m = computeAtr(sessionBars);
         double atr   = Math.max(atr5m, curClose * 0.001);
 
-        // TP sizing: prefer dailyAtr if meaningful, else scale from 5m ATR
-        double effectiveAtr = (dailyAtr > atr * 3) ? dailyAtr : atr * 8;
 
         // Average session volume (excludes pre-market noise)
-        double avgVol = sessionBars.stream().mapToDouble(OHLCV::getVolume).average().orElse(1.0);
+        double avgVol = sessionBars.subList(0,sessionBars.size()-2).stream()
+                .mapToDouble(OHLCV::getVolume).average().orElse(1.0);
 
         // ── HTF trend filter (20-day SMA from daily bars) ────────────────────
-        // Only take LONG setups when price is in an uptrend (above SMA20).
-        // Only take SHORT setups when price is in a downtrend (below SMA20).
-        // This prevents counter-trend trades on broken levels.
+        // Trend contributes a score penalty for counter-trend setups; it is not a hard gate.
         String htfTrend = "neutral";
         if (htfBars.size() >= 20) {
             double sma20 = htfBars.subList(htfBars.size() - 20, htfBars.size())
@@ -128,6 +124,12 @@ public class KeyLevelStrategyDetector {
             double levelPrice   = lev[0];
             int    touches      = (int) lev[1];
             boolean isResistance = lev[2] > 0;
+            // A level already broken during this session cannot be called an intact
+            // rejection level after price reclaims it. Reclaim is a separate pattern.
+            boolean brokenThisSession=sessionBars.subList(0,sessionBars.size()-2).stream().anyMatch(b ->
+                    isResistance ? b.getClose()>levelPrice*(1+LEVEL_TOLERANCE)
+                                 : b.getClose()<levelPrice*(1-LEVEL_TOLERANCE));
+            if (brokenThisSession) continue;
 
             // Only act on levels that are genuinely close to current price
             double distPct = Math.abs(curClose - levelPrice) / levelPrice;
@@ -135,50 +137,36 @@ public class KeyLevelStrategyDetector {
 
             if (isResistance) {
                 // ── SHORT: price touched resistance and is rejecting downward ──
-                // Vector check: the MAJORITY of today's session must have traded BELOW the level.
-                // A genuine resistance test has price mostly below the level then spiking up to it.
-                // A breakdown-from-above (e.g. GLD 03/24: opened $410, level $403.78, price dropped
-                // through it — most session bars were ABOVE the level) fails this check.
-                // Symmetric with the LONG approachingFromAbove check (35% threshold).
-                boolean approachingFromBelow = false;
-                if (sessionBars.size() >= 4) {
-                    int totalBefore = sessionBars.size() - 1;
-                    int belowCount = 0;
-                    for (int bi = 0; bi < totalBefore; bi++) {
-                        if (sessionBars.get(bi).getClose() < levelPrice) belowCount++;
-                    }
-                    approachingFromBelow = belowCount >= totalBefore * 0.35;
-                }
-                if (!approachingFromBelow) continue; // price arrived from wrong side — skip
+                if (sessionBars.get(sessionBars.size()-3).getClose()>levelPrice) continue;
 
                 if (sessionBars.size() < 2) continue;
                 OHLCV rejectBar = sessionBars.get(sessionBars.size() - 2);
                 OHLCV confirmBar = last;
 
-                boolean touched      = rejectBar.getHigh() >= levelPrice * (1 - TOUCH_TOLERANCE);
+                boolean touched      = rejectBar.getHigh() >= levelPrice * (1 - TOUCH_TOLERANCE)
+                        && rejectBar.getLow() <= levelPrice * (1 + TOUCH_TOLERANCE);
                 boolean rejectedDown = rejectBar.getClose() <= levelPrice * (1 + TOUCH_TOLERANCE * 0.3);
                 boolean bearishBar   = rejectBar.getClose() < rejectBar.getOpen();
                 boolean upperWick    = (rejectBar.getHigh() - rejectBar.getClose()) > atr * 0.15;
                 boolean volConfirmed = rejectBar.getVolume() > avgVol * 1.2;
-                boolean followThrough = confirmBar.getClose() <= rejectBar.getClose()
-                        && confirmBar.getLow() <= rejectBar.getLow();
+                boolean followThrough = confirmBar.getClose() < Math.min(levelPrice,rejectBar.getLow())
+                        && confirmBar.getClose() < confirmBar.getOpen();
                 // Counter-trend flag: shorting into an uptrend reduces conviction
                 boolean counterTrend = "up".equals(htfTrend);
 
                 if (touched && rejectedDown && bearishBar && volConfirmed && followThrough) {
                     double entry = r4(curClose);
-                    double sl    = r4(levelPrice + atr * slMult);
-                    // Safety guard: sl must be above entry for a short
-                    if (sl <= entry) sl = r4(entry + atr * slMult);
-                    // TP = tpRatio:1 R:R (news-aligned extension to 3:1 applied later)
-                    double tp    = r4(entry - (sl - entry) * tpRatio);
+                    double sl = r4(Math.max(levelPrice,Math.max(rejectBar.getHigh(),confirmBar.getHigh())) + atr*slMult);
+                    double tp = nearestOpposingLevel(levels,entry,false);
+                    if (!Double.isFinite(tp)) continue;
+                    tp=r4(ScalpSetupRules.target(sessionBars,entry,tp,false));
 
                     if (sl > entry && tp < entry) {
                         double risk   = sl - entry;
                         double reward = entry - tp;
                         double rr     = risk > 0 ? reward / risk : 0.0;
 
-                        if (rr >= tpRatio * 0.95) {
+                        if (ScalpSetupRules.validRoom(entry,sl,tp,!isResistance,tpRatio)) {
                             int confidence = 65;
                             if (touches >= 3)                         confidence += 10;
                             if (touches >= 4)                         confidence += 5;
@@ -218,55 +206,36 @@ public class KeyLevelStrategyDetector {
 
             } else {
                 // ── LONG: price touched support and is bouncing upward ──────────
-                // Vector check: price must be APPROACHING from above (not already below level).
-                // At least 2 of the recent bars before this one should have been ABOVE
-                // the level — confirming this is a fresh test from above, not a breakout
-                // retest from below (which would be a SHORT setup).
-                // Vector check: the MAJORITY of today's session must have traded ABOVE the level.
-                // A genuine pullback-to-support has price mostly above the level then dipping to it.
-                // A rally-from-below (like GLD 02/13: opened $458, level $460, only ~18% of bars
-                // above level before the 11:25 entry) fails this check — only a small fraction of
-                // bars were above because price spent the morning climbing UP through the level.
-                // This is ATR-independent and not fooled by overnight micro-gaps.
-                boolean approachingFromAbove = false;
-                if (sessionBars.size() >= 4) {
-                    int totalBefore = sessionBars.size() - 1;
-                    int aboveCount = 0;
-                    for (int bi = 0; bi < totalBefore; bi++) {
-                        if (sessionBars.get(bi).getClose() > levelPrice) aboveCount++;
-                    }
-                    approachingFromAbove = aboveCount >= totalBefore * 0.35;
-                }
-                if (!approachingFromAbove) continue; // price arrived from wrong side — skip
+                if (sessionBars.get(sessionBars.size()-3).getClose()<levelPrice) continue;
 
                 if (sessionBars.size() < 2) continue;
                 OHLCV rejectBar = sessionBars.get(sessionBars.size() - 2);
                 OHLCV confirmBar = last;
 
-                boolean touched      = rejectBar.getLow() <= levelPrice * (1 + TOUCH_TOLERANCE);
+                boolean touched      = rejectBar.getLow() <= levelPrice * (1 + TOUCH_TOLERANCE)
+                        && rejectBar.getHigh() >= levelPrice * (1 - TOUCH_TOLERANCE);
                 boolean bouncedUp    = rejectBar.getClose() >= levelPrice * (1 - TOUCH_TOLERANCE * 0.3);
                 boolean bullishBar   = rejectBar.getClose() > rejectBar.getOpen();
                 boolean lowerWick    = (rejectBar.getClose() - rejectBar.getLow()) > atr * 0.15;
                 boolean volConfirmed = rejectBar.getVolume() > avgVol * 1.2;
-                boolean followThrough = confirmBar.getClose() >= rejectBar.getClose()
-                        && confirmBar.getHigh() >= rejectBar.getHigh();
+                boolean followThrough = confirmBar.getClose() > Math.max(levelPrice,rejectBar.getHigh())
+                        && confirmBar.getClose() > confirmBar.getOpen();
                 // Counter-trend flag: buying into a downtrend reduces conviction
                 boolean counterTrend = "down".equals(htfTrend);
 
                 if (touched && bouncedUp && bullishBar && volConfirmed && followThrough) {
                     double entry = r4(curClose);
-                    double sl    = r4(levelPrice - atr * slMult);
-                    // Safety guard: sl must be below entry for a long
-                    if (sl >= entry) sl = r4(entry - atr * slMult);
-                    // TP = tpRatio:1 R:R (news-aligned extension to 3:1 applied later)
-                    double tp    = r4(entry + (entry - sl) * tpRatio);
+                    double sl = r4(Math.min(levelPrice,Math.min(rejectBar.getLow(),confirmBar.getLow())) - atr*slMult);
+                    double tp = nearestOpposingLevel(levels,entry,true);
+                    if (!Double.isFinite(tp)) continue;
+                    tp=r4(ScalpSetupRules.target(sessionBars,entry,tp,true));
 
                     if (sl < entry && tp > entry) {
                         double risk   = entry - sl;
                         double reward = tp - entry;
                         double rr     = risk > 0 ? reward / risk : 0.0;
 
-                        if (rr >= tpRatio * 0.95) {
+                        if (ScalpSetupRules.validRoom(entry,sl,tp,!isResistance,tpRatio)) {
                             int confidence = 65;
                             if (touches >= 3)                         confidence += 10;
                             if (touches >= 4)                         confidence += 5;
@@ -315,7 +284,7 @@ public class KeyLevelStrategyDetector {
      * Algorithm — rejection-wick density (not strict pivots):
      *  A price acts as RESISTANCE if a bar's high was near that price AND price
      *  closed well below it (upper wick / rejection). Multiple bars showing this
-     *  pattern at the same price cluster = a real supply zone.
+     *  pattern at the same price cluster = a candidate resistance zone.
      *
      *  A price acts as SUPPORT if a bar's low was near that price AND price closed
      *  well above it (lower wick / bounce).
@@ -324,7 +293,7 @@ public class KeyLevelStrategyDetector {
      *  where consecutive days touch the same level but none is a strict pivot high
      *  (because the adjacent bars have similar highs).
      *
-     * @param htf      daily bars (or 60m bars) — exclude the very last bar (current)
+     * @param htf      completed prior daily bars; current and future dates already excluded
      * @param curClose current 5m price for proximity filtering
      */
     private List<double[]> findKeyLevels(List<OHLCV> htf, double curClose) {
@@ -333,8 +302,8 @@ public class KeyLevelStrategyDetector {
 
         // Use last 60 daily bars (≈3 months) — recent enough to be actionable
         int start = Math.max(0, htf.size() - 60);
-        // Exclude the very last HTF bar; it may be incomplete (current day)
-        int end = htf.size() - 1;
+        // Caller has already removed current/future daily bars; keep the latest completed day.
+        int end = htf.size();
 
         for (int i = start; i < end; i++) {
             OHLCV bar = htf.get(i);
@@ -358,6 +327,22 @@ public class KeyLevelStrategyDetector {
         List<double[]> result = new ArrayList<>();
         result.addAll(clusterLevels(touchHighs, curClose, +1.0)); // resistance
         result.addAll(clusterLevels(touchLows,  curClose, -1.0)); // support
+
+        // A broken zone loses its old touch count. Require distinct completed
+        // sessions defending it again after the most recent close through it.
+        result.removeIf(level -> {
+            java.util.Set<LocalDate> defended=new java.util.HashSet<>();
+            for (OHLCV bar:htf.subList(start,end)) {
+                double price=level[0]; boolean resistance=level[2]>0;
+                boolean broken=resistance?bar.getClose()>price*(1+LEVEL_TOLERANCE):bar.getClose()<price*(1-LEVEL_TOLERANCE);
+                if (broken) {defended.clear();continue;}
+                double extreme=resistance?bar.getHigh():bar.getLow();
+                boolean rejected=resistance?bar.getClose()<extreme*(1-.003):bar.getClose()>extreme*(1+.003);
+                if (rejected && Math.abs(extreme-price)/price<=LEVEL_TOLERANCE)
+                    defended.add(Instant.ofEpochMilli(bar.getTimestamp()).atZone(ET).toLocalDate());
+            }
+            level[1]=defended.size();return defended.size()<MIN_TOUCHES;
+        });
 
         // Sort ascending by distance from current price (nearest first)
         result.sort((a, b) -> Double.compare(
@@ -403,9 +388,15 @@ public class KeyLevelStrategyDetector {
         return clusters;
     }
 
-    /** Compute 14-bar simple ATR. Requires at least 5 bars for meaningful result. */
+    private double nearestOpposingLevel(List<double[]> levels,double entry,boolean bullish) {
+        return levels.stream().filter(x -> bullish ? x[2]>0 && x[0]>entry : x[2]<0 && x[0]<entry)
+                .mapToDouble(x -> x[0]).reduce(bullish?Double.POSITIVE_INFINITY:Double.NEGATIVE_INFINITY,
+                        bullish?Math::min:Math::max);
+    }
+
+    /** Use the available completed-session true ranges, up to 14 bars. */
     private double computeAtr(List<OHLCV> bars) {
-        if (bars.size() < 6) return 0.0; // need 5+ true range samples
+        if (bars.size() < 2) return 0.0;
         int period = Math.min(14, bars.size() - 1);
         if (period <= 0) return 0.0;
         int start = bars.size() - period - 1;

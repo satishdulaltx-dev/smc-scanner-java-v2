@@ -822,6 +822,7 @@ public class BacktestService {
 
                 TradeSetup setup = bSetups.get(0);
                 boolean structuralScalp="scalp".equals(setup.getVolatility());
+                boolean preserveSetupLevels=structuralScalp || "keylevel".equals(setup.getVolatility());
 
                 // or-bounce setups (Mode B) are unreliable in crash conditions: VWAP loses
                 // gravity when the stock has declined sharply over multiple days. The VWAP
@@ -848,7 +849,7 @@ public class BacktestService {
                 // regimes (e.g. April 2026 tariff market). Fix: scale TP by same factor
                 // so R:R is preserved. Wider SL + proportionally wider TP = same R:R,
                 // just more room for the trade to develop in choppy conditions.
-                if (!structuralScalp && btRegime == MarketRegimeDetector.Regime.VOLATILE && !ticker.startsWith("X:")) {
+                if (!preserveSetupLevels && btRegime == MarketRegimeDetector.Regime.VOLATILE && !ticker.startsWith("X:")) {
                     double slFactor = regimeDetector.slExpansionFactor(btRegime);
                     double btEntry  = setup.getEntry();
                     double slDist   = Math.abs(setup.getStopLoss() - btEntry) * slFactor;
@@ -917,7 +918,7 @@ public class BacktestService {
                             pressureService.checkExhaustion(btSessionBarsEx, htfSlice);
                     if (exh.exhausted()) {
                         exhaustionAdj = -10;
-                        if (!structuralScalp) {
+                        if (!preserveSetupLevels) {
                             double btEntry = setup.getEntry();
                             double risk    = Math.abs(setup.getStopLoss() - btEntry);
                             double capTp   = "long".equals(setup.getDirection()) ? btEntry + risk : btEntry - risk;
@@ -987,7 +988,7 @@ public class BacktestService {
                 }
 
                 // ── RS continuous TP multiplier [0.7 → 1.5] — mirrors live ──
-                if (!structuralScalp && bp.isIntradayRsGate() && !ticker.startsWith("X:") && btIntradayRs > 0) {
+                if (!preserveSetupLevels && bp.isIntradayRsGate() && !ticker.startsWith("X:") && btIntradayRs > 0) {
                     double rsMultiplier = 1.0;
                     if      (btIntradayRs > 1.3) rsMultiplier = Math.min(1.5, btIntradayRs);
                     else if (btIntradayRs < 0.8) rsMultiplier = Math.max(0.7, btIntradayRs);
@@ -1060,7 +1061,7 @@ public class BacktestService {
                 // News-aligned TP extension: widen TP to 3:1 R:R (but respect ticker tpRrRatio)
                 // If profile sets tpRrRatio (e.g. JPM=1.0), don't override — the low ratio is intentional
                 boolean hasTpOverride = bp.getTpRrRatio() != null;
-                if (!structuralScalp && sentiment.isAligned(setup.getDirection()) && !ticker.startsWith("X:") && !hasTpOverride) {
+                if (!preserveSetupLevels && sentiment.isAligned(setup.getDirection()) && !ticker.startsWith("X:") && !hasTpOverride) {
                     double risk  = Math.abs(setup.getEntry() - setup.getStopLoss());
                     double tp3x  = "long".equals(setup.getDirection())
                             ? Math.round((setup.getEntry() + risk * 3.0) * 10000.0) / 10000.0
@@ -1076,7 +1077,7 @@ public class BacktestService {
 
                 // ── Fractal Anchor — mirrors live ScannerService ──────────────
                 // 15m SQUEEZE → cap TP to 1:1. Uses slice15Ref computed above.
-                if (!structuralScalp && !ticker.startsWith("X:") && !slice15Ref.isEmpty()
+                if (!preserveSetupLevels && !ticker.startsWith("X:") && !slice15Ref.isEmpty()
                         && regimeDetector.detectSqueeze(slice15Ref)) {
                     double fa_entry = setup.getEntry();
                     double fa_risk  = Math.abs(setup.getStopLoss() - fa_entry);

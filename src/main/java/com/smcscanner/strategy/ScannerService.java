@@ -524,7 +524,8 @@ public class ScannerService {
                 TradeSetup s=setups.get(0);
                 // A scalp's level-derived stop/target must survive later score adjustments.
                 boolean structuralScalp="scalp".equals(s.getVolatility());
-                String detectedStrategy=structuralScalp?"scalp":intradayStratType;
+                boolean preserveSetupLevels=structuralScalp || "keylevel".equals(s.getVolatility());
+                String detectedStrategy=structuralScalp?"scalp":("keylevel".equals(s.getVolatility())?"keylevel":intradayStratType);
                 if (structuralScalp) {
                     effectiveMinConf=scalpMode.resolveMinConfidence(parentMinConf,config.getMinConfidence());
                     effectiveMaxConf=scalpMode.resolveMaxConfidence(parentMaxConf);
@@ -611,7 +612,7 @@ public class ScannerService {
                     // Prevents wick-out on low-price volatile stocks (SOFI: $0.05 ATR → $0.08 SL = dead).
                     double minSlPct = Math.max(profile.minSlPricePct(),
                             s.getEntry() < 30.0 ? 0.015 : 0.0);
-                    if (minSlPct > 0 && !structuralScalp) {
+                    if (minSlPct > 0 && !preserveSetupLevels) {
                         double entry = s.getEntry();
                         double slDist = Math.abs(s.getStopLoss() - entry);
                         double minSlDist = entry * minSlPct;
@@ -652,7 +653,7 @@ public class ScannerService {
                             pressureService.checkExhaustion(sessionBars5m, dailyBars);
                     if (exh.exhausted()) {
                         exhaustionAdj = -10;
-                        if (!structuralScalp) {
+                        if (!preserveSetupLevels) {
                             double entry = s.getEntry();
                             double risk  = Math.abs(s.getStopLoss() - entry);
                             double capTp = "long".equals(s.getDirection()) ? entry + risk : entry - risk;
@@ -688,7 +689,7 @@ public class ScannerService {
                 // ── RS continuous TP multiplier [0.7 → 1.5] ─────────────────
                 // Strong outperformance vs SPY → extend TP (stock has momentum).
                 // Lagging SPY → tighten TP (less room to run). Float, not boolean.
-                if (!structuralScalp && profile.isIntradayRsGate() && !isC && intradayRsVal > 0) {
+                if (!preserveSetupLevels && profile.isIntradayRsGate() && !isC && intradayRsVal > 0) {
                     double rsMultiplier = 1.0;
                     if      (intradayRsVal > 1.3) rsMultiplier = Math.min(1.5, intradayRsVal);
                     else if (intradayRsVal < 0.8) rsMultiplier = Math.max(0.7, intradayRsVal);
@@ -715,7 +716,7 @@ public class ScannerService {
                 // CRITICAL: also scale TP by same factor to preserve R:R.
                 // Old code only widened SL → converted 1.5:1 trades to sub-1:1 in
                 // volatile regimes (e.g. April 2026 tariff market = 66% sub-1:1 R:R).
-                if (!structuralScalp && regime == MarketRegimeDetector.Regime.VOLATILE && !isC) {
+                if (!preserveSetupLevels && regime == MarketRegimeDetector.Regime.VOLATILE && !isC) {
                     double slFactor = regimeDetector.slExpansionFactor(regime);
                     double entry   = s.getEntry();
                     double slDist  = Math.abs(s.getStopLoss() - entry) * slFactor;
@@ -761,7 +762,7 @@ public class ScannerService {
                 // ── News-aligned TP extension: widen TP to 3:1 ──────────────────
                 // Skip extension if ticker has explicit tpRrRatio override (e.g. JPM=1.0)
                 boolean hasTpOverride = profile.getTpRrRatio() != null;
-                if (!structuralScalp && !isC && sentiment.isAligned(s.getDirection()) && !hasTpOverride) {
+                if (!preserveSetupLevels && !isC && sentiment.isAligned(s.getDirection()) && !hasTpOverride) {
                     double risk = Math.abs(s.getEntry() - s.getStopLoss());
                     double tp3x = "long".equals(s.getDirection())
                             ? Math.round((s.getEntry() + risk * 3.0) * 10000.0) / 10000.0
@@ -782,7 +783,7 @@ public class ScannerService {
                 // above 1:1 is premature — the squeeze hasn't resolved yet.
                 // Hard geometric cap; no confidence penalty (trade still fires, tighter).
                 boolean m15Squeeze = !isC && !bars15Ref.isEmpty() && regimeDetector.detectSqueeze(bars15Ref);
-                if (m15Squeeze && !structuralScalp) {
+                if (m15Squeeze && !preserveSetupLevels) {
                     double fa_entry = s.getEntry();
                     double fa_risk  = Math.abs(s.getStopLoss() - fa_entry);
                     double fa_oneR  = "long".equals(s.getDirection()) ? fa_entry + fa_risk : fa_entry - fa_risk;
@@ -1087,7 +1088,7 @@ public class ScannerService {
                         sma200Adj, rsiAdj, candleAdj, volAdj, regimeStratAdj, pivotAdj,
                         trapAdj, exhaustionAdj, confluenceVetoAdj);
                 String smcSignals = s.getFactorBreakdown(); // raw SMC signals from SetupDetector
-                String factorBreakdown = (smcSignals != null && (smcSignals.startsWith("smc-") || structuralScalp))
+                String factorBreakdown = (smcSignals != null && (smcSignals.startsWith("smc-") || preserveSetupLevels))
                         ? smcSignals + "\nadj: " + adjBreakdown
                         : adjBreakdown;
 
@@ -1213,7 +1214,7 @@ public class ScannerService {
                             // Prevents unrealistic TPs like TSLA $359→$386 (+5.76%)
                             // on intraday trades. Daily ATR is the max realistic
                             // single-day move; cap TP at 2x that from entry.
-                            if (!structuralScalp && !lateDay && dailyAtr > 0) {
+                            if (!preserveSetupLevels && !lateDay && dailyAtr > 0) {
                                 double maxTpDist = dailyAtr * 2.0;
                                 double tpDist = Math.abs(s.getTakeProfit() - s.getEntry());
                                 if (tpDist > maxTpDist) {
