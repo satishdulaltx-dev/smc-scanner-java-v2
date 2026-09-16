@@ -11,15 +11,16 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.time.Clock;
 import java.time.ZoneOffset;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+
 import java.util.concurrent.TimeUnit;
 
 /**
  * Fetches options chain data from Polygon.io /v3/snapshot/options/{underlyingAsset}.
  * Returns raw contract-level data (strike, expiry, volume, OI, greeks, IV).
- * Caches results for 5 minutes per ticker.
+ * Caches complete query-specific snapshots for 15 seconds; recommendation quotes expire separately.
  */
 @Service
 public class OptionsDataService {
@@ -27,125 +28,94 @@ public class OptionsDataService {
     private static final String BASE = "https://api.polygon.io/v3/snapshot/options/";
 
     private final ScannerConfig config;
-    private final ObjectMapper  mapper = new ObjectMapper();
-    private final OkHttpClient  http   = new OkHttpClient.Builder()
-            .connectTimeout(10, TimeUnit.SECONDS)
-            .readTimeout(20, TimeUnit.SECONDS)
-            .build();
+    private final ObjectMapper mapper = new ObjectMapper();
+    private final OkHttpClient http;
+    private final Clock clock;
+    private long providerRetryAtMs;
+    private static final long CACHE_TTL_MS = 15_000L;
+    private static final long FAILURE_TTL_MS = 60_000L;
+    private static final int MAX_PAGES = 10;
+    private final Map<String, CacheEntry> cache = new LinkedHashMap<>(32, .75f, true) {
+        @Override protected boolean removeEldestEntry(Map.Entry<String, CacheEntry> eldest) {
+            return size() > 256;
+        }
+    };
 
-    // Simple TTL cache: ticker → (data, timestamp)
-    private final Map<String, CacheEntry> cache = new ConcurrentHashMap<>();
-    private static final long CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-
+    @org.springframework.beans.factory.annotation.Autowired
     public OptionsDataService(ScannerConfig config) {
-        this.config = config;
+        this(config, new OkHttpClient.Builder().connectTimeout(10, TimeUnit.SECONDS)
+                .readTimeout(20, TimeUnit.SECONDS).build(), Clock.systemUTC());
     }
 
-    /**
-     * Fetches near-the-money options chain for the given ticker.
-     *
-     * @param ticker         underlying symbol (e.g. "AAPL")
-     * @param currentPrice   latest underlying price (to filter ATM ±range)
-     * @param strikeRange    how far from ATM in dollars (e.g. 15.0)
-     * @param minDte         minimum days to expiration (e.g. 5)
-     * @param maxDte         maximum days to expiration (e.g. 21)
-     * @return list of contract data maps, or empty list on error
-     */
-    public List<ContractData> getOptionsChain(String ticker, double currentPrice,
-                                               double strikeRange, int minDte, int maxDte) {
-        // Check cache
-        CacheEntry cached = cache.get(ticker);
-        if (cached != null && System.currentTimeMillis() - cached.timestamp < CACHE_TTL_MS) {
-            return cached.data;
-        }
+    OptionsDataService(ScannerConfig config, OkHttpClient http, Clock clock) {
+        this.config = config; this.http = http; this.clock = clock;
+    }
 
-        String apiKey = config.getPolygonApiKey();
-        if (apiKey == null || apiKey.isBlank()) {
-            log.warn("No Polygon API key for options data");
+    /** Fetch a complete requested chain. Different strike/expiry windows never share a cache entry. */
+    public synchronized List<ContractData> getOptionsChain(String ticker, double currentPrice,
+                                                          double strikeRange, int minDte, int maxDte) {
+        if (ticker == null || ticker.isBlank() || !Double.isFinite(currentPrice) || currentPrice <= 0
+                || !Double.isFinite(strikeRange) || strikeRange < 0 || minDte < 0 || maxDte < minDte)
             return List.of();
-        }
-
+        String apiKey = config.getPolygonApiKey();
+        if (apiKey == null || apiKey.isBlank()) return List.of();
         double minStrike = Math.max(0, currentPrice - strikeRange);
         double maxStrike = currentPrice + strikeRange;
-        LocalDate minExp = LocalDate.now(ZoneOffset.UTC).plusDays(minDte);
-        LocalDate maxExp = LocalDate.now(ZoneOffset.UTC).plusDays(maxDte);
-
-        List<ContractData> allContracts = new ArrayList<>();
-        String url = String.format("%s%s?strike_price.gte=%.0f&strike_price.lte=%.0f" +
-                        "&expiration_date.gte=%s&expiration_date.lte=%s&limit=250&apiKey=%s",
-                BASE, ticker, minStrike, maxStrike, minExp, maxExp, apiKey);
-
+        LocalDate today = LocalDate.now(clock.withZone(ZoneOffset.UTC));
+        okhttp3.HttpUrl initial = Objects.requireNonNull(okhttp3.HttpUrl.parse(BASE)).newBuilder()
+                .addPathSegment(ticker)
+                .addQueryParameter("strike_price.gte", Double.toString(minStrike))
+                .addQueryParameter("strike_price.lte", Double.toString(maxStrike))
+                .addQueryParameter("expiration_date.gte", today.plusDays(minDte).toString())
+                .addQueryParameter("expiration_date.lte", today.plusDays(maxDte).toString())
+                .addQueryParameter("limit", "250").build();
+        String cacheKey = initial.toString();
+        CacheEntry cached = cache.get(cacheKey);
+        if (cached != null && clock.millis() < cached.expiresAtMs) return cached.data;
+        if (clock.millis() < providerRetryAtMs) return List.of();
+        Map<String, ContractData> contracts = new LinkedHashMap<>();
+        Set<String> seen = new HashSet<>();
+        String pageUrl = cacheKey;
         try {
-            allContracts.addAll(fetchPage(url));
-
-            // Follow pagination — Polygon returns next_url for large chains
-            // (limit to 3 pages max = 750 contracts to avoid rate limits)
-            String nextUrl = null;
-            for (int page = 0; page < 2; page++) {
-                // Re-parse the last response to get next_url
-                // Actually let's track it inline
-                break; // We'll handle pagination below
-            }
-        } catch (Exception e) {
-            log.error("Options chain fetch failed for {}: {}", ticker, e.getMessage());
-        }
-
-        // Try pagination if the API returned next_url
-        try {
-            String pageUrl = url;
-            for (int page = 0; page < 3; page++) {
-                String nextUrl = fetchPageWithNext(pageUrl, allContracts);
-                if (nextUrl == null) break;
-                pageUrl = nextUrl + "&apiKey=" + apiKey;
-            }
-        } catch (Exception e) {
-            log.debug("Options pagination stopped: {}", e.getMessage());
-        }
-
-        // Deduplicate by contract ticker
-        Map<String, ContractData> dedupe = new LinkedHashMap<>();
-        for (ContractData c : allContracts) {
-            dedupe.putIfAbsent(c.contractTicker(), c);
-        }
-        List<ContractData> result = new ArrayList<>(dedupe.values());
-
-        cache.put(ticker, new CacheEntry(result, System.currentTimeMillis()));
-        log.debug("Options chain for {}: {} contracts (strikes {}-{}, exp {}-{})",
-                ticker, result.size(), minStrike, maxStrike, minExp, maxExp);
-        return result;
-    }
-
-    /** Fetches a page and returns the next_url (or null). Adds contracts to the provided list. */
-    private String fetchPageWithNext(String url, List<ContractData> out) {
-        try (Response resp = http.newCall(new Request.Builder().url(url).build()).execute()) {
-            if (!resp.isSuccessful() || resp.body() == null) return null;
-            JsonNode root = mapper.readTree(resp.body().string());
-
-            if (!"OK".equals(root.path("status").asText())) {
-                log.warn("Options API status: {}", root.path("status").asText());
-                return null;
-            }
-
-            JsonNode results = root.get("results");
-            if (results != null && results.isArray()) {
-                for (JsonNode node : results) {
-                    ContractData cd = parseContract(node);
-                    if (cd != null) out.add(cd);
+            while (pageUrl != null) {
+                okhttp3.HttpUrl parsed = okhttp3.HttpUrl.parse(pageUrl);
+                if (parsed == null || !"https".equals(parsed.scheme())
+                        || !"api.polygon.io".equals(parsed.host()) || !seen.add(pageUrl) || seen.size() > MAX_PAGES)
+                    throw new IllegalStateException("Invalid or incomplete options pagination");
+                // Credentials stay in the header, including on provider pagination URLs.
+                okhttp3.HttpUrl safeUrl = parsed.newBuilder().removeAllQueryParameters("apiKey").build();
+                Request request = new Request.Builder().url(safeUrl)
+                        .header("Authorization", "Bearer " + apiKey).build();
+                try (Response response = http.newCall(request).execute()) {
+                    if (!response.isSuccessful() || response.body() == null) {
+                        if (response.code() == 429) providerRetryAtMs = clock.millis() + FAILURE_TTL_MS;
+                        if (response.code() == 401 || response.code() == 403)
+                            providerRetryAtMs = clock.millis() + 5 * FAILURE_TTL_MS;
+                        throw new IllegalStateException("Options provider HTTP " + response.code());
+                    }
+                    JsonNode root = mapper.readTree(response.body().string());
+                    if (!Set.of("OK", "DELAYED").contains(root.path("status").asText()))
+                        throw new IllegalStateException("Options provider did not return a successful snapshot");
+                    JsonNode results = root.get("results");
+                    if (results != null && !results.isArray())
+                        throw new IllegalStateException("Invalid options snapshot results");
+                    if (results != null) for (JsonNode node : results) {
+                        ContractData contract = parseContract(node);
+                        if (contract != null) contracts.putIfAbsent(contract.contractTicker(), contract);
+                    }
+                    JsonNode next = root.get("next_url");
+                    pageUrl = next == null || next.isNull() ? null : next.asText();
                 }
             }
-
-            JsonNode nextUrl = root.get("next_url");
-            return nextUrl != null && !nextUrl.isNull() ? nextUrl.asText() : null;
+            List<ContractData> result = List.copyOf(contracts.values());
+            cache.put(cacheKey, new CacheEntry(result, clock.millis() + CACHE_TTL_MS));
+            return result;
         } catch (Exception e) {
-            log.error("Options page fetch error: {}", e.getMessage());
-            return null;
+            // Never return a partial chain as a complete universe, or log URLs containing credentials.
+            log.warn("Options chain unavailable for {} ({})", ticker, e.getClass().getSimpleName());
+            cache.put(cacheKey, new CacheEntry(List.of(), clock.millis() + FAILURE_TTL_MS));
+            return List.of();
         }
-    }
-
-    private List<ContractData> fetchPage(String url) {
-        List<ContractData> result = new ArrayList<>();
-        fetchPageWithNext(url, result);
-        return result;
     }
 
     private ContractData parseContract(JsonNode node) {
@@ -160,6 +130,9 @@ public class OptionsDataService {
             double strike         = details.path("strike_price").asDouble(0);
             String expDate        = details.path("expiration_date").asText(null);
             int    sharesPerContract = details.path("shares_per_contract").asInt(100);
+            if (contractTicker == null || contractTicker.isBlank() || expDate == null
+                    || !Set.of("call", "put").contains(contractType) || strike <= 0 || sharesPerContract <= 0)
+                return null;
 
             long volume = day != null ? day.path("volume").asLong(0) : 0;
             double close = day != null ? day.path("close").asDouble(0) : 0;
@@ -172,6 +145,11 @@ public class OptionsDataService {
             JsonNode lastQuote = node.get("last_quote");
             double ask = lastQuote != null ? lastQuote.path("ask").asDouble(0) : 0;
             double bid = lastQuote != null ? lastQuote.path("bid").asDouble(0) : 0;
+
+            long quoteTimestampMs = lastQuote != null ? lastQuote.path("last_updated").asLong(0) / 1_000_000L : 0;
+            String quoteTimeframe = lastQuote != null ? lastQuote.path("timeframe").asText("") : "";
+            double askSize = lastQuote != null ? lastQuote.path("ask_size").asDouble(0) : 0;
+            double bidSize = lastQuote != null ? lastQuote.path("bid_size").asDouble(0) : 0;
 
             long oi = node.path("open_interest").asLong(0);
             double iv = node.path("implied_volatility").asDouble(0);
@@ -186,7 +164,7 @@ public class OptionsDataService {
 
             return new ContractData(contractTicker, contractType, strike, expDate,
                     sharesPerContract, volume, close, dayHigh, dayLow, vwap, ask, bid,
-                    oi, iv, delta, gamma, theta, vega, underlyingPrice);
+                    oi, iv, delta, gamma, theta, vega, underlyingPrice, quoteTimestampMs, quoteTimeframe, askSize, bidSize);
         } catch (Exception e) {
             log.debug("Failed to parse contract: {}", e.getMessage());
             return null;
@@ -202,7 +180,7 @@ public class OptionsDataService {
             String expirationDate,
             int    sharesPerContract,
             long   volume,
-            double close,           // last traded price (previous session)
+            double close,           // most recent daily bar close; not an executable quote
             double dayHigh,
             double dayLow,
             double vwap,
@@ -214,8 +192,23 @@ public class OptionsDataService {
             double gamma,
             double theta,
             double vega,
-            double underlyingPrice
+            double underlyingPrice,
+            long quoteTimestampMs,
+            String quoteTimeframe,
+            double askSize,
+            double bidSize
     ) {
+        public boolean hasUsableQuote(long nowMs) {
+            return Double.isFinite(ask) && Double.isFinite(bid) && bid > 0 && ask >= bid
+                    && Double.isFinite(askSize) && askSize > 0 && Double.isFinite(bidSize) && bidSize > 0
+                    && "REAL-TIME".equals(quoteTimeframe) && quoteTimestampMs > 0
+                    && quoteTimestampMs <= nowMs && nowMs - quoteTimestampMs <= 30_000L;
+        }
+
+        public double spreadFraction() {
+            return (ask - bid) / ((ask + bid) / 2.0);
+        }
+
         /** Days to expiration from today. */
         public int dte() {
             try {
@@ -226,5 +219,5 @@ public class OptionsDataService {
         }
     }
 
-    private record CacheEntry(List<ContractData> data, long timestamp) {}
+    private record CacheEntry(List<ContractData> data, long expiresAtMs) {}
 }

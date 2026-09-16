@@ -145,9 +145,10 @@ public class OptionsFlowAnalyzer {
 
         // Filter by contract type based on direction
         String targetType = "long".equals(direction) ? "call" : "put";
+        long quoteCheckAtMs = System.currentTimeMillis();
         List<OptionsDataService.ContractData> candidates = chain.stream()
                 .filter(c -> targetType.equals(c.contractType()))
-                .filter(c -> c.close() > 0)         // must have a price
+                .filter(c -> c.hasUsableQuote(quoteCheckAtMs))
                 .filter(c -> Math.abs(c.delta()) >= 0.05) // filter dead options (delta~0)
                 .filter(c -> c.dte() >= 7 && c.dte() <= 21)  // 7-21 DTE
                 .collect(Collectors.toList());
@@ -156,7 +157,7 @@ public class OptionsFlowAnalyzer {
             // Fallback: accept 5-30 DTE range
             candidates = chain.stream()
                     .filter(c -> targetType.equals(c.contractType()))
-                    .filter(c -> c.close() > 0)
+                    .filter(c -> c.hasUsableQuote(quoteCheckAtMs))
                     .filter(c -> Math.abs(c.delta()) >= 0.05) // filter dead options
                     .filter(c -> c.dte() >= 5 && c.dte() <= 30)
                     .collect(Collectors.toList());
@@ -205,17 +206,15 @@ public class OptionsFlowAnalyzer {
             else if (c.dte() >= 7 && c.dte() <= 21) score += 5;
 
             // Bid-ask implied: prefer reasonable premium (not too cheap, not too expensive)
-            double premiumPct = c.close() / entry * 100;
+            double premiumPct = c.ask() / entry * 100;
             if (premiumPct >= 0.5 && premiumPct <= 3.0) score += 10;
             else if (premiumPct < 0.5) score -= 10; // too cheap = far OTM, likely worthless
 
-            // ── Bid-ask spread validation (estimated from day range) ──────
-            if (c.dayHigh() > 0 && c.dayLow() > 0 && c.close() > 0) {
-                double spreadPct = (c.dayHigh() - c.dayLow()) / c.close();
-                if (spreadPct > 0.15) score -= 15;      // very wide spread
-                else if (spreadPct > 0.10) score -= 5;   // moderately wide
-                else if (spreadPct < 0.05) score += 5;   // tight spread bonus
-            }
+            // Compare actual quoted spread. Daily price movement is not a spread measurement.
+            double spreadPct = c.spreadFraction();
+            if (spreadPct > 0.15) score -= 15;
+            else if (spreadPct > 0.10) score -= 5;
+            else if (spreadPct < 0.05) score += 5;
 
             // ── OI tier classification ────────────────────────────────────
             if (c.openInterest() < 100) score -= 25;     // illiquid, avoid
@@ -233,13 +232,10 @@ public class OptionsFlowAnalyzer {
 
         if (best == null) return OptionsRecommendation.NONE;
 
-        // Use live ask price as the fill price for limit orders — this is what Alpaca
-        // will use as the limit_price. If the ask is unavailable (0), fall back to
-        // close * 1.04 (empirical 4% spread between last close and intraday ask).
-        // Using close alone caused nearly all orders to be NOT_FILLED because the
-        // limit sat below the ask all day.
-        double premium = (best.ask() > 0) ? best.ask()
-                : (best.close() > 0 ? best.close() * 1.04 : best.close());
+        // A current ask is an observed reference price, not a guaranteed fill.
+        // Missing/delayed quotes are rejected above; never invent an ask from a bar close.
+        if (!best.hasUsableQuote(System.currentTimeMillis())) return OptionsRecommendation.NONE;
+        double premium = best.ask();
         double delta   = best.delta();
         double gamma   = best.gamma();
         double theta   = best.theta();

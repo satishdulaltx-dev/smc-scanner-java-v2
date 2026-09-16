@@ -11,7 +11,7 @@ public record OptionsRecommendation(
         double strike,
         String expirationDate,
         int    dte,               // days to expiration
-        double estimatedPremium,  // last close price of the contract
+        double estimatedPremium,  // observed ask at recommendation time; not a guaranteed fill
         double delta,
         double gamma,
         double theta,
