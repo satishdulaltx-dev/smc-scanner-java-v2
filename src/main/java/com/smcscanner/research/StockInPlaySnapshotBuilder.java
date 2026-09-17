@@ -85,7 +85,10 @@ public final class StockInPlaySnapshotBuilder {
     private static boolean completeThroughDecision(List<OHLCV> bars,LocalDate date,long asOfEpochMs) {
         if (bars.isEmpty() || bars.get(0).getTimestamp()!=date.atTime(9,30).atZone(ET).toInstant().toEpochMilli())
             return false;
-        if (bars.get(bars.size()-1).getTimestamp()+FIVE_MINUTES_MS!=asOfEpochMs) return false;
+        // A one-minute signal can arrive between five-minute boundaries. Rank it from
+        // the latest five-minute bar that was already complete, never from the forming bar.
+        long latestCompletion=bars.get(bars.size()-1).getTimestamp()+FIVE_MINUTES_MS;
+        if (latestCompletion>asOfEpochMs || asOfEpochMs-latestCompletion>=FIVE_MINUTES_MS) return false;
         for (int i=1;i<bars.size();i++)
             if (bars.get(i).getTimestamp()-bars.get(i-1).getTimestamp()!=FIVE_MINUTES_MS) return false;
         return true;

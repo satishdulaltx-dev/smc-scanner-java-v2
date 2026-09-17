@@ -39,6 +39,18 @@ class StockInPlaySnapshotBuilderTest {
         assertFalse(snapshot.historyComplete());
     }
 
+    @Test
+    void oneMinuteDecisionUsesLatestCompletedFiveMinuteBar() {
+        var history=history(false);
+        long asOf=LocalDate.of(2026,7,17).atTime(10,2).atZone(ET).toInstant().toEpochMilli();
+        var snapshot=StockInPlaySnapshotBuilder.build("TEST",asOf,history.fiveMinute(),history.daily(),false);
+        assertTrue(snapshot.historyComplete());
+
+        long tooLate=LocalDate.of(2026,7,17).atTime(10,5).atZone(ET).toInstant().toEpochMilli();
+        var stale=StockInPlaySnapshotBuilder.build("TEST",tooLate,history.fiveMinute(),history.daily(),false);
+        assertFalse(stale.historyComplete());
+    }
+
     private static History history(boolean omitCurrentMiddleBar) {
         List<OHLCV> five=new ArrayList<>();
         LocalDate cursor=LocalDate.of(2026,6,25);

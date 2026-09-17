@@ -827,13 +827,21 @@ public class DashboardController {
             @org.springframework.web.bind.annotation.RequestParam String tickers,
             @org.springframework.web.bind.annotation.RequestParam LocalDate start,
             @org.springframework.web.bind.annotation.RequestParam LocalDate end,
-            @org.springframework.web.bind.annotation.RequestParam(defaultValue="2") int topK) {
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue="2") int topK,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue="orb-opening-base-1m") String pattern,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue="STOP_EOD") String exitStyle,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue="390") int holdMinutes,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue="2.0") double targetR) {
         List<String> universe=Arrays.stream(tickers.split(",")).map(String::trim)
                 .filter(value->!value.isBlank()).map(String::toUpperCase).distinct().toList();
         try {
             if(universe.size()<5)throw new IllegalArgumentException("Use at least five distinct tickers");
             if(topK<1||topK>5)throw new IllegalArgumentException("Top selection must be between 1 and 5");
-            new BacktestRun(start,end,PortfolioResearchService.PATTERN,Set.of(),30,2.0);
+            BacktestExitStyle.fromString(exitStyle);
+            new BacktestRun(start,end,pattern,Set.of(),holdMinutes,targetR);
+            if(!Set.of("orb-opening-base-1m","qualified-retest","opening-momentum-1m",
+                    "opening-momentum-retest-1m").contains(pattern))
+                throw new IllegalArgumentException("Unsupported portfolio research pattern");
         } catch(Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error",e.getMessage()));
         }
@@ -845,7 +853,8 @@ public class DashboardController {
         controlledExecutor.submit(()->{
             job.put("status","running");
             try {
-                job.put("result",portfolioResearchService.run(universe,start,end,topK));
+                job.put("result",portfolioResearchService.run(universe,start,end,topK,pattern,
+                        BacktestExitStyle.fromString(exitStyle),holdMinutes,targetR));
                 job.put("status","complete");
             } catch(Exception e) {
                 log.error("Portfolio research job failed: {}",e.getMessage(),e);

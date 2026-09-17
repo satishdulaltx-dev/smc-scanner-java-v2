@@ -23,7 +23,7 @@ import java.util.TreeMap;
 /** Research-only portfolio replay. It never writes live scanner or broker state. */
 @Service
 public class PortfolioResearchService {
-    public static final String PATTERN="qualified-retest";
+    public static final String DEFAULT_PATTERN="orb-opening-base-1m";
     private final BacktestService backtestService;
     private final PolygonClient polygon;
     private final StockInPlayRanker ranker=new StockInPlayRanker();
@@ -33,20 +33,28 @@ public class PortfolioResearchService {
     }
 
     public Map<String,Object> run(List<String> requestedTickers,LocalDate start,LocalDate end,int topK) {
+        return run(requestedTickers,start,end,topK,DEFAULT_PATTERN,BacktestExitStyle.STOP_EOD,390,2.0);
+    }
+
+    public Map<String,Object> run(List<String> requestedTickers,LocalDate start,LocalDate end,int topK,
+                                  String pattern,BacktestExitStyle exitStyle,int holdMinutes,double targetR) {
         List<String> tickers=normalizeTickers(requestedTickers);
         if (tickers.size()<StockInPlayRanker.MIN_UNIVERSE_SIZE)
             throw new IllegalArgumentException("Portfolio research requires at least five distinct tickers");
         if (tickers.size()>30) throw new IllegalArgumentException("Portfolio research supports at most 30 tickers per run");
         if (topK<1 || topK>Math.min(5,tickers.size()))
             throw new IllegalArgumentException("Top selection must be between 1 and 5 tickers");
-        new BacktestRun(start,end,PATTERN,Set.of(),30,2.0);
+        if (!Set.of("orb-opening-base-1m","qualified-retest","opening-momentum-1m",
+                "opening-momentum-retest-1m").contains(pattern))
+            throw new IllegalArgumentException("Unsupported portfolio research pattern");
+        BacktestRun specification=new BacktestRun(start,end,pattern,Set.of(),holdMinutes,targetR);
 
         List<BacktestService.TradeResult> rawTrades=new ArrayList<>();
         List<String> warnings=new ArrayList<>();
         List<String> usableTickers=new ArrayList<>();
         for (String ticker:tickers) {
             BacktestService.BacktestResult result=backtestService.run(ticker,BacktestMode.INTRADAY,null,
-                    BacktestExitStyle.FIXED_R,new BacktestRun(start,end,PATTERN,Set.of(),30,2.0));
+                    exitStyle,new BacktestRun(start,end,pattern,Set.of(),holdMinutes,targetR));
             if (result.error!=null) {
                 warnings.add(ticker+": "+result.error);
                 continue;
@@ -57,7 +65,7 @@ public class PortfolioResearchService {
         }
         if (usableTickers.size()<StockInPlayRanker.MIN_UNIVERSE_SIZE)
             return failedResponse(tickers,usableTickers,start,end,topK,warnings,
-                    "Fewer than five tickers had complete historical coverage");
+                    "Fewer than five tickers had complete historical coverage",specification,exitStyle);
 
         Map<String,List<OHLCV>> fiveMinute=new LinkedHashMap<>();
         Map<String,List<OHLCV>> daily=new LinkedHashMap<>();
@@ -98,24 +106,28 @@ public class PortfolioResearchService {
         }
         selected.sort(Comparator.comparingLong(BacktestService.TradeResult::entryEpochMs)
                 .thenComparing(BacktestService.TradeResult::ticker));
-        return response(tickers,usableTickers,start,end,topK,rawTrades,selected,rankAudit,warnings,null);
+        return response(tickers,usableTickers,start,end,topK,rawTrades,selected,rankAudit,warnings,null,
+                specification,exitStyle);
     }
 
     private Map<String,Object> response(List<String> requested,List<String> usable,LocalDate start,LocalDate end,
                                         int topK,List<BacktestService.TradeResult> raw,
                                         List<BacktestService.TradeResult> selected,List<Map<String,Object>> audit,
-                                        List<String> warnings,String error) {
+                                        List<String> warnings,String error,BacktestRun specification,
+                                        BacktestExitStyle exitStyle) {
         ResearchStatistics.Summary evidence=ResearchStatistics.summarize(selected);
         int wins=(int)selected.stream().filter(t->t.riskMultiple()>0).count();
         int losses=(int)selected.stream().filter(t->t.riskMultiple()<0).count();
         int timeouts=(int)selected.stream().filter(t->"TIMEOUT".equals(t.outcome())).count();
         Map<String,Object> out=new LinkedHashMap<>();
         out.put("ticker","STOCK-IN-PLAY PORTFOLIO");out.put("portfolio",true);out.put("research",true);
-        out.put("pattern",PATTERN+" + synchronized universe rank");out.put("decision_timeframe","5m");
+        out.put("pattern",specification.pattern+" + synchronized universe rank");
+        out.put("decision_timeframe",BacktestRun.decisionTimeframe(specification.pattern));
         out.put("requested_tickers",requested);out.put("tickers",usable);out.put("universe_size",usable.size());
         out.put("top_k",topK);out.put("requested_start_date",start.toString());out.put("start_date",start.toString());
         out.put("end_date",end.toString());out.put("lookback_days",ChronoUnit.DAYS.between(start,end)+1);
-        out.put("exit_style",BacktestExitStyle.FIXED_R.name());out.put("max_hold_minutes",30);out.put("target_r",2.0);
+        out.put("exit_style",exitStyle.name());out.put("max_hold_minutes",specification.maxHoldMinutes);
+        out.put("target_r",specification.targetR);
         out.put("round_trip_cost_bps",BacktestRun.RESEARCH_ROUND_TRIP_COST_BPS);out.put("filters","stock-in-play rank");
         out.put("raw_total_trades",raw.size());out.put("rank_rejected",raw.size()-selected.size());
         out.put("rank_audit",audit);out.put("warnings",warnings);out.put("coverage",Map.of("usable_tickers",usable.size()));
@@ -156,8 +168,10 @@ public class PortfolioResearchService {
     }
 
     private Map<String,Object> failedResponse(List<String> requested,List<String> usable,LocalDate start,LocalDate end,
-                                              int topK,List<String> warnings,String error) {
-        return response(requested,usable,start,end,topK,List.of(),List.of(),List.of(),warnings,error);
+                                              int topK,List<String> warnings,String error,
+                                              BacktestRun specification,BacktestExitStyle exitStyle) {
+        return response(requested,usable,start,end,topK,List.of(),List.of(),List.of(),warnings,error,
+                specification,exitStyle);
     }
 
     private List<String> normalizeTickers(List<String> values) {
