@@ -11,7 +11,10 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 
 /**
  * Opening Range Breakout (ORB) strategy detector for volatile momentum stocks.
@@ -22,6 +25,81 @@ import java.util.List;
 public class BreakoutStrategyDetector {
 
     private static final ZoneId ET = ZoneId.of("America/New_York");
+
+    /**
+     * Research-only implementation of the five-minute opening-range method used in the
+     * published "Stocks in Play" study. Decisions are evaluated on completed one-minute
+     * bars so the next-minute fill in {@code BacktestService} remains executable.
+     *
+     * <p>The paper selects the top 20 opening-relative-volume stocks across thousands of
+     * names each day. A single-ticker backtest cannot reproduce that cross-sectional rank,
+     * so {@code minimumOpeningRvol} is an explicit adaptation: zero isolates the opening
+     * breakout itself and 1.5 tests whether unusual opening activity adds value.</p>
+     */
+    public List<TradeSetup> detectOpeningActivityResearch(List<OHLCV> bars, String ticker,
+                                                           double dailyAtr,
+                                                           double minimumOpeningRvol) {
+        if (bars == null || bars.isEmpty() || dailyAtr <= 0.50) return List.of();
+        Map<LocalDate,List<OHLCV>> sessions = new TreeMap<>();
+        for (OHLCV bar : bars) {
+            ZonedDateTime time = Instant.ofEpochMilli(bar.getTimestamp()).atZone(ET);
+            if (!time.toLocalTime().isBefore(LocalTime.of(9,30))
+                    && time.toLocalTime().isBefore(LocalTime.of(16,0))) {
+                sessions.computeIfAbsent(time.toLocalDate(), ignored -> new ArrayList<>()).add(bar);
+            }
+        }
+        if (sessions.size() < 15) return List.of();
+        List<LocalDate> dates = new ArrayList<>(sessions.keySet());
+        LocalDate currentDate = dates.get(dates.size()-1);
+        List<OHLCV> current = sessions.get(currentDate).stream()
+                .sorted(Comparator.comparingLong(OHLCV::getTimestamp)).toList();
+        if (current.size() < 6) return List.of();
+
+        List<List<OHLCV>> prior = new ArrayList<>();
+        for (int i=dates.size()-15;i<dates.size()-1;i++) {
+            List<OHLCV> session=sessions.get(dates.get(i)).stream()
+                    .sorted(Comparator.comparingLong(OHLCV::getTimestamp)).toList();
+            if (session.size()<5) return List.of();
+            prior.add(session);
+        }
+        double averageDailyVolume=prior.stream().mapToDouble(session ->
+                session.stream().mapToDouble(OHLCV::getVolume).sum()).average().orElse(0);
+        if (averageDailyVolume < 1_000_000) return List.of();
+        double averageOpeningVolume=prior.stream().mapToDouble(session ->
+                session.subList(0,5).stream().mapToDouble(OHLCV::getVolume).sum())
+                .average().orElse(0);
+        double openingVolume=current.subList(0,5).stream().mapToDouble(OHLCV::getVolume).sum();
+        if (averageOpeningVolume<=0) return List.of();
+        double openingRvol=openingVolume/averageOpeningVolume;
+        if (openingRvol < minimumOpeningRvol) return List.of();
+
+        OHLCV first=current.get(0), fifth=current.get(4), last=current.get(current.size()-1);
+        if (fifth.getClose()<5.0 || fifth.getClose()==first.getOpen()) return List.of();
+        double rangeHigh=current.subList(0,5).stream().mapToDouble(OHLCV::getHigh).max().orElse(0);
+        double rangeLow=current.subList(0,5).stream().mapToDouble(OHLCV::getLow).min().orElse(0);
+        boolean isLong=fifth.getClose()>first.getOpen();
+        boolean alreadyBroken=current.subList(5,current.size()-1).stream().anyMatch(bar ->
+                isLong ? bar.getHigh()>rangeHigh : bar.getLow()<rangeLow);
+        boolean breaksNow=isLong ? last.getHigh()>rangeHigh : last.getLow()<rangeLow;
+        if (alreadyBroken || !breaksNow) return List.of();
+
+        double entry=isLong?rangeHigh:rangeLow;
+        double risk=dailyAtr*0.10;
+        double stop=isLong?entry-risk:entry+risk;
+        double target=isLong?entry+2*risk:entry-2*risk;
+        String variant=minimumOpeningRvol>0?"rvol>=1.5":"no-rvol-gate";
+        String factors=String.format(
+                "orb-opening-%s | opening_rvol=%.3f | prior14_avg_daily_volume=%.0f | daily_atr=%.4f | %s",
+                isLong?"long":"short",openingRvol,averageDailyVolume,dailyAtr,variant);
+        int confidence=(int)Math.min(95,65+Math.round(Math.min(3,openingRvol)*10));
+        return List.of(TradeSetup.builder().ticker(ticker).direction(isLong?"long":"short")
+                .entry(r4(entry)).stopLoss(r4(stop)).takeProfit(r4(target))
+                .confidence(confidence).session("NYSE").volatility("high").atr(dailyAtr)
+                .hasBos(false).hasChoch(false).fvgTop(r4(rangeHigh)).fvgBottom(r4(rangeLow))
+                .factorBreakdown(factors)
+                .timestamp(Instant.ofEpochMilli(last.getTimestamp()).atZone(ET).toLocalDateTime())
+                .build());
+    }
 
     /**
      * Detect ORB setups for the given bars.

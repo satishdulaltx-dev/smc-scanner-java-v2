@@ -31,6 +31,7 @@ public final class BacktestRun {
             "liquidity-sweep-1m-20-soft", "liquidity-sweep-1m-20-deep",
             "liquidity-sweep-1m-60-soft", "liquidity-sweep-1m-60-deep",
             "opening-momentum-1m", "opening-momentum-retest-1m",
+            "orb-opening-base-1m", "orb-opening-rvol-1m",
             "choch-primary", "pdh-pdl", "pdh-retest");
     public static final Set<String> FILTERS = Set.of("spy", "15m", "volume", "regime", "time", "cost", "news");
     public static final Set<Integer> HOLD_MINUTES = Set.of(15, 30, 60, 120, 390);
@@ -39,7 +40,7 @@ public final class BacktestRun {
     public static final double RESEARCH_ROUND_TRIP_COST_BPS = 10.0;
 
     public static String decisionTimeframe(String pattern) {
-        return pattern != null && (Set.of("ict-sweep-fvg-1m", "opening-momentum-1m",
+        return pattern != null && (pattern.endsWith("-1m") || Set.of("ict-sweep-fvg-1m", "opening-momentum-1m",
                 "opening-momentum-retest-1m").contains(pattern)
                 || pattern.startsWith("liquidity-sweep-1m-")) ? "1m" : "5m";
     }

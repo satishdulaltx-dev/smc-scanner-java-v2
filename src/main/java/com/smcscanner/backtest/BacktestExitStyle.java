@@ -2,6 +2,7 @@ package com.smcscanner.backtest;
 
 public enum BacktestExitStyle {
     FIXED_R("Fixed stop and 2R target"),
+    STOP_EOD("Structural stop or session close"),
     TRAIL_3R("Experimental: 3R target, trailing arms at 2.5R"),
     CLASSIC("Classic TP/SL + breakeven"),
     HYBRID("Profile target; trail arms at 2R scalp / 2.5R other"),

@@ -219,7 +219,8 @@ public class BacktestService {
         }
 
         // Fetch 5m bars for the full lookback — one API call gets it all
-        List<OHLCV> allBars = run.bars(client, ticker, "5m", 10);
+        int researchWarmupDays=run.research && run.pattern.startsWith("orb-opening-") ? 30 : 10;
+        List<OHLCV> allBars = run.bars(client, ticker, "5m", researchWarmupDays);
         if (allBars == null || allBars.size() < 30) {
             return BacktestResult.failed(ticker, lookbackDays, mode,
                     "Insufficient data (" + (allBars==null?0:allBars.size()) + " bars)");
@@ -297,7 +298,7 @@ public class BacktestService {
                 && (run.research || mode == BacktestMode.SCALP || "scalp".equals(preProfile.getStrategyType()) || "scalp".equals(strategyOverride)
                     || (mode == BacktestMode.SCALP && "scalp".equals(scalpSubStrat)));
         List<OHLCV> all1mBars = needsScalp1m
-                ? run.bars(client, ticker, "1m", 0)
+                ? run.bars(client, ticker, "1m", run.research && run.pattern.startsWith("orb-opening-") ? 30 : 0)
                 : List.of();
         if (run.research && needsScalp1m && !ticker.startsWith("X:")) {
             all1mBars=run.normalizeSparseMinuteBars(ticker+" 1m",allBars,all1mBars);
@@ -391,7 +392,7 @@ public class BacktestService {
             String stratType;
             if (run.research) {
                 stratType = switch (run.pattern) {
-                    case "scalp", "scalp-early", "scalp-core", "scalp-rvol", "scalp-tod-rvol", "scalp-breakout", "scalp-breakout-retest", "scalp-structure", "ict-sweep-fvg-1m", "liquidity-sweep-1m-20-soft", "liquidity-sweep-1m-20-deep", "liquidity-sweep-1m-60-soft", "liquidity-sweep-1m-60-deep", "opening-momentum-1m", "opening-momentum-retest-1m",
+                    case "scalp", "scalp-early", "scalp-core", "scalp-rvol", "scalp-tod-rvol", "scalp-breakout", "scalp-breakout-retest", "scalp-structure", "ict-sweep-fvg-1m", "liquidity-sweep-1m-20-soft", "liquidity-sweep-1m-20-deep", "liquidity-sweep-1m-60-soft", "liquidity-sweep-1m-60-deep", "opening-momentum-1m", "opening-momentum-retest-1m", "orb-opening-base-1m", "orb-opening-rvol-1m",
                          "scalp-spy", "scalp-chase" -> "scalp";
                     case "vwap", "vwap-cont-long", "vwap-cont-short",
                          "vwap-reversion-long", "vwap-reversion-short" -> "vwap";
@@ -452,6 +453,7 @@ public class BacktestService {
             long nextResearchEntryMs = Long.MIN_VALUE;
             boolean allowResearchReentry = "ict-sweep-fvg-1m".equals(run.pattern);
             if (run.research && run.pattern.startsWith("scalp-") && !"scalp".equals(run.pattern)) minBars = 8;
+            if (run.research && run.pattern.startsWith("orb-opening-")) minBars = 6;
             Map<LocalTime,Double> priorSlotVolume = "scalp-tod-rvol".equals(run.pattern)
                     ? priorSessionMedianVolume(byDate,dates,di,20)
                     : Map.of();
@@ -468,7 +470,9 @@ public class BacktestService {
                 }
                 List<OHLCV> window = dayBars.subList(0, end);
                 List<OHLCV> priorSessionWindow = new ArrayList<>();
-                if (di > 0) priorSessionWindow.addAll(byDate.getOrDefault(dates.get(di - 1),List.of()));
+                int priorSessions=run.research && run.pattern.startsWith("orb-opening-") ? 14 : 1;
+                for (int k=Math.max(0,di-priorSessions);k<di;k++)
+                    priorSessionWindow.addAll(decisionBarsByDate.getOrDefault(dates.get(k),List.of()));
                 priorSessionWindow.addAll(window);
                 long decisionMs = completedAt(dayBars.get(end - 1), oneMinuteResearch ? 1 : 5);
                 if (!ticker.startsWith("X:") && !Instant.ofEpochMilli(decisionMs).atZone(ET).toLocalTime().isBefore(LocalTime.of(16,0))) break;
@@ -540,6 +544,10 @@ public class BacktestService {
                         case "liquidity-sweep-1m-60-deep" -> sweepFlipDetector.detectOneMinuteSweepResearch(window,ticker,60,0.20);
                         case "opening-momentum-1m" -> scalpDetector.detectOpeningMomentumResearch(window,ticker);
                         case "opening-momentum-retest-1m" -> scalpDetector.detectOpeningMomentumRetestResearch(window,ticker);
+                        case "orb-opening-base-1m" -> breakoutDetector.detectOpeningActivityResearch(
+                                priorSessionWindow,ticker,dailyAtr,0);
+                        case "orb-opening-rvol-1m" -> breakoutDetector.detectOpeningActivityResearch(
+                                priorSessionWindow,ticker,dailyAtr,1.5);
                         case "gap-continuation", "gap-trap", "gap-fill" -> {
                             List<OHLCV> todayRth=window.stream().filter(this::isRegularSessionBar).toList();
                             List<OHLCV> previousRth=di>0
@@ -594,12 +602,13 @@ public class BacktestService {
                     }
                     Map<BacktestExitStyle,ExitResult> exits = new EnumMap<>(BacktestExitStyle.class);
                     exits.put(BacktestExitStyle.FIXED_R,withResearchExitFriction(simulateClassicExit(forward,fill,stop,target,candidate.getDirection(),false,false)));
+                    exits.put(BacktestExitStyle.STOP_EOD,withResearchExitFriction(simulateStopToClose(forward,fill,stop,candidate.getDirection())));
                     exits.put(BacktestExitStyle.CLASSIC,withResearchExitFriction(simulateClassicExit(forward,fill,stop,target,candidate.getDirection(),true,false)));
                     exits.put(BacktestExitStyle.HYBRID,withResearchExitFriction(simulateHybridExit(completedBars(byDate1m.getOrDefault(date,List.of()),1,decisionMs),forward,fill,stop,target,candidate.getDirection())));
                     double experimentalTarget = fill + ("long".equals(candidate.getDirection()) ? 3 : -3) * Math.abs(fill-stop);
                     exits.put(BacktestExitStyle.TRAIL_3R,withResearchExitFriction(simulateHybridExit(completedBars(byDate1m.getOrDefault(date,List.of()),1,decisionMs),forward,fill,stop,experimentalTarget,candidate.getDirection())));
                     ExitResult exit = exits.get(exitStyle);
-                    if (exit == null) throw new IllegalArgumentException("Research supports FIXED_R, CLASSIC, HYBRID or TRAIL_3R");
+                    if (exit == null) throw new IllegalArgumentException("Unsupported research exit rule");
                     Map<String,Object> ledger = new LinkedHashMap<>();
                     ledger.put("id",ticker+":"+run.pattern+":"+decisionMs+":"+candidate.getDirection());
                     ledger.put("entry_ts",decisionMs); ledger.put("entry",fill); ledger.put("sl",stop);
@@ -1420,6 +1429,7 @@ public class BacktestService {
                 ExitResult exit = switch (exitStyle) {
                     case TRAIL_3R -> simulateHybridExit(window, fwdBars, entry, sl, tp, dir);
                     case FIXED_R -> simulateClassicExit(fwdBars, entry, sl, tp, dir, false);
+                    case STOP_EOD -> simulateStopToClose(fwdBars,entry,sl,dir);
                     case LIVE_PARITY -> scalpManaged
                             ? simulateScalpExit(windowForExit, fwdBarsForExit, entry, sl, tp, dir)
                             : simulateLiveParityExit(window, fwdBars, entry, sl, tp, dir);
@@ -1514,7 +1524,8 @@ public class BacktestService {
         if (crypto) return true;
         LocalTime decisionTime = Instant.ofEpochMilli(decisionMs).atZone(ET).toLocalTime();
         if (!decisionTime.isBefore(LocalTime.of(15, 30))) return false;
-        return !decisionTime.isBefore(LocalTime.of(9, 45)) || "or-vwap".equals(pattern);
+        return !decisionTime.isBefore(LocalTime.of(9, 45)) || "or-vwap".equals(pattern)
+                || pattern.startsWith("orb-opening-");
     }
     static double netResearchPnlPct(double grossPnlPct) {
         // Entry is already filled 5 BPS adversely. Charge another 5 BPS on exit.
@@ -1694,6 +1705,27 @@ public class BacktestService {
 
     private ExitResult simulateClassicExit(List<OHLCV> fwdBars, double entry, double sl, double tp, String dir) {
         return simulateClassicExit(fwdBars, entry, sl, tp, dir, true);
+    }
+
+    /** Published ORB benchmark: retain the original structural stop and otherwise exit at session close. */
+    private ExitResult simulateStopToClose(List<OHLCV> fwdBars,double entry,double sl,String dir) {
+        if (fwdBars.isEmpty()) return null;
+        boolean isLong="long".equals(dir);
+        for (OHLCV bar:fwdBars) {
+            boolean gapThrough=isLong?bar.getOpen()<=sl:bar.getOpen()>=sl;
+            if (gapThrough) {
+                double pnl=(isLong?bar.getOpen()-entry:entry-bar.getOpen())/entry*100;
+                return new ExitResult("LOSS",toDateTime(bar.getTimestamp()),pnl);
+            }
+            boolean touched=isLong?bar.getLow()<=sl:bar.getHigh()>=sl;
+            if (touched) {
+                double pnl=(isLong?sl-entry:entry-sl)/entry*100;
+                return new ExitResult("LOSS",toDateTime(bar.getTimestamp()),pnl);
+            }
+        }
+        OHLCV last=fwdBars.get(fwdBars.size()-1);
+        double pnl=(isLong?last.getClose()-entry:entry-last.getClose())/entry*100;
+        return new ExitResult(pnl>0?"WIN":pnl<0?"LOSS":"TIMEOUT",toDateTime(last.getTimestamp()),pnl);
     }
 
     private ExitResult simulateClassicExit(List<OHLCV> fwdBars, double entry, double sl, double tp,

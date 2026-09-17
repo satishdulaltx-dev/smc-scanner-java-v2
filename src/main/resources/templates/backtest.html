@@ -197,6 +197,8 @@
             <option value="liquidity-sweep-1m-60-deep">1m sweep/reclaim — 60m pool, deep</option>
             <option value="opening-momentum-1m">1m opening momentum breakout</option>
             <option value="opening-momentum-retest-1m">1m opening momentum breakout + retest</option>
+            <option value="orb-opening-base-1m">Published 5m opening breakout — activity gate off</option>
+            <option value="orb-opening-rvol-1m">Published 5m opening breakout — opening RVOL ≥ 1.5</option>
             <option value="gap-continuation">Opening gap continuation</option>
             <option value="gap-trap">Opening gap trap reversal</option>
             <option value="gap-fill">Opening gap fill</option>
@@ -209,6 +211,7 @@
         </select></div>
         <div class="ctrl-group"><label for="experiment-exit">Exit rule</label><select id="experiment-exit">
             <option value="FIXED_R">Fixed stop / selected target</option><option value="CLASSIC">Breakeven at 1R / selected target</option>
+            <option value="STOP_EOD">Structural stop / session close (published ORB)</option>
             <option value="TRAIL_3R">Trail at 2.5R / target 3R</option>
         </select></div>
         <div class="ctrl-group"><label for="experiment-target">Profit target</label><select id="experiment-target">

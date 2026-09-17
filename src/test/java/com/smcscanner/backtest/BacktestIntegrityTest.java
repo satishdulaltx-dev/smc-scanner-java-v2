@@ -112,6 +112,7 @@ class BacktestIntegrityTest {
     void researchUsesLiveEntryHoursIncludingOpeningRangeException() {
         assertFalse(BacktestService.researchEntryWindowAllows("scalp", at("2026-06-01T09:40"), false));
         assertTrue(BacktestService.researchEntryWindowAllows("or-vwap", at("2026-06-01T09:40"), false));
+        assertTrue(BacktestService.researchEntryWindowAllows("orb-opening-rvol-1m", at("2026-06-01T09:36"), false));
         assertTrue(BacktestService.researchEntryWindowAllows("scalp", at("2026-06-01T09:45"), false));
         assertFalse(BacktestService.researchEntryWindowAllows("scalp", at("2026-06-01T15:30"), false));
         assertTrue(BacktestService.researchEntryWindowAllows("scalp", at("2026-06-01T18:00"), true));
