@@ -30,6 +30,13 @@ class BacktestIntegrityTest {
         assertEquals("5m",BacktestRun.decisionTimeframe(null));
     }
     @Test
+    void qualifiedRetestFactorsAreAvailableForIndependentFilterTests() {
+        String factors="qualified-retest-long | opening_rvol=1.625 | breakout_volume=2.100 | vwap_aligned=1 | room_r=-1.000";
+        assertEquals(1.625,BacktestService.factorMetric(factors,"opening_rvol").orElseThrow());
+        assertEquals(1.0,BacktestService.factorMetric(factors,"vwap_aligned").orElseThrow());
+        assertTrue(BacktestService.factorMetric(factors,"missing").isEmpty());
+    }
+    @Test
     void historicalSessionReservationIsVisibleAndReleased() {
         PolygonClient client = new PolygonClient(new ScannerConfig(), new DataCache());
         assertFalse(client.isHistoricalSessionActive());

@@ -219,7 +219,8 @@ public class BacktestService {
         }
 
         // Fetch 5m bars for the full lookback — one API call gets it all
-        int researchWarmupDays=run.research && run.pattern.startsWith("orb-opening-") ? 30 : 10;
+        int researchWarmupDays=run.research && (run.pattern.startsWith("orb-opening-")
+                || "qualified-retest".equals(run.pattern)) ? 30 : 10;
         List<OHLCV> allBars = run.bars(client, ticker, "5m", researchWarmupDays);
         if (allBars == null || allBars.size() < 30) {
             return BacktestResult.failed(ticker, lookbackDays, mode,
@@ -398,7 +399,7 @@ public class BacktestService {
                          "vwap-reversion-long", "vwap-reversion-short" -> "vwap";
                     case "breakout", "keylevel", "vsqueeze", "or-vwap", "idiv" -> run.pattern;
                     case "gap-continuation", "gap-trap", "gap-fill" -> "gap-open";
-                    case "pdh-pdl", "pdh-retest" -> "pdh-pdl";
+                    case "pdh-pdl", "pdh-retest", "qualified-retest" -> "pdh-pdl";
                     default -> "smc";
                 };
             } else if (strategyOverride != null && !strategyOverride.isBlank()) {
@@ -470,7 +471,8 @@ public class BacktestService {
                 }
                 List<OHLCV> window = dayBars.subList(0, end);
                 List<OHLCV> priorSessionWindow = new ArrayList<>();
-                int priorSessions=run.research && run.pattern.startsWith("orb-opening-") ? 14 : 1;
+                int priorSessions=run.research && (run.pattern.startsWith("orb-opening-")
+                        || "qualified-retest".equals(run.pattern)) ? 14 : 1;
                 for (int k=Math.max(0,di-priorSessions);k<di;k++)
                     priorSessionWindow.addAll(decisionBarsByDate.getOrDefault(dates.get(k),List.of()));
                 priorSessionWindow.addAll(window);
@@ -561,6 +563,8 @@ public class BacktestService {
                         }
                         case "pdh-pdl" -> pdhPdlDetector.detect(priorSessionWindow,ticker,dailyAtr,true);
                         case "pdh-retest" -> pdhPdlDetector.detectRetests(priorSessionWindow,ticker,dailyAtr,true);
+                        case "qualified-retest" -> pdhPdlDetector.detectQualifiedRetest(
+                                priorSessionWindow,ticker,dailyAtr);
                         case "choch-primary" -> setupDetector.detectChochPrimary(window,ticker,dailyAtr,true);
                         default -> throw new IllegalArgumentException("Unknown pattern");
                     };
@@ -625,6 +629,12 @@ public class BacktestService {
                     Map<String,Double> features=new LinkedHashMap<>(oneMinuteResearch
                             ? oneMinuteResearchFeatures(window,spy,candidate,btRegime,decisionMs)
                             : researchFeatures(window,spy,candidate,btRegime,decisionMs));
+                    if ("qualified-retest".equals(run.pattern)) {
+                        for (String name:List.of("opening_rvol","breakout_volume","confirmation_volume",
+                                "confirmation_body","directional_close","vwap_aligned","room_r")) {
+                            factorMetric(candidate.getFactorBreakdown(),name).ifPresent(value->features.put(name,value));
+                        }
+                    }
                     gatePass.forEach((gate,passed)->features.put("gate_"+gate,passed?1.0:0.0));
                     ledger.put("features",Map.copyOf(features));
                     boolean longCandidate = "long".equals(candidate.getDirection());
@@ -1634,6 +1644,18 @@ public class BacktestService {
         for (MarketRegimeDetector.Regime value:MarketRegimeDetector.Regime.values())
             f.put("regime_"+value.name().toLowerCase(),regime==value?1.0:0.0);
         return Map.copyOf(f);
+    }
+
+    static OptionalDouble factorMetric(String factors,String name) {
+        if (factors==null || name==null) return OptionalDouble.empty();
+        String marker=name+"=";
+        int start=factors.indexOf(marker);
+        if (start<0) return OptionalDouble.empty();
+        start+=marker.length();
+        int end=factors.indexOf(" | ",start);
+        if (end<0) end=factors.length();
+        try { return OptionalDouble.of(Double.parseDouble(factors.substring(start,end).trim())); }
+        catch (NumberFormatException ignored) { return OptionalDouble.empty(); }
     }
 
     private static boolean isRegularSession(OHLCV bar) {

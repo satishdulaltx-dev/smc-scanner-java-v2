@@ -11,6 +11,9 @@ class PdhPdlIntegrityTest {
     static OHLCV b(long t,double o,double h,double l,double c) {
         return OHLCV.builder().timestamp(t).open(o).high(h).low(l).close(c).volume(100).build();
     }
+    static OHLCV bv(long t,double o,double h,double l,double c,double v) {
+        return OHLCV.builder().timestamp(t).open(o).high(h).low(l).close(c).volume(v).build();
+    }
     static List<OHLCV> bars() {
         long prev=LocalDate.of(2026,5,29).atTime(9,30).atZone(ET).toInstant().toEpochMilli();
         long now=LocalDate.of(2026,6,1).atTime(9,30).atZone(ET).toInstant().toEpochMilli();
@@ -52,5 +55,42 @@ class PdhPdlIntegrityTest {
         rows.set(79,b(open+300000,99.8,101.5,99.8,100.8));
         assertTrue(PdhPdlDetector.targetHasRoom(rows,setup,101.0,101.4));
         assertFalse(PdhPdlDetector.targetHasRoom(rows,setup,101.0,102.0));
+    }
+
+    @Test void qualifiedRetestEmitsTheStructureBeforeOptionalActivityFilters() {
+        var rows=qualifiedBars(20_000);
+        var result=new PdhPdlDetector().detectQualifiedRetest(rows,"TEST",2);
+        assertEquals(1,result.size());
+        var setup=result.get(0);
+        assertEquals("long",setup.getDirection());
+        assertTrue(setup.getStopLoss()<100.95);
+        assertTrue(setup.getFactorBreakdown().contains("level_type=PDH"));
+        assertTrue(setup.getFactorBreakdown().contains("opening_rvol=1.000"));
+        assertTrue(setup.getFactorBreakdown().contains("vwap_aligned=1"));
+    }
+
+    @Test void qualifiedRetestRejectsIncompleteReferenceHistory() {
+        var rows=qualifiedBars(20_000);
+        rows.remove(13*78);
+        assertTrue(new PdhPdlDetector().detectQualifiedRetest(rows,"TEST",2).isEmpty());
+    }
+
+    private static List<OHLCV> qualifiedBars(double currentVolume) {
+        var rows=new ArrayList<OHLCV>();
+        LocalDate first=LocalDate.of(2026,5,13);
+        for (int d=0;d<14;d++) {
+            LocalDate day=first.plusDays(d);
+            long open=day.atTime(9,30).atZone(ET).toInstant().toEpochMilli();
+            for (int i=0;i<78;i++) rows.add(bv(open+i*300_000L,100,101,99,100,20_000));
+        }
+        LocalDate today=first.plusDays(14);
+        long pre=today.atTime(8,0).atZone(ET).toInstant().toEpochMilli();
+        rows.add(bv(pre,100,100.7,99.6,100.2,5_000));
+        long open=today.atTime(9,30).atZone(ET).toInstant().toEpochMilli();
+        rows.add(bv(open,100.2,100.6,99.9,100.3,currentVolume));
+        rows.add(bv(open+300_000L,100.3,101.5,100.2,101.3,currentVolume));
+        rows.add(bv(open+600_000L,101.25,101.35,100.95,101.1,currentVolume));
+        rows.add(bv(open+900_000L,101.1,101.6,101.05,101.45,currentVolume));
+        return rows;
     }
 }

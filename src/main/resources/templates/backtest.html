@@ -163,21 +163,22 @@
 
 <section style="margin:20px 24px;padding:20px;border:1px solid var(--border);border-radius:8px">
     <h2 style="font-size:20px;margin:0 0 8px">Test one setup</h2>
-    <p style="color:var(--muted);font-size:14px;margin:0 0 18px">Start with the repaired breakout–retest pattern. This tests the stock-price setup; it does not establish options profit.</p>
+    <p style="color:var(--muted);font-size:14px;margin:0 0 18px">Test the replacement scanner foundation: liquid stock, prior-day or premarket level, ordered breakout, first retest and confirmation. Research only; no option order is placed.</p>
     <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:end">
         <div class="ctrl-group"><label for="experiment-ticker">Ticker</label><input id="experiment-ticker" value="AMD" maxlength="10" style="width:90px"></div>
         <div class="ctrl-group"><label for="experiment-start">Start</label><input id="experiment-start" type="date" value="2026-03-02"></div>
         <div class="ctrl-group"><label for="experiment-end">End</label><input id="experiment-end" type="date" value="2026-07-17"></div>
         <button class="run-btn" id="experiment-run" onclick="runControlledExperiment()">Run setup test</button>
     </div>
-    <p id="setup-test-summary" style="color:var(--blue);font-size:13px;margin:16px 0">Prior-day breakout → retest → confirmation · fixed stop / 2R · 30-minute maximum hold · no optional filter</p>
-    <p style="color:var(--muted);font-size:12px">Dates use the existing development period. Keep unused validation dates closed while changing rules. No option orders are placed.</p>
+    <p id="setup-test-summary" style="color:var(--blue);font-size:13px;margin:16px 0">Qualified level breakout → retest → confirmation · fixed stop / 2R · 30-minute maximum hold · no optional filter</p>
+    <p style="color:var(--muted);font-size:12px">Use one period while changing rules and reserve a later period for the final check. No option orders are placed.</p>
     <details id="advanced-research" style="margin-top:18px" onchange="updateSetupTestSummary()">
         <summary style="cursor:pointer;color:var(--muted)">Advanced research — other hypotheses and controls</summary>
         <p style="color:var(--muted);font-size:12px">These are unvalidated experiments, not approved trading methods. Change one variable at a time. Each run uses one pattern, its first passing entry per session and an assumed 0.10% round-trip stock execution cost. This is not an options spread estimate.</p>
         <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:end">
         <div class="ctrl-group"><label for="experiment-pattern">Pattern</label><select id="experiment-pattern">
-            <option value="pdh-retest" selected>Prior-day breakout → retest → confirmation</option>
+            <option value="qualified-retest" selected>Qualified level breakout → retest → confirmation</option>
+            <option value="pdh-retest">Prior-day breakout → retest → confirmation</option>
             <option value="scalp">Scalp baseline — 20 bars</option><option value="scalp-early">Scalp experiment — 8 bars</option>
             <option value="scalp-core">Scalp core — VWAP rejection only</option><option value="scalp-rvol">Scalp core + trailing-bar volume</option>
             <option value="scalp-tod-rvol">Scalp core + time-of-day relative volume</option>
@@ -197,8 +198,6 @@
             <option value="liquidity-sweep-1m-60-deep">1m sweep/reclaim — 60m pool, deep</option>
             <option value="opening-momentum-1m">1m opening momentum breakout</option>
             <option value="opening-momentum-retest-1m">1m opening momentum breakout + retest</option>
-            <option value="orb-opening-base-1m">Published 5m opening breakout — activity gate off</option>
-            <option value="orb-opening-rvol-1m">Published 5m opening breakout — opening RVOL ≥ 1.5</option>
             <option value="gap-continuation">Opening gap continuation</option>
             <option value="gap-trap">Opening gap trap reversal</option>
             <option value="gap-fill">Opening gap fill</option>

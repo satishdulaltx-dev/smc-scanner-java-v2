@@ -12,7 +12,11 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 
 /**
  * Previous Day High / Previous Day Low (PDH/PDL) detector.
@@ -35,6 +39,142 @@ public class PdhPdlDetector {
     private static final ZoneId ET        = ZoneId.of("America/New_York");
     private static final double LEVEL_TOL = 0.002; // 0.2%
     private static final double SL_BUFFER = 0.15;  // ATR buffer beyond wick for SL
+
+    /**
+     * Research-only foundation for the replacement scanner. It emits the structural
+     * candidate before optional momentum/context filters so those layers can be tested
+     * independently against the same ledger.
+     */
+    public List<TradeSetup> detectQualifiedRetest(List<OHLCV> bars,String ticker,double dailyAtr) {
+        if (bars==null || bars.isEmpty() || dailyAtr<=0.50) return List.of();
+        Map<LocalDate,List<OHLCV>> allByDate=new TreeMap<>();
+        for (OHLCV bar:bars) {
+            LocalDate date=Instant.ofEpochMilli(bar.getTimestamp()).atZone(ET).toLocalDate();
+            allByDate.computeIfAbsent(date,ignored->new ArrayList<>()).add(bar);
+        }
+        if (allByDate.size()<2) return List.of();
+        List<LocalDate> dates=new ArrayList<>(allByDate.keySet());
+        LocalDate today=dates.get(dates.size()-1);
+        List<OHLCV> todayAll=allByDate.get(today).stream()
+                .sorted(Comparator.comparingLong(OHLCV::getTimestamp)).toList();
+        List<OHLCV> todayRth=regular(todayAll);
+        if (todayRth.size()<4) return List.of();
+        long decisionMs=todayRth.get(todayRth.size()-1).getTimestamp()+ScalpSetupRules.BAR_MS;
+        if (!ScalpSetupRules.contiguousFromOpen(todayRth,decisionMs)) return List.of();
+        LocalTime decisionTime=Instant.ofEpochMilli(decisionMs).atZone(ET).toLocalTime();
+        if (decisionTime.isBefore(LocalTime.of(9,45)) || !decisionTime.isBefore(LocalTime.of(15,30)))
+            return List.of();
+
+        LocalDate previous=dates.stream().filter(d->d.isBefore(today)).max(LocalDate::compareTo).orElse(null);
+        if (previous==null) return List.of();
+        List<OHLCV> previousRth=regular(allByDate.get(previous));
+        if (!ScalpSetupRules.contiguousFromOpen(previousRth,
+                previous.atTime(16,0).atZone(ET).toInstant().toEpochMilli())) return List.of();
+        double pdh=previousRth.stream().mapToDouble(OHLCV::getHigh).max().orElse(0);
+        double pdl=previousRth.stream().mapToDouble(OHLCV::getLow).min().orElse(0);
+        if (pdh<=pdl || todayRth.get(todayRth.size()-1).getClose()<5) return List.of();
+
+        List<List<OHLCV>> priorComplete=new ArrayList<>();
+        for (int i=Math.max(0,dates.size()-15);i<dates.size()-1;i++) {
+            List<OHLCV> session=regular(allByDate.get(dates.get(i)));
+            if (session.size()==78) priorComplete.add(session);
+        }
+        if (priorComplete.size()<10) return List.of();
+        double averageDailyVolume=priorComplete.stream().mapToDouble(session->
+                session.stream().mapToDouble(OHLCV::getVolume).sum()).average().orElse(0);
+        if (averageDailyVolume<1_000_000) return List.of();
+        int elapsedBars=todayRth.size();
+        double expectedElapsedVolume=priorComplete.stream().mapToDouble(session->
+                session.subList(0,Math.min(elapsedBars,session.size())).stream()
+                        .mapToDouble(OHLCV::getVolume).sum()).average().orElse(0);
+        double observedElapsedVolume=todayRth.stream().mapToDouble(OHLCV::getVolume).sum();
+        double openingRvol=expectedElapsedVolume>0?observedElapsedVolume/expectedElapsedVolume:0;
+
+        Map<String,Level> levels=new LinkedHashMap<>();
+        levels.put("PDH",new Level("PDH",pdh,true));
+        levels.put("PDL",new Level("PDL",pdl,false));
+        List<OHLCV> premarket=todayAll.stream().filter(bar->{
+            LocalTime time=Instant.ofEpochMilli(bar.getTimestamp()).atZone(ET).toLocalTime();
+            return !time.isBefore(LocalTime.of(4,0)) && time.isBefore(LocalTime.of(9,30));
+        }).toList();
+        if (!premarket.isEmpty()) {
+            double pmh=premarket.stream().mapToDouble(OHLCV::getHigh).max().orElse(0);
+            double pml=premarket.stream().mapToDouble(OHLCV::getLow).min().orElse(0);
+            if (Math.abs(pmh-pdh)/pdh>0.001) levels.put("PMH",new Level("PMH",pmh,true));
+            if (Math.abs(pml-pdl)/pdl>0.001) levels.put("PML",new Level("PML",pml,false));
+        }
+
+        double atr=Math.max(computeAtr(todayRth),todayRth.get(todayRth.size()-1).getClose()*0.001);
+        double vwap=sessionVwap(todayRth);
+        List<TradeSetup> candidates=new ArrayList<>();
+        for (Level level:levels.values()) {
+            double tolerance=level.price()*0.0015;
+            var sequence=BreakoutRetestSequence.atLastBar(todayRth,level.price(),level.bullish(),
+                    0,tolerance,12);
+            if (sequence==null) continue;
+            OHLCV breakout=todayRth.get(sequence.breakoutIndex());
+            OHLCV confirmation=todayRth.get(todayRth.size()-1);
+            double entry=confirmation.getClose();
+            double stop=sequence.invalidationExtreme()+(level.bullish()?-1:1)*atr*0.10;
+            double risk=level.bullish()?entry-stop:stop-entry;
+            double riskPct=risk/entry;
+            if (risk<=0 || riskPct<0.001 || risk>atr*2.5) continue;
+            double target=entry+(level.bullish()?2:-2)*risk;
+            double breakoutVolumeRatio=volumeRatioBefore(todayRth,sequence.breakoutIndex());
+            double confirmVolumeRatio=volumeRatioBefore(todayRth,todayRth.size()-1);
+            double confirmationRange=Math.max(confirmation.getHigh()-confirmation.getLow(),entry*.00001);
+            double confirmationBody=Math.abs(confirmation.getClose()-confirmation.getOpen())/confirmationRange;
+            double directionalClose=level.bullish()
+                    ? (confirmation.getClose()-confirmation.getLow())/confirmationRange
+                    : (confirmation.getHigh()-confirmation.getClose())/confirmationRange;
+            boolean vwapAligned=level.bullish()?entry>vwap:entry<vwap;
+            double roomR=roomToNextLevel(levels.values(),level,entry,risk);
+            int confidence=60+(vwapAligned?5:0)+(openingRvol>=1.5?5:0)
+                    +(breakoutVolumeRatio>=1.5?5:0)+(confirmationBody>=0.5?5:0)
+                    +(directionalClose>=0.70?5:0)+(roomR>=2?5:0);
+            String factors=String.format(
+                    "qualified-retest-%s | level_type=%s | level=%.4f | opening_rvol=%.3f | breakout_volume=%.3f | confirmation_volume=%.3f | confirmation_body=%.3f | directional_close=%.3f | vwap_aligned=%d | room_r=%.3f | breakout=%d | retest=%d",
+                    level.bullish()?"long":"short",level.name(),level.price(),openingRvol,
+                    breakoutVolumeRatio,confirmVolumeRatio,confirmationBody,directionalClose,
+                    vwapAligned?1:0,roomR,breakout.getTimestamp(),
+                    todayRth.get(sequence.retestIndex()).getTimestamp());
+            candidates.add(build(ticker,level.bullish()?"long":"short",r4(entry),r4(stop),r4(target),
+                    confidence,atr,confirmation,factors));
+        }
+        return candidates.stream().sorted(Comparator.comparingInt(TradeSetup::getConfidence).reversed()
+                .thenComparingDouble(s->Math.abs(s.getEntry()-s.getStopLoss()))).limit(1).toList();
+    }
+
+    private record Level(String name,double price,boolean bullish) {}
+
+    private List<OHLCV> regular(List<OHLCV> bars) {
+        return bars.stream().filter(bar->{
+            LocalTime time=Instant.ofEpochMilli(bar.getTimestamp()).atZone(ET).toLocalTime();
+            return !time.isBefore(LocalTime.of(9,30)) && time.isBefore(LocalTime.of(16,0));
+        }).sorted(Comparator.comparingLong(OHLCV::getTimestamp)).toList();
+    }
+
+    private double sessionVwap(List<OHLCV> bars) {
+        double pv=0,volume=0;
+        for (OHLCV bar:bars) {
+            pv+=((bar.getHigh()+bar.getLow()+bar.getClose())/3.0)*bar.getVolume();
+            volume+=bar.getVolume();
+        }
+        return volume>0?pv/volume:bars.get(bars.size()-1).getClose();
+    }
+
+    private double volumeRatioBefore(List<OHLCV> bars,int index) {
+        int from=Math.max(0,index-20);
+        double average=bars.subList(from,index).stream().mapToDouble(OHLCV::getVolume).average().orElse(0);
+        return average>0?bars.get(index).getVolume()/average:0;
+    }
+
+    private double roomToNextLevel(java.util.Collection<Level> levels,Level broken,double entry,double risk) {
+        if (risk<=0) return -1;
+        return levels.stream().filter(level->level!=broken)
+                .mapToDouble(Level::price).filter(price->broken.bullish()?price>entry:price<entry)
+                .map(price->Math.abs(price-entry)/risk).min().orElse(-1);
+    }
 
     public List<TradeSetup> detect(List<OHLCV> bars, String ticker, double dailyAtr) {
         return detect(bars, ticker, dailyAtr, false);
