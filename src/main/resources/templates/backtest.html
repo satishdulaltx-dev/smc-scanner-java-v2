@@ -162,15 +162,15 @@
 </div>
 
 <section style="margin:20px 24px;padding:20px;border:1px solid var(--border);border-radius:8px">
-    <h2 style="font-size:20px;margin:0 0 8px">Test the published opening-range benchmark</h2>
-    <p style="color:var(--muted);font-size:14px;margin:0 0 18px">Rank nine liquid names using only information available at the time, then test the first five-minute opening-range break in the top two. Research only; no alert or option order is placed.</p>
+    <h2 style="font-size:20px;margin:0 0 8px">Test the published SPY momentum benchmark</h2>
+    <p style="color:var(--muted);font-size:14px;margin:0 0 18px">Test a fixed time-of-day momentum rule on SPY: prior-session noise boundaries, decisions every 30 minutes, and a current-boundary/VWAP exit. Research only; no alert or option order is placed.</p>
     <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:end">
         <div class="ctrl-group"><label for="experiment-start">Start</label><input id="experiment-start" type="date" value="2026-03-02"></div>
         <div class="ctrl-group"><label for="experiment-end">End</label><input id="experiment-end" type="date" value="2026-07-17"></div>
-        <button class="run-btn" id="portfolio-experiment-run" onclick="runPortfolioExperiment()">Run portfolio test</button>
+        <button class="run-btn" id="portfolio-experiment-run" onclick="runSpyMomentumExperiment()">Run SPY benchmark</button>
     </div>
-    <p id="setup-test-summary" style="color:var(--blue);font-size:13px;margin:16px 0">AMD, TSLA, NVDA, META, AAPL, SPY, QQQ, MSFT and AMZN · top 2 stock-in-play ranks · volatility stop · exit at session close</p>
-    <p style="color:var(--yellow);font-size:12px;margin:0 0 6px">Promotion requires: at least 100 trades across several liquid tickers, profit factor ≥ 1.20 after costs, a positive 95% expectancy range, at least 60% positive active months, and a positive frozen validation period.</p>
+    <p id="setup-test-summary" style="color:var(--blue);font-size:13px;margin:16px 0">SPY 1-minute bars · 14-session noise estimate · 10:00–15:30 half-hour decisions · next-minute fills · 0.10% round-trip cost</p>
+    <p style="color:var(--yellow);font-size:12px;margin:0 0 6px">Promotion requires: at least 100 trades, profit factor ≥ 1.20 after costs, a positive 95% expectancy range, at least 60% positive active months, and a positive frozen validation period.</p>
     <p style="color:var(--muted);font-size:12px">Use one period while changing rules and reserve a later period for the final check. No option orders are placed.</p>
     <details id="advanced-research" style="margin-top:18px">
         <summary style="cursor:pointer;color:var(--muted)">Advanced research — other hypotheses and controls</summary>
@@ -958,6 +958,30 @@ async function runPortfolioExperiment() {
         }
     } catch (error) { alert(error.message); }
     finally { setLoading(false); button.disabled = false; button.textContent = 'Run portfolio test'; }
+}
+
+async function runSpyMomentumExperiment() {
+    const start = document.getElementById('experiment-start').value;
+    const end = document.getElementById('experiment-end').value;
+    if (!start || !end || start > end) { alert('Enter an ordered date range.'); return; }
+    const params = new URLSearchParams({start, end});
+    const button = document.getElementById('portfolio-experiment-run');
+    button.disabled = true; button.textContent = 'Starting SPY replay…'; setLoading(true);
+    try {
+        const response = await fetch(`/api/backtest/spy-momentum-job?${params}`, {method:'POST'});
+        const started = await response.json();
+        if (!response.ok || !started.job_id) throw new Error(started.error || `Request failed (HTTP ${response.status})`);
+        while (true) {
+            await new Promise(resolve => setTimeout(resolve, 2500));
+            const check = await fetch(`/api/backtest/job/${encodeURIComponent(started.job_id)}`);
+            if (!check.ok) throw new Error(`Status check failed (HTTP ${check.status})`);
+            const job = await check.json();
+            button.textContent = job.status === 'queued' ? 'Waiting for data slot…' : 'Replaying SPY history…';
+            if (job.status === 'failed') throw new Error(job.error || 'SPY benchmark failed');
+            if (job.status === 'complete') { renderSingle(job.result); break; }
+        }
+    } catch (error) { alert(error.message); }
+    finally { setLoading(false); button.disabled = false; button.textContent = 'Run SPY benchmark'; }
 }
 
 function runBacktest() {
