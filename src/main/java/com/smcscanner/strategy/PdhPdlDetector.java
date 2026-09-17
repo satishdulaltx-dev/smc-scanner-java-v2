@@ -72,6 +72,7 @@ public class PdhPdlDetector {
                 previous.atTime(16,0).atZone(ET).toInstant().toEpochMilli())) return List.of();
         double pdh=previousRth.stream().mapToDouble(OHLCV::getHigh).max().orElse(0);
         double pdl=previousRth.stream().mapToDouble(OHLCV::getLow).min().orElse(0);
+        double previousClose=previousRth.get(previousRth.size()-1).getClose();
         if (pdh<=pdl || todayRth.get(todayRth.size()-1).getClose()<5) return List.of();
 
         List<List<OHLCV>> priorComplete=new ArrayList<>();
@@ -89,6 +90,11 @@ public class PdhPdlDetector {
                         .mapToDouble(OHLCV::getVolume).sum()).average().orElse(0);
         double observedElapsedVolume=todayRth.stream().mapToDouble(OHLCV::getVolume).sum();
         double openingRvol=expectedElapsedVolume>0?observedElapsedVolume/expectedElapsedVolume:0;
+        double gapAtr=Math.abs(todayRth.get(0).getOpen()-previousClose)/dailyAtr;
+        double openingRangeAtr=(todayRth.stream().mapToDouble(OHLCV::getHigh).max().orElse(0)
+                -todayRth.stream().mapToDouble(OHLCV::getLow).min().orElse(0))/dailyAtr;
+        double cumulativeDollarVolume=todayRth.stream().mapToDouble(bar->
+                ((bar.getHigh()+bar.getLow()+bar.getClose())/3.0)*bar.getVolume()).sum();
 
         Map<String,Level> levels=new LinkedHashMap<>();
         levels.put("PDH",new Level("PDH",pdh,true));
@@ -133,8 +139,9 @@ public class PdhPdlDetector {
                     +(breakoutVolumeRatio>=1.5?5:0)+(confirmationBody>=0.5?5:0)
                     +(directionalClose>=0.70?5:0)+(roomR>=2?5:0);
             String factors=String.format(
-                    "qualified-retest-%s | level_type=%s | level=%.4f | opening_rvol=%.3f | breakout_volume=%.3f | confirmation_volume=%.3f | confirmation_body=%.3f | directional_close=%.3f | vwap_aligned=%d | room_r=%.3f | breakout=%d | retest=%d",
+                    "qualified-retest-%s | level_type=%s | level=%.4f | opening_rvol=%.3f | gap_atr=%.3f | opening_range_atr=%.3f | cumulative_dollar_volume=%.0f | breakout_volume=%.3f | confirmation_volume=%.3f | confirmation_body=%.3f | directional_close=%.3f | vwap_aligned=%d | room_r=%.3f | breakout=%d | retest=%d",
                     level.bullish()?"long":"short",level.name(),level.price(),openingRvol,
+                    gapAtr,openingRangeAtr,cumulativeDollarVolume,
                     breakoutVolumeRatio,confirmVolumeRatio,confirmationBody,directionalClose,
                     vwapAligned?1:0,roomR,breakout.getTimestamp(),
                     todayRth.get(sequence.retestIndex()).getTimestamp());

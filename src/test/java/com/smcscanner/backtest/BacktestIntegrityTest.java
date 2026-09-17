@@ -31,8 +31,9 @@ class BacktestIntegrityTest {
     }
     @Test
     void qualifiedRetestFactorsAreAvailableForIndependentFilterTests() {
-        String factors="qualified-retest-long | opening_rvol=1.625 | breakout_volume=2.100 | vwap_aligned=1 | room_r=-1.000";
+        String factors="qualified-retest-long | opening_rvol=1.625 | gap_atr=0.750 | breakout_volume=2.100 | vwap_aligned=1 | room_r=-1.000";
         assertEquals(1.625,BacktestService.factorMetric(factors,"opening_rvol").orElseThrow());
+        assertEquals(0.750,BacktestService.factorMetric(factors,"gap_atr").orElseThrow());
         assertEquals(1.0,BacktestService.factorMetric(factors,"vwap_aligned").orElseThrow());
         assertTrue(BacktestService.factorMetric(factors,"missing").isEmpty());
     }
@@ -285,6 +286,22 @@ class BacktestIntegrityTest {
         assertEquals("INSUFFICIENT_SAMPLE", evidence.verdict());
         assertEquals(4, evidence.trades());
         assertEquals(4, evidence.positiveMonths());
+    }
+
+    @Test
+    void researchEvidenceRejectsAStableNegativePointEstimateEvenWhenNoisy() {
+        List<BacktestService.TradeResult> rows = new java.util.ArrayList<>();
+        for (int i=0;i<12;i++) rows.add(tradeAt("WIN",1.0,
+                LocalDateTime.of(2025,1,2,10,0).plusHours(i)));
+        for (int i=0;i<28;i++) rows.add(tradeAt("LOSS",-0.5,
+                LocalDateTime.of(2025,1,3,10,0).plusHours(i)));
+
+        ResearchStatistics.Summary evidence=ResearchStatistics.summarize(rows);
+
+        assertTrue(evidence.ciHighR()>0);
+        assertEquals("REJECTED",evidence.verdict());
+        assertTrue(evidence.meanR()<0);
+        assertTrue(evidence.profitFactor()<1);
     }
 
     @Test

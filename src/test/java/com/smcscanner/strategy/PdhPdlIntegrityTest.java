@@ -66,6 +66,9 @@ class PdhPdlIntegrityTest {
         assertTrue(setup.getStopLoss()<100.95);
         assertTrue(setup.getFactorBreakdown().contains("level_type=PDH"));
         assertTrue(setup.getFactorBreakdown().contains("opening_rvol=1.000"));
+        assertTrue(setup.getFactorBreakdown().contains("gap_atr=0.100"));
+        assertTrue(setup.getFactorBreakdown().contains("opening_range_atr=0.850"));
+        assertTrue(setup.getFactorBreakdown().contains("cumulative_dollar_volume="));
         assertTrue(setup.getFactorBreakdown().contains("vwap_aligned=1"));
     }
 

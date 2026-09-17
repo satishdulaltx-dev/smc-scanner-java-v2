@@ -630,7 +630,8 @@ public class BacktestService {
                             ? oneMinuteResearchFeatures(window,spy,candidate,btRegime,decisionMs)
                             : researchFeatures(window,spy,candidate,btRegime,decisionMs));
                     if ("qualified-retest".equals(run.pattern)) {
-                        for (String name:List.of("opening_rvol","breakout_volume","confirmation_volume",
+                        for (String name:List.of("opening_rvol","gap_atr","opening_range_atr",
+                                "cumulative_dollar_volume","breakout_volume","confirmation_volume",
                                 "confirmation_body","directional_close","vwap_aligned","room_r")) {
                             factorMetric(candidate.getFactorBreakdown(),name).ifPresent(value->features.put(name,value));
                         }

@@ -43,13 +43,15 @@ public final class ResearchStatistics {
 
         String verdict;
         String explanation;
-        if (interval[1] <= 0) {
+        double mean=total/trades.size();
+        if (interval[1] <= 0 || (trades.size()>=30 && mean<=0 && profitFactor<1
+                && positiveMonths<Math.ceil(monthly.size()*0.50))) {
             verdict = "REJECTED";
-            explanation = "The 95% range is entirely non-positive. Keep this rule out of live trading.";
-        } else if (trades.size() < 30) {
+            explanation = "Negative expectancy, profit factor below 1, or weak monthly consistency. Keep this rule out of live trading.";
+        } else if (trades.size() < 100) {
             verdict = "INSUFFICIENT_SAMPLE";
-            explanation = "Fewer than 30 trades. Treat the apparent result as unproven.";
-        } else if (interval[0] > 0 && profitFactor > 1
+            explanation = "Fewer than 100 trades. Treat the apparent result as unproven.";
+        } else if (interval[0] > 0 && profitFactor >= 1.20
                 && positiveMonths >= Math.ceil(monthly.size() * 0.60)) {
             verdict = "PROMISING_TRAINING_ONLY";
             explanation = "Positive development evidence. Freeze the rule before opening untouched validation.";
@@ -58,7 +60,7 @@ public final class ResearchStatistics {
             explanation = "The 95% range crosses zero or monthly results are unstable. Do not promote this rule.";
         }
 
-        return new Summary(trades.size(), total, total / trades.size(), profitFactor,
+        return new Summary(trades.size(), total, mean, profitFactor,
                 interval[0], interval[1], positiveMonths, monthly.size(), verdict, explanation);
     }
 
