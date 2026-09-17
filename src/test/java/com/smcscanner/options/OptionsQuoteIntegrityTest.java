@@ -60,6 +60,14 @@ class OptionsQuoteIntegrityTest {
         assertFalse(c.hasUsableQuote(NOW + 30_001));
     }
 
+    @Test
+    void snapshotDoesNotInventHistoricalIvPercentileOrPositionSize() {
+        var rec=analyzer(List.of(contract("sample",1.05,1.04,3,.5,System.currentTimeMillis(),"REAL-TIME")))
+                .recommendContract("TEST","long",100,99,102);
+        assertTrue(rec.hasData());assertEquals(-1,rec.ivPercentile());assertEquals(0,rec.suggestedContracts());
+        assertFalse(String.valueOf(rec.greeksWarning()).contains("selling premium"));
+    }
+
     private OptionsFlowAnalyzer analyzer(List<OptionsDataService.ContractData> contracts) {
         OptionsDataService data = mock(OptionsDataService.class);
         when(data.getOptionsChain(anyString(), anyDouble(), anyDouble(), anyInt(), anyInt())).thenReturn(contracts);

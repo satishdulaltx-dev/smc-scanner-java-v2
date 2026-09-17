@@ -149,7 +149,7 @@
         <div class="logo-dot"></div>
         <div>
             <h1>SD SCANNER — BACKTEST</h1>
-            <p>SMC strategy historical performance</p>
+            <p>Setup research for manual options trading</p>
         </div>
     </div>
     <div style="display:flex;gap:10px">
@@ -161,6 +161,70 @@
     </div>
 </div>
 
+<section style="margin:20px 24px;padding:20px;border:1px solid var(--border);border-radius:8px">
+    <h2 style="font-size:20px;margin:0 0 8px">Test one setup</h2>
+    <p style="color:var(--muted);font-size:14px;margin:0 0 18px">Start with the repaired breakout–retest pattern. This tests the stock-price setup; it does not establish options profit.</p>
+    <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:end">
+        <div class="ctrl-group"><label for="experiment-ticker">Ticker</label><input id="experiment-ticker" value="AMD" maxlength="10" style="width:90px"></div>
+        <div class="ctrl-group"><label for="experiment-start">Start</label><input id="experiment-start" type="date" value="2026-03-02"></div>
+        <div class="ctrl-group"><label for="experiment-end">End</label><input id="experiment-end" type="date" value="2026-07-17"></div>
+        <button class="run-btn" id="experiment-run" onclick="runControlledExperiment()">Run setup test</button>
+    </div>
+    <p id="setup-test-summary" style="color:var(--blue);font-size:13px;margin:16px 0">Prior-day breakout → retest → confirmation · fixed stop / 2R · 30-minute maximum hold · no optional filter</p>
+    <p style="color:var(--muted);font-size:12px">Dates use the existing development period. Keep unused validation dates closed while changing rules. No option orders are placed.</p>
+    <details id="advanced-research" style="margin-top:18px" onchange="updateSetupTestSummary()">
+        <summary style="cursor:pointer;color:var(--muted)">Advanced research — other hypotheses and controls</summary>
+        <p style="color:var(--muted);font-size:12px">These are unvalidated experiments, not approved trading methods. Change one variable at a time. Each run uses one pattern, its first passing entry per session and an assumed 0.10% round-trip stock execution cost. This is not an options spread estimate.</p>
+        <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:end">
+        <div class="ctrl-group"><label for="experiment-pattern">Pattern</label><select id="experiment-pattern">
+            <option value="pdh-retest" selected>Prior-day breakout → retest → confirmation</option>
+            <option value="scalp">Scalp baseline — 20 bars</option><option value="scalp-early">Scalp experiment — 8 bars</option>
+            <option value="scalp-core">Scalp core — VWAP rejection only</option><option value="scalp-rvol">Scalp core + trailing-bar volume</option>
+            <option value="scalp-tod-rvol">Scalp core + time-of-day relative volume</option>
+            <option value="scalp-breakout">Scalp momentum — fresh six-bar breakout</option>
+            <option value="scalp-breakout-retest">Scalp momentum — breakout retest</option>
+            <option value="scalp-structure">Scalp core + trend structure</option><option value="scalp-spy">Scalp core + SPY alignment</option>
+            <option value="scalp-chase">Scalp core + anti-chase</option>
+            <option value="breakout">Opening-range breakout</option><option value="vwap">All VWAP setups</option>
+            <option value="vwap-cont-long">VWAP continuation — long</option><option value="vwap-cont-short">VWAP continuation — short</option>
+            <option value="vwap-reversion-long">VWAP reversion — long</option><option value="vwap-reversion-short">VWAP reversion — short</option>
+            <option value="or-vwap">Opening-range VWAP</option><option value="keylevel">Key-level rejection</option>
+            <option value="vsqueeze">Volatility squeeze</option><option value="idiv">Index divergence</option>
+            <option value="sweep-flip">Sweep-flip</option><option value="ict-sweep-fvg-1m">1m liquidity sweep + FVG retest</option>
+            <option value="liquidity-sweep-1m-20-soft">1m sweep/reclaim — 20m pool, shallow</option>
+            <option value="liquidity-sweep-1m-20-deep">1m sweep/reclaim — 20m pool, deep</option>
+            <option value="liquidity-sweep-1m-60-soft">1m sweep/reclaim — 60m pool, shallow</option>
+            <option value="liquidity-sweep-1m-60-deep">1m sweep/reclaim — 60m pool, deep</option>
+            <option value="opening-momentum-1m">1m opening momentum breakout</option>
+            <option value="opening-momentum-retest-1m">1m opening momentum breakout + retest</option>
+            <option value="gap-continuation">Opening gap continuation</option>
+            <option value="gap-trap">Opening gap trap reversal</option>
+            <option value="gap-fill">Opening gap fill</option>
+            <option value="choch-primary">CHOCH</option><option value="pdh-pdl">Prior-day high / low</option>
+        </select></div>
+        <div class="ctrl-group"><label for="experiment-filter">One optional filter</label><select id="experiment-filter">
+            <option value="">None</option><option value="spy">SPY alignment</option><option value="15m">15m alignment</option>
+            <option value="volume">Volume</option><option value="regime">Market regime</option><option value="time">Time of day</option>
+            <option value="cost">Cost-aware stop (risk ≥ 4× friction)</option><option value="news">Aligned 48-hour news catalyst</option>
+        </select></div>
+        <div class="ctrl-group"><label for="experiment-exit">Exit rule</label><select id="experiment-exit">
+            <option value="FIXED_R">Fixed stop / selected target</option><option value="CLASSIC">Breakeven at 1R / selected target</option>
+            <option value="TRAIL_3R">Trail at 2.5R / target 3R</option>
+        </select></div>
+        <div class="ctrl-group"><label for="experiment-target">Profit target</label><select id="experiment-target">
+            <option value="0.5">0.5R</option><option value="1.0">1R</option><option value="1.5">1.5R</option><option value="2.0" selected>2R</option>
+        </select></div>
+        <div class="ctrl-group"><label for="experiment-hold">Maximum hold</label><select id="experiment-hold">
+            <option value="15">15 minutes</option><option value="30" selected>30 minutes</option>
+            <option value="60">60 minutes</option><option value="120">120 minutes</option><option value="390">Session close</option>
+        </select></div>
+        </div>
+        <p style="color:var(--muted);font-size:12px">Historical downloads can take several minutes. Fresh scans pause while data loads; existing order monitoring remains active.</p>
+    </details>
+</section>
+<details id="legacy-backtests" style="margin:16px 24px;padding:16px;border:1px solid var(--border);border-radius:8px">
+    <summary style="cursor:pointer;color:var(--muted)">Advanced — legacy profile backtests and optimizer</summary>
+    <p style="color:var(--muted);font-size:12px">Profile settings combine additional filters and scoring. Past optimizer rankings are not validation. Estimated option P&amp;L is not a replay of executable option quotes.</p>
 <!-- Controls -->
 <div class="controls">
     <div class="ctrl-group">
@@ -205,6 +269,7 @@
                 <option value="choch-primary">CHOCH Primary (structure flip)</option>
                 <option value="vwap">VWAP (1-day reversion)</option>
                 <option value="keylevel">Key Level rejection</option>
+                <option value="pdh-pdl">Prior-day high / low</option>
                 <option value="breakout">ORB breakout</option>
                 <option value="gap">Gap Momentum / Overnight</option>
                 <option value="peg">Power Earnings Gap (PEG)</option>
@@ -215,7 +280,7 @@
                 <option value="vwap3d">3-Day VWAP reversion</option>
                 <option value="idiv">Index Divergence (SPY lag)</option>
                 <option value="gammapin">Gamma Pin ($5 strike)</option>
-                <option value="or-vwap">Opening Range VWAP (9:35–10:30)</option>
+
             </optgroup>
             <optgroup label="── Order Flow ──">
                 <option value="volflow">Volume Profile + Order Flow</option>
@@ -250,61 +315,6 @@
     <button class="run-btn" id="optimize-btn" onclick="runOptimize()" style="background:#bc8cff;margin-left:8px;">🧠 Optimize</button>
 </div>
 
-<details style="margin:16px 24px;padding:16px;border:1px solid var(--border);border-radius:8px">
-    <summary style="cursor:pointer;color:var(--blue);font-weight:600">Controlled experiments — compare one change at a time</summary>
-    <p style="color:var(--muted);font-size:13px">Historical tests only. Each run uses one pattern, the first passing entry per session, normalized risk, live entry hours, and 0.10% round-trip execution friction.
-        Scalp early warm-up uses 8 completed five-minute session bars (earliest decision around 10:10), versus 20 in the baseline.
-        Embedded pattern rules remain active. Fresh scans pause while historical pages load so they do not share the provider quota; order monitoring remains active.
-        These experiments do not change live alerts or trading settings.</p>
-    <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:end">
-        <div class="ctrl-group"><label for="experiment-ticker">Ticker</label><input id="experiment-ticker" value="AMD" maxlength="10" style="width:90px"></div>
-        <div class="ctrl-group"><label for="experiment-start">Start</label><input id="experiment-start" type="date" value="2026-03-02"></div>
-        <div class="ctrl-group"><label for="experiment-end">End</label><input id="experiment-end" type="date" value="2026-07-17"></div>
-        <div class="ctrl-group"><label for="experiment-pattern">Pattern</label><select id="experiment-pattern">
-            <option value="scalp">Scalp baseline — 20 bars</option><option value="scalp-early">Scalp experiment — 8 bars</option>
-            <option value="scalp-core">Scalp core — VWAP rejection only</option><option value="scalp-rvol">Scalp core + trailing-bar volume</option>
-            <option value="scalp-tod-rvol">Scalp core + time-of-day relative volume</option>
-            <option value="scalp-breakout">Scalp momentum — fresh six-bar breakout</option>
-            <option value="scalp-breakout-retest">Scalp momentum — breakout retest</option>
-            <option value="scalp-structure">Scalp core + trend structure</option><option value="scalp-spy">Scalp core + SPY alignment</option>
-            <option value="scalp-chase">Scalp core + anti-chase</option>
-            <option value="breakout">Opening-range breakout</option><option value="vwap">All VWAP setups</option>
-            <option value="vwap-cont-long">VWAP continuation — long</option><option value="vwap-cont-short">VWAP continuation — short</option>
-            <option value="vwap-reversion-long">VWAP reversion — long</option><option value="vwap-reversion-short">VWAP reversion — short</option>
-            <option value="or-vwap">Opening-range VWAP</option><option value="keylevel">Key-level rejection</option>
-            <option value="vsqueeze">Volatility squeeze</option><option value="idiv">Index divergence</option>
-            <option value="sweep-flip">Sweep-flip</option><option value="ict-sweep-fvg-1m">1m liquidity sweep + FVG retest</option>
-            <option value="liquidity-sweep-1m-20-soft">1m sweep/reclaim — 20m pool, shallow</option>
-            <option value="liquidity-sweep-1m-20-deep">1m sweep/reclaim — 20m pool, deep</option>
-            <option value="liquidity-sweep-1m-60-soft">1m sweep/reclaim — 60m pool, shallow</option>
-            <option value="liquidity-sweep-1m-60-deep">1m sweep/reclaim — 60m pool, deep</option>
-            <option value="opening-momentum-1m">1m opening momentum breakout</option>
-            <option value="opening-momentum-retest-1m">1m opening momentum breakout + retest</option>
-            <option value="gap-continuation">Opening gap continuation</option>
-            <option value="gap-trap">Opening gap trap reversal</option>
-            <option value="gap-fill">Opening gap fill</option>
-            <option value="choch-primary">CHOCH</option><option value="pdh-pdl">Prior-day high / low</option>
-        </select></div>
-        <div class="ctrl-group"><label for="experiment-filter">One optional filter</label><select id="experiment-filter">
-            <option value="">None</option><option value="spy">SPY alignment</option><option value="15m">15m alignment</option>
-            <option value="volume">Volume</option><option value="regime">Market regime</option><option value="time">Time of day</option>
-            <option value="cost">Cost-aware stop (risk ≥ 4× friction)</option><option value="news">Aligned 48-hour news catalyst</option>
-        </select></div>
-        <div class="ctrl-group"><label for="experiment-exit">Exit rule</label><select id="experiment-exit">
-            <option value="FIXED_R">Fixed stop / selected target</option><option value="CLASSIC">Breakeven at 1R / selected target</option>
-            <option value="TRAIL_3R">Trail at 2.5R / target 3R</option>
-        </select></div>
-        <div class="ctrl-group"><label for="experiment-target">Profit target</label><select id="experiment-target">
-            <option value="0.5">0.5R</option><option value="1.0">1R</option><option value="1.5">1.5R</option><option value="2.0" selected>2R</option>
-        </select></div>
-        <div class="ctrl-group"><label for="experiment-hold">Maximum hold</label><select id="experiment-hold">
-            <option value="15">15 minutes</option><option value="30" selected>30 minutes</option>
-            <option value="60">60 minutes</option><option value="120">120 minutes</option><option value="390">Session close</option>
-        </select></div>
-        <button class="run-btn" id="experiment-run" onclick="runControlledExperiment()">Run experiment</button>
-    </div>
-    <p style="color:var(--muted);font-size:12px">Dates default to the previously used training period. Keep any unused validation period closed while changing rules.
-        Start with one ticker; historical downloads can take several minutes.</p>
 </details>
 <div id="experiment-note" style="display:none;margin:16px 24px;padding:12px;border:1px solid var(--blue);border-radius:6px"></div>
 
@@ -488,8 +498,8 @@
 <!-- Empty state -->
 <div class="empty-state" id="empty-state">
     <div class="empty-icon">📈</div>
-    <div>Select a ticker and click Run Backtest</div>
-    <div style="font-size:11px; color:var(--muted); margin-top:6px;">Replays historical price data (30d–2yr) to find setups and test outcomes</div>
+    <div>Choose a ticker and click Run setup test</div>
+    <div style="font-size:11px; color:var(--muted); margin-top:6px;">Test one setup on the selected development dates; keep validation dates untouched.</div>
 </div>
 
 <div class="footer">SD Scanner — Backtest Engine · Completed-candle replay · Strict coverage checks · Optional context disclosed</div>
@@ -884,6 +894,12 @@ function checkDaysWarning() {
     document.getElementById('days-warn').style.display = days >= 365 ? 'block' : 'none';
 }
 
+function updateSetupTestSummary() {
+    const label = id => document.getElementById(id).selectedOptions[0].textContent;
+    document.getElementById('setup-test-summary').textContent =
+        `${label('experiment-pattern')} · ${label('experiment-exit')} · ${label('experiment-target')} target · ${label('experiment-hold')} maximum hold · filter: ${label('experiment-filter')}`;
+}
+
 async function runControlledExperiment() {
     const ticker = document.getElementById('experiment-ticker').value.trim().toUpperCase();
     const start = document.getElementById('experiment-start').value;
@@ -912,7 +928,7 @@ async function runControlledExperiment() {
             if (job.status === 'complete') { renderSingle(job.result); break; }
         }
     } catch (error) { alert(error.message); }
-    finally { setLoading(false); button.disabled = false; button.textContent = 'Run experiment'; }
+    finally { setLoading(false); button.disabled = false; button.textContent = 'Run setup test'; }
 }
 
 function runBacktest() {
@@ -1073,7 +1089,7 @@ function renderSingle(d) {
     `;
 
     // Options aggregate stats (if available)
-    if (d.opt_total_pnl !== undefined) {
+    if (!d.research && d.opt_total_pnl !== undefined) {
         const optRetColor = d.opt_total_return >= 0 ? 'var(--green)' : 'var(--red)';
         const optExpColor = d.opt_expectancy >= 0 ? 'var(--green)' : 'var(--red)';
         document.getElementById('stats-grid').innerHTML += `
@@ -1088,8 +1104,7 @@ function renderSingle(d) {
     }
 
     // ── Confidence bucket analysis ────────────────────────────────────────────
-    // Shows WR and expectancy by confidence tier — reveals WHERE the real edge is.
-    // If 85+ WR >> 75-84 WR, the system should raise min confidence threshold.
+    // Descriptive score buckets are not calibrated probabilities or sizing instructions.
     if (d.bucket_85plus_total !== undefined) {
         const bucketHtml = [
             { label: '⭐ 85+',   total: d.bucket_85plus_total,  wins: d.bucket_85plus_wins,  wr: d.bucket_85plus_wr,  exp: d.bucket_85plus_exp  },
@@ -1099,7 +1114,7 @@ function renderSingle(d) {
             const wrCol  = b.wr  >= 45 ? 'var(--green)'  : b.wr  >= 35 ? 'var(--yellow)' : 'var(--red)';
             const expCol = b.exp >= 0  ? 'var(--green)'  : 'var(--red)';
             return `<div class="stat-card" style="grid-column:span 1">
-                <div style="font-size:11px;color:var(--muted);margin-bottom:4px">${b.label} confidence</div>
+                <div style="font-size:11px;color:var(--muted);margin-bottom:4px">${b.label} setup score</div>
                 <div style="font-size:18px;font-weight:700;color:${wrCol}">${b.wr}%</div>
                 <div style="font-size:10px;color:var(--muted)">WR (${b.wins}/${b.total})</div>
                 <div style="font-size:13px;font-weight:600;color:${expCol};margin-top:4px">${b.exp >= 0 ? '+' : ''}${b.exp}%</div>
@@ -1108,7 +1123,7 @@ function renderSingle(d) {
         }).join('');
         document.getElementById('stats-grid').innerHTML += `
             <div style="grid-column:1/-1;height:1px;background:var(--border);margin:4px 0"></div>
-            <div style="grid-column:1/-1;font-size:10px;color:#58d68d;text-transform:uppercase;letter-spacing:.8px;font-weight:600">🔬 Edge by Confidence Tier — Where does the real alpha live?</div>
+            <div style="grid-column:1/-1;font-size:10px;color:#58d68d;text-transform:uppercase;letter-spacing:.8px;font-weight:600">Results by setup score — score is not win probability</div>
             ${bucketHtml}
         `;
     }

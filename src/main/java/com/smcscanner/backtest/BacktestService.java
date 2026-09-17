@@ -202,7 +202,7 @@ public class BacktestService {
                 modeKey = switch (strategyOverride.toLowerCase()) {
                     case "scalp"                                     -> "scalp";
                     case "smc","vwap","keylevel","breakout","gap",
-                         "peg","vsqueeze","vwap3d","idiv","gammapin","choch-primary","volflow" -> "intraday";
+                         "peg","vsqueeze","vwap3d","idiv","gammapin","choch-primary","volflow","pdh-pdl" -> "intraday";
                     default                                          -> null;
                 };
             } else {
@@ -397,6 +397,7 @@ public class BacktestService {
                          "vwap-reversion-long", "vwap-reversion-short" -> "vwap";
                     case "breakout", "keylevel", "vsqueeze", "or-vwap", "idiv" -> run.pattern;
                     case "gap-continuation", "gap-trap", "gap-fill" -> "gap-open";
+                    case "pdh-pdl", "pdh-retest" -> "pdh-pdl";
                     default -> "smc";
                 };
             } else if (strategyOverride != null && !strategyOverride.isBlank()) {
@@ -427,7 +428,8 @@ public class BacktestService {
             int minBars = "breakout".equals(stratType)  ? 8
                         : "scalp".equals(stratType)     ? ScalpMomentumDetector.DEFAULT_WARMUP_BARS
                         : "vwap".equals(stratType)      ? 12
-                        : "keylevel".equals(stratType)  ? 20
+                        : "keylevel".equals(stratType)  ? 5
+                        : "pdh-pdl".equals(stratType)   ? 3
                         : "gap".equals(stratType)       ? 20
                         : "peg".equals(stratType)       ? 2   // 2nd RTH bar = 9:35 AM confirmation
                         : "vsqueeze".equals(stratType)  ? 25
@@ -550,6 +552,7 @@ public class BacktestService {
                                     : List.of();
                         }
                         case "pdh-pdl" -> pdhPdlDetector.detect(priorSessionWindow,ticker,dailyAtr,true);
+                        case "pdh-retest" -> pdhPdlDetector.detectRetests(priorSessionWindow,ticker,dailyAtr,true);
                         case "choch-primary" -> setupDetector.detectChochPrimary(window,ticker,dailyAtr,true);
                         default -> throw new IllegalArgumentException("Unknown pattern");
                     };
@@ -583,6 +586,12 @@ public class BacktestService {
                     }
                     // Target is the only variable in target-size experiments; initial risk remains fixed.
                     double target = researchTarget(fill,stop,candidate.getDirection(),run.targetR);
+                    double selectedTarget=exitStyle==BacktestExitStyle.TRAIL_3R
+                            ? researchTarget(fill,stop,candidate.getDirection(),3) : target;
+                    if (("pdh-pdl".equals(run.pattern) || "pdh-retest".equals(run.pattern))
+                            && !PdhPdlDetector.targetHasRoom(priorSessionWindow,candidate,fill,selectedTarget)) {
+                        run.reject("target_blocked_after_fill");continue;
+                    }
                     Map<BacktestExitStyle,ExitResult> exits = new EnumMap<>(BacktestExitStyle.class);
                     exits.put(BacktestExitStyle.FIXED_R,withResearchExitFriction(simulateClassicExit(forward,fill,stop,target,candidate.getDirection(),false,false)));
                     exits.put(BacktestExitStyle.CLASSIC,withResearchExitFriction(simulateClassicExit(forward,fill,stop,target,candidate.getDirection(),true,false)));
@@ -731,6 +740,8 @@ public class BacktestService {
                             bSetups = List.of();
                         }
                     }
+                } else if ("pdh-pdl".equals(effectiveStrat)) {
+                    bSetups = pdhPdlDetector.detect(priorSessionWindow,ticker,dailyAtr,true);
                 } else if ("keylevel".equals(effectiveStrat)) {
                     // Pass daily bars up to this date (htfSlice) as the level-detection source
                     bSetups = keyLevelDetector.detect(window, htfSlice, ticker, dailyAtr, bp, true);
@@ -762,61 +773,8 @@ public class BacktestService {
                     bSetups = dr.setups();
                 }
 
-                // ── Capitulation reversal overlay — mirrors live ScannerService ──
-                // Skip for or-vwap: overlays would fill in wrong-direction trades labeled as or-vwap
-                if (mode != BacktestMode.SCALP && bSetups.isEmpty() && !ticker.startsWith("X:") && !"or-vwap".equals(effectiveStrat)
-                        && btRegime != MarketRegimeDetector.Regime.VOLATILE) {
-                    bSetups = capReversalDetector.detect(window, ticker, dailyAtr);
-                }
-
-                // ── Pattern overlays: sweep-flip, PDH/PDL, CHOCH primary ────────
-                // Mirrors live ScannerService overlay block — fires for all non-crypto tickers.
-                if (mode != BacktestMode.SCALP && bSetups.isEmpty() && !ticker.startsWith("X:") && !"or-vwap".equals(effectiveStrat)
-                        && !"choch-primary".equals(effectiveStrat)) {
-                    java.util.List<TradeSetup> ov = new java.util.ArrayList<>();
-                    ov.addAll(sweepFlipDetector.detect(window, ticker, dailyAtr, true));
-                    ov.addAll(pdhPdlDetector.detect(priorSessionWindow, ticker, dailyAtr, true));
-                    ov.addAll(setupDetector.detectChochPrimary(window, ticker, dailyAtr, true));
-                    if (vwapLongOnly) ov.removeIf(s -> "short".equals(s.getDirection()));
-                    if (!ov.isEmpty()) {
-                        ov.sort(java.util.Comparator.comparingInt(TradeSetup::getConfidence).reversed());
-                        bSetups = java.util.List.of(ov.get(0));
-                    }
-                }
-
-                if (btRegime == MarketRegimeDetector.Regime.LOW_LIQUIDITY) {
-                    log.debug("{} REGIME_LOW_LIQUIDITY {} — skipping bar window", ticker, date);
-                    continue;
-                }
-
-                // ── Regime-based fallback — mirrors live ScannerService ────────
-                // Gap strategy is time-sensitive: only valid at the 9:30 AM open.
-                // Fallback would generate SMC/keylevel setups at 3 PM under the "gap" umbrella — wrong.
-                // Only fall back when strategy is the default "smc" — explicit profile strategies
-                // (vwap, breakout, keylevel, etc.) must not be silently replaced by the regime fallback.
-                if (bSetups.isEmpty() && "smc".equals(effectiveStrat) && !ticker.startsWith("X:") && !"gap".equals(effectiveStrat) && !"peg".equals(effectiveStrat)) {
-                    String fallbackStrat = regimeDetector.suggestStrategy(btRegime, effectiveStrat);
-                    if (fallbackStrat != null && !fallbackStrat.equals(effectiveStrat)) {
-                        bSetups = switch (fallbackStrat) {
-                            case "scalp" -> {
-                                List<OHLCV> spySlice = spy5mByDate.getOrDefault(date, List.of()).stream()
-                                        .filter(this::isRegularSessionBar)
-                                        .filter(b -> b.getTimestamp() <= barEpochMs)
-                                        .collect(Collectors.toList());
-                                yield scalpDetector.detect(priorSessionWindow, spySlice, ticker, dailyAtr, true);
-                            }
-                            case "smc" -> {
-                                SetupDetector.DetectResult fr = setupDetector.detectSetups(
-                                        window, htfBias, ticker, false, dailyAtr, true);
-                                yield fr.setups();
-                            }
-                            case "keylevel" -> keyLevelDetector.detect(window, htfSlice, ticker, dailyAtr, bp, true);
-                            case "vsqueeze" -> vSqueezeDetector.detect(window, ticker, dailyAtr, true);
-                            default -> java.util.List.of();
-                        };
-                        if (!bSetups.isEmpty()) log.debug("{} BT_FALLBACK: {} → {}", ticker, effectiveStrat, fallbackStrat);
-                    }
-                }
+                // Keep selected-strategy attribution exact: no hidden overlays or fallback.
+                if (btRegime == MarketRegimeDetector.Regime.LOW_LIQUIDITY) continue;
 
                 if (bSetups.isEmpty()) continue;
 
@@ -1315,10 +1273,9 @@ public class BacktestService {
                 }
 
                 // ── 1 contract per trade ──
-                // Conviction-scaled contracts — mirrors live ScannerService (lines 781-784)
-                // 90+ → 3, 82-89 → 2, <82 → 1 (same thresholds as live)
-                int contracts = adjConf >= 90 ? 3 : adjConf >= 82 ? 2 : 1;
-                log.debug("{} CONVICTION: conf={} → {} contract(s)", ticker, adjConf, contracts);
+                // Use a constant reference quantity; manual position sizing is separate.
+                int contracts = 1; // per-contract reference only; setup scores do not set position size
+                log.debug("{} model reference quantity={} contract", ticker, contracts);
 
                 // Apply entry slippage: live orders are marketable limits at the ask price.
                 // Model underlying entry with 5 BPS adverse slippage; TP/SL resolved on underlying.
@@ -1416,7 +1373,7 @@ public class BacktestService {
                 // Universal floor: 1.5% of price for any stock under $30.
                 // Ticker-character override (SPECULATIVE_LOW_PRICE) adds extra floor (2%).
                 // Prevents wick-out on low-price volatile stocks (SOFI: tiny ATR SL → dead).
-                if (!ticker.startsWith("X:")) {
+                if (!preserveSetupLevels && !ticker.startsWith("X:")) {
                     double minSlPct = Math.max(bp2.minSlPricePct(),
                             entry < 30.0 ? 0.015 : 0.0);
                     if (minSlPct > 0) {

@@ -164,16 +164,8 @@ public class OptionsFlowAnalyzer {
             if (candidates.isEmpty()) return OptionsRecommendation.NONE;
         }
 
-        // ── IV Rank filter: avoid buying when IV is expensive ──────────────
-        double avgIV = candidates.stream().mapToDouble(OptionsDataService.ContractData::iv)
-                .filter(iv -> iv > 0).average().orElse(0.30);
-        int chainIvPct = avgIV <= 0 ? 50
-                : avgIV < 0.20 ? 15 : avgIV < 0.30 ? 35 : avgIV < 0.40 ? 55
-                : avgIV < 0.50 ? 70 : avgIV < 0.60 ? 82 : 92;
-        if (chainIvPct > 70) {
-            log.info("{} HIGH_IV_RANK: IV percentile ~{} — options premiums expensive, IV crush risk",
-                    ticker, chainIvPct);
-        }
+        // Historical IV rank/percentile requires an actual historical IV series.
+        // A snapshot's absolute IV cannot supply that statistic.
 
         // Score each candidate: prefer 0.35-0.55 delta, good liquidity, reasonable premium
         OptionsDataService.ContractData best = null;
@@ -220,10 +212,6 @@ public class OptionsFlowAnalyzer {
             if (c.openInterest() < 100) score -= 25;     // illiquid, avoid
             else if (c.openInterest() >= 1000) score += 10; // very liquid bonus
 
-            // ── IV Rank penalty for expensive premiums ────────────────────
-            if (chainIvPct > 70) score -= 15;             // IV crush risk
-            else if (chainIvPct < 30) score += 10;        // cheap IV = good for directional buys
-
             if (score > bestScore) {
                 bestScore = score;
                 best = c;
@@ -258,17 +246,8 @@ public class OptionsFlowAnalyzer {
                 ? best.strike() + premium
                 : best.strike() - premium;
 
-        // IV percentile estimate (simple: IV < 0.25 = low, > 0.50 = high)
-        int ivPercentile = best.iv() <= 0 ? 50
-                : best.iv() < 0.20 ? 15
-                : best.iv() < 0.30 ? 35
-                : best.iv() < 0.40 ? 55
-                : best.iv() < 0.50 ? 70
-                : best.iv() < 0.60 ? 82
-                : 92;
-
-        // Suggested contracts: aim for ~$500 total premium
-        int suggested = premium > 0 ? Math.max(1, (int) Math.floor(500.0 / (premium * 100))) : 1;
+        int ivPercentile = -1; // unavailable: no historical IV comparison loaded
+        int suggested = 0; // manual sizing; no arbitrary premium budget or score-based quantity
 
         String greeksWarning = OptionsRecommendation.computeGreeksWarning(
                 theta, gamma, best.vega(), best.iv(), ivPercentile);

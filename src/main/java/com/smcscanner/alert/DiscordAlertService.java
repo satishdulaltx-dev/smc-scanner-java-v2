@@ -75,11 +75,16 @@ public class DiscordAlertService {
         double slPct=s.getEntry()>0?slPts/s.getEntry()*100:0, tpPct=s.getEntry()>0?tpPts/s.getEntry()*100:0;
         String ts=ZonedDateTime.now(ZoneOffset.UTC).format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"))+" UTC";
         String strategy = "normal".equals(s.getVolatility())   ? "📊 VWAP Reversion"
-                        : "scalp".equals(s.getVolatility())    ? "⚡ Bollinger Scalp"
+                        : "scalp".equals(s.getVolatility())    ? "Scalp setup"
                         : "high".equals(s.getVolatility())     ? "🚀 ORB Breakout"
                         : "keylevel".equals(s.getVolatility()) ? "🎯 Key Level Rejection"
                         : "gap".equals(s.getVolatility())      ? "🚀 Gap Momentum / Overnight"
                         : "🔷 SMC Sweep+FVG";
+
+        String rawPattern=Objects.toString(s.getFactorBreakdown(),"");
+        if (rawPattern.startsWith("pdhpdl-breakout-retest-")) strategy="Prior-day breakout / retest";
+        else if (rawPattern.startsWith("pdhpdl-rejection-")) strategy="Prior-day level rejection";
+        else if (rawPattern.startsWith("scalp-long") || rawPattern.startsWith("scalp-short")) strategy="VWAP rejection scalp";
 
         List<Map<String,Object>> fields = new java.util.ArrayList<>();
 
@@ -97,47 +102,28 @@ public class DiscordAlertService {
                     s.getOptionsExpiry(), dte);
             fields.add(f("🎯 OPTIONS CONTRACT", contractLabel, false));
 
-            String premiumLine = String.format("Premium: **$%.2f** /contract ($%.0f total for %d)",
-                    s.getOptionsPremium(), s.getOptionsPremium() * 100 * s.getOptionsSuggested(),
-                    s.getOptionsSuggested());
-            fields.add(f("💵 Entry Cost", premiumLine, false));
-
+            String premiumLine = String.format("Observed ask: **$%.2f per share** (standard 100-share contract: **$%.0f**). Choose quantity manually.",
+                    s.getOptionsPremium(), s.getOptionsPremium() * 100);
+            fields.add(f("💵 Entry reference", premiumLine, false));
             String greeksLine = String.format("Δ %.3f  |  IV %.1f%%",
                     s.getOptionsDelta(), s.getOptionsIV() * 100);
             fields.add(f("📐 Greeks", greeksLine, false));
 
-            // P&L estimate
-            double totalProfit = s.getOptionsProfitPer() * s.getOptionsSuggested();
-            double totalLoss   = s.getOptionsLossPer() * s.getOptionsSuggested();
             String pnlLine = String.format(
-                    "**If TP hit:** +$%.0f per contract → **+$%.0f** (%d contracts)\n" +
-                    "**If SL hit:** -$%.0f per contract → **-$%.0f**\n" +
-                    "**Options R:R:** %.1f:1",
-                    s.getOptionsProfitPer(), totalProfit, s.getOptionsSuggested(),
-                    s.getOptionsLossPer(), totalLoss,
-                    s.getOptionsRR());
-            fields.add(f("💰 P&L Estimate", pnlLine, false));
-
-            fields.add(f("🔓 Break-Even", String.format("$%.2f (stock must reach this)", s.getOptionsBreakEven()), false));
-
-            // Bracket order prices — what to enter in broker
-            double delta = s.getOptionsDelta();
-            double optAtTP = Math.max(0.01, s.getOptionsPremium() + delta * (s.getTakeProfit() - s.getEntry()));
-            double optAtSL = Math.max(0.01, s.getOptionsPremium() + delta * (s.getStopLoss()  - s.getEntry()));
-            String bracketLine = String.format(
-                    "**BUY** option @ **$%.2f**\n" +
-                    "✅ **SELL TP** @ **$%.2f** (stock $%.2f)\n" +
-                    "🛑 **SELL SL** @ **$%.2f** (stock $%.2f)",
-                    s.getOptionsPremium(),
-                    optAtTP, s.getTakeProfit(),
-                    optAtSL, s.getStopLoss());
-            fields.add(f("📋 Broker Bracket Orders", bracketLine, false));
+                    "Model-only change per contract: TP **$%+.0f**, SL **$%+.0f**. " +
+                    "Not executable exit quotes; spread, timing and IV changes can alter the result.",
+                    s.getOptionsProfitPer(), -s.getOptionsLossPer());
+            fields.add(f("Scenario estimate", pnlLine, false));
+            fields.add(f("Expiration break-even", String.format("$%.2f at expiry; not the required stock price for an earlier profitable exit", s.getOptionsBreakEven()), false));
+            fields.add(f("Manual exit plan",String.format(
+                    "Underlying target **$%.2f**; structural invalidation **$%.2f**. Check the option's current bid/ask before entering or exiting. No synthetic option bracket prices are supplied.",
+                    s.getTakeProfit(),s.getStopLoss()),false));
         }
 
         // ── Core setup fields ─────────────────────────────────────────────────
         fields.addAll(List.of(
             f("Direction",  arrow+" "+s.getDirection().toUpperCase(), true),
-            f("Confidence", grade+" "+s.getConfidence()+"/100",       true),
+            f("Setup score", grade+" "+s.getConfidence()+"/100 (not win probability)",       true),
             f("Strategy",   strategy,                                  true),
             f("Entry",      String.format("$%.2f (stock)",s.getEntry()),       true),
             f("Stop Loss",  String.format("$%.2f (-%.2f%%)",s.getStopLoss(),slPct),  true),
@@ -145,11 +131,7 @@ public class DiscordAlertService {
             f("R:R",        String.format("%.1f:1",s.rrRatio()),       true),
             f("ATR",        String.format("$%.2f",s.getAtr()),         true)));
 
-        // ── Breakeven stop instruction ────────────────────────────────────────
-        fields.add(f("🔒 Breakeven", String.format("Move SL → $%.2f once price hits $%.2f (1:1)",
-                    s.getEntry(),
-                    isLong ? s.getEntry() + Math.abs(s.getEntry()-s.getStopLoss())
-                           : s.getEntry() - Math.abs(s.getEntry()-s.getStopLoss())), false));
+
 
         // ══════════════════════════════════════════════════════════════════════
         // SEPARATOR
@@ -169,7 +151,7 @@ public class DiscordAlertService {
             fields.add(f("📊 Options Flow", s.getOptionsFlowLabel() + flowConflict, true));
         }
         if (s.getOptionsMaxPain() > 0) {
-            fields.add(f("🧲 Max Pain", String.format("$%.1f (price magnet by expiry)", s.getOptionsMaxPain()), true));
+            fields.add(f("🧲 Max Pain", String.format("$%.1f (open-interest estimate; not observed resting orders)", s.getOptionsMaxPain()), true));
         }
 
         // ── Conviction tier ─────────────────────────────────────────────────

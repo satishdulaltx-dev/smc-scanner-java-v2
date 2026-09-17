@@ -253,7 +253,7 @@ public class AnalysisService {
                 optMap.put("premium",    round2(rec.estimatedPremium()));
                 optMap.put("delta",      round3(rec.delta()));
                 optMap.put("iv",         round2(rec.iv() * 100));
-                optMap.put("ivPct",      round2(rec.ivPercentile()));
+                optMap.put("ivPct", rec.ivPercentile() < 0 ? null : round2(rec.ivPercentile()));
                 optMap.put("breakEven",  round2(rec.breakEvenPrice()));
                 optMap.put("profitPer",  round2(rec.profitPerContract()));
                 optMap.put("lossPer",    round2(rec.lossPerContract()));

@@ -57,3 +57,5 @@ scripts/*
 !scripts/ScalpLogicAudit.java
 
 !scripts/LevelLogicAudit.java
+
+!scripts/FocusedRetestAudit.java

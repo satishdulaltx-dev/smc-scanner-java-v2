@@ -16,18 +16,18 @@ public record OptionsRecommendation(
         double gamma,
         double theta,
         double iv,                // implied volatility (decimal)
-        int    ivPercentile,      // 0-100, where 100 = most expensive historically
+        int    ivPercentile,      // historical percentile 0-100; -1 when unavailable
         double breakEvenPrice,    // strike ± premium
         double premiumAtTP,       // estimated premium if underlying reaches TP
         double premiumAtSL,       // estimated premium if underlying hits SL
         double profitPerContract, // (premiumAtTP - premium) × 100
         double lossPerContract,   // (premium - premiumAtSL) × 100
         double optionsRR,         // profitPerContract / lossPerContract
-        int    suggestedContracts, // based on ~$500 budget
+        int    suggestedContracts, // 0 means manual sizing, not a zero-cost trade
         String greeksWarning      // risk warnings from Greeks analysis (null = none)
 ) {
     public static final OptionsRecommendation NONE =
-            new OptionsRecommendation(null, null, 0, null, 0, 0, 0, 0, 0, 0, 50,
+            new OptionsRecommendation(null, null, 0, null, 0, 0, 0, 0, 0, 0, -1,
                     0, 0, 0, 0, 0, 0, 0, null);
 
     public boolean hasData() { return contractTicker != null && estimatedPremium > 0; }
@@ -52,7 +52,7 @@ public record OptionsRecommendation(
         if (vega > 0 && ivPercentile > 70)
             warn.append("⚠️ Long vega + high IV — IV crush risk | ");
         if (ivPercentile > 80)
-            warn.append("🔴 IV Rank >80% — consider selling premium instead of buying | ");
+            warn.append("Historical IV percentile exceeds 80% | ");
         return warn.length() > 0 ? warn.toString().replaceAll(" \\| $", "") : null;
     }
 

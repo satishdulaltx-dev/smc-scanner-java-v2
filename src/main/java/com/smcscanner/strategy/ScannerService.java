@@ -287,24 +287,28 @@ public class ScannerService {
                     : rootStratType;
 
             // ── Universal intraday time gate ──────────────────────────────────
-            // Pre-compute so capReversal/fallback overlays share the same gate.
+            // Gate at the completed candle decision time, not its opening timestamp.
             java.time.LocalTime etNowIntraday = isC ? java.time.LocalTime.NOON
-                    : java.time.Instant.ofEpochMilli(lastBarTs)
+                    : java.time.Instant.ofEpochMilli(lastBarTs + ScalpSetupRules.BAR_MS)
                             .atZone(java.time.ZoneId.of("America/New_York")).toLocalTime();
             boolean intradayTooEarly = !isC && etNowIntraday.isBefore(java.time.LocalTime.of(9, 45));
             boolean intradayTooLate  = !isC && !etNowIntraday.isBefore(java.time.LocalTime.of(15, 30));
 
             List<TradeSetup> setups; String phaseMsg;
+            java.util.Map<TradeSetup,String> setupSources = new java.util.IdentityHashMap<>();
             if (isC) { setups=crypto.detectCryptoSetup(bars,ticker); phaseMsg=setups.isEmpty()?"Waiting for breakout + volume spike...":""; }
             else if (intradayTooEarly) {
                 // OR-VWAP is exempt from the 9:45 gate — it fires specifically in the opening flush window
-                List<TradeSetup> orEarlySetups = orVwap.detect(bars, ticker, dailyAtr);
+                boolean openingVwapConfigured = (intradayActive && "or-vwap".equals(intradayStratType))
+                        || (!scalpMode.isEffectiveSkip(rootSkip) && "or-vwap".equals(scalpMode.resolveStrategy(rootStratType)));
+                List<TradeSetup> orEarlySetups = openingVwapConfigured ? orVwap.detect(bars, ticker, dailyAtr) : List.of();
                 if (!orEarlySetups.isEmpty()) {
                     setups   = List.of(orEarlySetups.get(0));
+                    setupSources.put(orEarlySetups.get(0),"or-vwap");
                     phaseMsg = "";
                 } else {
                     setups   = List.of();
-                    phaseMsg = "⏳ Opening range — watching for VWAP flush recovery...";
+                    phaseMsg = openingVwapConfigured ? "Waiting for opening VWAP recovery..." : "Waiting for the configured entry window...";
                 }
                 setTs(ticker, "idle", null, 0, phaseMsg);
             } else if (intradayTooLate) {
@@ -423,12 +427,18 @@ public class ScannerService {
                     } else if ("volflow".equals(strat)) {
                         stratSetups = volFlow.detect(bars, ticker, dailyAtr);
                         if (stratSetups.isEmpty() && phaseMsg.isEmpty()) phaseMsg = "Waiting for volume profile signal (VA re-entry / delta divergence / VPOC magnet)...";
-                    } else {
-                        // smc (default)
+                    } else if ("pdh-pdl".equals(strat)) {
+                        stratSetups = pdhPdl.detect(bars,ticker,dailyAtr);
+                    } else if ("smc".equals(strat)) {
+                        // Explicit SMC selection
                         SetupDetector.DetectResult r = setupDetector.detectSetups(bars, htfBias, ticker, false, dailyAtr);
                         stratSetups = r.setups();
                         if (stratSetups.isEmpty() && phaseMsg.isEmpty()) phaseMsg = r.state().phaseMsg();
+                    } else {
+                        stratSetups = List.of();
+                        if (phaseMsg.isEmpty()) phaseMsg = "Unknown configured strategy: " + strat;
                     }
+                    for (TradeSetup candidate : stratSetups) setupSources.put(candidate,strat);
                     allSetups.addAll(stratSetups);
                 }
                 // Pick highest-confidence setup across all strategies
@@ -443,89 +453,15 @@ public class ScannerService {
                 }
             }
 
-            // ── Capitulation reversal overlay — runs on ALL equity tickers ────
-            // When the primary strategy finds nothing AND price has dropped ≥2.5%
-            // in recent bars, check for a capitulation reversal bounce.
-            // This catches the COIN/SOFI waterfall pattern regardless of configured strategy.
-            // Blocked in VOLATILE regime only (too much false-positive noise).
-            if (intradayActive && setups.isEmpty() && !isC && !intradayTooEarly && !intradayTooLate && regime != MarketRegimeDetector.Regime.VOLATILE) {
-                List<TradeSetup> capSetups = capReversal.detect(bars, ticker, dailyAtr);
-                if (!capSetups.isEmpty()) {
-                    log.info("{} CAP_REVERSAL_OVERLAY: waterfall + reversal detected — primary strategy={}", ticker,
-                            intradayStratType);
-                    setups = capSetups;
-                    phaseMsg = "";
-                }
-            }
-
-            // ── Pattern overlays: sweep-flip, PDH/PDL, CHOCH primary ──────────
-            // Run for all non-crypto NYSE tickers after primary strategy + cap overlay.
-            // These detect setups that don't require a full SMC chain.
-            if (intradayActive && setups.isEmpty() && !isC && !intradayTooEarly && !intradayTooLate) {
-                List<TradeSetup> overlaySetups = new java.util.ArrayList<>();
-                overlaySetups.addAll(sweepFlip.detect(bars, ticker, dailyAtr));
-                overlaySetups.addAll(pdhPdl.detect(bars, ticker, dailyAtr));
-                overlaySetups.addAll(setupDetector.detectChochPrimary(bars, ticker, dailyAtr, false));
-                if (!overlaySetups.isEmpty()) {
-                    overlaySetups.sort(java.util.Comparator.comparingInt(TradeSetup::getConfidence).reversed());
-                    setups = List.of(overlaySetups.get(0));
-                    phaseMsg = "";
-                    log.info("{} OVERLAY_SIGNAL: {} (conf={})", ticker,
-                            setups.get(0).getFactorBreakdown(), setups.get(0).getConfidence());
-                }
-            }
-
-            // ── Regime-based fallback when primary strategy finds nothing ─────
-            // e.g. SMC ticker in a RANGING day → try keylevel instead.
-            // Only the 3 generic regimes have clear fallbacks; VOLATILE/LOW_LIQUIDITY
-            // don't (LOW_LIQUIDITY is already gated above, VOLATILE trusts the profile).
-            if (intradayActive && setups.isEmpty() && !isC && !intradayTooEarly && !intradayTooLate) {
-                String strategyType = intradayStratType;
-                String fallbackStrat = regimeDetector.suggestStrategy(regime, strategyType);
-                if (fallbackStrat != null && !fallbackStrat.equals(strategyType)) {
-                    List<TradeSetup> fb = switch (fallbackStrat) {
-                        case "smc" -> {
-                            SetupDetector.DetectResult fr = setupDetector.detectSetups(bars, htfBias, ticker, false, dailyAtr);
-                            yield fr.setups();
-                        }
-                        case "scalp" -> {
-                            // Same gates as primary scalp path
-                            if (regime == MarketRegimeDetector.Regime.VOLATILE) { yield List.of(); }
-                            List<OHLCV> spyBars5m = List.of();
-                            try {
-                                List<OHLCV> sp = client.getBars("SPY", "5m", 100);
-                                if (sp != null) {
-                                    long decision=bars.get(bars.size()-1).getTimestamp()+ScalpSetupRules.BAR_MS;
-                                    List<OHLCV> aligned=ScalpSetupRules.sessionAsOf(sp,decision);
-                                    if (ScalpSetupRules.contiguousFromOpen(aligned,decision)) spyBars5m=aligned;
-                                }
-                            } catch (Exception e) { log.debug("{} SPY 5m fetch error: {}", ticker, e.getMessage()); }
-                            if (spyBars5m.size() >= 10) {
-                                double spyOpen = spyBars5m.get(0).getOpen();
-                                double spyCur  = spyBars5m.get(spyBars5m.size() - 1).getClose();
-                                if (spyOpen > 0 && Math.abs(spyCur - spyOpen) / spyOpen > 0.018) { yield List.of(); }
-                            }
-                            yield scalpMomentum.detect(bars, spyBars5m, ticker, dailyAtr);
-                        }
-                        case "keylevel" -> keyLevel.detect(bars, dailyBars, ticker, dailyAtr, profile);
-                        case "vsqueeze" -> vSqueeze.detect(bars, ticker, dailyAtr);
-                        default -> List.of();
-                    };
-                    if (!fb.isEmpty()) {
-                        log.info("{} REGIME_FALLBACK: primary={} regime={} → fallback={} fired",
-                                ticker, strategyType, regime, fallbackStrat);
-                        setups = fb;
-                        phaseMsg = "";
-                    }
-                }
-            }
+            // Only explicitly configured detectors may supply a setup. An empty result
+            // is not permission to substitute a different strategy or regime fallback.
 
             if (!setups.isEmpty()) {
                 TradeSetup s=setups.get(0);
                 // A scalp's level-derived stop/target must survive later score adjustments.
                 boolean structuralScalp="scalp".equals(s.getVolatility());
                 boolean preserveSetupLevels=structuralScalp || "keylevel".equals(s.getVolatility());
-                String detectedStrategy=structuralScalp?"scalp":("keylevel".equals(s.getVolatility())?"keylevel":intradayStratType);
+                String detectedStrategy=setupSources.getOrDefault(s,intradayStratType);
                 if (structuralScalp) {
                     effectiveMinConf=scalpMode.resolveMinConfidence(parentMinConf,config.getMinConfidence());
                     effectiveMaxConf=scalpMode.resolveMaxConfidence(parentMaxConf);
@@ -1088,33 +1024,14 @@ public class ScannerService {
                         sma200Adj, rsiAdj, candleAdj, volAdj, regimeStratAdj, pivotAdj,
                         trapAdj, exhaustionAdj, confluenceVetoAdj);
                 String smcSignals = s.getFactorBreakdown(); // raw SMC signals from SetupDetector
-                String factorBreakdown = (smcSignals != null && (smcSignals.startsWith("smc-") || preserveSetupLevels))
+                String factorBreakdown = (smcSignals != null && !smcSignals.isBlank())
                         ? smcSignals + "\nadj: " + adjBreakdown
                         : adjBreakdown;
 
-                // ── Conviction tier (suggested contract size) ─────────────────
-                // Based on final adjusted confidence — scales exposure to signal quality.
-                // 90+ = rare A+ setup → 3 contracts max
-                // 82–89 = strong setup → 2 contracts
-                // 75–81 = standard → 1 contract
-                // <75   = borderline → 1 contract (minimum size, treat as paper trade)
-                String convictionTier;
-                int suggestedOverride;
-                if      (s.getConfidence() >= 90) { convictionTier = "🔥 HIGH CONVICTION (3 contracts)";  suggestedOverride = 3; }
-                else if (s.getConfidence() >= 82) { convictionTier = "✅ STRONG (2 contracts)";            suggestedOverride = 2; }
-                else if (s.getConfidence() >= 75) { convictionTier = "🟡 STANDARD (1 contract)";           suggestedOverride = 1; }
-                else                              { convictionTier = "⚪ BORDERLINE (1 contract — lite)";  suggestedOverride = 1; }
-
-                // ── Risk tier classification ─────────────────────────────────
-                // Guides position sizing and stop width based on final confidence.
-                String riskTier;
-                if (s.getConfidence() >= 86) {
-                    riskTier = "🔴 AGGRESSIVE — 2-3% risk, ATR-based stop, max 3d hold";
-                } else if (s.getConfidence() >= 70) {
-                    riskTier = "🟡 STANDARD — 1-2% risk, 1x ATR stop, max 5d hold";
-                } else {
-                    riskTier = "🟢 CONSERVATIVE — 0.5% risk, 1.5x ATR stop, spreads preferred";
-                }
+                // An uncalibrated detector score cannot determine position size or account risk.
+                String convictionTier = "Setup score " + s.getConfidence() + "/100 — not win probability";
+                int suggestedOverride = 0;
+                String riskTier = "Manual sizing — use structural invalidation and your chosen account risk";
 
                 // Attach attribution + conviction to setup
                 if (factorBreakdown != null || convictionTier != null) {
@@ -1136,7 +1053,7 @@ public class ScannerService {
                            .optionsBreakEven(s.getOptionsBreakEven())
                            .optionsProfitPer(s.getOptionsProfitPer()).optionsLossPer(s.getOptionsLossPer())
                            .optionsRR(s.getOptionsRR())
-                           .optionsSuggested(suggestedOverride); // override with conviction-scaled count
+                           .optionsSuggested(suggestedOverride); // quantity remains the trader's decision
                     }
                     s = sb2.build();
                 }
@@ -1165,15 +1082,6 @@ public class ScannerService {
                 if (s.getConfidence() > effectiveMaxConf) {
                     log.debug("{} OVEREXTENDED conf={} maxConf={} — skipping over-extended signal",
                             ticker, s.getConfidence(), effectiveMaxConf);
-                } else if (s.hasOptionsData() && s.getOptionsRR() <= 0) {
-                    // Block only truly negative R:R: you lose money even when the stock hits TP.
-                    // Weak-but-positive R:R (0.01–0.79) still fires — stock R:R is good, options just expensive (elevated IV).
-                    log.info("{} OPTIONS_RR_BLOCK: optionsRR={} NEGATIVE (lose at TP) stockRR={} entry={} tp={} sl={}",
-                            ticker, String.format("%.2f", s.getOptionsRR()),
-                            String.format("%.2f", s.rrRatio()), s.getEntry(), s.getTakeProfit(), s.getStopLoss());
-                    removeSetup(ticker);
-                    setTs(ticker, "idle", null, 0, "⊘ Options lose at TP");
-                    return;
                 } else if (scalpOptionSetup && strongFlowConflict) {
                     log.info("{} FLOW_CONFLICT_BLOCK: {} flow ratio={} conflicts with {} scalp",
                             ticker, flow.flowDirection(), String.format("%.2f", flow.pcRatioVol()),

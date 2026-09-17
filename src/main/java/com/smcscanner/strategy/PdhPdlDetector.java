@@ -169,6 +169,33 @@ public class PdhPdlDetector {
         return result;
     }
 
+    /** Isolate the ordered breakout/retest hypothesis from rejection trades. */
+    public List<TradeSetup> detectRetests(List<OHLCV> bars,String ticker,double dailyAtr,boolean backtestMode) {
+        return detect(bars,ticker,dailyAtr,backtestMode).stream()
+                .filter(s -> s.getFactorBreakdown().startsWith("pdhpdl-breakout-retest-")).toList();
+    }
+
+    /** Recheck observable room after the replay's next-bar fill changes the entry risk. */
+    public static boolean targetHasRoom(List<OHLCV> bars,TradeSetup setup,double fill,double target) {
+        if (bars.isEmpty()) return false;
+        boolean bullish="long".equals(setup.getDirection());
+        long decision=bars.get(bars.size()-1).getTimestamp()+ScalpSetupRules.BAR_MS;
+        List<OHLCV> session=ScalpSetupRules.sessionAsOf(bars,decision);
+        double limit=ScalpSetupRules.target(session,fill,target,bullish);
+        if (setup.getFactorBreakdown()!=null && setup.getFactorBreakdown().startsWith("pdhpdl-rejection-")) {
+            LocalDate day=Instant.ofEpochMilli(decision).atZone(ET).toLocalDate();
+            LocalDate previous=bars.stream().map(b->Instant.ofEpochMilli(b.getTimestamp()).atZone(ET).toLocalDate())
+                    .filter(d->d.isBefore(day)).max(LocalDate::compareTo).orElse(null);
+            if (previous==null) return false;
+            var prior=bars.stream().filter(b->{var t=Instant.ofEpochMilli(b.getTimestamp()).atZone(ET);
+                return t.toLocalDate().equals(previous) && !t.toLocalTime().isBefore(LocalTime.of(9,30)) && t.toLocalTime().isBefore(LocalTime.of(16,0));}).toList();
+            if (prior.isEmpty()) return false;
+            double opposite=bullish?prior.stream().mapToDouble(OHLCV::getHigh).max().orElseThrow():prior.stream().mapToDouble(OHLCV::getLow).min().orElseThrow();
+            limit=bullish?Math.min(limit,opposite):Math.max(limit,opposite);
+        }
+        return bullish?target<=limit+1e-8:target>=limit-1e-8;
+    }
+
     private int baseConf(OHLCV bar, double avgVol) {
         int c = 68;
         if (bar.getVolume() > avgVol * 2.0)      c += 10;

@@ -19,7 +19,7 @@ public class TradeSetup {
     private final double optionsPremium;      // estimated entry premium
     private final double optionsDelta;
     private final double optionsIV;
-    private final int    optionsIVPct;        // IV percentile 0-100
+    private final int    optionsIVPct;        // historical IV percentile 0-100; -1 unavailable
     private final double optionsBreakEven;
     private final double optionsProfitPer;    // profit per contract at TP
     private final double optionsLossPer;      // loss per contract at SL
@@ -127,7 +127,7 @@ public class TradeSetup {
             m.put("options_premium",    optionsPremium);
             m.put("options_delta",      optionsDelta);
             m.put("options_iv",         optionsIV);
-            m.put("options_iv_pct",     optionsIVPct);
+            m.put("options_iv_pct", optionsIVPct < 0 ? null : optionsIVPct);
             m.put("options_break_even", optionsBreakEven);
             m.put("options_profit_per", optionsProfitPer);
             m.put("options_loss_per",   optionsLossPer);

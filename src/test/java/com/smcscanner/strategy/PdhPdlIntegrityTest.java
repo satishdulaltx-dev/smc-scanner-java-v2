@@ -37,4 +37,20 @@ class PdhPdlIntegrityTest {
         assertTrue(new PdhPdlDetector().detect(rows,"TEST",2,true).stream()
                 .noneMatch(s->s.getFactorBreakdown().contains("breakout-retest")));
     }
+    @Test void isolatedRetestCannotSilentlyReturnARejection() {
+        var detector=new PdhPdlDetector();assertEquals(1,detector.detectRetests(bars(),"TEST",2,true).size());
+        var rows=new ArrayList<>(bars().subList(0,78));long t=bars().get(78).getTimestamp();
+        for(int i=0;i<4;i++)rows.add(b(t+i*300000,98,98.5,97.5,98));
+        rows.add(b(t+1200000,100.1,100.2,99.7,99.8));
+        assertFalse(detector.detect(rows,"TEST",2,true).isEmpty());
+        assertTrue(detector.detectRetests(rows,"TEST",2,true).isEmpty());
+    }
+    @Test void fillCannotMoveTheTargetPastKnownResistance() {
+        var rows=bars();var setup=new PdhPdlDetector().detectRetests(rows,"TEST",2,true).get(0);
+        long open=rows.get(78).getTimestamp();
+        // An earlier confirmed high remains above the entry but below the requested target.
+        rows.set(79,b(open+300000,99.8,101.5,99.8,100.8));
+        assertTrue(PdhPdlDetector.targetHasRoom(rows,setup,101.0,101.4));
+        assertFalse(PdhPdlDetector.targetHasRoom(rows,setup,101.0,102.0));
+    }
 }
