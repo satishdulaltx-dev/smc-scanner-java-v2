@@ -118,6 +118,14 @@ public class OptionsDataService {
         }
     }
 
+    /** Refresh one previously selected contract without fabricating a quote when it is absent. */
+    public Optional<ContractData> findContractSnapshot(String ticker,double currentPrice,String contractTicker){
+        if(contractTicker==null||contractTicker.isBlank())return Optional.empty();
+        double strikeRange=Math.max(currentPrice*.10,5.0);
+        return getOptionsChain(ticker,currentPrice,strikeRange,0,35).stream()
+                .filter(c->contractTicker.equalsIgnoreCase(c.contractTicker())).findFirst();
+    }
+
     private ContractData parseContract(JsonNode node) {
         try {
             JsonNode details = node.get("details");

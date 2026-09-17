@@ -6,6 +6,8 @@ import com.smcscanner.data.PolygonClient;
 import com.smcscanner.model.OHLCV;
 import com.smcscanner.model.TradeSetup;
 import com.smcscanner.broker.AlpacaOrderService;
+import com.smcscanner.options.OptionsDataService;
+import com.smcscanner.options.OptionsQuoteSnapshot;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -50,11 +52,13 @@ public class LiveTradeLog {
     private final ObjectMapper mapper = new ObjectMapper();
     private final PolygonClient client;
     private final AlpacaOrderService alpaca;
+    private final OptionsDataService optionsData;
     private final List<Map<String, Object>> trades = Collections.synchronizedList(new ArrayList<>());
 
-    public LiveTradeLog(PolygonClient client, AlpacaOrderService alpaca) {
+    public LiveTradeLog(PolygonClient client, AlpacaOrderService alpaca,OptionsDataService optionsData) {
         this.client = client;
         this.alpaca = alpaca;
+        this.optionsData=optionsData;
     }
 
     @EventListener(ContextRefreshedEvent.class)
@@ -122,6 +126,7 @@ public class LiveTradeLog {
         record.put("atr", s.getAtr());
         record.put("optionsContract", s.getOptionsContract());
         record.put("optionsPremium", s.getOptionsPremium());
+        record.put("optionEntryQuote",s.getOptionsQuoteSnapshot()==null?null:s.getOptionsQuoteSnapshot().toMap());
         record.put("date", signalTime.format(DATE_FMT));
         record.put("time", signalTime.format(TIME_FMT));
         record.put("timestamp", signalTime.toInstant().toEpochMilli());
@@ -195,6 +200,11 @@ public class LiveTradeLog {
         ensureTradeHistoryAvailable();
         backfillBrokerResolvedPnL();
         return getResolvedTradesForDate(ZonedDateTime.now(ET).format(DATE_FMT));
+    }
+
+    public boolean hasOpenTrades(){
+        ensureTradeHistoryAvailable();
+        synchronized(trades){return trades.stream().anyMatch(t->"OPEN".equals(t.get("outcome")));}
     }
 
     /** Get realized trades that closed on a specific ET date (yyyy-MM-dd). */
@@ -375,6 +385,11 @@ public class LiveTradeLog {
                     .mapToDouble(t -> toDouble(t.get("pnlAmount")))
                     .sum();
             stats.put("totalPnlAmount", Math.round(totalPnlAmount * 100) / 100.0);
+            long optionPaperTrades=trades.stream().filter(t->t.get("optionPaperPnlAmount") instanceof Number).count();
+            double optionPaperPnlAmount=trades.stream().filter(t->t.get("optionPaperPnlAmount") instanceof Number)
+                    .mapToDouble(t->toDouble(t.get("optionPaperPnlAmount"))).sum();
+            stats.put("optionPaperTrades",optionPaperTrades);
+            stats.put("optionPaperPnlAmount",Math.round(optionPaperPnlAmount*100.0)/100.0);
 
             // Unique trading days
             long tradingDays = trades.stream()
@@ -462,6 +477,7 @@ public class LiveTradeLog {
                         t.put("pnlPct", Math.round(pnlPct * 100.0) / 100.0);
                         if (!t.containsKey("pnlAmount")) t.put("pnlAmount", null);
                         t.put("resolvedAt", ZonedDateTime.now(ET).toInstant().toEpochMilli());
+                        if(!"NOT_FILLED".equals(outcome)&&lastPrice!=null)attachOptionExitQuote(t,lastPrice);
                         if ("NOT_FILLED".equals(outcome)) {
                             t.remove("exitPrice");
                         } else if (t.containsKey("resolutionSource")) {
@@ -553,6 +569,7 @@ public class LiveTradeLog {
                     trade.put("pnlAmount", null);
                     trade.put("exitPrice", exitLevel);
                     trade.put("resolutionSource", "STOCK_PRICE");
+                    trade.put("underlyingExitBarTimestamp",bar.getTimestamp());
                     trade.put("resolvedAt", ZonedDateTime.now(ET).toInstant().toEpochMilli());
                     log.info("STOCK_PRICE_RESOLVED {} {} entry={} exit={} → {} pnl={}%",
                             trade.get("ticker"), trade.get("direction"), entry, exitLevel,
@@ -584,6 +601,28 @@ public class LiveTradeLog {
         }
 
         return false; // still within active window — check again at 4:30 PM
+    }
+
+    private void attachOptionExitQuote(Map<String,Object> trade,double underlyingPrice){
+        String contract=String.valueOf(trade.getOrDefault("optionsContract",""));
+        String ticker=String.valueOf(trade.getOrDefault("ticker",""));
+        long exitBar=((Number)trade.getOrDefault("underlyingExitBarTimestamp",0L)).longValue();
+        long now=System.currentTimeMillis();
+        if(contract.isBlank()||ticker.isBlank()){trade.put("optionExitQuoteStatus","NO_ENTRY_CONTRACT");return;}
+        if(exitBar<=0||now-exitBar>10*60_000L){trade.put("optionExitQuoteStatus","MISSED_EXIT_WINDOW");return;}
+        Optional<OptionsDataService.ContractData> found=optionsData.findContractSnapshot(ticker,underlyingPrice,contract);
+        if(found.isEmpty()||!found.get().hasUsableQuote(now)){trade.put("optionExitQuoteStatus","UNAVAILABLE");return;}
+        OptionsDataService.ContractData q=found.get();
+        OptionsQuoteSnapshot snapshot=new OptionsQuoteSnapshot(q.contractTicker(),q.bid(),q.ask(),q.bidSize(),q.askSize(),
+                q.quoteTimestampMs(),q.quoteTimeframe(),q.volume(),q.openInterest(),q.iv(),q.delta(),q.gamma(),q.theta(),q.vega(),q.sharesPerContract());
+        trade.put("optionExitQuote",snapshot.toMap());trade.put("optionExitQuoteStatus","CAPTURED");
+        double entryAsk=toDouble(trade.get("optionsPremium")),exitBid=q.bid();
+        if(entryAsk>0&&exitBid>0){
+            double pnlPct=(exitBid-entryAsk)/entryAsk*100.0;
+            trade.put("optionPaperPnlPct",Math.round(pnlPct*100.0)/100.0);
+            trade.put("optionPaperPnlAmount",Math.round((exitBid-entryAsk)*q.sharesPerContract()*100.0)/100.0);
+            trade.put("optionPaperOutcome",Math.abs(pnlPct)<.10?"BE_STOP":pnlPct>0?"WIN":"LOSS");
+        }
     }
 
     private ZonedDateTime resolveSignalTime(TradeSetup setup) {

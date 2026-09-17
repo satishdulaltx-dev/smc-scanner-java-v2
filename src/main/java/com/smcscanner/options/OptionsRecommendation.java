@@ -24,11 +24,12 @@ public record OptionsRecommendation(
         double lossPerContract,   // (premium - premiumAtSL) × 100
         double optionsRR,         // profitPerContract / lossPerContract
         int    suggestedContracts, // 0 means manual sizing, not a zero-cost trade
-        String greeksWarning      // risk warnings from Greeks analysis (null = none)
+        String greeksWarning,     // risk warnings from Greeks analysis (null = none)
+        OptionsQuoteSnapshot quoteSnapshot
 ) {
     public static final OptionsRecommendation NONE =
             new OptionsRecommendation(null, null, 0, null, 0, 0, 0, 0, 0, 0, -1,
-                    0, 0, 0, 0, 0, 0, 0, null);
+                    0, 0, 0, 0, 0, 0, 0, null,null);
 
     public boolean hasData() { return contractTicker != null && estimatedPremium > 0; }
 

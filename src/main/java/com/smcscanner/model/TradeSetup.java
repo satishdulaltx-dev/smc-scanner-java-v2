@@ -1,5 +1,6 @@
 package com.smcscanner.model;
 
+import com.smcscanner.options.OptionsQuoteSnapshot;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
@@ -28,6 +29,7 @@ public class TradeSetup {
     private final String optionsFlowLabel;    // e.g. "🟢 UNUSUAL CALL SWEEP 3.2:1"
     private final String optionsFlowDir;      // "BULLISH" | "BEARISH" | "NEUTRAL"
     private final double optionsMaxPain;
+    private final OptionsQuoteSnapshot optionsQuoteSnapshot;
 
     private final String optionsGreeksWarning; // risk warnings from Greeks analysis
 
@@ -53,6 +55,7 @@ public class TradeSetup {
         this.optionsRR = b.optionsRR; this.optionsSuggested = b.optionsSuggested;
         this.optionsFlowLabel = b.optionsFlowLabel; this.optionsFlowDir = b.optionsFlowDir;
         this.optionsMaxPain = b.optionsMaxPain; this.optionsGreeksWarning = b.optionsGreeksWarning;
+        this.optionsQuoteSnapshot=b.optionsQuoteSnapshot;
         this.factorBreakdown = b.factorBreakdown;
         this.convictionTier  = b.convictionTier;
         this.riskTier        = b.riskTier;
@@ -94,6 +97,7 @@ public class TradeSetup {
     public String getConvictionTier()    { return convictionTier; }
     public String getRiskTier()          { return riskTier; }
     public double getOptionsMaxPain()    { return optionsMaxPain; }
+    public OptionsQuoteSnapshot getOptionsQuoteSnapshot(){return optionsQuoteSnapshot;}
     public boolean hasOptionsData()      { return optionsContract != null && optionsPremium > 0; }
 
     public double rrRatio() {
@@ -136,6 +140,7 @@ public class TradeSetup {
             m.put("options_flow_label", optionsFlowLabel);
             m.put("options_flow_dir",   optionsFlowDir);
             m.put("options_max_pain",   optionsMaxPain);
+            if(optionsQuoteSnapshot!=null)m.put("options_quote",optionsQuoteSnapshot.toMap());
         }
         return m;
     }
@@ -154,6 +159,7 @@ public class TradeSetup {
         private double optionsProfitPer, optionsLossPer, optionsRR, optionsMaxPain;
         private int optionsIVPct, optionsSuggested;
         private String optionsGreeksWarning;
+        private OptionsQuoteSnapshot optionsQuoteSnapshot;
         private String factorBreakdown, convictionTier, riskTier;
 
         public Builder ticker(String v)        { this.ticker = v;      return this; }
@@ -188,6 +194,7 @@ public class TradeSetup {
         public Builder optionsFlowDir(String v)    { this.optionsFlowDir = v;    return this; }
         public Builder optionsMaxPain(double v)    { this.optionsMaxPain = v;    return this; }
         public Builder optionsGreeksWarning(String v) { this.optionsGreeksWarning = v; return this; }
+        public Builder optionsQuoteSnapshot(OptionsQuoteSnapshot v){this.optionsQuoteSnapshot=v;return this;}
         public Builder factorBreakdown(String v)   { this.factorBreakdown = v;   return this; }
         public Builder convictionTier(String v)    { this.convictionTier = v;    return this; }
         public Builder riskTier(String v)          { this.riskTier = v;          return this; }

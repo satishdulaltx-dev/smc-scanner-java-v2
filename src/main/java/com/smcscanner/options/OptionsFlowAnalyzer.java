@@ -266,7 +266,10 @@ public class OptionsFlowAnalyzer {
                 Math.round(profitPerContract * 100.0) / 100.0,
                 Math.round(lossPerContract * 100.0) / 100.0,
                 Math.round(optionsRR * 100.0) / 100.0,
-                suggested, greeksWarning);
+                suggested, greeksWarning,
+                new OptionsQuoteSnapshot(best.contractTicker(),best.bid(),best.ask(),best.bidSize(),best.askSize(),
+                        best.quoteTimestampMs(),best.quoteTimeframe(),best.volume(),best.openInterest(),best.iv(),
+                        best.delta(),best.gamma(),best.theta(),best.vega(),best.sharesPerContract()));
 
         log.info("{} contract rec: {} strike={} exp={} premium={} delta={} optRR={}:1",
                 ticker, best.contractTicker(), best.strike(), best.expirationDate(),

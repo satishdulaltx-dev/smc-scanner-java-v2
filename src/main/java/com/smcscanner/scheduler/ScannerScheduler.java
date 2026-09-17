@@ -194,6 +194,14 @@ public class ScannerScheduler {
         } catch (Exception e) { log.error("Daily trade report failed: {}", e.getMessage()); }
     }
 
+    /** Keep manual option observations current enough to capture an executable exit bid. */
+    @Scheduled(fixedRate=300_000)
+    public void trackManualPaperTrades(){
+        ZonedDateTime nowET=ZonedDateTime.now(ET);LocalTime time=nowET.toLocalTime();
+        if(nowET.getDayOfWeek().getValue()>=6||time.isBefore(LocalTime.of(9,30))||time.isAfter(LocalTime.of(16,5))||!liveLog.hasOpenTrades())return;
+        try{liveLog.resolveOpenTrades();}catch(Exception e){log.warn("Manual paper-trade refresh failed: {}",e.getMessage());}
+    }
+
     /** Force-close ALL open intraday positions at 3:55 PM ET — no overnight holds for intraday trades. */
     @Scheduled(fixedRate=30_000)
     public void forceEodClose() {

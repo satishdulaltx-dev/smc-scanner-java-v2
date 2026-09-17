@@ -985,7 +985,8 @@ public class ScannerService {
                           .optionsIV(rec.iv()).optionsIVPct(rec.ivPercentile())
                           .optionsBreakEven(rec.breakEvenPrice())
                           .optionsProfitPer(rec.profitPerContract()).optionsLossPer(rec.lossPerContract())
-                          .optionsRR(rec.optionsRR()).optionsSuggested(rec.suggestedContracts());
+                          .optionsRR(rec.optionsRR()).optionsSuggested(rec.suggestedContracts())
+                          .optionsQuoteSnapshot(rec.quoteSnapshot());
                         if (rec.greeksWarning() != null) {
                             sb.optionsGreeksWarning(rec.greeksWarning());
                         }

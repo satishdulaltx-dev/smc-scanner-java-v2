@@ -276,10 +276,13 @@ async function loadCumulative() {
     const c = d.cumulative || {};
     const pnlAmount = c.totalPnlAmount || 0;
     const realizedDollarTrades = c.realizedDollarTrades || 0;
+    const optionPaperPnl = c.optionPaperPnlAmount || 0;
+    const optionPaperTrades = c.optionPaperTrades || 0;
     document.getElementById('cum-stats').innerHTML = `
         <div class="stat-card"><div class="stat-label">Total Alerts</div><div class="stat-val">${c.totalAlerts||0}</div><div class="stat-sub">${c.tradingDays||0} trading days · ${c.avgTradesPerDay||0}/day avg</div></div>
         <div class="stat-card"><div class="stat-label">Resolved Trades</div><div class="stat-val">${(c.wins||0) + (c.losses||0) + (c.beStops||0)}</div><div class="stat-sub">${c.wins||0}W / ${c.losses||0}L / ${c.beStops||0}BE / ${c.notFilled||0}NF</div></div>
         <div class="stat-card"><div class="stat-label">Realized P&amp;L</div><div class="stat-val" style="color:${pnlAmount>=0?'var(--green)':'var(--red)'}">${pnlAmount>=0?'+':''}$${Math.abs(pnlAmount).toFixed(2)}</div><div class="stat-sub">${realizedDollarTrades} broker-matched closes</div></div>
+        <div class="stat-card"><div class="stat-label">Paper Option P&amp;L</div><div class="stat-val" style="color:${optionPaperPnl>=0?'var(--green)':'var(--red)'}">${optionPaperPnl>=0?'+':''}$${Math.abs(optionPaperPnl).toFixed(2)}</div><div class="stat-sub">${optionPaperTrades} ask-to-bid observations</div></div>
         <div class="stat-card"><div class="stat-label">Open / Unresolved</div><div class="stat-val" style="color:var(--yellow)">${c.open||0}</div><div class="stat-sub">awaiting outcome</div></div>
     `;
     const storage = d.storage || {};
@@ -401,6 +404,12 @@ function buildTable(trades, summary, groupByDate) {
             const num = parseFloat(amount || 0);
             return `<span class="${cls}">${num>=0?'+':''}$${Math.abs(num).toFixed(2)}</span>`;
         }
+        if (t.optionPaperPnlAmount !== null && t.optionPaperPnlAmount !== undefined) {
+            const num=parseFloat(t.optionPaperPnlAmount||0);
+            const paperCls=num>0?'win':num<0?'loss':'be';
+            return `<span class="${paperCls}">${num>=0?'+':''}$${Math.abs(num).toFixed(2)} <span style="font-size:10px">paper option</span></span>`;
+        }
+        if(t.optionExitQuoteStatus)return `<span class="be">— <span style="font-size:10px">${t.optionExitQuoteStatus.toLowerCase().replaceAll('_',' ')}</span></span>`;
         return `<span class="be">— <span style="color:var(--muted);font-size:10px;">no broker fill</span></span>`;
     };
 
@@ -412,9 +421,9 @@ function buildTable(trades, summary, groupByDate) {
         const date = t.date || '';
         if (groupByDate && date && date !== lastDate) {
             const dayTrades = trades.filter(x => x.date === date);
-            const dayPnl = dayTrades.reduce((sum, x) => sum + parseFloat(x.pnlAmount || 0), 0);
+            const dayPnl = dayTrades.reduce((sum, x) => sum + parseFloat(x.pnlAmount ?? x.optionPaperPnlAmount ?? 0), 0);
             const pnlColor = dayPnl >= 0 ? 'var(--green)' : 'var(--red)';
-            rows += `<tr class="date-sep"><td colspan="8">📅 ${date}
+            rows += `<tr class="date-sep"><td colspan="9">📅 ${date}
                 <span style="font-weight:400;color:var(--muted);margin-left:10px">${dayTrades.length} alerts</span>
                 <span style="margin-left:10px;color:${pnlColor};font-weight:600">${dayPnl>=0?'+':''}$${Math.abs(dayPnl).toFixed(2)}</span>
             </td></tr>`;
@@ -483,14 +492,17 @@ async function showLiveChart(key) {
         `${t.date} ${t.time} ET · ${t.strategy||'smc'} · conf ${t.confidence||0}`;
 
     const infoBox = document.getElementById('ltc-info');
-    const pnlStr = t.pnlAmount != null ? `P&L $${parseFloat(t.pnlAmount).toFixed(2)}` : 'OPEN';
-    const pnlColor = (t.pnlAmount||0) >= 0 ? '#3fb950' : '#f85149';
+    const displayPnl = t.pnlAmount ?? t.optionPaperPnlAmount;
+    const pnlStr = displayPnl != null ? `${t.pnlAmount != null ? 'Broker' : 'Paper option'} P&L $${parseFloat(displayPnl).toFixed(2)}` : 'OPEN';
+    const pnlColor = (displayPnl||0) >= 0 ? '#3fb950' : '#f85149';
     infoBox.innerHTML = `
         <span style="color:#58a6ff">Entry $${parseFloat(t.entry||0).toFixed(2)}</span>
         <span style="color:#f85149">SL $${parseFloat(t.stopLoss||0).toFixed(2)}</span>
         <span style="color:#d29922">TP $${parseFloat(t.takeProfit||0).toFixed(2)}</span>
         <span style="color:${pnlColor}">${pnlStr}</span>
         ${t.optionsContract ? `<span style="color:var(--muted)">${t.optionsContract.replace('O:','')}</span>` : ''}
+        ${t.optionEntryQuote ? `<span style="color:var(--muted)">Entry ask $${parseFloat(t.optionEntryQuote.ask).toFixed(2)} · spread ${(parseFloat(t.optionEntryQuote.spreadFraction||0)*100).toFixed(1)}%</span>` : ''}
+        ${t.optionExitQuote ? `<span style="color:var(--muted)">Exit bid $${parseFloat(t.optionExitQuote.bid).toFixed(2)}</span>` : ''}
     `;
 
     const container = document.getElementById('live-trade-chart');
