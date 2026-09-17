@@ -875,9 +875,12 @@ public class DashboardController {
     @ResponseBody
     public ResponseEntity<Map<String,Object>> startSpyMomentumJob(
             @org.springframework.web.bind.annotation.RequestParam LocalDate start,
-            @org.springframework.web.bind.annotation.RequestParam LocalDate end) {
+            @org.springframework.web.bind.annotation.RequestParam LocalDate end,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue="CURRENT_BOUNDARY_VWAP") String stopRule) {
         try {
             new BacktestRun(start,end,"spy-noise-momentum-1m",Set.of(),390,2);
+            if(!Set.of("CURRENT_BOUNDARY_VWAP","OPPOSITE_BOUNDARY").contains(stopRule))
+                throw new IllegalArgumentException("Unsupported SPY momentum stop rule");
         } catch(Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error",e.getMessage()));
         }
@@ -889,7 +892,7 @@ public class DashboardController {
         controlledExecutor.submit(()->{
             job.put("status","running");
             try {
-                job.put("result",spyMomentumResearchService.run(start,end));
+                job.put("result",spyMomentumResearchService.run(start,end,stopRule));
                 job.put("status","complete");
             } catch(Exception e) {
                 log.error("SPY momentum research job failed: {}",e.getMessage(),e);

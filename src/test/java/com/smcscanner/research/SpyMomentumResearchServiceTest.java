@@ -43,6 +43,21 @@ class SpyMomentumResearchServiceTest {
         assertTrue(trades.isEmpty());
     }
 
+    @Test
+    void oppositeBoundaryVariantDoesNotApplyTheTighterCurrentBandStop() {
+        LocalDate date=LocalDate.of(2026,7,6);
+        List<List<OHLCV>> prior=new ArrayList<>();
+        for(int i=1;i<=14;i++)prior.add(session(date.minusDays(i),index->100.10));
+        List<OHLCV> faded=session(date,index->index<30?100+index*.01:100.05);
+        var service=new SpyMomentumResearchService(null);
+
+        var tight=service.replayDay(date,faded,prior,100,new ArrayList<>(),true);
+        var opposite=service.replayDay(date,faded,prior,100,new ArrayList<>(),false);
+
+        assertEquals(faded.get(60).getTimestamp(),tight.get(0).exitEpochMs());
+        assertEquals(faded.get(389).getTimestamp()+60_000,opposite.get(0).exitEpochMs());
+    }
+
     private static List<OHLCV> session(LocalDate date,Price price) {
         long start=date.atTime(9,30).atZone(ET).toInstant().toEpochMilli();
         List<OHLCV> bars=new ArrayList<>();

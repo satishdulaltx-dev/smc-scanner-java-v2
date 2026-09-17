@@ -19,7 +19,10 @@ public class SpyMomentumResearchService {
     private final PolygonClient polygon;
     public SpyMomentumResearchService(PolygonClient polygon){this.polygon=polygon;}
 
-    public Map<String,Object> run(LocalDate start,LocalDate end){
+    public Map<String,Object> run(LocalDate start,LocalDate end){return run(start,end,"CURRENT_BOUNDARY_VWAP");}
+
+    public Map<String,Object> run(LocalDate start,LocalDate end,String stopRule){
+        if(!Set.of("CURRENT_BOUNDARY_VWAP","OPPOSITE_BOUNDARY").contains(stopRule))throw new IllegalArgumentException("Unsupported SPY momentum stop rule");
         new BacktestRun(start,end,"spy-noise-momentum-1m",Set.of(),390,2);
         List<OHLCV> bars;polygon.beginHistoricalSession();
         try{bars=polygon.getHistoricalBars("SPY","1m",start.minusDays(35),end);}finally{polygon.endHistoricalSession();}
@@ -32,7 +35,7 @@ public class SpyMomentumResearchService {
             if(prior.stream().anyMatch(s->s.size()!=MINUTES)){skipped++;continue;}
             double previousClose=sessions.get(dates.get(di-1)).get(MINUTES-1).getClose();
             if(effectiveStart==null)effectiveStart=date;effectiveEnd=date;
-            trades.addAll(replayDay(date,sessions.get(date),prior,previousClose,audit));
+            trades.addAll(replayDay(date,sessions.get(date),prior,previousClose,audit,"CURRENT_BOUNDARY_VWAP".equals(stopRule)));
         }
         if(sessionSet.incomplete()>0)warnings.add(sessionSet.incomplete()+" observed sessions were excluded because all 390 regular-session one-minute bars were not present");
         if(effectiveStart!=null&&effectiveStart.isAfter(start))warnings.add("Requested start "+start+" was not fully testable; the effective test begins "+effectiveStart);
@@ -44,7 +47,7 @@ public class SpyMomentumResearchService {
         out.put("ticker","SPY TIME-OF-DAY MOMENTUM");out.put("research",true);out.put("portfolio",false);
         out.put("pattern","spy-noise-momentum-1m");out.put("decision_timeframe","1m / half-hour decisions");
         out.put("start_date",start.toString());out.put("end_date",end.toString());out.put("lookback_days",ChronoUnit.DAYS.between(start,end)+1);
-        out.put("exit_style","CURRENT_BOUNDARY_VWAP");out.put("max_hold_minutes",390);out.put("target_r",0);
+        out.put("exit_style",stopRule);out.put("max_hold_minutes",390);out.put("target_r",0);
         out.put("round_trip_cost_bps",10.0);out.put("filters","none");out.put("return_unit","1R = 1% SPY move");
         out.put("total_trades",trades.size());out.put("wins",wins);out.put("losses",losses);out.put("timeouts",0);out.put("be_stops",0);
         out.put("win_rate",trades.isEmpty()?0:wins*100.0/trades.size());out.put("expectancy",average(trades,false));
@@ -62,6 +65,10 @@ public class SpyMomentumResearchService {
     }
 
     List<BacktestService.TradeResult> replayDay(LocalDate date,List<OHLCV> day,List<List<OHLCV>> prior,double previousClose,List<Map<String,Object>> audit){
+        return replayDay(date,day,prior,previousClose,audit,true);
+    }
+
+    List<BacktestService.TradeResult> replayDay(LocalDate date,List<OHLCV> day,List<List<OHLCV>> prior,double previousClose,List<Map<String,Object>> audit,boolean tightStop){
         List<BacktestService.TradeResult> result=new ArrayList<>();Position position=null;
         for(int index=29;index<=359;index+=30){
             int decisionIndex=index;
@@ -72,10 +79,10 @@ public class SpyMomentumResearchService {
             if(position==null){if(!"flat".equals(signal))position=enter(signal,next.getOpen(),next.getTimestamp(),upper,lower,vwap);}
             else if("long".equals(position.direction())){
                 if(close<lower){result.add(exit(position,next.getOpen(),next.getTimestamp(),"REVERSE"));position=enter("short",next.getOpen(),next.getTimestamp(),upper,lower,vwap);}
-                else if(close<Math.max(upper,vwap)){result.add(exit(position,next.getOpen(),next.getTimestamp(),"TRAIL_EXIT"));position=null;}
+                else if(tightStop&&close<Math.max(upper,vwap)){result.add(exit(position,next.getOpen(),next.getTimestamp(),"TRAIL_EXIT"));position=null;}
             }else{
                 if(close>upper){result.add(exit(position,next.getOpen(),next.getTimestamp(),"REVERSE"));position=enter("long",next.getOpen(),next.getTimestamp(),upper,lower,vwap);}
-                else if(close>Math.min(lower,vwap)){result.add(exit(position,next.getOpen(),next.getTimestamp(),"TRAIL_EXIT"));position=null;}
+                else if(tightStop&&close>Math.min(lower,vwap)){result.add(exit(position,next.getOpen(),next.getTimestamp(),"TRAIL_EXIT"));position=null;}
             }
             row.put("position_after",position==null?"flat":position.direction());audit.add(Map.copyOf(row));
         }
