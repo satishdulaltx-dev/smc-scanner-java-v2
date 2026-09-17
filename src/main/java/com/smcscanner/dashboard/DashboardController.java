@@ -14,6 +14,7 @@ import com.smcscanner.model.TickerStatus;
 import com.smcscanner.model.eod.Level;
 import com.smcscanner.model.eod.TickerReport;
 import com.smcscanner.research.ResearchService;
+import com.smcscanner.research.PortfolioResearchService;
 import com.smcscanner.state.ReportCache;
 import com.smcscanner.state.SharedState;
 import com.smcscanner.strategy.EodReportService;
@@ -65,6 +66,7 @@ public class DashboardController {
     private final PolygonClient      polygon;
     private final ProfileOptimizer   optimizer;
     private final ResearchService    researchService;
+    private final PortfolioResearchService portfolioResearchService;
     private final com.smcscanner.broker.AlpacaOrderService alpaca;
     private final com.smcscanner.vision.ChartVisionService chartVision;
     private final ConcurrentMap<String,Map<String,Object>> controlledJobs=new ConcurrentHashMap<>();
@@ -92,14 +94,15 @@ public class DashboardController {
                                 BacktestService backtestService, AdaptiveSuppressor adaptive,
                                 AnalysisService analysisService, LiveTradeLog liveLog,
                                 PolygonClient polygon, ProfileOptimizer optimizer,
-                                ResearchService researchService,
+                                ResearchService researchService, PortfolioResearchService portfolioResearchService,
                                 com.smcscanner.broker.AlpacaOrderService alpaca,
                                 com.smcscanner.vision.ChartVisionService chartVision) {
         this.state=state; this.config=config; this.sessionFilter=sessionFilter;
         this.tracker=tracker; this.eodReport=eodReport; this.discord=discord;
         this.reportCache=reportCache; this.backtestService=backtestService; this.adaptive=adaptive;
         this.analysisService=analysisService; this.liveLog=liveLog; this.polygon=polygon;
-        this.optimizer=optimizer; this.researchService=researchService; this.alpaca=alpaca;
+        this.optimizer=optimizer; this.researchService=researchService;
+        this.portfolioResearchService=portfolioResearchService; this.alpaca=alpaca;
         this.chartVision=chartVision;
     }
 
@@ -810,6 +813,43 @@ public class DashboardController {
             } catch (Exception e) {
                 log.error("Controlled backtest job failed: {}",e.getMessage());
                 job.put("error",e.getMessage()==null?"Controlled backtest failed":e.getMessage());
+                job.put("status","failed");
+            }
+            job.put("finished_at",System.currentTimeMillis());
+        });
+        return ResponseEntity.accepted().body(Map.of("job_id",id,"status","queued"));
+    }
+
+    /** Rank a synchronized universe first, then replay only setups from the top names. */
+    @PostMapping("/api/backtest/portfolio-job")
+    @ResponseBody
+    public ResponseEntity<Map<String,Object>> startPortfolioBacktestJob(
+            @org.springframework.web.bind.annotation.RequestParam String tickers,
+            @org.springframework.web.bind.annotation.RequestParam LocalDate start,
+            @org.springframework.web.bind.annotation.RequestParam LocalDate end,
+            @org.springframework.web.bind.annotation.RequestParam(defaultValue="2") int topK) {
+        List<String> universe=Arrays.stream(tickers.split(",")).map(String::trim)
+                .filter(value->!value.isBlank()).map(String::toUpperCase).distinct().toList();
+        try {
+            if(universe.size()<5)throw new IllegalArgumentException("Use at least five distinct tickers");
+            if(topK<1||topK>5)throw new IllegalArgumentException("Top selection must be between 1 and 5");
+            new BacktestRun(start,end,PortfolioResearchService.PATTERN,Set.of(),30,2.0);
+        } catch(Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("error",e.getMessage()));
+        }
+        long now=System.currentTimeMillis();
+        controlledJobs.entrySet().removeIf(e->now-((Number)e.getValue().getOrDefault("created_at",now)).longValue()>3_600_000L);
+        String id=UUID.randomUUID().toString();
+        Map<String,Object> job=new ConcurrentHashMap<>();
+        job.put("status","queued");job.put("created_at",now);controlledJobs.put(id,job);
+        controlledExecutor.submit(()->{
+            job.put("status","running");
+            try {
+                job.put("result",portfolioResearchService.run(universe,start,end,topK));
+                job.put("status","complete");
+            } catch(Exception e) {
+                log.error("Portfolio research job failed: {}",e.getMessage(),e);
+                job.put("error",e.getMessage()==null?"Portfolio research failed":e.getMessage());
                 job.put("status","failed");
             }
             job.put("finished_at",System.currentTimeMillis());
